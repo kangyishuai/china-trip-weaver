@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;none&#x27;; font-src data:; connect-src &#x27;none&#x27;; frame-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;">
+<title>上海 · 2026-09-10 — 2026-09-10</title>
+<style id="renderer-css">:root {
+  color-scheme: light;
+  --paper: #f7f3eb;
+  --paper-raised: #fffdf8;
+  --ink: #1f2927;
+  --muted: #53615d;
+  --line: #c8d0c9;
+  --jade: #1f5b4f;
+  --jade-soft: #dcebe5;
+  --vermilion: #8b3022;
+  --vermilion-soft: #f5dfd8;
+  --gold: #8b6518;
+  --shadow: 0 8px 24px rgba(31, 41, 39, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-size: 16px;
+  line-height: 1.55;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 0;
+  background:
+    linear-gradient(180deg, rgba(139, 48, 34, 0.06), transparent 18rem),
+    var(--paper);
+  overflow-wrap: anywhere;
+}
+
+a {
+  color: var(--jade);
+  text-decoration-thickness: 0.12em;
+  text-underline-offset: 0.18em;
+}
+
+a[href] {
+  align-items: center;
+  display: inline-flex;
+  min-height: 44px;
+  padding-block: 0.35rem;
+}
+
+a:focus-visible,
+summary:focus-visible {
+  border-radius: 0.25rem;
+  outline: 3px solid #0b5f9e;
+  outline-offset: 3px;
+}
+
+.skip-link {
+  background: var(--ink);
+  color: #ffffff;
+  left: 0.75rem;
+  padding: 0.6rem 0.8rem;
+  position: fixed;
+  top: -5rem;
+  z-index: 10;
+}
+
+.skip-link:focus {
+  top: 0.75rem;
+}
+
+.page-header,
+.truth-banner,
+.day-nav,
+main,
+.page-footer {
+  margin-inline: auto;
+  max-width: 74rem;
+  width: min(100%, 74rem);
+}
+
+.page-header {
+  padding: 2.25rem 1rem 1rem;
+}
+
+.eyebrow {
+  color: var(--vermilion);
+  font-size: 0.82rem;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+  margin: 0 0 0.5rem;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.2;
+  margin-block: 0;
+  text-wrap: balance;
+}
+
+h1 {
+  font-family: Georgia, "Songti SC", "STSong", serif;
+  font-size: clamp(2rem, 8vw, 4.5rem);
+  font-weight: 620;
+  letter-spacing: -0.035em;
+  max-width: 17ch;
+}
+
+h2 {
+  font-size: clamp(1.35rem, 4vw, 2rem);
+  margin-bottom: 1rem;
+}
+
+h3 {
+  font-size: 1.1rem;
+}
+
+.header-meta,
+.badge-row,
+.inline-list,
+.claim-links {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.8rem;
+}
+
+.header-meta {
+  color: var(--muted);
+  margin-top: 1rem;
+}
+
+.mode-badge,
+.status-badge,
+.lock-badge,
+.claim-badge,
+.price-type {
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 720;
+  line-height: 1.2;
+  padding: 0.28rem 0.55rem;
+}
+
+.mode-badge {
+  background: var(--vermilion);
+  color: #ffffff;
+}
+
+.status-badge,
+.claim-badge {
+  background: var(--jade-soft);
+  color: #17463d;
+}
+
+.lock-badge,
+.price-type {
+  background: var(--vermilion-soft);
+  color: #70271d;
+}
+
+.truth-banner {
+  background: var(--ink);
+  color: #ffffff;
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.truth-banner strong {
+  color: #f7d7ad;
+}
+
+.truth-banner p {
+  margin: 0;
+}
+
+.day-nav {
+  background: var(--paper-raised);
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  padding-inline: 0.75rem;
+}
+
+.day-nav ul {
+  display: flex;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0.35rem 0;
+}
+
+.day-nav a {
+  padding-inline: 0.75rem;
+  white-space: nowrap;
+}
+
+main {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.panel {
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  box-shadow: var(--shadow);
+  min-width: 0;
+  padding: 1rem;
+}
+
+.summary-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+dl {
+  display: grid;
+  gap: 0.25rem;
+  grid-template-columns: minmax(7.5rem, 0.32fr) minmax(0, 1fr);
+  margin: 0;
+}
+
+dt {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+dd {
+  margin: 0;
+}
+
+.entity-card,
+.health-card,
+.unknown-card {
+  border-top: 1px solid var(--line);
+  padding-block: 0.9rem;
+}
+
+.entity-card:first-of-type,
+.health-card:first-of-type,
+.unknown-card:first-of-type {
+  border-top: 0;
+}
+
+.entity-card p,
+.health-card p,
+.unknown-card p {
+  margin: 0.35rem 0;
+}
+
+.timeline {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0 0 0 1.3rem;
+  position: relative;
+}
+
+.timeline::before {
+  background: var(--line);
+  bottom: 0.5rem;
+  content: "";
+  left: 0.31rem;
+  position: absolute;
+  top: 0.5rem;
+  width: 2px;
+}
+
+.timeline-item {
+  break-inside: avoid;
+  margin-bottom: 1rem;
+  padding-left: 0.75rem;
+  position: relative;
+}
+
+.timeline-item::before {
+  background: var(--vermilion);
+  border: 3px solid var(--paper-raised);
+  border-radius: 50%;
+  content: "";
+  height: 0.72rem;
+  left: -1.35rem;
+  position: absolute;
+  top: 0.38rem;
+  width: 0.72rem;
+}
+
+.slot-time {
+  color: var(--vermilion);
+  display: block;
+  font-variant-numeric: tabular-nums;
+  font-weight: 760;
+}
+
+.location-svg {
+  background: #edf2ed;
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  display: block;
+  height: auto;
+  max-height: 28rem;
+  width: 100%;
+}
+
+.location-svg .route-line {
+  fill: none;
+  stroke: #687d74;
+  stroke-dasharray: 4 4;
+  stroke-width: 1.5;
+}
+
+.location-svg circle {
+  fill: var(--vermilion);
+  stroke: #ffffff;
+  stroke-width: 2;
+}
+
+.location-svg text {
+  fill: var(--ink);
+  font-size: 4px;
+  font-weight: 700;
+}
+
+.schematic-note {
+  background: var(--vermilion-soft);
+  border-left: 4px solid var(--vermilion);
+  color: #542219;
+  padding: 0.75rem;
+}
+
+.health-table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  border-collapse: collapse;
+  min-width: 42rem;
+  width: 100%;
+}
+
+th,
+td {
+  border-bottom: 1px solid var(--line);
+  padding: 0.7rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  background: #e9eee9;
+}
+
+.empty-state {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.page-footer {
+  color: var(--muted);
+  padding: 1.5rem 1rem 2.5rem;
+}
+
+.page-footer p {
+  margin: 0.35rem 0;
+}
+
+@media (min-width: 768px) {
+  .truth-banner {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  main {
+    gap: 1.25rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 1.5rem;
+  }
+
+  .panel-wide,
+  #days,
+  #location-overview,
+  #evidence,
+  #provider-health {
+    grid-column: 1 / -1;
+  }
+
+  .panel {
+    padding: 1.35rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+@media print {
+  :root {
+    --paper: #ffffff;
+    --paper-raised: #ffffff;
+    --ink: #000000;
+    --muted: #333333;
+    --line: #777777;
+    --shadow: none;
+  }
+
+  .skip-link,
+  .day-nav {
+    display: none;
+  }
+
+  body {
+    background: #ffffff;
+  }
+
+  main {
+    display: block;
+  }
+
+  .panel {
+    break-inside: avoid;
+    box-shadow: none;
+    margin-bottom: 0.8rem;
+  }
+
+  a[href^="https://"]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.8em;
+  }
+
+  details {
+    display: block;
+  }
+}
+.evidence-card > summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  min-height: 44px;
+  padding-block: 0.45rem;
+}
+.location-group + .location-group { margin-top: 1.5rem; }
+.location-group h4 { font-size: 1.05rem; line-height: 1.2; margin: 0; }
+@media print {
+  details:not([open]) > :not(summary) { display: block; }
+}</style>
+</head>
+<body>
+<a class="skip-link" href="#main-content">跳到行程正文</a>
+<header class="page-header" data-section="header">
+<p class="eyebrow">China Trip Weaver · v1</p>
+<h1>上海 · 2026-09-10 — 2026-09-10</h1>
+<div class="header-meta"><span>人数 3</span><span>修订 1</span><span>生成于 <time datetime="2026-09-04T00:00:00+08:00">2026-09-04 00:00</time></span><span class="mode-badge" data-trip-mode="static">数据口径: 静态参考资料</span></div>
+</header>
+<aside class="truth-banner" data-section="truth-banner" aria-labelledby="truth-heading"><p><strong id="truth-heading">真实性与边界</strong><br>数据口径 静态参考资料 · 生成于 <time datetime="2026-09-04T00:00:00+08:00">2026-09-04 00:00</time></p><p data-worst-provider="variflight" data-health-status="missing"><strong>数据源:</strong><br>飞常准 · 未配置</p><p><strong>备选与未知项:</strong><br>4 · 不登录、不实名、不代下单、不支付、不退改。</p></aside>
+<nav class="day-nav" data-section="day-nav" aria-label="逐日行程"><ul><li><a href="#day-b4a697ec0b">第 1 天 · 2026-09-10</a></li></ul></nav>
+<main id="main-content">
+<section class="panel" id="alternatives-and-unknowns" data-section="alternatives-and-unknowns" aria-labelledby="alternatives-and-unknowns-heading"><h2 id="alternatives-and-unknowns-heading">备选与未知项</h2><article class="unknown-card" data-unknown-index="0" data-unknown-path="/pois/2/price" data-unknown-reason="exact dinner venue and price remain unselected; the slot reserves time only" data-unknown-claim=""><h3>晚餐（地点待定） · 价格</h3><div class="badge-row"><span class="status-badge" data-selection-state="unknown">未知</span></div><p>现有资料不足以确认“晚餐（地点待定） · 价格”；请按行程日期在官方页面复核。</p><p>数据源: 无 / 未提供</p></article><article class="unknown-card" data-unknown-index="1" data-unknown-path="/budget_ledger/items/2/amount_max_cny" data-unknown-reason="no comparable price was supplied" data-unknown-claim=""><h3>待核验信息</h3><div class="badge-row"><span class="status-badge" data-selection-state="unknown">未知</span></div><p>现有资料不足以确认“待核验信息”；请按行程日期在官方页面复核。</p><p>数据源: 无 / 未提供</p></article><article class="unknown-card" data-unknown-index="2" data-unknown-path="/budget_ledger/items/3/amount_max_cny" data-unknown-reason="no comparable price was supplied" data-unknown-claim=""><h3>待核验信息</h3><div class="badge-row"><span class="status-badge" data-selection-state="unknown">未知</span></div><p>现有资料不足以确认“待核验信息”；请按行程日期在官方页面复核。</p><p>数据源: 无 / 未提供</p></article><article class="unknown-card" data-unknown-index="3" data-unknown-path="/budget_ledger/items/4/amount_max_cny" data-unknown-reason="no comparable price was supplied" data-unknown-claim=""><h3>待核验信息</h3><div class="badge-row"><span class="status-badge" data-selection-state="unknown">未知</span></div><p>现有资料不足以确认“待核验信息”；请按行程日期在官方页面复核。</p><p>数据源: 无 / 未提供</p></article></section>
+<section class="panel" id="request-summary" data-section="request-summary" aria-labelledby="request-heading"><h2 id="request-heading">行程需求</h2><dl><dt>出发地</dt><dd>北京（2 人）、广州（1 人）</dd><dt>目的地</dt><dd>上海</dd><dt>日期</dt><dd>2026-09-10 — 2026-09-10</dd><dt>预算</dt><dd>CNY 5000</dd><dt>兴趣</dt><dd>建筑、滨水空间</dd><dt>节奏</dt><dd>适中</dd><dt>硬约束</dt><dd>不执行任何交易动作</dd><dt>默认假设</dt><dd>分组交通使用仓库内全合成铁路夹具、MEETING_PRE_JOIN_MEAL meal_type=lunch</dd></dl></section>
+<section class="panel panel-wide" id="provider-health" data-section="provider-health" aria-labelledby="provider-health-heading"><h2 id="provider-health-heading">数据源状态</h2><div class="health-table-wrap"><table><thead><tr><th>数据源</th><th>版本</th><th>数据口径</th><th>状态</th><th>检查时间</th><th>原因</th></tr></thead><tbody><tr data-provider="amap" data-provider-mode="static" data-provider-status="missing" data-provider-reason="AMap mobility is off; calls=0/80 qps&lt;=2; route matrix uses static estimates"><th scope="row">高德地图</th><td>web-service-v5-v3-route</td><td>静态参考资料</td><td>未配置</td><td><time datetime="2026-09-04T00:00:00+08:00">2026-09-04 00:00</time></td><td>当前状态为“未配置”；技术详情已保留在页面数据中。</td></tr><tr data-provider="variflight" data-provider-mode="static" data-provider-status="missing" data-provider-reason="VariFlight enrichment is off; no business call was made and tools/list was not run"><th scope="row">飞常准</th><td>1.0.3</td><td>静态参考资料</td><td>未配置</td><td><time datetime="2026-09-04T00:00:00+08:00">2026-09-04 00:00</time></td><td>当前状态为“未配置”；技术详情已保留在页面数据中。</td></tr><tr data-provider="anysearch" data-provider-mode="static" data-provider-status="missing" data-provider-reason="optional search supplement is disabled; no auto-registration or business call was made"><th scope="row">AnySearch</th><td>runtime-probe-v1</td><td>静态参考资料</td><td>未配置</td><td><time datetime="2026-09-04T00:00:00+08:00">2026-09-04 00:00</time></td><td>当前状态为“未配置”；技术详情已保留在页面数据中。</td></tr><tr data-provider="12306-mcp" data-provider-mode="live" data-provider-status="ready" data-provider-reason="all dated rail legs were normalized from live MCP inventory"><th scope="row">中国铁路 12306</th><td>0.3.10</td><td>实时查询</td><td>可用</td><td><time datetime="2026-09-04T00:00:00+08:00">2026-09-04 00:00</time></td><td>当前状态为“可用”；技术详情已保留在页面数据中。</td></tr><tr data-provider="host-web" data-provider-mode="static" data-provider-status="ready" data-provider-reason="researched candidate file supplied; no web call was made"><th scope="row">宿主网络搜索</th><td>candidate-file</td><td>静态参考资料</td><td>可用</td><td><time datetime="2026-09-04T00:00:00+08:00">2026-09-04 00:00</time></td><td>当前状态为“可用”；技术详情已保留在页面数据中。</td></tr><tr data-provider="flyai" data-provider-mode="static" data-provider-status="ready" data-provider-reason="candidate-file lodging retained; FlyAI live inventory and flight comparison were not called"><th scope="row">飞猪</th><td>1.0.16</td><td>静态参考资料</td><td>可用</td><td><time datetime="2026-09-04T00:00:00+08:00">2026-09-04 00:00</time></td><td>当前状态为“可用”；技术详情已保留在页面数据中。</td></tr></tbody></table></div></section>
+<section class="panel" id="transport-summary" data-section="transport-summary" aria-labelledby="transport-summary-heading"><h2 id="transport-summary-heading">交通摘要</h2><article class="entity-card" data-entity-id="leg-rail-0cf705c5b110" data-entity-kind="transport" data-travel-mode="rail" data-service-number="G1001" data-from-ref="city-beijing" data-to-ref="airport-shanghai"><h3>铁路 · G1001</h3><div class="badge-row" aria-label="行程选择"><span class="status-badge" data-selection-state="alternative">备选</span></div><p>北京 → 上海虹桥国际机场</p><p><time datetime="2026-09-10T08:00:00+08:00">2026-09-10 08:00</time> — <time datetime="2026-09-10T12:00:00+08:00">2026-09-10 12:00</time> · 240 分钟</p><p data-price-owner="leg-rail-0cf705c5b110" data-price-type="live" data-price-amount="300"><strong>CNY 300</strong> <span class="price-type">当前报价 · 每人</span> · 查询于 <time datetime="2026-09-04T00:00:00+08:00">2026-09-04 00:00</time></p><p><a href="https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc&amp;fs=%E5%8C%97%E4%BA%AC%E7%A4%BA%E4%BE%8B%E7%AB%99%2CBEX&amp;ts=%E4%B8%8A%E6%B5%B7%E7%A4%BA%E4%BE%8B%E7%AB%99%2CSHX&amp;date=2026-09-10&amp;flag=N%2CN%2CY" rel="noopener noreferrer">打开官方页面（只读）</a></p><div class="claim-links" aria-label="关联证据"><a class="claim-badge" data-claim-link="claim-56212b60e60692d3" href="#claim-248baa9cc6">已核验</a><a class="claim-badge" data-claim-link="claim-4fb867d5c0928bdd" href="#claim-981a4bf6ed">已核验</a><a class="claim-badge" data-claim-link="claim-b8263a6fb333ef52" href="#claim-9035b136bf">已核验</a></div></article><article class="entity-card" data-entity-id="leg-rail-bcf544b2bd03" data-entity-kind="transport" data-travel-mode="rail" data-service-number="G1001" data-from-ref="city-guangzhou" data-to-ref="airport-shanghai"><h3>铁路 · G1001</h3><div class="badge-row" aria-label="行程选择"><span class="status-badge" data-selection-state="alternative">备选</span></div><p>广州 → 上海虹桥国际机场</p><p><time datetime="2026-09-10T08:00:00+08:00">2026-09-10 08:00</time> — <time datetime="2026-09-10T12:00:00+08:00">2026-09-10 12:00</time> · 240 分钟</p><p data-price-owner="leg-rail-bcf544b2bd03" data-price-type="live" data-price-amount="300"><strong>CNY 300</strong> <span class="price-type">当前报价 · 每人</span> · 查询于 <time datetime="2026-09-04T00:00:00+08:00">2026-09-04 00:00</time></p><p><a href="https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc&amp;fs=%E5%8C%97%E4%BA%AC%E7%A4%BA%E4%BE%8B%E7%AB%99%2CBEX&amp;ts=%E4%B8%8A%E6%B5%B7%E7%A4%BA%E4%BE%8B%E7%AB%99%2CSHX&amp;date=2026-09-10&amp;flag=N%2CN%2CY" rel="noopener noreferrer">打开官方页面（只读）</a></p><div class="claim-links" aria-label="关联证据"><a class="claim-badge" data-claim-link="claim-647a128edd62bc2b" href="#claim-c0476d4994">已核验</a><a class="claim-badge" data-claim-link="claim-65f89cef6b0f0d2d" href="#claim-a99b8f545d">已核验</a><a class="claim-badge" data-claim-link="claim-145ea85d05b91257" href="#claim-4fb5ce1b2a">已核验</a></div></article></section>
+<section class="panel" id="lodging-summary" data-section="lodging-summary" aria-labelledby="lodging-summary-heading"><h2 id="lodging-summary-heading">住宿摘要</h2><p class="empty-state">无 / 未提供</p></section>
+<section class="panel panel-wide" id="days" data-section="days" aria-labelledby="days-heading"><h2 id="days-heading">逐日行程</h2><article class="day-block" id="day-b4a697ec0b" data-day-id="day-1"><h3>第 1 天 · 2026-09-10 · 上海</h3><ol class="timeline"><li class="timeline-item" data-slot-id="slot-poi-grouped-1" data-ref-id="poi-grouped-1" data-slot-kind="poi" data-slot-status="scheduled" data-start-at="2026-09-10T13:00:00+08:00" data-end-at="2026-09-10T13:45:00+08:00"><span class="slot-time"><time datetime="2026-09-10T13:00:00+08:00">13:00</time>–<time datetime="2026-09-10T13:45:00+08:00">13:45</time></span><h3>上海示例建筑漫步</h3><div class="badge-row"><span class="status-badge" data-kind="poi">景点</span><span class="status-badge" data-selection-state="selected">已选</span></div><div class="claim-links" aria-label="关联证据"><a class="claim-badge" data-claim-link="claim-grouped-1" href="#claim-c3d49dd85d">待证假设</a></div></li><li class="timeline-item" data-slot-id="slot-poi-grouped-2" data-ref-id="poi-grouped-2" data-slot-kind="poi" data-slot-status="scheduled" data-start-at="2026-09-10T14:05:00+08:00" data-end-at="2026-09-10T14:50:00+08:00"><span class="slot-time"><time datetime="2026-09-10T14:05:00+08:00">14:05</time>–<time datetime="2026-09-10T14:50:00+08:00">14:50</time></span><h3>上海示例滨水公园</h3><div class="badge-row"><span class="status-badge" data-kind="poi">景点</span><span class="status-badge" data-selection-state="selected">已选</span></div><div class="claim-links" aria-label="关联证据"><a class="claim-badge" data-claim-link="claim-grouped-2" href="#claim-85695ce220">待证假设</a></div></li><li class="timeline-item" data-slot-id="slot-routine-rest-020803a7e687" data-ref-id="" data-slot-kind="rest" data-slot-status="scheduled" data-start-at="2026-09-10T14:50:00+08:00" data-end-at="2026-09-10T15:50:00+08:00"><span class="slot-time"><time datetime="2026-09-10T14:50:00+08:00">14:50</time>–<time datetime="2026-09-10T15:50:00+08:00">15:50</time></span><h3>午休</h3><div class="badge-row"><span class="status-badge" data-kind="rest">休息</span><span class="status-badge" data-selection-state="selected">已选</span></div><div class="claim-links" aria-label="关联证据"><span class="empty-state">无关联证据</span></div></li><li class="timeline-item" data-slot-id="slot-poi-routine-meal-1107022f0747" data-ref-id="poi-routine-meal-1107022f0747" data-slot-kind="meal" data-slot-status="scheduled" data-start-at="2026-09-10T16:30:00+08:00" data-end-at="2026-09-10T17:30:00+08:00"><span class="slot-time"><time datetime="2026-09-10T16:30:00+08:00">16:30</time>–<time datetime="2026-09-10T17:30:00+08:00">17:30</time></span><h3>晚餐（地点待定）</h3><div class="badge-row"><span class="status-badge" data-kind="meal">用餐</span><span class="status-badge" data-selection-state="selected">已选</span></div><div class="claim-links" aria-label="关联证据"><a class="claim-badge" data-claim-link="claim-acff11540908ae7a" href="#claim-c1da095d47">待证假设</a></div></li></ol></article></section>
+<section class="panel panel-wide" id="location-overview" data-section="location-overview" aria-labelledby="location-overview-heading"><h2 id="location-overview-heading">位置概览</h2><section class="location-group" data-location-group="上海"><h3>上海 · 2026-09-10</h3><svg class="location-svg" data-crs="WGS84" viewBox="0 0 100 100" role="img" aria-labelledby="location-map-title-38ae03eb93 location-map-desc-38ae03eb93"><title id="location-map-title-38ae03eb93">上海位置顺序示意</title><desc id="location-map-desc-38ae03eb93">非真实道路路线；编号对应下方地点。</desc><polyline class="route-line" points="10.000,50.000 90.000,50.000 10.000,50.000"></polyline><g data-coordinate-ref="poi-grouped-1"><circle cx="10.000" cy="50.000" r="3.5"></circle><text x="14.500" y="51.500">1</text></g><g data-coordinate-ref="poi-grouped-2"><circle cx="90.000" cy="50.000" r="3.5"></circle><text x="94.500" y="51.500">2</text></g><g data-coordinate-ref="poi-routine-meal-1107022f0747"><circle cx="10.000" cy="50.000" r="3.5"></circle><text x="14.500" y="51.500">3</text></g></svg><p class="schematic-note" data-schematic-label="true">游览顺序示意，非道路路线；WGS84 坐标仅用于相对位置。</p><article class="entity-card" data-entity-id="poi-grouped-1" data-entity-kind="poi"><h4>上海示例建筑漫步</h4><div class="badge-row" aria-label="行程选择"><span class="status-badge" data-selection-state="selected">已选</span></div><p>WGS84 121.471000, 31.230000</p><p data-price-owner="poi-grouped-1" data-price-type="none" data-price-amount="">价格未知 / 点击核验</p><p><a href="https://example.com/grouped-departures/1" rel="noopener noreferrer">查看来源</a></p><div class="claim-links" aria-label="关联证据"><a class="claim-badge" data-claim-link="claim-grouped-1" href="#claim-c3d49dd85d">待证假设</a></div></article><article class="entity-card" data-entity-id="poi-grouped-2" data-entity-kind="poi"><h4>上海示例滨水公园</h4><div class="badge-row" aria-label="行程选择"><span class="status-badge" data-selection-state="selected">已选</span></div><p>WGS84 121.472000, 31.230000</p><p data-price-owner="poi-grouped-2" data-price-type="none" data-price-amount="">价格未知 / 点击核验</p><p><a href="https://example.com/grouped-departures/2" rel="noopener noreferrer">查看来源</a></p><div class="claim-links" aria-label="关联证据"><a class="claim-badge" data-claim-link="claim-grouped-2" href="#claim-85695ce220">待证假设</a></div></article><article class="entity-card" data-entity-id="poi-routine-meal-1107022f0747" data-entity-kind="poi"><h4>晚餐（地点待定）</h4><div class="badge-row" aria-label="行程选择"><span class="status-badge" data-selection-state="selected">已选</span><span class="lock-badge" data-unknown-state="true">含待核验信息</span></div><p>WGS84 121.471000, 31.230000</p><p data-price-owner="poi-routine-meal-1107022f0747" data-price-type="none" data-price-amount="">价格未知 / 点击核验</p><p>无 / 未提供</p><div class="claim-links" aria-label="关联证据"><a class="claim-badge" data-claim-link="claim-acff11540908ae7a" href="#claim-c1da095d47">待证假设</a></div></article></section></section>
+<section class="panel panel-wide" id="evidence" data-section="evidence" aria-labelledby="evidence-heading"><h2 id="evidence-heading">证据</h2><details class="entity-card evidence-card" id="claim-c3d49dd85d" data-claim-id="claim-grouped-1" data-subject-ref="poi-grouped-1" data-claim-status="hypothesis" data-claim-mode="static"><summary><strong>官方网站</strong> · 待证假设 · 上海示例建筑漫步 · 待核验信息</summary><p>查询于 <time datetime="2026-09-03T12:00:00+08:00">2026-09-03 12:00</time> · 可信度 50% · 数据口径 静态参考资料</p><p><a href="https://example.com/grouped-departures/1" rel="noopener noreferrer">查看来源</a></p></details><details class="entity-card evidence-card" id="claim-85695ce220" data-claim-id="claim-grouped-2" data-subject-ref="poi-grouped-2" data-claim-status="hypothesis" data-claim-mode="static"><summary><strong>官方网站</strong> · 待证假设 · 上海示例滨水公园 · 待核验信息</summary><p>查询于 <time datetime="2026-09-03T12:00:00+08:00">2026-09-03 12:00</time> · 可信度 50% · 数据口径 静态参考资料</p><p><a href="https://example.com/grouped-departures/2" rel="noopener noreferrer">查看来源</a></p></details><details class="entity-card evidence-card" id="claim-c1da095d47" data-claim-id="claim-acff11540908ae7a" data-subject-ref="poi-routine-meal-1107022f0747" data-claim-status="hypothesis" data-claim-mode="static"><summary><strong>ctw-planner</strong> · 待证假设 · 晚餐（地点待定） · 开放时间</summary><p>查询于 <time datetime="2026-09-04T00:00:00+08:00">2026-09-04 00:00</time> · 可信度 50% · 数据口径 静态参考资料</p><p><a href="https://china-trip-weaver.local/planning/routine-meals" rel="noopener noreferrer">查看来源</a></p></details><details class="entity-card evidence-card" id="claim-248baa9cc6" data-claim-id="claim-56212b60e60692d3" data-subject-ref="leg-rail-0cf705c5b110" data-claim-status="verified" data-claim-mode="live"><summary><strong>中国铁路 12306</strong> · 已核验 · 北京 → 上海虹桥国际机场 · 出发时间</summary><p>查询于 <time datetime="2026-09-04T00:00:00+08:00">2026-09-04 00:00</time> · 可信度 95% · 数据口径 实时查询</p><p><a href="https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc&amp;fs=%E5%8C%97%E4%BA%AC%E7%A4%BA%E4%BE%8B%E7%AB%99%2CBEX&amp;ts=%E4%B8%8A%E6%B5%B7%E7%A4%BA%E4%BE%8B%E7%AB%99%2CSHX&amp;date=2026-09-10&amp;flag=N%2CN%2CY" rel="noopener noreferrer">查看来源</a></p></details><details class="entity-card evidence-card" id="claim-981a4bf6ed" data-claim-id="claim-4fb867d5c0928bdd" data-subject-ref="leg-rail-0cf705c5b110" data-claim-status="verified" data-claim-mode="live"><summary><strong>中国铁路 12306</strong> · 已核验 · 北京 → 上海虹桥国际机场 · 价格</summary><p>查询于 <time datetime="2026-09-04T00:00:00+08:00">2026-09-04 00:00</time> · 可信度 95% · 数据口径 实时查询</p><p><a href="https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc&amp;fs=%E5%8C%97%E4%BA%AC%E7%A4%BA%E4%BE%8B%E7%AB%99%2CBEX&amp;ts=%E4%B8%8A%E6%B5%B7%E7%A4%BA%E4%BE%8B%E7%AB%99%2CSHX&amp;date=2026-09-10&amp;flag=N%2CN%2CY" rel="noopener noreferrer">查看来源</a></p></details><details class="entity-card evidence-card" id="claim-9035b136bf" data-claim-id="claim-b8263a6fb333ef52" data-subject-ref="leg-rail-0cf705c5b110" data-claim-status="verified" data-claim-mode="live"><summary><strong>中国铁路 12306</strong> · 已核验 · 北京 → 上海虹桥国际机场 · 待核验信息</summary><p>查询于 <time datetime="2026-09-04T00:00:00+08:00">2026-09-04 00:00</time> · 可信度 95% · 数据口径 实时查询</p><p><a href="https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc&amp;fs=%E5%8C%97%E4%BA%AC%E7%A4%BA%E4%BE%8B%E7%AB%99%2CBEX&amp;ts=%E4%B8%8A%E6%B5%B7%E7%A4%BA%E4%BE%8B%E7%AB%99%2CSHX&amp;date=2026-09-10&amp;flag=N%2CN%2CY" rel="noopener noreferrer">查看来源</a></p></details><details class="entity-card evidence-card" id="claim-c0476d4994" data-claim-id="claim-647a128edd62bc2b" data-subject-ref="leg-rail-bcf544b2bd03" data-claim-status="verified" data-claim-mode="live"><summary><strong>中国铁路 12306</strong> · 已核验 · 广州 → 上海虹桥国际机场 · 出发时间</summary><p>查询于 <time datetime="2026-09-04T00:00:00+08:00">2026-09-04 00:00</time> · 可信度 95% · 数据口径 实时查询</p><p><a href="https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc&amp;fs=%E5%8C%97%E4%BA%AC%E7%A4%BA%E4%BE%8B%E7%AB%99%2CBEX&amp;ts=%E4%B8%8A%E6%B5%B7%E7%A4%BA%E4%BE%8B%E7%AB%99%2CSHX&amp;date=2026-09-10&amp;flag=N%2CN%2CY" rel="noopener noreferrer">查看来源</a></p></details><details class="entity-card evidence-card" id="claim-a99b8f545d" data-claim-id="claim-65f89cef6b0f0d2d" data-subject-ref="leg-rail-bcf544b2bd03" data-claim-status="verified" data-claim-mode="live"><summary><strong>中国铁路 12306</strong> · 已核验 · 广州 → 上海虹桥国际机场 · 价格</summary><p>查询于 <time datetime="2026-09-04T00:00:00+08:00">2026-09-04 00:00</time> · 可信度 95% · 数据口径 实时查询</p><p><a href="https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc&amp;fs=%E5%8C%97%E4%BA%AC%E7%A4%BA%E4%BE%8B%E7%AB%99%2CBEX&amp;ts=%E4%B8%8A%E6%B5%B7%E7%A4%BA%E4%BE%8B%E7%AB%99%2CSHX&amp;date=2026-09-10&amp;flag=N%2CN%2CY" rel="noopener noreferrer">查看来源</a></p></details><details class="entity-card evidence-card" id="claim-4fb5ce1b2a" data-claim-id="claim-145ea85d05b91257" data-subject-ref="leg-rail-bcf544b2bd03" data-claim-status="verified" data-claim-mode="live"><summary><strong>中国铁路 12306</strong> · 已核验 · 广州 → 上海虹桥国际机场 · 待核验信息</summary><p>查询于 <time datetime="2026-09-04T00:00:00+08:00">2026-09-04 00:00</time> · 可信度 95% · 数据口径 实时查询</p><p><a href="https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc&amp;fs=%E5%8C%97%E4%BA%AC%E7%A4%BA%E4%BE%8B%E7%AB%99%2CBEX&amp;ts=%E4%B8%8A%E6%B5%B7%E7%A4%BA%E4%BE%8B%E7%AB%99%2CSHX&amp;date=2026-09-10&amp;flag=N%2CN%2CY" rel="noopener noreferrer">查看来源</a></p></details></section>
+</main>
+<footer class="page-footer" data-section="footer" data-trip-id="trip-f7db617375c1e346"><p><strong>仅提供只读规划：</strong>本页只做查询、比较和官方深链；不保证库存、价格、准点或开放状态。不登录、不实名、不代下单、不支付、不退改。</p><p class="attribution" data-attribution="1">铁路班次与票价来源于中国铁路 12306 公开查询。</p><p>数据结构 1.0.0 · 页面模板 1 · 当前修订 1</p></footer>
+<script id="trip-data" type="application/json">{"budget_ledger":{"budget_cny":5000,"currency":"CNY","items":[{"amount_max_cny":600,"amount_min_cny":600,"basis":"300 per person × 2 travelers","category":"transport","included_in_scheduler":true,"price_type":"live","reason":null,"ref_id":"leg-rail-0cf705c5b110"},{"amount_max_cny":300,"amount_min_cny":300,"basis":"300 per person × 1 travelers","category":"transport","included_in_scheduler":true,"price_type":"live","reason":null,"ref_id":"leg-rail-bcf544b2bd03"},{"amount_max_cny":null,"amount_min_cny":null,"basis":"price unavailable","category":"poi","included_in_scheduler":false,"price_type":null,"reason":"no comparable price was supplied","ref_id":"poi-grouped-1"},{"amount_max_cny":null,"amount_min_cny":null,"basis":"price unavailable","category":"poi","included_in_scheduler":false,"price_type":null,"reason":"no comparable price was supplied","ref_id":"poi-grouped-2"},{"amount_max_cny":null,"amount_min_cny":null,"basis":"price unavailable","category":"poi","included_in_scheduler":false,"price_type":null,"reason":"no comparable price was supplied","ref_id":"poi-routine-meal-1107022f0747"}],"known_cost_cny":900,"remaining_known_budget_cny":4100,"status":"incomplete","total_range_cny":{"maximum":null,"minimum":null}},"claims":[{"as_of":null,"claim_id":"claim-grouped-1","confidence":0.5,"field_path":"/name","json_path":null,"mode":"static","provider":"official-web","queried_at":"2026-09-03T12:00:00+08:00","raw_ref":null,"response_hash":null,"source_url":"https://example.com/grouped-departures/1","status":"hypothesis","subject_ref":"poi-grouped-1","value":"synthetic grouped-departure candidate"},{"as_of":null,"claim_id":"claim-grouped-2","confidence":0.5,"field_path":"/name","json_path":null,"mode":"static","provider":"official-web","queried_at":"2026-09-03T12:00:00+08:00","raw_ref":null,"response_hash":null,"source_url":"https://example.com/grouped-departures/2","status":"hypothesis","subject_ref":"poi-grouped-2","value":"synthetic grouped-departure candidate"},{"as_of":"2026-09-10T08:00:00+08:00","claim_id":"claim-56212b60e60692d3","confidence":0.95,"field_path":"/depart_at","json_path":"/start_time","mode":"live","provider":"12306-mcp","queried_at":"2026-09-04T00:00:00+08:00","raw_ref":null,"response_hash":null,"source_url":"https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc\u0026fs=%E5%8C%97%E4%BA%AC%E7%A4%BA%E4%BE%8B%E7%AB%99%2CBEX\u0026ts=%E4%B8%8A%E6%B5%B7%E7%A4%BA%E4%BE%8B%E7%AB%99%2CSHX\u0026date=2026-09-10\u0026flag=N%2CN%2CY","status":"verified","subject_ref":"leg-rail-0cf705c5b110","value":{"arrive_at":"2026-09-10T12:00:00+08:00","depart_at":"2026-09-10T08:00:00+08:00","duration_minutes":240}},{"as_of":"2026-09-10T08:00:00+08:00","claim_id":"claim-4fb867d5c0928bdd","confidence":0.95,"field_path":"/price","json_path":"/prices","mode":"live","provider":"12306-mcp","queried_at":"2026-09-04T00:00:00+08:00","raw_ref":null,"response_hash":null,"source_url":"https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc\u0026fs=%E5%8C%97%E4%BA%AC%E7%A4%BA%E4%BE%8B%E7%AB%99%2CBEX\u0026ts=%E4%B8%8A%E6%B5%B7%E7%A4%BA%E4%BE%8B%E7%AB%99%2CSHX\u0026date=2026-09-10\u0026flag=N%2CN%2CY","status":"verified","subject_ref":"leg-rail-0cf705c5b110","value":{"amount":300,"currency":"CNY","seat_name":"二等座"}},{"as_of":"2026-09-10T08:00:00+08:00","claim_id":"claim-b8263a6fb333ef52","confidence":0.95,"field_path":"/availability","json_path":"/prices","mode":"live","provider":"12306-mcp","queried_at":"2026-09-04T00:00:00+08:00","raw_ref":null,"response_hash":null,"source_url":"https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc\u0026fs=%E5%8C%97%E4%BA%AC%E7%A4%BA%E4%BE%8B%E7%AB%99%2CBEX\u0026ts=%E4%B8%8A%E6%B5%B7%E7%A4%BA%E4%BE%8B%E7%AB%99%2CSHX\u0026date=2026-09-10\u0026flag=N%2CN%2CY","status":"verified","subject_ref":"leg-rail-0cf705c5b110","value":[{"availability":"2","available":true,"price":1000,"seat_name":"商务座"},{"availability":"有","available":true,"price":500,"seat_name":"一等座"},{"availability":"有","available":true,"price":300,"seat_name":"二等座"},{"availability":"无","available":false,"price":300,"seat_name":"无座"}]},{"as_of":"2026-09-10T08:00:00+08:00","claim_id":"claim-647a128edd62bc2b","confidence":0.95,"field_path":"/depart_at","json_path":"/start_time","mode":"live","provider":"12306-mcp","queried_at":"2026-09-04T00:00:00+08:00","raw_ref":null,"response_hash":null,"source_url":"https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc\u0026fs=%E5%8C%97%E4%BA%AC%E7%A4%BA%E4%BE%8B%E7%AB%99%2CBEX\u0026ts=%E4%B8%8A%E6%B5%B7%E7%A4%BA%E4%BE%8B%E7%AB%99%2CSHX\u0026date=2026-09-10\u0026flag=N%2CN%2CY","status":"verified","subject_ref":"leg-rail-bcf544b2bd03","value":{"arrive_at":"2026-09-10T12:00:00+08:00","depart_at":"2026-09-10T08:00:00+08:00","duration_minutes":240}},{"as_of":"2026-09-10T08:00:00+08:00","claim_id":"claim-65f89cef6b0f0d2d","confidence":0.95,"field_path":"/price","json_path":"/prices","mode":"live","provider":"12306-mcp","queried_at":"2026-09-04T00:00:00+08:00","raw_ref":null,"response_hash":null,"source_url":"https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc\u0026fs=%E5%8C%97%E4%BA%AC%E7%A4%BA%E4%BE%8B%E7%AB%99%2CBEX\u0026ts=%E4%B8%8A%E6%B5%B7%E7%A4%BA%E4%BE%8B%E7%AB%99%2CSHX\u0026date=2026-09-10\u0026flag=N%2CN%2CY","status":"verified","subject_ref":"leg-rail-bcf544b2bd03","value":{"amount":300,"currency":"CNY","seat_name":"二等座"}},{"as_of":"2026-09-10T08:00:00+08:00","claim_id":"claim-145ea85d05b91257","confidence":0.95,"field_path":"/availability","json_path":"/prices","mode":"live","provider":"12306-mcp","queried_at":"2026-09-04T00:00:00+08:00","raw_ref":null,"response_hash":null,"source_url":"https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc\u0026fs=%E5%8C%97%E4%BA%AC%E7%A4%BA%E4%BE%8B%E7%AB%99%2CBEX\u0026ts=%E4%B8%8A%E6%B5%B7%E7%A4%BA%E4%BE%8B%E7%AB%99%2CSHX\u0026date=2026-09-10\u0026flag=N%2CN%2CY","status":"verified","subject_ref":"leg-rail-bcf544b2bd03","value":[{"availability":"2","available":true,"price":1000,"seat_name":"商务座"},{"availability":"有","available":true,"price":500,"seat_name":"一等座"},{"availability":"有","available":true,"price":300,"seat_name":"二等座"},{"availability":"无","available":false,"price":300,"seat_name":"无座"}]},{"as_of":null,"claim_id":"claim-acff11540908ae7a","confidence":0.5,"field_path":"/opening_windows","json_path":null,"mode":"static","provider":"ctw-planner","queried_at":"2026-09-04T00:00:00+08:00","raw_ref":null,"response_hash":null,"source_url":"https://china-trip-weaver.local/planning/routine-meals","status":"hypothesis","subject_ref":"poi-routine-meal-1107022f0747","value":{"duration_minutes":60,"end_time":"19:30","meal_type":"dinner","start_time":"16:30","travel_day_adjusted":[{"end_at":"2026-09-10T20:30:00+08:00","start_at":"2026-09-10T16:30:00+08:00"}]}}],"days":[{"city":"上海","date":"2026-09-10","day_id":"day-1","pace":"balanced","planned_walking_km":0.5,"slots":[{"claim_ids":["claim-grouped-1"],"end_at":"2026-09-10T13:45:00+08:00","kind":"poi","locked":false,"ref_id":"poi-grouped-1","slot_id":"slot-poi-grouped-1","start_at":"2026-09-10T13:00:00+08:00","status":"scheduled","title":"上海示例建筑漫步"},{"claim_ids":["claim-grouped-2"],"end_at":"2026-09-10T14:50:00+08:00","kind":"poi","locked":false,"ref_id":"poi-grouped-2","slot_id":"slot-poi-grouped-2","start_at":"2026-09-10T14:05:00+08:00","status":"scheduled","title":"上海示例滨水公园"},{"claim_ids":[],"end_at":"2026-09-10T15:50:00+08:00","kind":"rest","locked":false,"ref_id":null,"slot_id":"slot-routine-rest-020803a7e687","start_at":"2026-09-10T14:50:00+08:00","status":"scheduled","title":"午休"},{"claim_ids":["claim-acff11540908ae7a"],"end_at":"2026-09-10T17:30:00+08:00","kind":"meal","locked":false,"ref_id":"poi-routine-meal-1107022f0747","slot_id":"slot-poi-routine-meal-1107022f0747","start_at":"2026-09-10T16:30:00+08:00","status":"scheduled","title":"晚餐（地点待定）"}],"stay_id":null,"timezone":"Asia/Shanghai"}],"generated_at":"2026-09-04T00:00:00+08:00","lodgings":[],"mode":"static","patches":[],"pois":[{"category":"architecture","city":"上海","claim_ids":["claim-grouped-1"],"coordinates":{"conversion":{"accuracy_m":null,"converted_at":null,"derived_fields":[],"method":"identity","status":"not-needed","version":"1"},"gcj02":null,"native":{"lat":31.23,"lng":121.471},"source_crs":"WGS84","wgs84":{"lat":31.23,"lng":121.471}},"deep_links":["https://example.com/grouped-departures/1"],"name":"上海示例建筑漫步","opening_windows":[],"poi_id":"poi-grouped-1","price":null,"recommended_duration_minutes":45},{"category":"park","city":"上海","claim_ids":["claim-grouped-2"],"coordinates":{"conversion":{"accuracy_m":null,"converted_at":null,"derived_fields":[],"method":"identity","status":"not-needed","version":"1"},"gcj02":null,"native":{"lat":31.23,"lng":121.472},"source_crs":"WGS84","wgs84":{"lat":31.23,"lng":121.472}},"deep_links":["https://example.com/grouped-departures/2"],"name":"上海示例滨水公园","opening_windows":[],"poi_id":"poi-grouped-2","price":null,"recommended_duration_minutes":45},{"category":"food","city":"上海","claim_ids":["claim-acff11540908ae7a"],"coordinates":{"conversion":{"accuracy_m":null,"converted_at":null,"derived_fields":[],"method":"identity","status":"not-needed","version":"1"},"gcj02":null,"native":{"lat":31.23,"lng":121.471},"source_crs":"WGS84","wgs84":{"lat":31.23,"lng":121.471}},"deep_links":[],"name":"晚餐（地点待定）","opening_windows":[{"claim_id":"claim-acff11540908ae7a","end_at":"2026-09-10T20:30:00+08:00","start_at":"2026-09-10T16:30:00+08:00","status":"tentative"}],"physical_intensity":"light","poi_id":"poi-routine-meal-1107022f0747","price":null,"recommended_duration_minutes":60}],"provider_health":[{"capabilities":["rail"],"checked_at":"2026-09-04T00:00:00+08:00","mode":"live","provider":"12306-mcp","reason":"all dated rail legs were normalized from live MCP inventory","status":"ready","version":"0.3.10"},{"capabilities":["research"],"checked_at":"2026-09-04T00:00:00+08:00","mode":"static","provider":"host-web","reason":"researched candidate file supplied; no web call was made","status":"ready","version":"candidate-file"},{"capabilities":["lodging","flight"],"checked_at":"2026-09-04T00:00:00+08:00","mode":"static","provider":"flyai","reason":"candidate-file lodging retained; FlyAI live inventory and flight comparison were not called","status":"ready","version":"1.0.16"},{"capabilities":["geocode","poi","route"],"checked_at":"2026-09-04T00:00:00+08:00","mode":"static","provider":"amap","reason":"AMap mobility is off; calls=0/80 qps\u003c=2; route matrix uses static estimates","status":"missing","version":"web-service-v5-v3-route"},{"capabilities":["flight","weather","comfort"],"checked_at":"2026-09-04T00:00:00+08:00","mode":"static","provider":"variflight","reason":"VariFlight enrichment is off; no business call was made and tools/list was not run","status":"missing","version":"1.0.3"},{"capabilities":["research"],"checked_at":"2026-09-04T00:00:00+08:00","mode":"static","provider":"anysearch","reason":"optional search supplement is disabled; no auto-registration or business call was made","status":"missing","version":"runtime-probe-v1"}],"request":{"assumptions":["分组交通使用仓库内全合成铁路夹具","MEETING_PRE_JOIN_MEAL meal_type=lunch"],"budget_cny":5000,"constraints":["不执行任何交易动作"],"destinations":[{"city":"上海","name":"上海","ref_id":"city-shanghai"}],"end_date":"2026-09-10","interests":["建筑","滨水空间"],"locale":"zh-CN","meeting_anchor":{"buffer_minutes":60,"location":{"city":"上海","name":"上海虹桥国际机场","ref_id":"airport-shanghai"},"meet_by":"2026-09-10T13:00:00+08:00"},"pace":"balanced","pasted_notes":null,"start_date":"2026-09-10","traveler_groups":[{"group_id":"family-beijing","origin":{"city":"北京","name":"北京","ref_id":"city-beijing"},"travelers":2},{"group_id":"family-guangzhou","origin":{"city":"广州","name":"广州","ref_id":"city-guangzhou"},"travelers":1}]},"revision":{"created_at":"2026-09-04T00:00:00+08:00","created_by":"system","number":1,"parent_revision":null,"reason":"initial candidate-file plan"},"schema_version":"1.0.0","transport_legs":[{"arrive_at":"2026-09-10T12:00:00+08:00","booking_url":"https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc\u0026fs=%E5%8C%97%E4%BA%AC%E7%A4%BA%E4%BE%8B%E7%AB%99%2CBEX\u0026ts=%E4%B8%8A%E6%B5%B7%E7%A4%BA%E4%BE%8B%E7%AB%99%2CSHX\u0026date=2026-09-10\u0026flag=N%2CN%2CY","claim_ids":["claim-56212b60e60692d3","claim-4fb867d5c0928bdd","claim-b8263a6fb333ef52"],"data_mode":"live","depart_at":"2026-09-10T08:00:00+08:00","duration_minutes":240,"from_ref":"city-beijing","group_refs":["family-beijing"],"leg_id":"leg-rail-0cf705c5b110","locked":false,"price":{"amount":300,"claim_id":"claim-4fb867d5c0928bdd","currency":"CNY","includes_taxes":true,"price_type":"live","queried_at":"2026-09-04T00:00:00+08:00","unit":"per_person"},"provider":"12306-mcp","service_number":"G1001","to_ref":"airport-shanghai","travel_mode":"rail"},{"arrive_at":"2026-09-10T12:00:00+08:00","booking_url":"https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc\u0026fs=%E5%8C%97%E4%BA%AC%E7%A4%BA%E4%BE%8B%E7%AB%99%2CBEX\u0026ts=%E4%B8%8A%E6%B5%B7%E7%A4%BA%E4%BE%8B%E7%AB%99%2CSHX\u0026date=2026-09-10\u0026flag=N%2CN%2CY","claim_ids":["claim-647a128edd62bc2b","claim-65f89cef6b0f0d2d","claim-145ea85d05b91257"],"data_mode":"live","depart_at":"2026-09-10T08:00:00+08:00","duration_minutes":240,"from_ref":"city-guangzhou","group_refs":["family-guangzhou"],"leg_id":"leg-rail-bcf544b2bd03","locked":false,"price":{"amount":300,"claim_id":"claim-65f89cef6b0f0d2d","currency":"CNY","includes_taxes":true,"price_type":"live","queried_at":"2026-09-04T00:00:00+08:00","unit":"per_person"},"provider":"12306-mcp","service_number":"G1001","to_ref":"airport-shanghai","travel_mode":"rail"}],"transport_pricing":{"currency":"CNY","group_totals":[{"group_ref":"family-beijing","total_cny":{"maximum":600,"minimum":600},"travelers":2},{"group_ref":"family-guangzhou","total_cny":{"maximum":300,"minimum":300},"travelers":1}],"party_total_cny":{"maximum":900,"minimum":900}},"trip_id":"trip-f7db617375c1e346","unknowns":[{"claim_id":null,"field_path":"/pois/2/price","provider":null,"reason":"exact dinner venue and price remain unselected; the slot reserves time only"},{"claim_id":null,"field_path":"/budget_ledger/items/2/amount_max_cny","provider":null,"reason":"no comparable price was supplied"},{"claim_id":null,"field_path":"/budget_ledger/items/3/amount_max_cny","provider":null,"reason":"no comparable price was supplied"},{"claim_id":null,"field_path":"/budget_ledger/items/4/amount_max_cny","provider":null,"reason":"no comparable price was supplied"}]}</script>
+</body>
+</html>

@@ -890,3 +890,280 @@ OK
 - `git diff --check` exit 0；`git diff --name-only` 恰为 11 个白名单文件；针对 `cli.py/providers/mobility.py/render/demo/plugin.json/test_packaging.py/scan_secrets.py/docs/research` 的 diff 命令 exit 0 且输出为空。
 - 两份 Schema `cmp -s` exit 0，SHA-256 同为 `fa8c9075fa044fd51d71fc5ddc7b3c2cd5dbbbbd85b677d5135661aa58d345ff`；manifest 只读核验版本仍为 `0.2.0`。
 - 当前验收轮次 8/14；没有非意图性验收失败，三次指定反向变更均已还原。公开 validator 的白名单阻塞保留在 `BLOCKED.md`，其余书 8 条件已完成。
+
+## 0.3.0 发布开工理解（2026-09-04，≤10 行）
+
+1. 目标：公开 validator、renderer、FlyAI inventory 原生消费严格互斥的分组 request，并发布/安装 0.3.0。
+2. 顺序：任务 0 基线与 KeyError 复现 → 三消费方与投影清理 → 四组 demo → 10 处版本 → 真实 Codex 安装。
+3. 分组端点集合必须并入每组 origin；人数取各组之和；渲染出发地按组列出，不向 request 持久化派生字段。
+4. planning.py 只删除本次原生支持后确实多余的投影，仍服务其他旧消费者的投影保留并注明原因。
+5. 每项保留真实命令输出；validator 合并组出发地必须做一次临时移除的红→还原绿验证。
+6. 最大风险：语义引用集合、HTML 内嵌原始 Trip 与 planner 内部调用边界同时收紧时破坏旧单出发流程。
+7. 边界：只写任务白名单；不动 schema、docs/research、其他 provider/CLI/scheduler，不放宽断言、不跳过测试。
+8. 止损上限 14 轮；同一验收连败 3 次转下一项并如实记录，最终 `BLOCKED.md` 必须随交付存在。
+
+## 0.3.0 任务 0：基线与分组崩溃复现（完成）
+
+- Git 根为 `/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver`；开工 HEAD 与 `origin/main` 均为 `0034ac6c1c45de5902ddcb138bfcfedba3ae4a6a`，worktree clean。
+- `/usr/bin/python3 -m unittest discover -s tests`（exit 0）原始输出：
+
+```text
+....................................................................................................................................................................................................................................................................................................................................................................
+----------------------------------------------------------------------
+Ran 356 tests in 25.923s
+
+OK
+```
+
+- `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）原始输出：
+
+```text
+secret scan: 0 finding(s) across 357 file(s)
+```
+
+- 使用既有全合成 G6 构造器在内存生成 Trip；schema-only 验证为真，request 严格不含 `origin/travelers`，两腿均有 `group_refs`，根含 `transport_pricing`。随后直接调用两个公开消费方，原始输出：
+
+```text
+GROUPED_TRIP_SCHEMA_OK True
+REQUEST_KEYS ['assumptions', 'budget_cny', 'constraints', 'destinations', 'end_date', 'interests', 'locale', 'meeting_anchor', 'pace', 'pasted_notes', 'start_date', 'traveler_groups']
+GROUPS [('family-beijing', 2, 'city-beijing'), ('family-guangzhou', 1, 'city-guangzhou')]
+LEG_GROUP_REFS [['family-beijing'], ['family-guangzhou']]
+TRANSPORT_PRICING_PRESENT True
+BEGIN validate_trip
+Traceback (most recent call last):
+  File "<stdin>", line 17, in <module>
+  File "<stdin>", line 14, in <lambda>
+  File ".../validate_trip.py", line 486, in validate_trip
+    semantic_errors = semantic_issues(trip) if semantic else []
+  File ".../validate_trip.py", line 293, in semantic_issues
+    origin = trip["request"]["origin"]
+KeyError: 'origin'
+END validate_trip
+BEGIN render_trip
+Traceback (most recent call last):
+  File "<stdin>", line 17, in <module>
+  File "<stdin>", line 14, in <lambda>
+  File ".../render/html.py", line 140, in render_trip
+    report = validate_trip(trip)
+  File ".../validate_trip.py", line 486, in validate_trip
+    semantic_errors = semantic_issues(trip) if semantic else []
+  File ".../validate_trip.py", line 293, in semantic_issues
+    origin = trip["request"]["origin"]
+KeyError: 'origin'
+END render_trip
+```
+
+- 当前验收轮次：0/14；复现与任务现状一致，可以进入实现。
+
+## 0.3.0 任务 1：三个消费方原生支持分组（完成）
+
+- `validate_trip` 原生把每个 `traveler_groups[].origin`、`meeting_anchor.location` 与 destinations 合入引用集合；跨城起点判定接受非空分组起点，不再索引缺失的 legacy `origin`。
+- renderer 原生汇总各组人数；中文出发地按 `北京（2 人）、广州（1 人）` 显示，英文按逐组 traveler(s) 显示；引用名包含各组起点与会合点，交通腿不再显示“地点尚未解析”。
+- FlyAI/AMap lodging 参数对分组 request 的 `adult_count` 固定取各组 `travelers` 之和；legacy `adult_count → party.adults → travelers` 优先级保持不变。
+- planning 已把真实 grouped request 直接交给 FlyAI，并直接调用公开 `validate_trip`/`render_trip`；删除 `_legacy_request_projection`、`_validate_planned_trip`、`_render_planned_trip` 及私有 renderer/embedded JSON imports。仓内已无兼容投影引用，故没有仍需保留并注释的投影。
+- 新增 4 个精准回归，改前同一命令原始摘要为 `Ran 4 tests ... FAILED (errors=4)`；三处分别 `KeyError: 'origin'`，FlyAI 为 `KeyError: 'travelers'`。改后原始摘要：
+
+```text
+test_grouped_trip_validates_natively_with_each_origin_endpoint ... ok
+test_grouped_trip_renders_natively_with_total_and_origin_list ... ok
+test_grouped_trip_public_cli_validate_and_validate_html ... ok
+test_grouped_flyai_lodging_adult_count_is_group_sum ... ok
+----------------------------------------------------------------------
+Ran 4 tests in 0.168s
+
+OK
+```
+
+- 指定反向验证：临时把 validator 的 group-origin 合并替换为空列表（已还原），精准测试 exit 1 原始关键输出：
+
+```text
+test_grouped_trip_validates_natively_with_each_origin_endpoint ... ERROR
+ValueError: Trip validation failed: V_ENDPOINT_REF /transport_legs/0/from_ref transport endpoint does not exist; V_ENDPOINT_REF /transport_legs/1/from_ref transport endpoint does not exist; V_ORIGIN_REQUIRED /request/origin cross-city travel requires an origin
+----------------------------------------------------------------------
+Ran 1 test in 0.009s
+
+FAILED (errors=1)
+```
+
+- 还原后要求的 `/usr/bin/python3 -m unittest tests.test_keyless_e2e tests.test_renderer -v`（exit 0）原始摘要：
+
+```text
+----------------------------------------------------------------------
+Ran 65 tests in 5.405s
+
+OK
+```
+
+- 严格分组 Trip 序列化后公开 CLI 原始输出：
+
+```text
+COMMAND .../scripts/ctw validate exit 0
+VALID .../.tmp/tmpso0nyy4j/grouped-trip.json
+COMMAND .../scripts/ctw validate-html exit 0
+HTML VALID .../.tmp/tmpso0nyy4j/grouped-trip.html errors=0
+```
+
+- 当前验收轮次：1/14；Task 1 正向门与指定红→绿均完成，临时变更已还原。
+
+## 0.3.0 任务 2：四组 demo 重跑（完成）
+
+- `build_plan_fixtures.py` 新增纯合成 `grouped_departures_demo()`，生成 `demo/grouped-departures/request.json|candidates.json`：北京 2 人、广州 1 人分别到上海虹桥机场会合；request 严格不含 legacy `origin/travelers`。生成器重跑输出：
+
+```text
+wrote 3 plan cases, 3 invalid candidates, and single/multi-city/grouped demo inputs; packaged reference verified
+```
+
+- 三组首次与 grouped 新组离线重跑中，北京→上海、多城市、分组组均 exit 0；原始输出：
+
+```text
+PLAN_COMPLETE json=demo/trip.json html=demo/trip.html mode=static stages=INTAKE,RESEARCHED,CANDIDATES_READY,MATRIX_DEGRADED,SCHEDULED,VALIDATED,RENDERED calls=rail12306.fixture:2026-10-16:北京:上海,rail12306.fixture:2026-10-18:上海:北京 trip_sha256=5c4a3c32db5bf700228ce1faa35dee23999f4868555bcd213f0fde5b7547a17c html_sha256=ed161aa9f0f2ecbe368fc02230f14e2d9c8a0b59b472ee474d941703cd7cf47b errors=0
+PLAN_COMPLETE json=demo/multicity-5d/trip.json html=demo/multicity-5d/trip.html mode=static stages=INTAKE,RESEARCHED,CANDIDATES_READY,MATRIX_DEGRADED,SCHEDULED,VALIDATED,RENDERED calls= trip_sha256=12b01b2971970d291253d8e5e0a0b611bfa3211d30290bcbc9d3988e61c132c1 html_sha256=a8f83e9aeb00b89c3067fb4e734f06746533499e54a8598ec64804c82865ef9f errors=0
+PLAN_COMPLETE json=demo/grouped-departures/trip.json html=demo/grouped-departures/trip.html mode=static stages=INTAKE,RESEARCHED,CANDIDATES_READY,MATRIX_DEGRADED,SCHEDULED,VALIDATED,RENDERED calls=rail12306.fixture:2026-09-10:北京:上海虹桥国际机场,rail12306.fixture:2026-09-10:广州:上海虹桥国际机场 trip_sha256=4be53526d0c77112344b3a0aa99f0168f03a2cf75ba54f0b2b5afb9c18206c96 html_sha256=3715615d7514a8ace116235a72c68caf2d03f173d190606d0d115c1d85774162 errors=0
+```
+
+- 广州→深圳首次重跑（exit 1）暴露旧 demo 输入与新硬缓冲的真实冲突：5 小时合成降级腿之间只有 3 小时，却要求两次 45 分钟换乘缓冲及默认各 60 分钟的午餐、晚餐、午休；原始输出：
+
+```text
+PLAN_FAILED plan has no feasible schedule: {"attempted_relaxations":[],"budget_ledger":null,"conflict":{"code":"window","message":"required candidate routine-transfer-buffer-3fe32ee61fc6 has no feasible insertion"}}
+```
+
+- 保留一日往返语义，只在该合成 request 明示 30 分钟午/晚简餐与 15 分钟短休；第二次同一离线命令 exit 0：
+
+```text
+PLAN_COMPLETE json=demo/guangzhou-shenzhen/trip.json html=demo/guangzhou-shenzhen/trip.html mode=static stages=INTAKE,RESEARCHED,CANDIDATES_READY,MATRIX_DEGRADED,SCHEDULED,VALIDATED,RENDERED calls=rail12306.fixture:2026-09-10:广州:深圳,rail12306.fixture:2026-09-10:深圳:广州 trip_sha256=85c2b9f73bf831b786f91397b6c2600c4e1322d999de3b1c9aec017eb2cf1288 html_sha256=db28a8d0ec8780be7a1e22e4b21cbac1edcb23f24b79c88cd7294f819b7ff4fa errors=0
+```
+
+- 四组公开验证八条命令均 exit 0，原始输出：
+
+```text
+VALID demo/trip.json
+HTML VALID demo/trip.html errors=0
+VALID demo/guangzhou-shenzhen/trip.json
+HTML VALID demo/guangzhou-shenzhen/trip.html errors=0
+VALID demo/multicity-5d/trip.json
+HTML VALID demo/multicity-5d/trip.html errors=0
+VALID demo/grouped-departures/trip.json
+HTML VALID demo/grouped-departures/trip.html errors=0
+```
+
+- `/usr/bin/python3 scripts/scan_secrets.py` 对 `rg --files demo` 的全部 16 个文件（exit 0）：`secret scan: 0 finding(s) across 16 file(s)`。
+- 新的 checked-in demo 回归（exit 0）断言严格互斥 request、3 人合计、两条 group refs、party CNY 900、可见分组出发地及 Trip/HTML 全有效：`Ran 1 test in 0.009s`、`OK`。
+- 当前验收轮次：2/14；一次非连续 demo 验收失败已由白名单内合成输入修正，未触碰 scheduler。
+
+## 0.3.0 任务 3：版本发布面同步（完成）
+
+- 一次补齐任务书列出的 10 处精确版本：package `__version__`、manifest、MCP `clientInfo`、两份 README 安装预期、`test_packaging.py` 两处，以及 credentials/contracts/skills 各一处；所有断言仍为 `assertEqual("0.3.0", ...)` 精确相等。
+- 两份 README 同时删除已失效的“旧消费端兼容投影”说法，改为 validator/renderer/inventory 原生消费分组；新增第四组 demo 的可见证据入口。
+- `rg -n '0\.3\.0'` 对上述九个文件（packaging 含两处）实际恰好返回 10 行。固定字符串旧版本审计：
+
+```text
+/usr/bin/grep -rnF --exclude-dir=__pycache__ "0.2.0" README.md README.zh-CN.md plugins/china-trip-weaver/src plugins/china-trip-weaver/.codex-plugin tests/test_packaging.py tests/test_credentials.py tests/test_contracts.py tests/test_skills.py scripts/build_renderer_fixtures.py scripts/build_plan_fixtures.py demo
+exit=1
+<no output>
+```
+
+- 一次检查误用 plain `grep "0.2.0"`，点号按正则通配而命中 demo 数字和旧 `.pyc`；未修改文件。随后以上 fixed-string source audit 给出真实零命中。
+- `git diff -- docs/research plugins/china-trip-weaver/schema docs/design/schema`（exit 0）输出为空。
+- 版本后的全量 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）原始输出：
+
+```text
+.........................................................................................................................................................................................................................................................................................................................................................................
+----------------------------------------------------------------------
+Ran 361 tests in 28.079s
+
+OK
+```
+
+- skipped 0；满足 ≥360。同期 `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 361 file(s)`。
+- 当前验收轮次：3/14；版本、精确断言、全量测试与旧版本审计均通过。
+
+## 0.3.0 任务 4：安装进真实 Codex（完成）
+
+- 按要求不设置 `CODEX_HOME`，真实目标为 `/Users/kangyishuai/.codex`。首次 `scripts/install_local_plugin.sh` 已把 plugin list 更新到 `installed, enabled 0.3.0`，但 source/cache diff 因插件源码下遗留的 398 MB Git-ignored `.npm-cache` 而 exit 1：
+
+```text
+SKILL parser smoke: OK (9 SKILL.md via codex debug prompt-input)
+已执行 plugin add china-trip-weaver@china-trip-weaver-local
+plugin list: installed, enabled 0.3.0
+校验失败：缓存与源码不一致（先跑不带 --check 的本脚本刷新）
+Only in .../plugins/china-trip-weaver/.npm-cache/.../node_modules/.bin: 12306-mcp
+```
+
+- `git status --ignored` 与 `git check-ignore -v` 确认该树完全由根 `.gitignore:3:.npm-cache/` 忽略，mtime 为 2026-09-04，且不属于源码或安装缓存。直接删除被执行环境拒绝，故按可恢复原则把唯一精确目录移入 `/Users/kangyishuai/.Trash/china-trip-weaver-plugin-npm-cache-20260905-release`；源码位置已不存在，tracked 状态未受影响。
+- 第二次同一真实安装命令（exit 0）原始输出：
+
+```text
+codex: /Applications/ChatGPT.app/Contents/Resources/codex
+源码: .../plugins/china-trip-weaver (manifest 版本 0.3.0)
+Codex home: /Users/kangyishuai/.codex
+SKILL parser smoke: OK (9 SKILL.md via codex debug prompt-input)
+本地市场已注册 -> /Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver
+已执行 plugin add china-trip-weaver@china-trip-weaver-local
+plugin list: installed, enabled 0.3.0
+OK：china-trip-weaver@china-trip-weaver-local 0.3.0 已安装且缓存与源码一致
+提醒：在 Codex 里新建一个任务才会加载新版本；若 Skill 未出现，重启 Codex 桌面版
+```
+
+- 独立 `/Applications/ChatGPT.app/Contents/Resources/codex plugin list` 目标行（exit 0）：
+
+```text
+china-trip-weaver@china-trip-weaver-local  installed, enabled  0.3.0    /Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/plugins/china-trip-weaver
+```
+
+- 最终 `scripts/install_local_plugin.sh --check`（exit 0）原始关键输出：
+
+```text
+SKILL parser smoke: OK (9 SKILL.md via codex debug prompt-input)
+本地市场已注册 -> /Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver
+plugin list: installed, enabled 0.3.0
+OK：china-trip-weaver@china-trip-weaver-local 0.3.0 已安装且缓存与源码一致
+```
+
+- 当前验收轮次：4/14；真实安装、独立状态核对与只读缓存一致性检查均完成。
+
+## 0.3.0 最终验收（完成）
+
+- 最终代码审阅补了防御式 `request.get("traveler_groups") or ()`，避免非法 null 形状在直接调用内部语义/渲染 helper 时变成迭代异常；冻结 Schema 实际会先以 `S_ONE_OF + S_REQUIRED` 拒绝显式 null。新增负向回归最初错误地假设该形状合法，精准门 `Ran 4 ... FAILED (errors=1)`；核对 Schema 后改为断言 typed rejection，同门 `Ran 4 ... OK`，未改 Schema。
+- 最终全量 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）原始输出：
+
+```text
+..........................................................................................................................................................................................................................................................................................................................................................................
+----------------------------------------------------------------------
+Ran 362 tests in 24.601s
+
+OK
+```
+
+- skipped 0；基线 356→最终 362，满足 ≥360。最终 repo scan：`secret scan: 0 finding(s) across 361 file(s)`；demo 全 16 文件：`secret scan: 0 finding(s) across 16 file(s)`。
+- 最终四组八条公开校验原始输出：
+
+```text
+VALID demo/trip.json
+HTML VALID demo/trip.html errors=0
+VALID demo/guangzhou-shenzhen/trip.json
+HTML VALID demo/guangzhou-shenzhen/trip.html errors=0
+VALID demo/multicity-5d/trip.json
+HTML VALID demo/multicity-5d/trip.html errors=0
+VALID demo/grouped-departures/trip.json
+HTML VALID demo/grouped-departures/trip.html errors=0
+```
+
+- 最终固定字符串 0.2.0 审计 exit 1、输出为空。要求的 keyless+renderer 命令最终为 `Ran 67 tests in 6.200s`、`OK`、skipped 0。
+- 防御式两行代码是在上一次真实安装后加入，故首次最终 `--check` 如实 exit 1 并列出 validator/renderer cache stale；随即再次运行不带 `CODEX_HOME` 的 installer 刷新源码，exit 0。刷新后的最终 `--check` 原始关键输出：
+
+```text
+SKILL parser smoke: OK (9 SKILL.md via codex debug prompt-input)
+plugin list: installed, enabled 0.3.0
+OK：china-trip-weaver@china-trip-weaver-local 0.3.0 已安装且缓存与源码一致
+```
+
+- 最终独立 plugin list 行：`china-trip-weaver@china-trip-weaver-local  installed, enabled  0.3.0    /Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/plugins/china-trip-weaver`。
+- 当前验收轮次：6/14；没有同一验收三连败，所有完成条件已绿。
+
+## 0.3.0 最终边界快照
+
+- `git diff --check` exit 0。`git status --short` 只列任务白名单中的 25 个 tracked 文件及 `?? demo/grouped-departures/`；没有 schema、`docs/research/`、禁碰 provider/CLI/candidates/mobility/scheduler/test/scan 脚本路径。
+- `git diff --stat` 原始摘要为 `25 files changed, 671 insertions(+), 129 deletions(-)`；新增 grouped demo 目录因未跟踪而由上方 status 单列，仍在 `demo/全部` 白名单内。
+- `git diff --name-only -- docs/research docs/design/schema plugins/china-trip-weaver/schema ...禁碰路径...` exit 0 且输出为空；`rg -n '0\.3\.0'` 对版本清单恰好输出 10 行。
+- `git status --short --ignored plugins/china-trip-weaver/.npm-cache` exit 0 且输出为空，确认已移入废纸篓的生成缓存未在源码处复生。
+- 边界快照后的 repo secret scan 仍为 `secret scan: 0 finding(s) across 361 file(s)`。

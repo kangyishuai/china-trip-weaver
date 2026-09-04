@@ -24,8 +24,6 @@ from .providers.base import ProviderContext, ReplayTransport, stable_id
 from .providers.mcp_stdio import RailMCPStdioTransport
 from .providers.rail12306 import Rail12306Adapter
 from .render import render_trip, validate_html
-from .render.html import _render as render_grouped_trip
-from .render.template import embedded_json
 from .scheduler.light import LightScheduler, PaceProfile, pace_profile
 from .validate_trip import SchemaSubsetValidator, load_schema, validate_trip
 from .variflight_enrichment import VariFlightBackend
@@ -170,8 +168,7 @@ def plan_trip(
     _validate_meeting_anchor(normalized_request, transport_legs)
     claims.extend(rail_claims)
     active_flyai = flyai_backend or FlyAIBackend.from_spec("off", rail_backend.repo_root)
-    provider_request = _legacy_request_projection(normalized_request)
-    inventory = active_flyai.resolve(provider_request, routes, clock)
+    inventory = active_flyai.resolve(normalized_request, routes, clock)
     amap_lodging = None
     if not inventory.lodgings and active_flyai.mode == "live":
         active_amap_lodging = amap_lodging_backend or AMapLodgingBackend.from_spec(
@@ -338,12 +335,12 @@ def plan_trip(
     }
     if transport_pricing is not None:
         trip["transport_pricing"] = transport_pricing
-    report = _validate_planned_trip(trip)
+    report = validate_trip(trip)
     if not report.ok:
         raise ValueError("Trip validation failed: " + "; ".join(item.render() for item in report.errors))
     run.advance("VALIDATED", {"errors": 0, "schema_version": "1.0.0"}, trip_id, 1)
 
-    html = _render_planned_trip(trip)
+    html = render_trip(trip)
     html_report = validate_html(html, trip)
     if not html_report.ok:
         raise ValueError("HTML validation failed: " + "; ".join(item.render() for item in html_report.errors))
@@ -417,17 +414,6 @@ def _request_traveler_count(request: Mapping[str, Any]) -> int:
     if groups:
         return sum(int(item["travelers"]) for item in groups)
     return int(request["travelers"])
-
-
-def _legacy_request_projection(request: Mapping[str, Any]) -> Mapping[str, Any]:
-    if not request.get("traveler_groups"):
-        return request
-    projected = copy.deepcopy(dict(request))
-    projected["origin"] = copy.deepcopy(request["meeting_anchor"]["location"])
-    projected["travelers"] = _request_traveler_count(request)
-    projected.pop("traveler_groups", None)
-    projected.pop("meeting_anchor", None)
-    return projected
 
 
 def _combined_group_mobility(
@@ -1032,38 +1018,6 @@ def _reserved_meeting_cost(
         else:
             known += float(cost.maximum_cny)
     return known, tuple(sorted(unknown_refs))
-
-
-def _validate_planned_trip(trip: Mapping[str, Any]):
-    if not trip["request"].get("traveler_groups"):
-        return validate_trip(trip)
-    schema_report = validate_trip(trip, semantic=False)
-    if not schema_report.ok:
-        return schema_report
-    projection = copy.deepcopy(dict(trip))
-    groups = list(trip["request"]["traveler_groups"])
-    projected_request = copy.deepcopy(dict(_legacy_request_projection(trip["request"])))
-    known_refs = {item["ref_id"] for item in projected_request["destinations"]}
-    for group in groups:
-        origin = group["origin"]
-        if origin["ref_id"] not in known_refs and origin["ref_id"] != projected_request["origin"]["ref_id"]:
-            projected_request["destinations"].append(copy.deepcopy(origin))
-            known_refs.add(origin["ref_id"])
-    projection["request"] = projected_request
-    return validate_trip(projection)
-
-
-def _render_planned_trip(trip: Mapping[str, Any]) -> str:
-    if not trip["request"].get("traveler_groups"):
-        return render_trip(trip)
-    projection = copy.deepcopy(dict(trip))
-    projection["request"] = copy.deepcopy(dict(_legacy_request_projection(trip["request"])))
-    html = render_grouped_trip(projection)
-    projected_script = '<script id="trip-data" type="application/json">%s</script>' % embedded_json(projection)
-    actual_script = '<script id="trip-data" type="application/json">%s</script>' % embedded_json(trip)
-    if html.count(projected_script) != 1:
-        raise ValueError("grouped Trip renderer projection did not contain one canonical payload")
-    return html.replace(projected_script, actual_script, 1)
 
 
 def _deep_link_leg(route: RouteSpec, clock: Clock) -> Tuple[Mapping[str, Any], Sequence[Mapping[str, Any]]]:

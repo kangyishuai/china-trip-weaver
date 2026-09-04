@@ -134,6 +134,44 @@ def safe_output_name(trip_id: str) -> str:
     return cleaned[:64] + ".html"
 
 
+def _request_traveler_count(request: Mapping[str, Any]) -> int:
+    groups = request.get("traveler_groups")
+    if groups:
+        return sum(int(group["travelers"]) for group in groups)
+    return int(request["travelers"])
+
+
+def _request_origin_summary(request: Mapping[str, Any], labels: Mapping[str, str]) -> str:
+    groups = request.get("traveler_groups")
+    if groups:
+        if labels["locale"] == "zh-CN":
+            return "、".join(
+                "%s（%d 人）" % (group["origin"]["name"], group["travelers"])
+                for group in groups
+            )
+        return ", ".join(
+            "%s (%d %s)" % (
+                group["origin"]["name"],
+                group["travelers"],
+                "traveler" if group["travelers"] == 1 else "travelers",
+            )
+            for group in groups
+        )
+    origin = request.get("origin")
+    return origin["name"] if origin else labels["none"]
+
+
+def _request_places(request: Mapping[str, Any]) -> List[Mapping[str, Any]]:
+    places: List[Mapping[str, Any]] = []
+    if request.get("origin"):
+        places.append(request["origin"])
+    places.extend(group["origin"] for group in (request.get("traveler_groups") or ()))
+    if request.get("meeting_anchor"):
+        places.append(request["meeting_anchor"]["location"])
+    places.extend(request["destinations"])
+    return places
+
+
 def render_trip(trip: Mapping[str, Any], renderer_version: str = RENDERER_VERSION) -> str:
     if renderer_version != RENDERER_VERSION:
         raise RendererError("unsupported renderer version")
@@ -171,7 +209,7 @@ def _render(trip: Mapping[str, Any]) -> str:
         '<p class="eyebrow">China Trip Weaver · v%s</p>' % RENDERER_VERSION,
         "<h1>%s</h1>" % text(title_value),
         '<div class="header-meta"><span>%s %s</span><span>%s %s</span><span>%s %s</span><span class="mode-badge" data-trip-mode="%s">%s: %s</span></div>' % (
-            text(labels["travelers"]), text(trip["request"]["travelers"]),
+            text(labels["travelers"]), text(_request_traveler_count(trip["request"])),
             text(labels["revision"]), text(trip["revision"]["number"]),
             text(labels["generated"]), _time(trip["generated_at"]),
             attr(trip["mode"]), text(labels["mode"]), text(_enum_label(labels, "mode", trip["mode"])),
@@ -275,8 +313,7 @@ def _health_reason(health: Mapping[str, Any], labels: Mapping[str, str]) -> str:
 def _reference_names(trip: Mapping[str, Any], labels: Mapping[str, str]) -> Mapping[str, str]:
     names: Dict[str, str] = {}
     request = trip["request"]
-    places = ([request["origin"]] if request["origin"] else []) + list(request["destinations"])
-    for place in places:
+    for place in _request_places(request):
         names[place["ref_id"]] = place["name"]
     for lodging in trip["lodgings"]:
         names[lodging["lodging_id"]] = lodging["name"]
@@ -426,7 +463,7 @@ def _day_nav(trip: Mapping[str, Any], labels: Mapping[str, str]) -> str:
 
 def _request_section(trip: Mapping[str, Any], labels: Mapping[str, str]) -> str:
     request = trip["request"]
-    origin = request["origin"]["name"] if request["origin"] else labels["none"]
+    origin = _request_origin_summary(request, labels)
     budget = ("CNY " + _number(request["budget_cny"])) if request["budget_cny"] is not None else labels["price_unknown"]
     return (
         '<section class="panel" id="request-summary" data-section="request-summary" aria-labelledby="request-heading">'

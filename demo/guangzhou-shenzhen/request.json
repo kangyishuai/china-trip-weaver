@@ -20,6 +20,18 @@
     "公园",
     "公共文化"
   ],
+  "meal_windows": {
+    "dinner": {
+      "duration_minutes": 30,
+      "end_time": "19:30",
+      "start_time": "16:30"
+    },
+    "lunch": {
+      "duration_minutes": 30,
+      "end_time": "13:00",
+      "start_time": "11:00"
+    }
+  },
   "pace": "balanced",
   "constraints": [
     "当日往返",
@@ -28,7 +40,16 @@
   ],
   "assumptions": [
     "未来开放安排与临时管控需在出发前复核",
-    "一日游不查询住宿"
+    "一日游不查询住宿",
+    "合成降级交通时长较长，示例采用 30 分钟简餐与 15 分钟短休"
+  ],
+  "rest_windows": [
+    {
+      "duration_minutes": 15,
+      "end_time": "15:30",
+      "start_time": "13:00",
+      "title": "短途往返休整"
+    }
   ],
   "locale": "zh-CN",
   "pasted_notes": null

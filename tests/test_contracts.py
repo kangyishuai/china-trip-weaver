@@ -33,7 +33,7 @@ def load(path: Path):
 
 class ContractTests(unittest.TestCase):
     def test_versions_are_frozen(self):
-        self.assertEqual("0.2.0", __version__)
+        self.assertEqual("0.3.0", __version__)
         self.assertEqual("1.0.0", SCHEMA_VERSION)
 
     def test_packaged_schema_is_byte_identical_to_accepted_schema(self):

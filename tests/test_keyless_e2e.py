@@ -20,7 +20,11 @@ sys.path.insert(0, str(SRC))
 from china_trip_weaver.clock import FixedClock
 from china_trip_weaver.contracts import canonical_json
 from china_trip_weaver.credentials import resolve_credentials
-from china_trip_weaver.flyai_inventory import AMapLodgingBackend, FlyAIBackend
+from china_trip_weaver.flyai_inventory import (
+    AMapLodgingBackend,
+    FlyAIBackend,
+    _lodging_parameters_from_trip,
+)
 from china_trip_weaver.mobility import MobilityResult
 from china_trip_weaver.planning import (
     RailBackend,
@@ -32,7 +36,7 @@ from china_trip_weaver.planning import (
 )
 from china_trip_weaver.providers.base import ProviderTimeout, ReplayTransport
 from china_trip_weaver.providers.variflight_mcp import VariFlightMCPTransport
-from china_trip_weaver.render import validate_html
+from china_trip_weaver.render import render_trip, validate_html
 from china_trip_weaver.validate_trip import validate_trip
 from china_trip_weaver.variflight_enrichment import VariFlightBackend
 
@@ -267,6 +271,94 @@ class KeylessE2ETests(unittest.TestCase):
         self.assertEqual([300, 600], sorted(item["amount_max_cny"] for item in transport_budget))
         self.assertTrue(validate_trip(result.trip, semantic=False).ok)
         self.assertTrue(validate_html(result.html, result.trip).ok)
+
+    def test_grouped_trip_validates_natively_with_each_origin_endpoint(self):
+        result = self.run_grouped_meeting()
+
+        report = validate_trip(result.trip)
+
+        self.assertTrue(report.ok, [item.render() for item in report.errors])
+        endpoint_refs = {
+            endpoint
+            for leg in result.trip["transport_legs"]
+            for endpoint in (leg["from_ref"], leg["to_ref"])
+        }
+        self.assertEqual(
+            {"city-beijing", "city-guangzhou", "airport-shanghai"},
+            endpoint_refs,
+        )
+
+    def test_grouped_trip_renders_natively_with_total_and_origin_list(self):
+        result = self.run_grouped_meeting()
+
+        rendered = render_trip(result.trip)
+
+        self.assertIn("<span>人数 3</span>", rendered)
+        self.assertIn("北京（2 人）、广州（1 人）", rendered)
+        self.assertIn("北京 → 上海虹桥国际机场", rendered)
+        self.assertIn("广州 → 上海虹桥国际机场", rendered)
+        report = validate_html(rendered, result.trip)
+        self.assertTrue(report.ok, [item.render() for item in report.errors])
+
+    def test_grouped_trip_public_cli_validate_and_validate_html(self):
+        result = self.run_grouped_meeting()
+        rendered = render_trip(result.trip)
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            folder = Path(temporary)
+            trip_path = folder / "grouped-trip.json"
+            html_path = folder / "grouped-trip.html"
+            trip_path.write_text(canonical_json(result.trip) + "\n", encoding="utf-8")
+            html_path.write_text(rendered, encoding="utf-8")
+
+            validated = subprocess.run(
+                [str(CTW), "validate", str(trip_path)],
+                text=True,
+                capture_output=True,
+            )
+            html_validated = subprocess.run(
+                [str(CTW), "validate-html", str(html_path), str(trip_path)],
+                text=True,
+                capture_output=True,
+            )
+
+        self.assertEqual(0, validated.returncode, validated.stdout + validated.stderr)
+        self.assertIn("VALID", validated.stdout)
+        self.assertEqual(0, html_validated.returncode, html_validated.stdout + html_validated.stderr)
+        self.assertIn("errors=0", html_validated.stdout)
+
+    def test_grouped_flyai_lodging_adult_count_is_group_sum(self):
+        request, _ = synthetic_grouped_meeting_input()
+
+        parameters = _lodging_parameters_from_trip(request, "上海")
+
+        self.assertEqual(3, parameters["adult_count"])
+        self.assertEqual({"adults": 3, "children": 0}, parameters["party"])
+        self.assertEqual("3 adult(s) across 1 room(s)", parameters["occupancy"])
+
+    def test_checked_in_grouped_departures_demo_is_strict_and_valid(self):
+        folder = ROOT / "demo" / "grouped-departures"
+        trip = load(folder / "trip.json")
+        rendered = (folder / "trip.html").read_text(encoding="utf-8")
+
+        self.assertNotIn("origin", trip["request"])
+        self.assertNotIn("travelers", trip["request"])
+        self.assertEqual(3, sum(
+            group["travelers"] for group in trip["request"]["traveler_groups"]
+        ))
+        self.assertEqual(
+            [["family-beijing"], ["family-guangzhou"]],
+            [leg["group_refs"] for leg in trip["transport_legs"]],
+        )
+        self.assertEqual(
+            {"minimum": 900, "maximum": 900},
+            trip["transport_pricing"]["party_total_cny"],
+        )
+        self.assertIn("<span>人数 3</span>", rendered)
+        self.assertIn("北京（2 人）、广州（1 人）", rendered)
+        trip_report = validate_trip(trip)
+        html_report = validate_html(rendered, trip)
+        self.assertTrue(trip_report.ok, [item.render() for item in trip_report.errors])
+        self.assertTrue(html_report.ok, [item.render() for item in html_report.errors])
 
     def test_g6_insufficient_meeting_buffer_is_a_structured_conflict(self):
         with self.assertRaisesRegex(ValueError, "MEETING_BUFFER_INSUFFICIENT") as raised:

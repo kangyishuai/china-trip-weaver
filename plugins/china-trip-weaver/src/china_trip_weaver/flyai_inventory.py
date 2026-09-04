@@ -352,11 +352,15 @@ def _lodging_parameters_from_trip(
     city: str,
 ) -> Dict[str, Any]:
     party = request.get("party")
-    adult_count = request.get("adult_count")
-    if adult_count is None and isinstance(party, dict):
-        adult_count = party.get("adults")
-    if adult_count is None:
-        adult_count = request["travelers"]
+    groups = request.get("traveler_groups")
+    if groups:
+        adult_count = sum(int(group["travelers"]) for group in groups)
+    else:
+        adult_count = request.get("adult_count")
+        if adult_count is None and isinstance(party, dict):
+            adult_count = party.get("adults")
+        if adult_count is None:
+            adult_count = request["travelers"]
     rooms = request.get("rooms", 1)
     if party is None:
         party = {"adults": adult_count, "children": 0}

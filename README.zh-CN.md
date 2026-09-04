@@ -10,7 +10,7 @@
 
 planner 继续支持既有的一日游与单城市行程，并支持 2–7 天的有序多城市行程。多个目的地严格按 `origin → D1 → D2 → …` 行进；默认单向，只有用户明确写往返，或最后一个目的地本来就是 origin，行程才包含返程。跨城当天归到到达城市，每个过夜日期都必须在该城市明确选中且仅选中一个 stay。调研得到的住宿候选不等于已选 stay；任一晚没有可覆盖的候选时，规划会返回结构化无解结果。
 
-超过 7 天的行程仍不支持。旅客输入有两种互斥写法：既有 `origin + travelers`，或 `traveler_groups[] + meeting_anchor`。每组提供稳定的 `group_id`、本组人数与 origin，可另带 mobility profile；会合锚点提供地点和 `meet_by`，`buffer_minutes` 缺省为 60。任何一组无法留出足够缓冲都会得到结构化冲突；混合输入会被拒绝，输出 Trip 也只保留被选中的那一种写法。供既有 0.2.0 消费端使用的汇总兼容投影只存在于调用边界。分组交通腿必须有明确 `group_refs`；`transport_pricing` 分别给出每组交通总价与全团交通总价。
+超过 7 天的行程仍不支持。旅客输入有两种互斥写法：既有 `origin + travelers`，或 `traveler_groups[] + meeting_anchor`。每组提供稳定的 `group_id`、本组人数与 origin，可另带 mobility profile；会合锚点提供地点和 `meet_by`，`buffer_minutes` 缺省为 60。任何一组无法留出足够缓冲都会得到结构化冲突；混合输入会被拒绝，输出 Trip 也只保留被选中的那一种写法。验证、渲染与 inventory 查询都会原生消费分组写法。分组交通腿必须有明确 `group_refs`；`transport_pricing` 分别给出每组交通总价与全团交通总价。
 
 `pace=slow` 先按严格慢节奏排程。只要无解，就累计尝试：降低每日 POI 上限、把 POI／餐点时长压到推荐值的 70%、最后把当日结束时间放宽到 balanced 的 21:30。排得出的第一步就停止，实际采用的每一步都会追加到 `request.assumptions`；三步无法改变的硬冲突保留原结构化冲突，并列出全部已尝试降配。
 
@@ -70,7 +70,7 @@ CODEX_HOME=/path/to/an/isolated/codex-home \
   plugin list
 ```
 
-期望结果是 `china-trip-weaver@china-trip-weaver-local`、版本 `0.2.0`、状态 `installed, enabled`。安装或更新后请新建一个 Codex 任务，让它的 9 个 Skill 与 MCP 配置重新加载。
+期望结果是 `china-trip-weaver@china-trip-weaver-local`、版本 `0.3.0`、状态 `installed, enabled`。安装或更新后请新建一个 Codex 任务，让它的 9 个 Skill 与 MCP 配置重新加载。
 
 用 Codex 桌面版界面安装时：把本仓库添加为本地市场，确认 `china-travel-assistant` 已禁用，安装 China Trip Weaver Local，重启，再新建任务。两个插件不能同时启用，因为它们都暴露 `plan-china-trip`。
 
@@ -109,6 +109,8 @@ plugins/china-trip-weaver/scripts/ctw validate-html demo/trip.html demo/trip.jso
 用你自己的凭据运行同一条规划命令，把 provider 参数换成 `--rail live --mobility live --lodging live --aviation auto`，去掉两个仅夹具使用的参数，并把输出写到 `.tmp/`，即可得到当前实网结果而不把它重新放回 Git。带凭据的验收曾证明以下能力数量：2 条日期铁路行程、20 个路线单元、10 个住宿候选、20 个航班对比，以及状态与舒适度增强。这里仅保留数量说明，不再分发该次运行的任何服务商条目。
 
 [`demo/guangzhou-shenzhen/`](demo/guangzhou-shenzhen/) 下的一日往返也由同一份合成空结果夹具生成。不过夜的请求不查询住宿，演示也不会编造服务商库存。
+
+[`demo/grouped-departures/`](demo/grouped-departures/) 下的分组出发示例让两组合成旅客分别从北京、广州前往上海会合点。提交的 Trip 保持严格的分组 request 形状，并可见地展示各组出发地、3 人总数、分组归属交通腿，以及分组/全团交通价格。
 
 铁路、网络或服务商失败，永远不会变成假成功。每项能力保留自己的健康状态，要么使用带标记的降级方案，要么停在一个有类型的 unknown 上。高德每次规划最多 80 次调用、不超过 2 QPS。FlyAI 的遮罩价（例如 `¥4xx`）一律是 `verify-on-click`，只有精确数字才是 `live`。FlyAI 的坐标始终是 `provider-unknown`，不做转换也不上图。
 

@@ -213,6 +213,97 @@ def multicity_demo() -> Mapping[str, Any]:
     return {"request": request_value, "candidates": candidates_value}
 
 
+def grouped_departures_demo() -> Mapping[str, Any]:
+    request_value = {
+        "traveler_groups": [
+            {
+                "group_id": "family-beijing",
+                "travelers": 2,
+                "origin": {"ref_id": "city-beijing", "name": "北京", "city": "北京"},
+            },
+            {
+                "group_id": "family-guangzhou",
+                "travelers": 1,
+                "origin": {"ref_id": "city-guangzhou", "name": "广州", "city": "广州"},
+            },
+        ],
+        "meeting_anchor": {
+            "location": {
+                "ref_id": "airport-shanghai",
+                "name": "上海虹桥国际机场",
+                "city": "上海",
+            },
+            "meet_by": "2026-09-10T13:00:00+08:00",
+            "buffer_minutes": 60,
+        },
+        "destinations": [
+            {"ref_id": "city-shanghai", "name": "上海", "city": "上海"},
+        ],
+        "start_date": "2026-09-10",
+        "end_date": "2026-09-10",
+        "budget_cny": 5000,
+        "interests": ["建筑", "滨水空间"],
+        "pace": "balanced",
+        "constraints": ["不执行任何交易动作"],
+        "assumptions": ["分组交通使用仓库内全合成铁路夹具"],
+        "locale": "zh-CN",
+        "pasted_notes": None,
+    }
+    pois: List[Mapping[str, Any]] = []
+    claims: List[Mapping[str, Any]] = []
+    for index, (name, category) in enumerate((
+        ("上海示例建筑漫步", "architecture"),
+        ("上海示例滨水公园", "park"),
+    ), start=1):
+        poi_id = "poi-grouped-%d" % index
+        claim_id = "claim-grouped-%d" % index
+        point = {"lng": 121.470 + index * 0.001, "lat": 31.230}
+        pois.append({
+            "poi_id": poi_id,
+            "name": name,
+            "city": "上海",
+            "category": category,
+            "coordinates": {
+                "source_crs": "WGS84",
+                "native": point,
+                "wgs84": point,
+                "gcj02": None,
+                "conversion": {
+                    "status": "not-needed",
+                    "method": "identity",
+                    "version": "1",
+                    "derived_fields": [],
+                    "converted_at": None,
+                    "accuracy_m": None,
+                },
+            },
+            "recommended_duration_minutes": 45,
+            "opening_windows": [],
+            "price": None,
+            "deep_links": ["https://example.com/grouped-departures/%d" % index],
+            "claim_ids": [claim_id],
+        })
+        claims.append(claim(
+            claim_id,
+            poi_id,
+            "/name",
+            "synthetic grouped-departure candidate",
+            "https://example.com/grouped-departures/%d" % index,
+            "hypothesis",
+            0.5,
+        ))
+    return {
+        "request": request_value,
+        "candidates": {
+            "candidates_version": "1.0.0",
+            "pois": pois,
+            "lodgings": [],
+            "claims": claims,
+            "unknowns": [],
+        },
+    }
+
+
 def rail_transcript(from_city: str, to_city: str, travel_date: str) -> Mapping[str, Any]:
     station_map = {from_city: STATIONS[from_city], to_city: STATIONS[to_city]}
     error_result = {
@@ -364,6 +455,14 @@ def main() -> int:
             json.dumps(multicity[name], ensure_ascii=False, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
+    grouped = grouped_departures_demo()
+    grouped_root = ROOT / "demo" / "grouped-departures"
+    grouped_root.mkdir(parents=True, exist_ok=True)
+    for name in ("request", "candidates"):
+        (grouped_root / (name + ".json")).write_text(
+            json.dumps(grouped[name], ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
 
     invalid_root = OUTPUT / "candidates-invalid"
     base = copy.deepcopy(cases[0]["candidates"])
@@ -386,7 +485,7 @@ def main() -> int:
         "files": sorted(files, key=lambda item: item["path"]),
     }
     write(OUTPUT / "manifest.json", manifest)
-    print("wrote %d plan cases, 3 invalid candidates, and single/multi-city demo inputs; packaged reference verified" % len(cases))
+    print("wrote %d plan cases, 3 invalid candidates, and single/multi-city/grouped demo inputs; packaged reference verified" % len(cases))
     return 0
 
 

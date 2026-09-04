@@ -1,0 +1,111 @@
+{
+  "candidates_version": "1.0.0",
+  "claims": [
+    {
+      "as_of": null,
+      "claim_id": "claim-grouped-1",
+      "confidence": 0.5,
+      "field_path": "/name",
+      "json_path": null,
+      "mode": "static",
+      "provider": "official-web",
+      "queried_at": "2026-09-03T12:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "source_url": "https://example.com/grouped-departures/1",
+      "status": "hypothesis",
+      "subject_ref": "poi-grouped-1",
+      "value": "synthetic grouped-departure candidate"
+    },
+    {
+      "as_of": null,
+      "claim_id": "claim-grouped-2",
+      "confidence": 0.5,
+      "field_path": "/name",
+      "json_path": null,
+      "mode": "static",
+      "provider": "official-web",
+      "queried_at": "2026-09-03T12:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "source_url": "https://example.com/grouped-departures/2",
+      "status": "hypothesis",
+      "subject_ref": "poi-grouped-2",
+      "value": "synthetic grouped-departure candidate"
+    }
+  ],
+  "lodgings": [],
+  "pois": [
+    {
+      "category": "architecture",
+      "city": "上海",
+      "claim_ids": [
+        "claim-grouped-1"
+      ],
+      "coordinates": {
+        "conversion": {
+          "accuracy_m": null,
+          "converted_at": null,
+          "derived_fields": [],
+          "method": "identity",
+          "status": "not-needed",
+          "version": "1"
+        },
+        "gcj02": null,
+        "native": {
+          "lat": 31.23,
+          "lng": 121.471
+        },
+        "source_crs": "WGS84",
+        "wgs84": {
+          "lat": 31.23,
+          "lng": 121.471
+        }
+      },
+      "deep_links": [
+        "https://example.com/grouped-departures/1"
+      ],
+      "name": "上海示例建筑漫步",
+      "opening_windows": [],
+      "poi_id": "poi-grouped-1",
+      "price": null,
+      "recommended_duration_minutes": 45
+    },
+    {
+      "category": "park",
+      "city": "上海",
+      "claim_ids": [
+        "claim-grouped-2"
+      ],
+      "coordinates": {
+        "conversion": {
+          "accuracy_m": null,
+          "converted_at": null,
+          "derived_fields": [],
+          "method": "identity",
+          "status": "not-needed",
+          "version": "1"
+        },
+        "gcj02": null,
+        "native": {
+          "lat": 31.23,
+          "lng": 121.472
+        },
+        "source_crs": "WGS84",
+        "wgs84": {
+          "lat": 31.23,
+          "lng": 121.472
+        }
+      },
+      "deep_links": [
+        "https://example.com/grouped-departures/2"
+      ],
+      "name": "上海示例滨水公园",
+      "opening_windows": [],
+      "poi_id": "poi-grouped-2",
+      "price": null,
+      "recommended_duration_minutes": 45
+    }
+  ],
+  "unknowns": []
+}

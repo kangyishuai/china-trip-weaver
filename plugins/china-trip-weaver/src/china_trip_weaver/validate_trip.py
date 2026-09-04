@@ -290,13 +290,21 @@ def semantic_issues(trip: Mapping[str, Any]) -> List[ValidationIssue]:
     all_refs.update(leg_map)
     all_refs.update(lodging_map)
     all_refs.update(poi_map)
-    origin = trip["request"]["origin"]
-    if origin:
-        all_refs.add(origin["ref_id"])
-    all_refs.update(place["ref_id"] for place in trip["request"]["destinations"])
+    request = trip["request"]
+    origins = [
+        group["origin"]
+        for group in (request.get("traveler_groups") or ())
+    ]
+    if request.get("origin"):
+        origins.append(request["origin"])
+    all_refs.update(origin["ref_id"] for origin in origins)
+    meeting_anchor = request.get("meeting_anchor")
+    if meeting_anchor:
+        all_refs.add(meeting_anchor["location"]["ref_id"])
+    all_refs.update(place["ref_id"] for place in request["destinations"])
 
-    start_date = date.fromisoformat(trip["request"]["start_date"])
-    end_date = date.fromisoformat(trip["request"]["end_date"])
+    start_date = date.fromisoformat(request["start_date"])
+    end_date = date.fromisoformat(request["end_date"])
     if end_date < start_date:
         _add(issues, "V_DATE_RANGE", "/request/end_date", "end_date precedes start_date")
     expected_dates = []
@@ -307,7 +315,7 @@ def semantic_issues(trip: Mapping[str, Any]) -> List[ValidationIssue]:
     actual_dates = [item["date"] for item in trip["days"]]
     if expected_dates and actual_dates != expected_dates:
         _add(issues, "V_DAY_DATES", "/days", "day dates must be ordered and match the request")
-    if (len(trip["request"]["destinations"]) > 1 or any(leg["travel_mode"] in ("rail", "flight") for leg in trip["transport_legs"])) and origin is None:
+    if (len(request["destinations"]) > 1 or any(leg["travel_mode"] in ("rail", "flight") for leg in trip["transport_legs"])) and not origins:
         _add(issues, "V_ORIGIN_REQUIRED", "/request/origin", "cross-city travel requires an origin")
 
     for day_index, day_item in enumerate(trip["days"]):

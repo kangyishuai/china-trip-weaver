@@ -10,7 +10,7 @@ It never logs in, submits identity, holds inventory, books, pays, cancels, or ch
 
 The planner supports existing one-day and single-city trips plus ordered multi-city trips lasting 2–7 days. For multiple destinations it follows `origin → D1 → D2 → …`; the default is one-way, and a return is added only when the request explicitly says round trip or the final destination is the origin. Each travel day belongs to the city reached by that day's route leg, and every overnight date must resolve to exactly one explicitly selected stay in that city. Researched lodging candidates are not selected stays; if no candidate can cover a night, planning returns a structured no-solution result.
 
-Trips longer than seven days are not supported. Traveler input has two mutually exclusive forms: the existing `origin + travelers` form, or `traveler_groups[] + meeting_anchor`. Every group supplies a stable `group_id`, its own traveler count and origin, plus an optional mobility profile. The meeting anchor supplies a location and `meet_by`; `buffer_minutes` defaults to 60, and any group that cannot arrive with that much buffer produces a structured conflict. Mixed input is rejected and the emitted Trip preserves only the selected representation. Aggregate compatibility projections are confined to calls into existing 0.2.0 consumers. Grouped transport legs carry explicit `group_refs`; `transport_pricing` exposes each group's total and the whole party's transport total separately.
+Trips longer than seven days are not supported. Traveler input has two mutually exclusive forms: the existing `origin + travelers` form, or `traveler_groups[] + meeting_anchor`. Every group supplies a stable `group_id`, its own traveler count and origin, plus an optional mobility profile. The meeting anchor supplies a location and `meet_by`; `buffer_minutes` defaults to 60, and any group that cannot arrive with that much buffer produces a structured conflict. Mixed input is rejected and the emitted Trip preserves only the selected representation. Validation, rendering, and inventory lookup consume the grouped form directly. Grouped transport legs carry explicit `group_refs`; `transport_pricing` exposes each group's total and the whole party's transport total separately.
 
 `pace=slow` first uses the strict slow profile. If that schedule has no solution, the planner cumulatively tries a smaller daily POI cap, 70% POI/meal durations, and finally the balanced 21:30 day end. It stops at the first feasible result and appends every applied step to `request.assumptions`; hard conflicts that none of those steps can change keep their original structured conflict and report all attempted relaxations.
 
@@ -71,7 +71,7 @@ CODEX_HOME=/path/to/an/isolated/codex-home \
   plugin list
 ```
 
-The expected result is `china-trip-weaver@china-trip-weaver-local`, version `0.2.0`, status `installed, enabled`. Use a fresh Codex task after installing or updating so its nine Skills and MCP configuration are reloaded.
+The expected result is `china-trip-weaver@china-trip-weaver-local`, version `0.3.0`, status `installed, enabled`. Use a fresh Codex task after installing or updating so its nine Skills and MCP configuration are reloaded.
 
 For Codex Desktop UI installation, add this repository as a local marketplace, ensure `china-travel-assistant` is disabled, install China Trip Weaver Local, restart, and create a new task. The two plugins must not be enabled together because both expose `plan-china-trip`.
 
@@ -110,6 +110,8 @@ plugins/china-trip-weaver/scripts/ctw validate-html demo/trip.html demo/trip.jso
 Use your own credentials to run the same planning command with `--rail live --mobility live --lodging live --aviation auto`, omit the two fixture-only options, and write the result under `.tmp/`; that produces current live results without putting them back into Git. A credentialed acceptance run has demonstrated the following capability counts: two dated rail legs, 20 route cells, ten lodging candidates, twenty flight comparisons, plus status and comfort enrichment. Those counts describe capability only; no provider items from that run are redistributed here.
 
 The one-day round trip under [`demo/guangzhou-shenzhen/`](demo/guangzhou-shenzhen/) is generated with the same synthetic empty-result fixture. A no-overnight request makes no lodging query, and the demo never invents provider inventory.
+
+The grouped-departure example under [`demo/grouped-departures/`](demo/grouped-departures/) sends two synthetic traveler groups from Beijing and Guangzhou to a Shanghai meeting anchor. Its checked-in Trip keeps the strict grouped request shape and visibly shows each origin, the three-person total, group-owned transport legs, and per-group/whole-party transport pricing.
 
 Railway/network/provider failure never becomes fake success. Each capability preserves its own health and either uses a labeled fallback or stops at a typed unknown. AMap is capped at 80 calls per plan and no more than 2 QPS. FlyAI masked prices such as `¥4xx` are always `verify-on-click`; only exact numeric prices are `live`. FlyAI coordinates remain `provider-unknown` and are never converted or mapped.
 

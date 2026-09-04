@@ -1,11 +1,15 @@
 # Unresolved items
 
-## Book 8: standalone Trip validation cannot yet consume the exclusive grouped request shape (2026-09-04)
+## Book 8: standalone grouped Trip consumption (resolved in 0.3.0 on 2026-09-05)
 
-- Status: blocked by this book's explicit write whitelist. A grouped plan itself completes, its actual request contains only `traveler_groups + meeting_anchor`, its schema validation and planner-side semantic projection pass, and its generated HTML passes fact validation. However, calling the existing public `validate_trip(result.trip)` on that same in-memory Trip produces the raw output `KeyError: 'origin'`.
-- Cause: `plugins/china-trip-weaver/src/china_trip_weaver/validate_trip.py` directly indexes `trip["request"]["origin"]` and only adds that one origin plus destinations to the endpoint reference set. It does not read `traveler_groups[].origin`. The renderer and FlyAI consumer also still read aggregate legacy fields, but `planning.py` can safely confine compatibility projections to those call boundaries.
-- Constraint: `validate_trip.py`, `cli.py`, and `render/` are outside Book 8's allowed paths. Persisting derived `origin + travelers` beside `traveler_groups` would make the public validator get farther, but would violate the explicit rule that the two request representations must never coexist and would still leave the second group origin unknown to semantic endpoint validation.
-- Safe delivery in scope: `planning.py` validates the actual grouped Trip against the public schema, then runs all existing release-critical semantic checks against a temporary projection that adds the group-origin refs only for validation. G6 asserts the actual Trip and HTML facts. A later book must authorize updating `validate_trip.py` (and preferably renderer request presentation) so `ctw validate` can natively validate a serialized grouped Trip without any projection.
+- Previous blocker: Book 8 could not edit the public validator or renderer, so a strict grouped Trip produced `KeyError: 'origin'` outside the planner even though its schema-only validation passed. FlyAI lodging parameter derivation likewise raised `KeyError: 'travelers'` without a planner projection.
+- Resolution: `validate_trip` now adds every `traveler_groups[].origin` plus `meeting_anchor.location` to the native reference set; renderer totals group travelers and lists every grouped origin; FlyAI lodging derives adults from the group sum. `planning.py` passes the real request to those consumers and deletes all three compatibility projection helpers.
+- Evidence: a serialized strict grouped Trip now exits 0 through `ctw validate` and `ctw validate-html`; the checked-in `demo/grouped-departures/` also passes both. Removing the group-origin merge turns the precise regression red with two `V_ENDPOINT_REF` errors and `V_ORIGIN_REQUIRED`; restoring it returns the required 65-test keyless/renderer gate to `OK`.
+
+## 0.3.0 release
+
+- Status: 无新增阻塞（no new blocker）。The grouped-consumer fix, four synthetic demos, exact ten-place version bump, full 361-test gate, repository secret scan, and real Codex 0.3.0 installation all have passing evidence in `PROGRESS.md`.
+- The first real installer check found a pre-existing, Git-ignored 398 MB plugin-local npm cache. It was moved recoverably to `/Users/kangyishuai/.Trash/china-trip-weaver-plugin-npm-cache-20260905-release`; the second install and final `--check` both passed. This is resolved residue, not pending product work.
 
 ## Book 3: ordered multi-city planning
 

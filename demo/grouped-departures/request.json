@@ -1,0 +1,54 @@
+{
+  "assumptions": [
+    "分组交通使用仓库内全合成铁路夹具"
+  ],
+  "budget_cny": 5000,
+  "constraints": [
+    "不执行任何交易动作"
+  ],
+  "destinations": [
+    {
+      "city": "上海",
+      "name": "上海",
+      "ref_id": "city-shanghai"
+    }
+  ],
+  "end_date": "2026-09-10",
+  "interests": [
+    "建筑",
+    "滨水空间"
+  ],
+  "locale": "zh-CN",
+  "meeting_anchor": {
+    "buffer_minutes": 60,
+    "location": {
+      "city": "上海",
+      "name": "上海虹桥国际机场",
+      "ref_id": "airport-shanghai"
+    },
+    "meet_by": "2026-09-10T13:00:00+08:00"
+  },
+  "pace": "balanced",
+  "pasted_notes": null,
+  "start_date": "2026-09-10",
+  "traveler_groups": [
+    {
+      "group_id": "family-beijing",
+      "origin": {
+        "city": "北京",
+        "name": "北京",
+        "ref_id": "city-beijing"
+      },
+      "travelers": 2
+    },
+    {
+      "group_id": "family-guangzhou",
+      "origin": {
+        "city": "广州",
+        "name": "广州",
+        "ref_id": "city-guangzhou"
+      },
+      "travelers": 1
+    }
+  ]
+}

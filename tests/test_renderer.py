@@ -116,6 +116,21 @@ class RendererTests(unittest.TestCase):
                 report = validate_html(first, trip)
                 self.assertTrue(report.ok, [item.render() for item in report.errors])
 
+    def test_explicit_null_group_fields_are_rejected_without_crashing(self):
+        trip = load(VALID / "weekend-live.json")
+        trip["request"]["traveler_groups"] = None
+        trip["request"]["meeting_anchor"] = None
+
+        trip_report = validate_trip(trip)
+
+        self.assertFalse(trip_report.ok)
+        self.assertTrue(
+            {"S_ONE_OF", "S_REQUIRED"}.issubset({item.code for item in trip_report.errors}),
+            [item.render() for item in trip_report.errors],
+        )
+        with self.assertRaises(RendererError):
+            render_trip(trip)
+
     def test_output_name_is_safe_and_deterministic(self):
         self.assertEqual("shanghai-weekend-20261016.html", safe_output_name("shanghai-weekend-20261016"))
         self.assertEqual("unsafe-trip.html", safe_output_name("../Unsafe Trip"))
