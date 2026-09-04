@@ -366,6 +366,155 @@ def amap_riding_body() -> Mapping[str, Any]:
     }
 
 
+def amap_identity_poi(
+    name: str,
+    identifier: str,
+    location: str,
+    *,
+    province: str = "上海市",
+    city: str = "上海市",
+    district: str = "示例区",
+    address: str = "示例大道100号",
+    business: Optional[Mapping[str, Any]] = None,
+) -> Mapping[str, Any]:
+    return {
+        "id": identifier,
+        "name": name,
+        "location": location,
+        "pname": province,
+        "cityname": city,
+        "adname": district,
+        "address": address,
+        "adcode": "310000" if city == "上海市" else "440400",
+        "type": "科教文化服务;展览馆;展览馆",
+        "business": dict(business or {"business_status": "开放", "opentime_today": "09:00-17:00"}),
+    }
+
+
+def amap_scenario_geocode(
+    formatted_address: str,
+    location: str,
+    *,
+    province: str = "上海市",
+    city: str = "上海市",
+    district: str = "示例区",
+) -> Mapping[str, Any]:
+    return {
+        "formatted_address": formatted_address,
+        "province": province,
+        "city": city,
+        "district": district,
+        "adcode": "310000" if city == "上海市" else "440400",
+        "location": location,
+        "level": "兴趣点",
+    }
+
+
+def amap_scenario_entity(
+    ref_id: str,
+    name: str,
+    location: str,
+    *,
+    city: str = "上海",
+    opening_date: Optional[str] = None,
+) -> Mapping[str, Any]:
+    provider_city = city if city.endswith("市") else city + "市"
+    address = "示例大道%s号" % (100 + len(ref_id))
+    formatted = "%s示例区%s" % (provider_city, address)
+    return {
+        "ref_id": ref_id,
+        "name": name,
+        "city": city,
+        "opening_date": opening_date,
+        "poi_results": [amap_identity_poi(
+            name,
+            "SYNTHETIC-" + ref_id.upper(),
+            location,
+            province=provider_city,
+            city=provider_city,
+            address=address,
+        )],
+        "geocode": amap_scenario_geocode(formatted, location, province=provider_city, city=provider_city),
+    }
+
+
+def amap_scenarios() -> Mapping[str, Mapping[str, Any]]:
+    ambiguous_first = amap_identity_poi(
+        "海岛生态廊道甲区", "SYNTHETIC-G3-A", "113.570000,22.270000",
+        province="广东省", city="珠海市", district="香洲区", address="海滨路100号",
+    )
+    ambiguous_second = amap_identity_poi(
+        "海岛生态廊道乙区", "SYNTHETIC-G3-B", "113.580000,22.280000",
+        province="广东省", city="珠海市", district="香洲区", address="海滨路102号",
+    )
+    g3_entity = {
+        "ref_id": "poi-g3-corridor",
+        "name": "海岛生态廊道",
+        "city": "珠海",
+        "opening_date": None,
+        "poi_results": [ambiguous_first, ambiguous_second],
+        "geocode": amap_scenario_geocode(
+            "北京市朝阳区错误同名点100号", "116.470000,39.920000",
+            province="北京市", city="北京市", district="朝阳区",
+        ),
+    }
+    g4_entity = amap_scenario_entity(
+        "poi-g4-museum", "海洋文化馆", "113.580000,22.280000", city="珠海",
+    )
+    g4_entity = copy.deepcopy(g4_entity)
+    g4_entity["poi_results"][0]["business"] = {
+        "business_status": "暂停开放",
+        "opentime_today": "暂停营业",
+    }
+    return {
+        "g3_identity_conflict.json": {
+            "fixture_version": 1,
+            "case": "g3_identity_conflict",
+            "source": AMAP_MUTATION_SOURCE,
+            "entities": [g3_entity],
+        },
+        "g4_business_conflict.json": {
+            "fixture_version": 1,
+            "case": "g4_business_conflict",
+            "source": AMAP_MUTATION_SOURCE,
+            "entities": [g4_entity],
+            "official_business": {"business_status": "开放", "opentime_today": "09:00-17:00"},
+        },
+        "semantic_same_city_outlier.json": {
+            "fixture_version": 1,
+            "case": "semantic_same_city_outlier",
+            "source": AMAP_MUTATION_SOURCE,
+            "entities": [
+                amap_scenario_entity("poi-cluster-a", "示例城市馆甲", "121.470000,31.230000"),
+                amap_scenario_entity("poi-cluster-b", "示例城市馆乙", "121.480000,31.240000"),
+                amap_scenario_entity("poi-outlier", "示例城市馆远点", "119.900000,29.900000"),
+            ],
+        },
+        "semantic_duplicate_coordinates.json": {
+            "fixture_version": 1,
+            "case": "semantic_duplicate_coordinates",
+            "source": AMAP_MUTATION_SOURCE,
+            "entities": [
+                amap_scenario_entity("poi-duplicate-a", "示例展馆甲", "121.470000,31.230000"),
+                amap_scenario_entity("poi-duplicate-b", "示例展馆乙", "121.470000,31.230000"),
+            ],
+        },
+        "semantic_same_day_far.json": {
+            "fixture_version": 1,
+            "case": "semantic_same_day_far",
+            "source": AMAP_MUTATION_SOURCE,
+            "entities": [
+                amap_scenario_entity(
+                    "poi-same-day-a", "示例日程甲", "121.470000,31.230000", opening_date="2026-10-16",
+                ),
+                amap_scenario_entity(
+                    "poi-same-day-b", "示例日程乙", "122.200000,31.230000", opening_date="2026-10-16",
+                ),
+            ],
+        },
+    }
+
+
 def vari_body(kind: str, payload: Mapping[str, Any], tools: Sequence[str] = VARIFLIGHT_TOOLS) -> Mapping[str, Any]:
     body = {"kind": kind}
     body.update(payload)
@@ -627,7 +776,25 @@ def main() -> int:
         "files": sorted(manifest_files, key=lambda item: item["path"]),
     }
     (OUTPUT / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print("wrote %d provider fixtures" % len(manifest_files))
+    scenario_directory = OUTPUT / "amap" / "scenarios"
+    scenario_directory.mkdir(parents=True, exist_ok=True)
+    scenarios = amap_scenarios()
+    scenario_files = []
+    for name, scenario in sorted(scenarios.items()):
+        encoded = (json.dumps(scenario, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
+        (scenario_directory / name).write_bytes(encoded)
+        scenario_files.append({"path": name, "sha256": hashlib.sha256(encoded).hexdigest()})
+    scenario_manifest = {
+        "manifest_version": 1,
+        "generated_by": "scripts/build_provider_fixtures.py",
+        "fixture_count": len(scenario_files),
+        "files": scenario_files,
+    }
+    (scenario_directory / "manifest.json").write_text(
+        json.dumps(scenario_manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    print("wrote %d provider fixtures and %d AMap scenarios" % (len(manifest_files), len(scenarios)))
     return 0
 
 

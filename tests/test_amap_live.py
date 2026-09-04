@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import sys
 import tempfile
@@ -16,12 +17,13 @@ from china_trip_weaver.clock import FixedClock
 from china_trip_weaver.contracts import ProviderRequest
 from china_trip_weaver.credentials import resolve_credentials
 from china_trip_weaver.flyai_inventory import FlyAIBackend
-from china_trip_weaver.mobility import MobilityBackend, normalize_modes
+from china_trip_weaver.mobility import MobilityBackend, apply_locations, normalize_modes
 from china_trip_weaver.planning import RailBackend, plan_trip
 from china_trip_weaver.providers.amap import AMapAdapter
 from china_trip_weaver.providers.amap_http import AMapCallBudget, AMapHTTPTransport
 from china_trip_weaver.providers.base import ProviderContext, ProviderEnvelope, ProviderRateLimited
 from china_trip_weaver.providers.flyai_cli import FlyAISubprocessTransport
+from tests.test_providers import AMAP_SCENARIOS, AMapScenarioTransport, amap_scenario_candidates
 
 
 FIXED_NOW = "2026-09-03T12:00:00+08:00"
@@ -94,8 +96,39 @@ class ScriptedAmapTransport:
         self.calls += 1
         capability = provider_request.capability
         if self.forbidden:
-            api = "geocode-v3" if capability == "geocode" else "route-transit-v3"
+            api = {
+                "poi": "poi-v5",
+                "geocode": "geocode-v3",
+                "route": "route-transit-v3",
+            }[capability]
             return ProviderEnvelope(200, {"status": "0", "info": "INVALID_USER_KEY", "api": api}, {})
+        if capability == "poi":
+            ref_id = provider_request.parameters["subject_ref"]
+            if ref_id not in self._coordinates:
+                index = len(self._coordinates)
+                self._coordinates[ref_id] = (121.0 + index * 0.1, 31.0 + index * 0.1)
+            lng, lat = self._coordinates[ref_id]
+            city = provider_request.parameters["city"]
+            cityname = city if city.endswith("市") else city + "市"
+            return ProviderEnvelope(200, {
+                "status": "1",
+                "info": "OK",
+                "api": "poi-v5",
+                "page_num": provider_request.parameters["page_num"],
+                "page_size": provider_request.parameters["page_size"],
+                "pois": [{
+                    "id": "SYNTHETIC-" + ref_id,
+                    "name": provider_request.parameters["keywords"],
+                    "pname": cityname,
+                    "cityname": cityname,
+                    "adname": "示例区",
+                    "address": "示例大道100号",
+                    "adcode": "310000",
+                    "type": "风景名胜;风景名胜相关;旅游景点",
+                    "business": {"opentime_today": "09:00-17:00"},
+                    "location": "%.7f,%.7f" % (lng, lat),
+                }],
+            }, {})
         if capability == "geocode":
             ref_id = provider_request.parameters["subject_ref"]
             if ref_id not in self._coordinates:
@@ -157,6 +190,8 @@ class AMapHTTPTransportTests(unittest.TestCase):
                 if capability == "poi":
                     self.assertEqual(["15"], query["page_size"])
                     self.assertEqual(["2"], query["page_num"])
+                    self.assertEqual(["true"], query["city_limit"])
+                    self.assertEqual(["business"], query["show_fields"])
                     self.assertNotIn("offset", query)
                     self.assertNotIn("page", query)
 
@@ -201,16 +236,86 @@ class AMapMobilityTests(unittest.TestCase):
         self.assertIsNotNone(coordinates["wgs84"])
         self.assertEqual(["wgs84"], coordinates["conversion"]["derived_fields"])
 
+    def test_g3_ambiguous_poi_and_wrong_geocode_admin_leave_coordinates_unknown(self):
+        scenario = load(AMAP_SCENARIOS / "g3_identity_conflict.json")
+        candidates = amap_scenario_candidates(scenario)
+
+        ambiguous_transport = AMapScenarioTransport(scenario)
+        ambiguous = MobilityBackend("live", credentials(), ambiguous_transport).resolve(
+            candidates, self.clock, ("walking",),
+        )
+        self.assertEqual(["poi"], ambiguous_transport.capabilities)
+        self.assertIn("identity_conflict", ambiguous.warnings)
+        self.assertEqual((), ambiguous.locations)
+        ambiguous_pois, _ = apply_locations(candidates["pois"], (), ambiguous)
+        self.assertIsNone(ambiguous_pois[0]["coordinates"])
+        self.assertEqual({"conflict"}, {claim["status"] for claim in ambiguous.claims})
+        self.assertEqual(
+            len(ambiguous.claims), len({claim["claim_id"] for claim in ambiguous.claims}),
+        )
+
+        wrong_poi_admin_scenario = copy.deepcopy(scenario)
+        wrong_poi_admin_scenario["entities"][0]["poi_results"] = [
+            wrong_poi_admin_scenario["entities"][0]["poi_results"][0]
+        ]
+        wrong_poi_admin_scenario["entities"][0]["poi_results"][0].update({
+            "pname": "北京市",
+            "cityname": "北京市",
+            "adname": "朝阳区",
+            "adcode": "110000",
+        })
+        wrong_poi_admin_transport = AMapScenarioTransport(wrong_poi_admin_scenario)
+        wrong_poi_admin = MobilityBackend("live", credentials(), wrong_poi_admin_transport).resolve(
+            amap_scenario_candidates(wrong_poi_admin_scenario), self.clock, ("walking",),
+        )
+        self.assertEqual(["poi"], wrong_poi_admin_transport.capabilities)
+        self.assertIn("identity_conflict", wrong_poi_admin.warnings)
+        self.assertEqual((), wrong_poi_admin.locations)
+
+        wrong_admin_scenario = copy.deepcopy(scenario)
+        wrong_admin_scenario["entities"][0]["poi_results"] = [
+            wrong_admin_scenario["entities"][0]["poi_results"][0]
+        ]
+        wrong_admin_candidates = amap_scenario_candidates(wrong_admin_scenario)
+        wrong_admin_transport = AMapScenarioTransport(wrong_admin_scenario)
+        wrong_admin = MobilityBackend("live", credentials(), wrong_admin_transport).resolve(
+            wrong_admin_candidates, self.clock, ("walking",),
+        )
+        self.assertEqual(["poi", "geocode"], wrong_admin_transport.capabilities)
+        self.assertIn("identity_conflict", wrong_admin.warnings)
+        self.assertEqual((), wrong_admin.locations)
+        wrong_pois, _ = apply_locations(wrong_admin_candidates["pois"], (), wrong_admin)
+        self.assertIsNone(wrong_pois[0]["coordinates"])
+        self.assertNotIn("verified", {claim["status"] for claim in wrong_admin.claims})
+
+        provider_answer_scenario = copy.deepcopy(wrong_admin_scenario)
+        provider_answer_scenario["entities"][0]["geocode"].update({
+            "formatted_address": "广东省珠海市香洲区海滨路100号",
+            "province": "广东省",
+            "city": "珠海市",
+            "district": "香洲区",
+            "adcode": "440400",
+            "location": "113.570000,22.270000",
+        })
+        provider_answer_candidates = amap_scenario_candidates(provider_answer_scenario)
+        provider_answer_transport = AMapScenarioTransport(provider_answer_scenario)
+        provider_answer = MobilityBackend("live", credentials(), provider_answer_transport).resolve(
+            provider_answer_candidates, self.clock, ("walking",),
+        )
+        self.assertEqual(1, len(provider_answer.locations))
+        self.assertEqual("珠海市", provider_answer.locations[0].city)
+        self.assertEqual("海岛生态廊道甲区", provider_answer.locations[0].name)
+
     def test_demo_candidates_produce_bounded_two_mode_live_matrix(self):
         transport = ScriptedAmapTransport()
         backend = MobilityBackend("live", credentials(), transport)
         result = backend.resolve(self.candidates, self.clock, ("transit", "walking"))
         self.assertEqual(5, len(result.locations))
         self.assertEqual(40, len(result.cells))
-        self.assertEqual(45, transport.calls)
+        self.assertEqual(49, transport.calls)
         self.assertLessEqual(transport.calls, 80)
         self.assertEqual("ready", result.health["status"])
-        self.assertIn("calls=45/80 qps<=2", result.health["reason"])
+        self.assertIn("calls=49/80 qps<=2", result.health["reason"])
         self.assertEqual({"transit", "walk"}, {cell.travel_mode for cell in result.cells})
         for location in result.locations:
             self.assertIsNotNone(location.coordinates["gcj02"])
@@ -252,7 +357,7 @@ class AMapMobilityTests(unittest.TestCase):
         amap = next(item for item in result.trip["provider_health"] if item["provider"] == "amap")
         self.assertEqual("ready", amap["status"])
         self.assertEqual("live", amap["mode"])
-        self.assertIn("calls=25/80", amap["reason"])
+        self.assertIn("calls=29/80", amap["reason"])
         for item in result.trip["pois"] + result.trip["lodgings"]:
             self.assertIsNotNone(item["coordinates"]["gcj02"])
             self.assertIsNotNone(item["coordinates"]["wgs84"])

@@ -8,7 +8,10 @@ description: Resolve mainland-China POIs, geocodes, coordinate provenance, and w
 Resolve only the candidate endpoints supplied by the parent Skill.
 
 - Preserve provider-native coordinates and explicitly derive WGS84/GCJ02 at most once. AMap requests always consume GCJ02.
+- Resolve POI identity with AMap v5 text search scoped by `city_limit=true` before geocoding. Preserve the provider POI id, matched name, formatted address, district, adcode, type, and business fields as claims; geocode only a complete address.
+- Treat a first/second name-similarity margin below `0.15`, or any provider administrative city that disagrees with the candidate city, as `identity_conflict`. Keep coordinates unknown and never replace the provider's city with the candidate city.
 - Build a bounded directed matrix for plausible adjacency, locked anchors, transport endpoints, and lodging; do not issue an unbounded all-pairs query.
+- Emit `semantic_outlier` for isolated same-city points, distinct entities sharing a coordinate, or same-day adjacent POIs over 50 km apart. These warnings do not block planning, but implicated claims must not remain `verified`.
 - A live/cached cell needs route evidence and query time. A static cell needs an explicit method and conservative buffer. Missing or unreachable cells are not routes.
 - Fail closed on endpoint/pagination/response drift and return health plus degradation rung. Do not choose the daily order.
 

@@ -1,0 +1,54 @@
+{
+  "case": "g3_identity_conflict",
+  "entities": [
+    {
+      "city": "珠海",
+      "geocode": {
+        "adcode": "440400",
+        "city": "北京市",
+        "district": "朝阳区",
+        "formatted_address": "北京市朝阳区错误同名点100号",
+        "level": "兴趣点",
+        "location": "116.470000,39.920000",
+        "province": "北京市"
+      },
+      "name": "海岛生态廊道",
+      "opening_date": null,
+      "poi_results": [
+        {
+          "adcode": "440400",
+          "address": "海滨路100号",
+          "adname": "香洲区",
+          "business": {
+            "business_status": "开放",
+            "opentime_today": "09:00-17:00"
+          },
+          "cityname": "珠海市",
+          "id": "SYNTHETIC-G3-A",
+          "location": "113.570000,22.270000",
+          "name": "海岛生态廊道甲区",
+          "pname": "广东省",
+          "type": "科教文化服务;展览馆;展览馆"
+        },
+        {
+          "adcode": "440400",
+          "address": "海滨路102号",
+          "adname": "香洲区",
+          "business": {
+            "business_status": "开放",
+            "opentime_today": "09:00-17:00"
+          },
+          "cityname": "珠海市",
+          "id": "SYNTHETIC-G3-B",
+          "location": "113.580000,22.280000",
+          "name": "海岛生态廊道乙区",
+          "pname": "广东省",
+          "type": "科教文化服务;展览馆;展览馆"
+        }
+      ],
+      "ref_id": "poi-g3-corridor"
+    }
+  ],
+  "fixture_version": 1,
+  "source": "locally generated synthetic AMap-shaped response; contains no captured provider data; failure case is a labeled synthetic mutation"
+}

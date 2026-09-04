@@ -1,0 +1,43 @@
+{
+  "case": "g4_business_conflict",
+  "entities": [
+    {
+      "city": "珠海",
+      "geocode": {
+        "adcode": "440400",
+        "city": "珠海市",
+        "district": "示例区",
+        "formatted_address": "珠海市示例区示例大道113号",
+        "level": "兴趣点",
+        "location": "113.580000,22.280000",
+        "province": "珠海市"
+      },
+      "name": "海洋文化馆",
+      "opening_date": null,
+      "poi_results": [
+        {
+          "adcode": "440400",
+          "address": "示例大道113号",
+          "adname": "示例区",
+          "business": {
+            "business_status": "暂停开放",
+            "opentime_today": "暂停营业"
+          },
+          "cityname": "珠海市",
+          "id": "SYNTHETIC-POI-G4-MUSEUM",
+          "location": "113.580000,22.280000",
+          "name": "海洋文化馆",
+          "pname": "珠海市",
+          "type": "科教文化服务;展览馆;展览馆"
+        }
+      ],
+      "ref_id": "poi-g4-museum"
+    }
+  ],
+  "fixture_version": 1,
+  "official_business": {
+    "business_status": "开放",
+    "opentime_today": "09:00-17:00"
+  },
+  "source": "locally generated synthetic AMap-shaped response; contains no captured provider data; failure case is a labeled synthetic mutation"
+}

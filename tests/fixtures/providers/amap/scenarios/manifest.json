@@ -1,0 +1,27 @@
+{
+  "files": [
+    {
+      "path": "g3_identity_conflict.json",
+      "sha256": "020dbd031ddce88c17c86705bd155b6312851250a6ac3c5961ee1e43f1aaac27"
+    },
+    {
+      "path": "g4_business_conflict.json",
+      "sha256": "cdd6bc6dd47701363e00ab69e4aea9f906ee2bd1bf688d2629b00798a91378c9"
+    },
+    {
+      "path": "semantic_duplicate_coordinates.json",
+      "sha256": "32eb224d3e5f5c8bb1cd6f0d77f54b353cbc207c78888946691f280f8c90cb48"
+    },
+    {
+      "path": "semantic_same_city_outlier.json",
+      "sha256": "b6202e1d1e92a52435099aa94ec0bf04cb231c43182d5bd5d7dd7473beaba506"
+    },
+    {
+      "path": "semantic_same_day_far.json",
+      "sha256": "8fbb0fecf88d838a0be9c34f53f2a8f1df0e925b6599f3fda89c55189b308c1c"
+    }
+  ],
+  "fixture_count": 5,
+  "generated_by": "scripts/build_provider_fixtures.py",
+  "manifest_version": 1
+}

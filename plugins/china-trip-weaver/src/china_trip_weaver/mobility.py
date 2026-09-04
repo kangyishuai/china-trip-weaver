@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import copy
+import difflib
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
 from .candidates import validate_candidates
 from .clock import Clock, isoformat_seconds
@@ -28,6 +30,8 @@ MODE_ALIASES = {
     "ride": "ride",
 }
 FATAL_ERRORS = frozenset(("credential_missing", "forbidden", "rate_limited", "contract_mismatch"))
+POI_NAME_SIMILARITY_MARGIN = 0.15
+SEMANTIC_OUTLIER_DISTANCE_METERS = 50_000.0
 
 
 @dataclass(frozen=True)
@@ -55,6 +59,7 @@ class MobilityResult:
     claims: Tuple[Mapping[str, Any], ...]
     health: Mapping[str, Any]
     business_calls: Tuple[str, ...]
+    warnings: Tuple[str, ...] = ()
 
     def as_dict(self) -> Mapping[str, Any]:
         return {
@@ -65,6 +70,7 @@ class MobilityResult:
             "claims": [copy.deepcopy(dict(item)) for item in self.claims],
             "health": copy.deepcopy(dict(self.health)),
             "business_calls": list(self.business_calls),
+            "warnings": list(self.warnings),
         }
 
 
@@ -131,6 +137,7 @@ class MobilityBackend:
         claims: List[Mapping[str, Any]] = []
         calls: List[str] = []
         errors: List[str] = []
+        warnings: List[str] = []
         fatal_status: Optional[str] = None
 
         for entity in source_entities:
@@ -140,12 +147,76 @@ class MobilityBackend:
                     entity["ref_id"], entity["name"], entity["city"], existing, (),
                 )
                 continue
+            identity_claims: List[Mapping[str, Any]] = []
+            provider_name: Optional[str] = None
+            geocode_address = "%s%s" % (entity["city"], entity["name"])
+            if not entity["lodging"]:
+                poi_request = ProviderRequest(
+                    request_id=stable_id("amap-poi", entity["ref_id"], entity["name"], entity["city"]),
+                    capability="poi",
+                    parameters={
+                        "subject_ref": entity["ref_id"],
+                        "keywords": entity["name"],
+                        "city": entity["city"],
+                        "page_size": 2,
+                        "page_num": 1,
+                    },
+                    deadline_ms=int(min(self.deadline_seconds, 8.0) * 1000),
+                    as_of=now[:10],
+                    cache_policy="bypass",
+                    trace={"stage": "mobility-poi-identity"},
+                )
+                poi_result = adapter.query(poi_request, context)
+                calls.append("amap.poi:%s" % entity["ref_id"])
+                if not poi_result.normalized_items:
+                    error = poi_result.error_class or "no_results"
+                    errors.append(error)
+                    if error in FATAL_ERRORS:
+                        fatal_status = poi_result.health["status"]
+                        break
+                    continue
+                selected = poi_result.normalized_items[0]
+                conflict_reasons = _poi_identity_conflicts(entity, poi_result.normalized_items)
+                if conflict_reasons:
+                    claims.extend(_claims_with_status(poi_result.claims, "conflict"))
+                    errors.append("identity_conflict")
+                    warnings.extend(("identity_conflict",) + tuple(
+                        "identity_conflict:%s:%s" % (entity["ref_id"], reason)
+                        for reason in conflict_reasons
+                    ))
+                    continue
+                selected_ids = set(selected.get("claim_ids", ()))
+                identity_claims = [
+                    copy.deepcopy(claim) for claim in poi_result.claims
+                    if claim["claim_id"] in selected_ids
+                ]
+                identity = next(
+                    (claim["value"] for claim in identity_claims if claim["field_path"] == "/provider_identity"),
+                    None,
+                )
+                if not _complete_poi_address(identity):
+                    claims.extend(_claims_with_status(identity_claims, "unknown"))
+                    errors.append("incomplete_address")
+                    warnings.extend((
+                        "incomplete_address",
+                        "incomplete_address:%s" % entity["ref_id"],
+                    ))
+                    continue
+                if _business_conflict(entity, candidates, identity_claims):
+                    identity_claims = _business_claims_with_conflict(identity_claims)
+                    warnings.extend((
+                        "business_conflict",
+                        "business_conflict:%s" % entity["ref_id"],
+                    ))
+                provider_name = selected["name"]
+                geocode_address = identity["formatted_address"]
+
             request = ProviderRequest(
-                request_id=stable_id("amap-geocode", entity["ref_id"], entity["name"], entity["city"]),
+                request_id=stable_id("amap-geocode", entity["ref_id"], geocode_address, entity["city"]),
                 capability="geocode",
                 parameters={
                     "subject_ref": entity["ref_id"],
-                    "address": "%s%s" % (entity["city"], entity["name"]),
+                    "address": geocode_address,
                     "city": entity["city"],
                 },
                 deadline_ms=int(min(self.deadline_seconds, 8.0) * 1000),
@@ -156,22 +227,39 @@ class MobilityBackend:
             result = adapter.query(request, context)
             calls.append("amap.geocode:%s" % entity["ref_id"])
             if result.normalized_items and result.claims:
-                coordinate_claim = next((item for item in result.claims if item["field_path"] == "/coordinates"), None)
+                provider_place = result.normalized_items[0]
+                coordinate_claim = result.claims[0] if result.claims[0]["field_path"] == "/coordinates" else None
                 if coordinate_claim is None or not isinstance(coordinate_claim.get("value"), dict):
                     errors.append("contract_mismatch")
                     fatal_status = "contract_mismatch"
                     break
-                claims.extend(result.claims)
+                if not _city_matches(entity["city"], provider_place["city"]):
+                    claims.extend(_claims_with_status(identity_claims + list(result.claims), "conflict"))
+                    errors.append("identity_conflict")
+                    warnings.extend((
+                        "identity_conflict",
+                        "identity_conflict:%s:geocode_admin_mismatch" % entity["ref_id"],
+                    ))
+                    continue
+                claims.extend(identity_claims)
+                claims.append(copy.deepcopy(coordinate_claim))
+                location_claim_ids = tuple(
+                    claim["claim_id"] for claim in identity_claims
+                ) + (coordinate_claim["claim_id"],)
                 locations[entity["ref_id"]] = MobilityLocation(
-                    entity["ref_id"], entity["name"], entity["city"],
-                    coordinate_claim["value"], (coordinate_claim["claim_id"],),
+                    entity["ref_id"], provider_name or provider_place["name"], provider_place["city"],
+                    coordinate_claim["value"], location_claim_ids,
                 )
             else:
+                claims.extend(identity_claims)
                 error = result.error_class or "no_results"
                 errors.append(error)
                 if error in FATAL_ERRORS:
                     fatal_status = result.health["status"]
                     break
+
+        claims, semantic_warnings = _semantic_location_checks(locations, claims, candidates)
+        warnings.extend(semantic_warnings)
 
         cells: List[RouteCell] = []
         if fatal_status is None and len(locations) >= 2:
@@ -179,7 +267,7 @@ class MobilityBackend:
             for left_ref, right_ref in pairs:
                 left = locations[left_ref]
                 right = locations[right_ref]
-                if left.city != right.city:
+                if not _city_matches(left.city, right.city):
                     continue
                 for mode in normalized_modes:
                     left_point = left.coordinates["gcj02"]
@@ -269,6 +357,8 @@ class MobilityBackend:
         live_cells = sum(1 for item in cells if item.mode == "live")
         if fatal_status is not None:
             status = fatal_status
+        elif "identity_conflict" in warnings or "incomplete_address" in warnings:
+            status = "degraded"
         elif live_cells:
             status = "ready"
         else:
@@ -278,8 +368,9 @@ class MobilityBackend:
             "live" if live_cells else "static",
             status,
             now,
-            "calls=%d/80 qps<=2; live_cells=%d; locations=%d; errors=%s" % (
+            "calls=%d/80 qps<=2; live_cells=%d; locations=%d; errors=%s; warnings=%s" % (
                 call_count, live_cells, len(locations), error_summary,
+                ",".join(sorted(set(item.split(":", 1)[0] for item in warnings))) if warnings else "none",
             ),
         )
         return MobilityResult(
@@ -288,6 +379,7 @@ class MobilityBackend:
             tuple(claims),
             health,
             tuple(calls),
+            tuple(dict.fromkeys(warnings)),
         )
 
 
@@ -303,6 +395,207 @@ def normalize_modes(modes: Sequence[str]) -> Tuple[str, ...]:
     if not normalized:
         raise ValueError("at least one mobility mode is required")
     return tuple(normalized)
+
+
+def _poi_identity_conflicts(
+    entity: Mapping[str, Any],
+    candidates: Sequence[Mapping[str, Any]],
+) -> Tuple[str, ...]:
+    first = candidates[0]
+    reasons = []
+    if not _city_matches(entity["city"], first.get("city")):
+        reasons.append("poi_admin_mismatch")
+    if len(candidates) > 1:
+        first_score = _name_similarity(entity["name"], first.get("name"))
+        second_score = _name_similarity(entity["name"], candidates[1].get("name"))
+        if first_score - second_score < POI_NAME_SIMILARITY_MARGIN:
+            reasons.append("ambiguous_name_margin")
+    return tuple(reasons)
+
+
+def _name_similarity(expected: Any, actual: Any) -> float:
+    left = _normalized_name(expected)
+    right = _normalized_name(actual)
+    if not left or not right:
+        return 0.0
+    return difflib.SequenceMatcher(None, left, right, autojunk=False).ratio()
+
+
+def _normalized_name(value: Any) -> str:
+    if not isinstance(value, str):
+        return ""
+    folded = unicodedata.normalize("NFKC", value).casefold()
+    return "".join(character for character in folded if character.isalnum())
+
+
+def _city_matches(expected: Any, actual: Any) -> bool:
+    left = _city_key(expected)
+    right = _city_key(actual)
+    return bool(left and right and left == right)
+
+
+def _city_key(value: Any) -> str:
+    if not isinstance(value, str):
+        return ""
+    result = "".join(
+        character for character in unicodedata.normalize("NFKC", value).casefold()
+        if character.isalnum()
+    )
+    for suffix in ("特别行政区", "自治州", "自治县", "地区", "市", "县", "区", "盟"):
+        if result.endswith(suffix) and len(result) > len(suffix):
+            result = result[:-len(suffix)]
+            break
+    return result
+
+
+def _complete_poi_address(identity: Any) -> bool:
+    return bool(
+        isinstance(identity, dict)
+        and isinstance(identity.get("formatted_address"), str)
+        and identity["formatted_address"].strip()
+        and isinstance(identity.get("district"), str)
+        and identity["district"].strip()
+        and isinstance(identity.get("adcode"), str)
+        and identity["adcode"].strip()
+    )
+
+
+def _claims_with_status(
+    claims: Sequence[Mapping[str, Any]],
+    status: str,
+) -> List[Mapping[str, Any]]:
+    output = copy.deepcopy(list(claims))
+    for claim in output:
+        claim["status"] = status
+        if status == "unknown":
+            claim["confidence"] = 0.0
+    return output
+
+
+def _business_claims_with_conflict(
+    claims: Sequence[Mapping[str, Any]],
+) -> List[Mapping[str, Any]]:
+    output = copy.deepcopy(list(claims))
+    for claim in output:
+        if claim["field_path"] in ("/provider_identity", "/business"):
+            claim["status"] = "conflict"
+    return output
+
+
+def _business_conflict(
+    entity: Mapping[str, Any],
+    candidates: Mapping[str, Any],
+    claims: Sequence[Mapping[str, Any]],
+) -> bool:
+    business = next(
+        (claim["value"] for claim in claims if claim["field_path"] == "/business"),
+        None,
+    )
+    if not _mentions_closure(business):
+        return False
+    entity_claim_ids = set(entity.get("claim_ids", ()))
+    official_claims = [
+        claim for claim in candidates["claims"]
+        if claim["claim_id"] in entity_claim_ids
+        and claim["provider"] in ("official-web", "official")
+        and claim["status"] not in ("conflict", "unavailable", "unknown")
+    ]
+    return bool(official_claims) and not any(_mentions_closure(claim["value"]) for claim in official_claims)
+
+
+def _mentions_closure(value: Any) -> bool:
+    text = str(value).casefold()
+    return any(marker in text for marker in (
+        "暂停营业", "暂停开放", "停止营业", "停止开放", "暂时关闭", "永久关闭",
+        "闭馆", "歇业", "closed", "suspended", "not open",
+    ))
+
+
+def _semantic_location_checks(
+    locations: Mapping[str, MobilityLocation],
+    claims: Sequence[Mapping[str, Any]],
+    candidates: Mapping[str, Any],
+) -> Tuple[List[Mapping[str, Any]], Tuple[str, ...]]:
+    partial_claim_ids: Set[str] = set()
+    conflict_claim_ids: Set[str] = set()
+    details: Set[str] = set()
+
+    coordinate_buckets: Dict[Tuple[float, float], List[MobilityLocation]] = {}
+    for location in locations.values():
+        point = _location_point(location)
+        if point is not None:
+            coordinate_buckets.setdefault(point, []).append(location)
+    for duplicate_locations in coordinate_buckets.values():
+        if len(duplicate_locations) < 2:
+            continue
+        refs = tuple(sorted(item.ref_id for item in duplicate_locations))
+        for location in duplicate_locations:
+            conflict_claim_ids.update(location.claim_ids)
+        details.add("semantic_outlier:duplicate_coordinates:%s" % ",".join(refs))
+
+    by_city: Dict[str, List[MobilityLocation]] = {}
+    for location in locations.values():
+        by_city.setdefault(_city_key(location.city), []).append(location)
+    for city_locations in by_city.values():
+        if len(city_locations) < 3:
+            continue
+        for location in city_locations:
+            point = _location_point(location)
+            if point is None:
+                continue
+            distances = [
+                haversine_meters(point[0], point[1], other_point[0], other_point[1])
+                for other in city_locations if other.ref_id != location.ref_id
+                for other_point in (_location_point(other),) if other_point is not None
+            ]
+            if distances and min(distances) > SEMANTIC_OUTLIER_DISTANCE_METERS:
+                partial_claim_ids.update(location.claim_ids)
+                details.add("semantic_outlier:same_city:%s" % location.ref_id)
+
+    for left_entity, right_entity in zip(candidates["pois"], candidates["pois"][1:]):
+        left = locations.get(left_entity["poi_id"])
+        right = locations.get(right_entity["poi_id"])
+        if left is None or right is None or not _city_matches(left.city, right.city):
+            continue
+        if not (_opening_dates(left_entity) & _opening_dates(right_entity)):
+            continue
+        left_point = _location_point(left)
+        right_point = _location_point(right)
+        if left_point is None or right_point is None:
+            continue
+        distance = haversine_meters(left_point[0], left_point[1], right_point[0], right_point[1])
+        if distance > SEMANTIC_OUTLIER_DISTANCE_METERS:
+            partial_claim_ids.update(left.claim_ids)
+            partial_claim_ids.update(right.claim_ids)
+            details.add(
+                "semantic_outlier:same_day_adjacent:%s:%s:%dm"
+                % (left.ref_id, right.ref_id, round(distance))
+            )
+
+    output = copy.deepcopy(list(claims))
+    for claim in output:
+        if claim["claim_id"] in conflict_claim_ids:
+            claim["status"] = "conflict"
+        elif claim["claim_id"] in partial_claim_ids and claim["status"] == "verified":
+            claim["status"] = "partial"
+    if not details:
+        return output, ()
+    return output, tuple(["semantic_outlier"] + sorted(details))
+
+
+def _location_point(location: MobilityLocation) -> Optional[Tuple[float, float]]:
+    point = location.coordinates.get("gcj02")
+    if not isinstance(point, dict):
+        return None
+    return float(point["lng"]), float(point["lat"])
+
+
+def _opening_dates(entity: Mapping[str, Any]) -> Set[str]:
+    return {
+        window["start_at"][:10]
+        for window in entity.get("opening_windows", ())
+        if isinstance(window.get("start_at"), str) and len(window["start_at"]) >= 10
+    }
 
 
 def apply_locations(
@@ -330,12 +623,12 @@ def _candidate_entities(candidates: Mapping[str, Any]) -> Tuple[Mapping[str, Any
     for item in candidates["lodgings"]:
         entities.append({
             "ref_id": item["lodging_id"], "name": item["name"], "city": item["city"],
-            "coordinates": item["coordinates"], "lodging": True,
+            "coordinates": item["coordinates"], "claim_ids": item["claim_ids"], "lodging": True,
         })
     for item in candidates["pois"][:12]:
         entities.append({
             "ref_id": item["poi_id"], "name": item["name"], "city": item["city"],
-            "coordinates": item["coordinates"], "lodging": False,
+            "coordinates": item["coordinates"], "claim_ids": item["claim_ids"], "lodging": False,
         })
     return tuple(sorted(entities, key=lambda item: item["ref_id"]))
 
@@ -358,7 +651,7 @@ def _bounded_pairs(
         left_point = left.coordinates["gcj02"]
         ranked = []
         for right in locations:
-            if left.ref_id == right.ref_id or left.city != right.city:
+            if left.ref_id == right.ref_id or not _city_matches(left.city, right.city):
                 continue
             right_point = right.coordinates["gcj02"]
             distance = haversine_meters(

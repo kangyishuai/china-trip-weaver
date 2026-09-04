@@ -14,7 +14,8 @@ sys.path.insert(0, str(SRC))
 from china_trip_weaver.clock import FixedClock
 from china_trip_weaver.contracts import ProviderRequest, canonical_json
 from china_trip_weaver.credentials import resolve_credentials
-from china_trip_weaver.evidence import validate_claim
+from china_trip_weaver.evidence import EvidenceLedger, make_claim, validate_claim
+from china_trip_weaver.mobility import MobilityBackend
 from china_trip_weaver.providers import (
     AMapAdapter,
     AnySearchAdapter,
@@ -23,13 +24,14 @@ from china_trip_weaver.providers import (
     Rail12306Adapter,
     VariFlightAdapter,
 )
-from china_trip_weaver.providers.base import ProviderContext, ReplayTransport
+from china_trip_weaver.providers.base import ProviderContext, ProviderEnvelope, ReplayTransport
 from china_trip_weaver.providers.rail12306 import EXPECTED_TOOLS as RAIL_TOOLS
 from china_trip_weaver.providers.variflight import EXPECTED_TOOLS as VARIFLIGHT_TOOLS
 from china_trip_weaver.validate_trip import SchemaSubsetValidator, load_schema
 
 
 FIXTURES = ROOT / "tests" / "fixtures" / "providers"
+AMAP_SCENARIOS = FIXTURES / "amap" / "scenarios"
 COMMON_CASES = {"success", "empty", "auth", "rate_limit", "timeout", "wrong_shape", "malicious"}
 ADAPTERS = {
     "host_web": HostWebAdapter,
@@ -270,6 +272,266 @@ def run_fixture_value(path: Path):
             transport=ReplayTransport(fixture["transport"]),
         ),
     )
+
+
+class AMapScenarioTransport:
+    """Replay the multi-call AMap responses stored in a synthetic scenario."""
+
+    def __init__(self, scenario):
+        self.entities = {item["ref_id"]: item for item in scenario["entities"]}
+        self.calls = 0
+        self.capabilities = []
+
+    def execute(self, provider, provider_request):
+        if provider != "amap":
+            raise AssertionError(provider)
+        self.calls += 1
+        self.capabilities.append(provider_request.capability)
+        if provider_request.capability == "poi":
+            entity = self.entities[provider_request.parameters["subject_ref"]]
+            return ProviderEnvelope(200, {
+                "status": "1",
+                "info": "OK",
+                "infocode": "10000",
+                "api": "poi-v5",
+                "page_num": provider_request.parameters["page_num"],
+                "page_size": provider_request.parameters["page_size"],
+                "count": str(len(entity["poi_results"])),
+                "pois": entity["poi_results"],
+            }, {})
+        if provider_request.capability == "geocode":
+            entity = self.entities[provider_request.parameters["subject_ref"]]
+            return ProviderEnvelope(200, {
+                "status": "1",
+                "info": "OK",
+                "infocode": "10000",
+                "api": "geocode-v3",
+                "count": "1",
+                "geocodes": [entity["geocode"]],
+            }, {})
+        if provider_request.capability == "route":
+            mode = provider_request.parameters["travel_mode"]
+            api = {
+                "walk": "route-walking-v3",
+                "transit": "route-transit-v3",
+                "drive": "route-driving-v3",
+                "ride": "route-riding-v4",
+            }[mode]
+            path = {"duration": "1800", "distance": "12000"}
+            if mode == "ride":
+                return ProviderEnvelope(200, {
+                    "api": api,
+                    "errcode": 0,
+                    "errmsg": "OK",
+                    "data": {"paths": [path]},
+                }, {})
+            return ProviderEnvelope(200, {
+                "api": api,
+                "status": "1",
+                "info": "OK",
+                "route": {"transits" if mode == "transit" else "paths": [path]},
+            }, {})
+        raise AssertionError(provider_request.capability)
+
+
+def amap_scenario_candidates(scenario):
+    clock = FixedClock.from_iso("2026-09-04T00:00:00+08:00")
+    claims = []
+    pois = []
+    for entity in scenario["entities"]:
+        opening_date = entity.get("opening_date")
+        field_path = "/opening_windows/0" if opening_date else "/name"
+        claim = make_claim(
+            subject_ref=entity["ref_id"],
+            field_path=field_path,
+            value="official dated opening information" if opening_date else entity["name"],
+            source_url="https://example.invalid/official/" + entity["ref_id"],
+            provider="official-web",
+            status="verified",
+            confidence=0.9,
+            mode="static",
+            clock=clock,
+        )
+        windows = []
+        if opening_date:
+            windows.append({
+                "start_at": opening_date + "T09:00:00+08:00",
+                "end_at": opening_date + "T17:00:00+08:00",
+                "status": "verified",
+                "claim_id": claim["claim_id"],
+            })
+        claims.append(claim)
+        pois.append({
+            "poi_id": entity["ref_id"],
+            "name": entity["name"],
+            "city": entity["city"],
+            "category": "synthetic-test-place",
+            "coordinates": None,
+            "recommended_duration_minutes": 60,
+            "opening_windows": windows,
+            "price": None,
+            "deep_links": ["https://example.invalid/place/" + entity["ref_id"]],
+            "claim_ids": [claim["claim_id"]],
+        })
+    return {
+        "candidates_version": "1.0.0",
+        "pois": pois,
+        "lodgings": [],
+        "claims": claims,
+        "unknowns": [],
+    }
+
+
+def run_amap_scenario(case):
+    scenario = load(AMAP_SCENARIOS / (case + ".json"))
+    candidates = amap_scenario_candidates(scenario)
+    transport = AMapScenarioTransport(scenario)
+    backend = MobilityBackend(
+        "live",
+        resolve_credentials(PROVIDER_ENV["amap"], ROOT / ".tmp" / "provider-fixture-no-file"),
+        transport,
+    )
+    result = backend.resolve(
+        candidates,
+        FixedClock.from_iso("2026-09-04T00:00:00+08:00"),
+        ("walking",),
+    )
+    return scenario, candidates, result
+
+
+class AMapIdentityAndSemanticTests(unittest.TestCase):
+    def test_amap_scenario_manifest_locks_five_synthetic_fixtures(self):
+        manifest = load(AMAP_SCENARIOS / "manifest.json")
+        actual = {
+            path.name for path in AMAP_SCENARIOS.glob("*.json")
+            if path.name != "manifest.json"
+        }
+        self.assertEqual(5, manifest["fixture_count"])
+        self.assertEqual({entry["path"] for entry in manifest["files"]}, actual)
+        for entry in manifest["files"]:
+            data = (AMAP_SCENARIOS / entry["path"]).read_bytes()
+            self.assertEqual(entry["sha256"], hashlib.sha256(data).hexdigest())
+            fixture = json.loads(data)
+            self.assertIn("locally generated synthetic AMap-shaped response", fixture["source"])
+            self.assertNotIn("AMAP_WEBSERVICE_KEY", canonical_json(fixture))
+
+    def test_g4_business_and_official_claims_both_survive_as_conflict(self):
+        scenario = load(AMAP_SCENARIOS / "g4_business_conflict.json")
+        entity = scenario["entities"][0]
+        result = AMapAdapter().query(
+            ProviderRequest(
+                request_id="g4-business-conflict",
+                capability="poi",
+                parameters={
+                    "subject_ref": entity["ref_id"],
+                    "city": entity["city"],
+                    "keywords": entity["name"],
+                    "page_size": 2,
+                    "page_num": 1,
+                },
+                deadline_ms=1000,
+                as_of="2026-09-04",
+                cache_policy="bypass",
+                trace={"stage": "g4"},
+            ),
+            ProviderContext(
+                FixedClock.from_iso("2026-09-04T00:00:00+08:00"),
+                resolve_credentials(PROVIDER_ENV["amap"], ROOT / ".tmp" / "provider-fixture-no-file"),
+                ReplayTransport({
+                    "kind": "response",
+                    "status_code": 200,
+                    "headers": {},
+                    "body": {
+                        "status": "1",
+                        "info": "OK",
+                        "api": "poi-v5",
+                        "page_num": 1,
+                        "page_size": 2,
+                        "pois": entity["poi_results"],
+                    },
+                }),
+            ),
+        )
+        identity = next(claim for claim in result.claims if claim["field_path"] == "/provider_identity")
+        self.assertEqual({
+            "provider_poi_id", "matched_name", "formatted_address", "district",
+            "adcode", "type", "business",
+        }, set(identity["value"]))
+        self.assertIsNone(result.normalized_items[0]["coordinates"])
+        business = next(claim for claim in result.claims if claim["field_path"] == "/business")
+        official = make_claim(
+            subject_ref=entity["ref_id"],
+            field_path="/business",
+            value=scenario["official_business"],
+            source_url="https://example.invalid/official/g4",
+            provider="official-web",
+            status="verified",
+            confidence=0.9,
+            mode="static",
+            clock=FixedClock.from_iso("2026-09-04T00:00:00+08:00"),
+        )
+        ledger = EvidenceLedger((official, business))
+        conflicts = ledger.claims()
+        self.assertEqual(2, len(conflicts))
+        self.assertEqual({"conflict"}, {claim["status"] for claim in conflicts})
+
+        mobility_transport = AMapScenarioTransport(scenario)
+        mobility = MobilityBackend(
+            "live",
+            resolve_credentials(PROVIDER_ENV["amap"], ROOT / ".tmp" / "provider-fixture-no-file"),
+            mobility_transport,
+        ).resolve(
+            amap_scenario_candidates(scenario),
+            FixedClock.from_iso("2026-09-04T00:00:00+08:00"),
+            ("walking",),
+        )
+        mobility_business = next(
+            claim for claim in mobility.claims if claim["field_path"] == "/business"
+        )
+        self.assertEqual("conflict", mobility_business["status"])
+        self.assertIn("business_conflict", mobility.warnings)
+
+    def test_same_city_isolated_coordinate_downgrades_its_claims(self):
+        _, _, result = run_amap_scenario("semantic_same_city_outlier")
+        self.assertIn("semantic_outlier", result.warnings)
+        self.assertEqual("ready", result.health["status"])
+        self.assertTrue(result.cells)
+        self.assertTrue(any("semantic_outlier:same_city:poi-outlier" == item for item in result.warnings))
+        outlier = next(item for item in result.locations if item.ref_id == "poi-outlier")
+        statuses = {
+            claim["status"] for claim in result.claims
+            if claim["claim_id"] in outlier.claim_ids
+        }
+        self.assertNotIn("verified", statuses)
+        self.assertIn("partial", statuses)
+
+    def test_distinct_entities_at_identical_coordinate_are_conflicts(self):
+        _, _, result = run_amap_scenario("semantic_duplicate_coordinates")
+        self.assertIn("semantic_outlier", result.warnings)
+        self.assertEqual("ready", result.health["status"])
+        self.assertTrue(result.cells)
+        self.assertTrue(any("semantic_outlier:duplicate_coordinates:" in item for item in result.warnings))
+        implicated = {
+            claim_id for location in result.locations for claim_id in location.claim_ids
+        }
+        self.assertEqual(
+            {"conflict"},
+            {claim["status"] for claim in result.claims if claim["claim_id"] in implicated},
+        )
+
+    def test_same_day_adjacent_pois_over_fifty_km_emit_warning_and_downgrade(self):
+        _, _, result = run_amap_scenario("semantic_same_day_far")
+        self.assertIn("semantic_outlier", result.warnings)
+        self.assertEqual("ready", result.health["status"])
+        self.assertTrue(result.cells)
+        self.assertTrue(any("semantic_outlier:same_day_adjacent:" in item for item in result.warnings))
+        implicated = {
+            claim_id for location in result.locations for claim_id in location.claim_ids
+        }
+        self.assertNotIn(
+            "verified",
+            {claim["status"] for claim in result.claims if claim["claim_id"] in implicated},
+        )
 
 
 for _path in fixture_paths():
