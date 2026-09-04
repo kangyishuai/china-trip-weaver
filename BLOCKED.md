@@ -109,6 +109,23 @@ should mean pending work. They live where they are enforced:
   visibly `degraded` with `errors=timeout`.
 - No new Book 4 blocker remains. The unrelated Book 5 manifest/test conflict is
   outside Book 4 scope and remains untouched.
+## slow 档在紧凑行程上只会无解，不会降配（验收时发现，2026-09-04）
+
+- 现象：同一份 `beijing-shanghai-3d` 候选，`pace=balanced` 与 `full` 都能排出
+  完整日程，`pace=slow` 直接 `PLAN_FAILED`，conflict 为
+  `{"code":"window","message":"required candidate routine-transfer-buffer-… has no feasible insertion"}`。
+  换成 POI 更多的 `demo/multicity-5d` 候选时三档都能排，所以这不是 slow 档普遍
+  失效，而是窗口收窄（09:00–20:00）后，必需的餐、休息与跨城 buffer 在这份
+  3 天跨城往返上塞不下。
+- 为什么不算书 6 未完成：输出是结构化无解而非崩溃，CLI 给出 `PLAN_FAILED` 加
+  具名 conflict 并 exit 1，符合任务书对无解的要求；三档可区分这条也成立
+  （slow 排 2 个 POI、18:00 结束，balanced/full 排 5 个、19:50 结束）。
+- 为什么仍要记一笔：产品语义反直觉——用户选「慢一点」，得到的却是排不出来。
+  CTW-004 原本要求的是「结构化无解**或降配**」，目前只实现了前者。
+- 建议解法（留给后续发布轮裁决）：slow 档在无解时先尝试降配（减少 POI、缩短
+  单点时长、放宽当日结束时间到 balanced 档），仍不可行才返回无解，并在
+  unknowns 或 assumptions 里说明降了什么。
+
 ## Book 7: baseline observation differs from task brief (2026-09-04)
 
 - Required baseline commands otherwise match exactly: HEAD and `origin/main` are `176dbc70fae76924014dca9e6913337436048ed2`; `/usr/bin/python3 -m unittest discover -s tests` reports `Ran 324 tests in 22.346s` and `OK` with zero skips; `/usr/bin/python3 scripts/scan_secrets.py` reports `secret scan: 0 finding(s) across 357 file(s)`.
