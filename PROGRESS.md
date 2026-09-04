@@ -1,5 +1,25 @@
 # PROGRESS
 
+## 当前状态速览（2026-09-05）
+
+接手先读这一节，下面 68 个章节是按轮次留存的实测证据，不必通读。
+
+- 版本 **0.4.0**，已装进本机 Codex（`plugin list: installed, enabled 0.4.0`，缓存与源码一致）。
+- 全量 `/usr/bin/python3 -m unittest discover -s tests` = **386 项 OK、skipped 0**；
+  `scripts/scan_secrets.py` = `0 finding(s) across 370 file(s)`。
+- demo 五组：`demo/` 根、`guangzhou-shenzhen/`、`multicity-5d/`、`grouped-departures/`、
+  `journey-16d/`，各自 validate 与 HTML 校验全过。
+- 2026-09-04/05 完成真实行程 dogfood 审计的全部 12 条 finding，测试从 290 涨到 386。
+  按管理者—执行者模式跑了 11 份任务书：地点身份、12306 站名 fallback、跨城多目的地、
+  住宿硬约束与库存兜底、可读交付与工具口径、节奏预算、并发与 CLI 便利、旅客分组与
+  降配、0.3.0 发布、Journey 模型、0.4.0 Journey 总览与发布。
+- 仍开着的两条在 `BLOCKED.md` 顶部 Open 区：12306 车站候选无距离信号；公开分发的
+  privacy/terms URL 有意留空。
+- 已知待办（验收时用真实 16 天福建行程实测发现，尚未修）：Journey 拆段只按交通腿日期
+  定边界，不读候选住宿链的 `check_in`/`check_out`，用户写好的住宿链会被无视并报
+  `NO_STAY_FOR_NIGHT`；`validate-candidates` 不校验 unknown 的 `field_path` 数组下标
+  与其 claim 实体是否一致，下标错位会被放行到拆段才炸。
+
 ## 书 3 开工理解（2026-09-04，≤10 行）
 1. 目标：补齐 planner 已承诺的 2–7 天有序多城市能力，不收回产品、Skill 或 Schema 合同。
 2. 顺序：任务 0 基线与失败复现 → 有序 legs/返程规则 → day.city/逐夜 stay → Schema → 文档与两组 demo → 全门禁与提交。
