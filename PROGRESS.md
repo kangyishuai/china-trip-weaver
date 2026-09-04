@@ -280,3 +280,13 @@ secret scan: 0 finding(s) across 355 file(s)
 - 禁碰 `providers/`、`mobility.py`、`cli.py`、`render/`、`scheduler/` 的当前 diff 原始输出为空；当前 diff stat 仅含书 3 白名单和获明确授权同步的三份 Trip Schema 副本。
 - 三份 Trip Schema 最终 SHA-256 均为 `13220c0a75a0f0fb9bd7ea9ac28633bcb74d6066b78306669933eef23227de52`；`BLOCKED.md` 已写书 3“无新增阻塞”，未覆盖书 2 既有事实。
 - 书 3 当前验收轮次：5/14；完成条件已全部满足并精确提交；提交后工作区 clean，禁碰路径的提交 diff 为空。
+
+## 书 1 交付门禁（完成）
+
+- 最终定向：`/usr/bin/python3 -m unittest tests.test_providers tests.test_amap_live -v` → `Ran 104 tests in 0.425s`、`OK`、skipped 0。
+- 最终全量：`/usr/bin/python3 -m unittest discover -s tests` → `Ran 311 tests in 21.198s`、`OK`、skipped 0（基线 290，满足 ≥295）。
+- 最终秘密扫描：`/usr/bin/python3 scripts/scan_secrets.py` → `secret scan: 0 finding(s) across 355 file(s)`。
+- 代码提交 `977188e`（`Harden AMap place identity resolution`）只含 12 个书 1 白名单路径；其 commit stat 为 1,334 insertions、35 deletions。
+- `git diff --quiet`、禁碰路径 working-tree diff、禁碰路径 `977188e^..977188e` diff 均 exit 0；planning、两处 schema、CLI、MCP stdio、rail12306 均未被书 1 修改。
+- 版本核对：plugin manifest 与 package `__version__` 均为 `0.2.0`；`BLOCKED.md` 已记录书 1“无新增阻塞”。
+- 书 1 最终验收失败轮次：0/10；两个意图性反向红均已还原。
