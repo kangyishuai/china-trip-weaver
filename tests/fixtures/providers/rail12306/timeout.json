@@ -1,0 +1,39 @@
+{
+  "captured_at": "2026-09-04T00:00:00+08:00",
+  "case": "timeout",
+  "contains_personal_data": false,
+  "credential_state": "configured",
+  "expected": {
+    "error_class": "timeout",
+    "health_status": "degraded",
+    "item_count": 0,
+    "sanitized": false,
+    "schema_refs": [],
+    "transport_calls": 2
+  },
+  "fixture_version": 1,
+  "provider": "rail12306",
+  "provider_version": "0.3.10",
+  "redacted": false,
+  "request": {
+    "as_of": "2026-10-16",
+    "cache_policy": "bypass",
+    "capability": "rail",
+    "deadline_ms": 1000,
+    "parameters": {
+      "date": "2026-09-10",
+      "from_name": "北京",
+      "from_ref": "city-beijing",
+      "to_name": "上海",
+      "to_ref": "city-shanghai"
+    },
+    "request_id": "fixture-request",
+    "trace": {
+      "stage": "provider-fixture"
+    }
+  },
+  "source": "locally generated synthetic 12306 MCP response; contains no captured provider data",
+  "transport": {
+    "kind": "timeout"
+  }
+}

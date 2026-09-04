@@ -1,0 +1,46 @@
+{
+  "captured_at": "2026-09-04T00:00:00+08:00",
+  "case": "rate_limit",
+  "contains_personal_data": false,
+  "credential_state": "configured",
+  "expected": {
+    "error_class": "rate_limited",
+    "health_status": "rate_limited",
+    "item_count": 0,
+    "sanitized": false,
+    "schema_refs": [],
+    "transport_calls": 1
+  },
+  "fixture_version": 1,
+  "provider": "flyai",
+  "provider_version": "1.0.16",
+  "redacted": false,
+  "request": {
+    "as_of": "2026-10-16",
+    "cache_policy": "bypass",
+    "capability": "flight",
+    "deadline_ms": 1000,
+    "parameters": {
+      "date": "2026-09-10",
+      "destination": "上海",
+      "from_ref": "city-beijing",
+      "origin": "北京",
+      "to_ref": "city-shanghai"
+    },
+    "request_id": "fixture-request",
+    "trace": {
+      "stage": "provider-fixture"
+    }
+  },
+  "source": "locally generated synthetic contract response; never captured from a provider",
+  "transport": {
+    "body": {
+      "error": "quota"
+    },
+    "headers": {
+      "Retry-After": "30"
+    },
+    "kind": "response",
+    "status_code": 429
+  }
+}

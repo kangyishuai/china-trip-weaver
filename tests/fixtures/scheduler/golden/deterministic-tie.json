@@ -1,0 +1,125 @@
+{
+  "case_id": "deterministic-tie",
+  "days": [
+    {
+      "budget_cny": null,
+      "buffer_minutes": 10,
+      "candidates": [
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "tie-a",
+          "required": false,
+          "title": "同分 A",
+          "utility": 80,
+          "windows": []
+        },
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "tie-b",
+          "required": false,
+          "title": "同分 B",
+          "utility": 80,
+          "windows": []
+        }
+      ],
+      "date": "2026-12-05",
+      "day_id": "tie-day",
+      "end_at": "2026-12-05T20:00:00+08:00",
+      "matrix": [
+        {
+          "claim_ids": [
+            "claim-route-tie-a-tie-b"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 7500,
+          "duration_minutes": 15,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "tie-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "tie-b",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-tie-b-tie-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 7500,
+          "duration_minutes": 15,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "tie-b",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "tie-a",
+          "travel_mode": "transit"
+        }
+      ],
+      "max_optional": 8,
+      "max_travel_minutes": null,
+      "start_at": "2026-12-05T09:00:00+08:00",
+      "travel_mode": "transit"
+    }
+  ],
+  "expected": {
+    "days": [
+      {
+        "end_at": [
+          "2026-12-05T10:00:00+08:00",
+          "2026-12-05T11:25:00+08:00"
+        ],
+        "excluded": [],
+        "hops": [
+          {
+            "duration_minutes": 15,
+            "from_ref": "tie-a",
+            "to_ref": "tie-b"
+          }
+        ],
+        "objective_vector": {
+          "cost_cny": 0,
+          "required_selected": 0,
+          "selected": 2,
+          "travel_minutes": 15,
+          "utility": 160
+        },
+        "selected_ids": [
+          "tie-a",
+          "tie-b"
+        ],
+        "start_at": [
+          "2026-12-05T09:00:00+08:00",
+          "2026-12-05T10:25:00+08:00"
+        ]
+      }
+    ],
+    "status": "SCHEDULED"
+  },
+  "fixture_version": 1,
+  "tags": [
+    "tie",
+    "deterministic"
+  ]
+}

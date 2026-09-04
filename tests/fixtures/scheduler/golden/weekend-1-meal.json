@@ -1,0 +1,230 @@
+{
+  "case_id": "weekend-1-meal",
+  "days": [
+    {
+      "budget_cny": null,
+      "buffer_minutes": 10,
+      "candidates": [
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 90,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "meal-a",
+          "required": false,
+          "title": "上午建筑",
+          "utility": 90,
+          "windows": []
+        },
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": "2026-10-18T12:00:00+08:00",
+          "kind": "meal",
+          "locked": true,
+          "ref_id": "meal-m",
+          "required": true,
+          "title": "已锁午餐",
+          "utility": 100,
+          "windows": [
+            {
+              "end_at": "2026-10-18T13:00:00+08:00",
+              "start_at": "2026-10-18T12:00:00+08:00"
+            }
+          ]
+        },
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 90,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "meal-z",
+          "required": false,
+          "title": "下午公园",
+          "utility": 60,
+          "windows": []
+        }
+      ],
+      "date": "2026-10-18",
+      "day_id": "w1-meal-day",
+      "end_at": "2026-10-18T20:00:00+08:00",
+      "matrix": [
+        {
+          "claim_ids": [
+            "claim-route-meal-a-meal-m"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 5000,
+          "duration_minutes": 10,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "meal-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "meal-m",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-meal-a-meal-z"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 5000,
+          "duration_minutes": 10,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "meal-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "meal-z",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-meal-m-meal-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 5000,
+          "duration_minutes": 10,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "meal-m",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "meal-a",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-meal-m-meal-z"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 5000,
+          "duration_minutes": 10,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "meal-m",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "meal-z",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-meal-z-meal-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 5000,
+          "duration_minutes": 10,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "meal-z",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "meal-a",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-meal-z-meal-m"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 5000,
+          "duration_minutes": 10,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "meal-z",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "meal-m",
+          "travel_mode": "transit"
+        }
+      ],
+      "max_optional": 8,
+      "max_travel_minutes": null,
+      "start_at": "2026-10-18T09:00:00+08:00",
+      "travel_mode": "transit"
+    }
+  ],
+  "expected": {
+    "days": [
+      {
+        "end_at": [
+          "2026-10-18T10:30:00+08:00",
+          "2026-10-18T13:00:00+08:00",
+          "2026-10-18T14:50:00+08:00"
+        ],
+        "excluded": [],
+        "hops": [
+          {
+            "duration_minutes": 10,
+            "from_ref": "meal-a",
+            "to_ref": "meal-m"
+          },
+          {
+            "duration_minutes": 10,
+            "from_ref": "meal-m",
+            "to_ref": "meal-z"
+          }
+        ],
+        "objective_vector": {
+          "cost_cny": 0,
+          "required_selected": 1,
+          "selected": 3,
+          "travel_minutes": 20,
+          "utility": 250
+        },
+        "selected_ids": [
+          "meal-a",
+          "meal-m",
+          "meal-z"
+        ],
+        "start_at": [
+          "2026-10-18T09:00:00+08:00",
+          "2026-10-18T12:00:00+08:00",
+          "2026-10-18T13:20:00+08:00"
+        ]
+      }
+    ],
+    "status": "SCHEDULED"
+  },
+  "fixture_version": 1,
+  "tags": [
+    "weekend",
+    "1-day",
+    "meal",
+    "locked"
+  ]
+}

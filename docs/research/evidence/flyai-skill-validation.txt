@@ -1,0 +1,13 @@
+$ command -v flyai
+
+[无输出；CLI 未安装]
+
+$ flyai --version
+zsh: command not found: flyai
+
+$ python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/flyai
+Unexpected key(s) in SKILL.md frontmatter: display_name, homepage. Allowed properties are: allowed-tools, description, license, metadata, name
+
+[exit_code=1]
+
+仓库无 tests/CI/package.json。没有执行 README 的 `npm i -g @fly-ai/flyai-cli`，因为任务禁止安装全局工具；CLI 是独立 npm 包，不在本 commit 内。

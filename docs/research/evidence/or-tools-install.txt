@@ -1,0 +1,52 @@
+$ ~/miniconda3/bin/python3.13 -m venv research/.venv
+
+$ research/.venv/bin/python -m pip --version
+pip 25.3 from <workspace>/research/.venv/lib/python3.13/site-packages/pip (python 3.13)
+
+$ PIP_CACHE_DIR=research/evidence/pip-cache research/.venv/bin/python -m pip download --no-deps --dest research/evidence/or-tools-wheel ortools
+Looking in indexes: https://mirrors.aliyun.com/pypi/simple/
+Collecting ortools
+  Downloading https://mirrors.aliyun.com/pypi/packages/ce/e6/f7019048ffdf41f8a1bff6815b2203cf7b9117ba9e26bf46c4585421d1c4/ortools-9.15.6755-cp313-cp313-macosx_11_0_arm64.whl (21.9 MB)
+Saved ./research/evidence/or-tools-wheel/ortools-9.15.6755-cp313-cp313-macosx_11_0_arm64.whl
+Successfully downloaded ortools
+
+$ stat -f 'wheel=%N bytes=%z' research/evidence/or-tools-wheel/*.whl
+wheel=research/evidence/or-tools-wheel/ortools-9.15.6755-cp313-cp313-macosx_11_0_arm64.whl bytes=21914246
+
+$ shasum -a 256 research/evidence/or-tools-wheel/ortools-9.15.6755-cp313-cp313-macosx_11_0_arm64.whl
+076565b803c85c4f87863e0616f537dd37f99c03e6f092e4068404f7b425d2b0  research/evidence/or-tools-wheel/ortools-9.15.6755-cp313-cp313-macosx_11_0_arm64.whl
+
+$ curl -sSL https://pypi.org/pypi/ortools/9.15.6755/json | jq <select exact filename>
+pypi filename=ortools-9.15.6755-cp313-cp313-macosx_11_0_arm64.whl size=21914246 sha256=076565b803c85c4f87863e0616f537dd37f99c03e6f092e4068404f7b425d2b0 uploaded=2026-01-14T15:39:10.584140Z
+
+$ /usr/bin/time -p env PIP_CACHE_DIR=research/evidence/pip-cache research/.venv/bin/python -m pip install research/evidence/or-tools-wheel/ortools-9.15.6755-cp313-cp313-macosx_11_0_arm64.whl
+Looking in indexes: https://mirrors.aliyun.com/pypi/simple/
+Processing ./research/evidence/or-tools-wheel/ortools-9.15.6755-cp313-cp313-macosx_11_0_arm64.whl
+Collecting absl-py>=2.0.0 (from ortools==9.15.6755)
+Collecting numpy>=2.0.2 (from ortools==9.15.6755)
+Collecting pandas>=2.0.0 (from ortools==9.15.6755)
+Collecting protobuf<6.34,>=6.33.1 (from ortools==9.15.6755)
+Collecting typing-extensions>=4.12 (from ortools==9.15.6755)
+Collecting immutabledict>=3.0.0 (from ortools==9.15.6755)
+Collecting python-dateutil>=2.8.2 (from pandas>=2.0.0->ortools==9.15.6755)
+Collecting six>=1.5 (from python-dateutil>=2.8.2->pandas>=2.0.0->ortools==9.15.6755)
+Installing collected packages: typing-extensions, six, protobuf, numpy, immutabledict, absl-py, python-dateutil, pandas, ortools
+Successfully installed absl-py-2.5.0 immutabledict-4.3.1 numpy-2.5.2 ortools-9.15.6755 pandas-3.0.5 protobuf-6.33.6 python-dateutil-2.9.0.post0 six-1.17.0 typing-extensions-4.16.0
+real 25.68
+user 3.25
+sys 0.75
+
+$ research/.venv/bin/python -c 'import ortools,platform; ...'
+ortools 9.15.6755
+python 3.13.12
+machine arm64
+
+$ research/.venv/bin/python -m pip show ortools
+Name: ortools
+Version: 9.15.6755
+Summary: Google OR-Tools python libraries and modules
+Home-page: https://developers.google.com/optimization/
+Author: Google LLC
+License: Apache 2.0
+Location: <workspace>/research/.venv/lib/python3.13/site-packages
+Requires: absl-py, immutabledict, numpy, pandas, protobuf, typing-extensions

@@ -1,0 +1,24 @@
+{
+  "base_fixture": "tests/fixtures/trips/schema/valid/weekend-live.json",
+  "case_id": "delay",
+  "event": {
+    "delta_minutes": 15,
+    "reason": "接驳晚点 15 分钟",
+    "reverify_claim_ids": [
+      "claim-route-duration",
+      "claim-route-fare"
+    ],
+    "subject_ref": "slot-2",
+    "type": "delay"
+  },
+  "expected": {
+    "affected_day": "day-1",
+    "operation_count": 4,
+    "trigger": "delay",
+    "unchanged_day_indexes": [
+      1
+    ]
+  },
+  "fixture_version": 1,
+  "user_locked_refs": []
+}

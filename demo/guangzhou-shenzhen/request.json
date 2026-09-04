@@ -1,0 +1,35 @@
+{
+  "origin": {
+    "ref_id": "city-guangzhou",
+    "name": "广州",
+    "city": "广州"
+  },
+  "destinations": [
+    {
+      "ref_id": "city-shenzhen",
+      "name": "深圳",
+      "city": "深圳"
+    }
+  ],
+  "start_date": "2026-09-10",
+  "end_date": "2026-09-10",
+  "travelers": 2,
+  "budget_cny": 2000,
+  "interests": [
+    "城市建筑",
+    "公园",
+    "公共文化"
+  ],
+  "pace": "balanced",
+  "constraints": [
+    "当日往返",
+    "优先高铁",
+    "不执行任何交易动作"
+  ],
+  "assumptions": [
+    "未来开放安排与临时管控需在出发前复核",
+    "一日游不查询住宿"
+  ],
+  "locale": "zh-CN",
+  "pasted_notes": null
+}

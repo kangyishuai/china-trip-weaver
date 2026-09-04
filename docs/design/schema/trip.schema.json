@@ -1,0 +1,537 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://china-trip-weaver.local/schema/trip-1.0.0.json",
+  "title": "ChinaTripWeaver Trip",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "trip_id",
+    "revision",
+    "mode",
+    "request",
+    "days",
+    "transport_legs",
+    "lodgings",
+    "pois",
+    "claims",
+    "provider_health",
+    "unknowns",
+    "patches",
+    "generated_at"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "trip_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"},
+    "revision": {"$ref": "#/$defs/revision"},
+    "mode": {"$ref": "#/$defs/dataMode"},
+    "mock_notice": {"type": ["string", "null"], "minLength": 1},
+    "request": {"$ref": "#/$defs/request"},
+    "days": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 7,
+      "items": {"$ref": "#/$defs/day"}
+    },
+    "transport_legs": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/transportLeg"}
+    },
+    "lodgings": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/lodging"}
+    },
+    "pois": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/poi"}
+    },
+    "claims": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/claim"}
+    },
+    "provider_health": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/providerHealth"}
+    },
+    "unknowns": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/unknown"}
+    },
+    "patches": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/patch"}
+    },
+    "generated_at": {"type": "string", "format": "date-time"}
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["mode"],
+        "properties": {"mode": {"const": "mock"}}
+      },
+      "then": {
+        "required": ["mock_notice"],
+        "properties": {"mock_notice": {"type": "string", "minLength": 1}}
+      }
+    }
+  ],
+  "$defs": {
+    "dataMode": {
+      "type": "string",
+      "enum": ["live", "cached", "static", "mock"]
+    },
+    "url": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://"
+    },
+    "stringList": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "idList": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"},
+      "uniqueItems": true
+    },
+    "point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lng", "lat"],
+      "properties": {
+        "lng": {"type": "number", "minimum": -180, "maximum": 180},
+        "lat": {"type": "number", "minimum": -90, "maximum": 90}
+      }
+    },
+    "coordinates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_crs", "native", "wgs84", "gcj02", "conversion"],
+      "properties": {
+        "source_crs": {
+          "type": "string",
+          "enum": ["WGS84", "GCJ02", "BD09", "provider-unknown"]
+        },
+        "native": {"$ref": "#/$defs/point"},
+        "wgs84": {
+          "oneOf": [{"$ref": "#/$defs/point"}, {"type": "null"}]
+        },
+        "gcj02": {
+          "oneOf": [{"$ref": "#/$defs/point"}, {"type": "null"}]
+        },
+        "conversion": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "method",
+            "version",
+            "derived_fields",
+            "converted_at",
+            "accuracy_m"
+          ],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": ["not-needed", "converted", "unavailable"]
+            },
+            "method": {"type": "string", "minLength": 1},
+            "version": {"type": "string", "minLength": 1},
+            "derived_fields": {
+              "type": "array",
+              "items": {"type": "string", "enum": ["wgs84", "gcj02"]},
+              "uniqueItems": true
+            },
+            "converted_at": {"type": ["string", "null"], "format": "date-time"},
+            "accuracy_m": {"type": ["number", "null"], "minimum": 0}
+          }
+        }
+      }
+    },
+    "price": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "amount",
+        "currency",
+        "price_type",
+        "unit",
+        "includes_taxes",
+        "queried_at",
+        "claim_id"
+      ],
+      "properties": {
+        "amount": {"type": ["number", "null"], "minimum": 0},
+        "currency": {"type": "string", "pattern": "^[A-Z]{3}$"},
+        "price_type": {
+          "type": "string",
+          "enum": ["live", "reference", "estimate", "verify-on-click", "unknown"]
+        },
+        "unit": {
+          "type": "string",
+          "enum": ["total", "per_person", "per_night", "from"]
+        },
+        "includes_taxes": {"type": ["boolean", "null"]},
+        "queried_at": {"type": ["string", "null"], "format": "date-time"},
+        "claim_id": {"type": ["string", "null"]}
+      }
+    },
+    "placeRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref_id", "name", "city"],
+      "properties": {
+        "ref_id": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "city": {"type": "string", "minLength": 1}
+      }
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "origin",
+        "destinations",
+        "start_date",
+        "end_date",
+        "travelers",
+        "budget_cny",
+        "interests",
+        "pace",
+        "constraints",
+        "assumptions",
+        "locale",
+        "pasted_notes"
+      ],
+      "properties": {
+        "origin": {
+          "oneOf": [{"$ref": "#/$defs/placeRef"}, {"type": "null"}]
+        },
+        "destinations": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/placeRef"}
+        },
+        "start_date": {"type": "string", "format": "date"},
+        "end_date": {"type": "string", "format": "date"},
+        "travelers": {"type": "integer", "minimum": 1, "maximum": 20},
+        "budget_cny": {"type": ["number", "null"], "minimum": 0},
+        "interests": {"$ref": "#/$defs/stringList"},
+        "pace": {"type": "string", "enum": ["slow", "balanced", "full"]},
+        "constraints": {"$ref": "#/$defs/stringList"},
+        "assumptions": {"$ref": "#/$defs/stringList"},
+        "locale": {"type": "string", "enum": ["zh-CN", "en"]},
+        "pasted_notes": {"type": ["string", "null"], "maxLength": 20000}
+      }
+    },
+    "slot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "slot_id",
+        "start_at",
+        "end_at",
+        "kind",
+        "ref_id",
+        "title",
+        "locked",
+        "status",
+        "claim_ids"
+      ],
+      "properties": {
+        "slot_id": {"type": "string", "minLength": 1},
+        "start_at": {"type": "string", "format": "date-time"},
+        "end_at": {"type": "string", "format": "date-time"},
+        "kind": {
+          "type": "string",
+          "enum": ["poi", "meal", "lodging", "transport", "rest", "free", "checkin", "checkout"]
+        },
+        "ref_id": {"type": ["string", "null"]},
+        "title": {"type": "string", "minLength": 1},
+        "locked": {"type": "boolean"},
+        "status": {
+          "type": "string",
+          "enum": ["scheduled", "tentative", "skipped", "unknown"]
+        },
+        "claim_ids": {"$ref": "#/$defs/idList"}
+      }
+    },
+    "day": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["day_id", "date", "city", "timezone", "slots"],
+      "properties": {
+        "day_id": {"type": "string", "minLength": 1},
+        "date": {"type": "string", "format": "date"},
+        "city": {"type": "string", "minLength": 1},
+        "timezone": {"const": "Asia/Shanghai"},
+        "slots": {"type": "array", "items": {"$ref": "#/$defs/slot"}}
+      }
+    },
+    "transportLeg": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "leg_id",
+        "travel_mode",
+        "data_mode",
+        "from_ref",
+        "to_ref",
+        "depart_at",
+        "arrive_at",
+        "duration_minutes",
+        "provider",
+        "service_number",
+        "price",
+        "booking_url",
+        "claim_ids",
+        "locked"
+      ],
+      "properties": {
+        "leg_id": {"type": "string", "minLength": 1},
+        "travel_mode": {
+          "type": "string",
+          "enum": ["rail", "flight", "walk", "transit", "drive", "ride", "taxi", "bus", "ferry"]
+        },
+        "data_mode": {"$ref": "#/$defs/dataMode"},
+        "from_ref": {"type": "string", "minLength": 1},
+        "to_ref": {"type": "string", "minLength": 1},
+        "depart_at": {"type": ["string", "null"], "format": "date-time"},
+        "arrive_at": {"type": ["string", "null"], "format": "date-time"},
+        "duration_minutes": {"type": ["integer", "null"], "minimum": 0},
+        "provider": {"type": ["string", "null"]},
+        "service_number": {"type": ["string", "null"]},
+        "price": {
+          "oneOf": [{"$ref": "#/$defs/price"}, {"type": "null"}]
+        },
+        "booking_url": {
+          "oneOf": [{"$ref": "#/$defs/url"}, {"type": "null"}]
+        },
+        "claim_ids": {"$ref": "#/$defs/idList"},
+        "locked": {"type": "boolean"}
+      }
+    },
+    "lodging": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lodging_id",
+        "name",
+        "city",
+        "area",
+        "check_in",
+        "check_out",
+        "coordinates",
+        "price",
+        "deep_links",
+        "claim_ids",
+        "locked"
+      ],
+      "properties": {
+        "lodging_id": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "city": {"type": "string", "minLength": 1},
+        "area": {"type": "string", "minLength": 1},
+        "check_in": {"type": "string", "format": "date"},
+        "check_out": {"type": "string", "format": "date"},
+        "coordinates": {
+          "oneOf": [{"$ref": "#/$defs/coordinates"}, {"type": "null"}]
+        },
+        "price": {
+          "oneOf": [{"$ref": "#/$defs/price"}, {"type": "null"}]
+        },
+        "deep_links": {"type": "array", "items": {"$ref": "#/$defs/url"}},
+        "claim_ids": {"$ref": "#/$defs/idList"},
+        "locked": {"type": "boolean"}
+      }
+    },
+    "openingWindow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start_at", "end_at", "status", "claim_id"],
+      "properties": {
+        "start_at": {"type": "string", "format": "date-time"},
+        "end_at": {"type": "string", "format": "date-time"},
+        "status": {"type": "string", "enum": ["verified", "tentative", "closed", "unknown"]},
+        "claim_id": {"type": ["string", "null"]}
+      }
+    },
+    "poi": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "poi_id",
+        "name",
+        "city",
+        "category",
+        "coordinates",
+        "recommended_duration_minutes",
+        "opening_windows",
+        "price",
+        "deep_links",
+        "claim_ids"
+      ],
+      "properties": {
+        "poi_id": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "city": {"type": "string", "minLength": 1},
+        "category": {"type": "string", "minLength": 1},
+        "coordinates": {
+          "oneOf": [{"$ref": "#/$defs/coordinates"}, {"type": "null"}]
+        },
+        "recommended_duration_minutes": {"type": ["integer", "null"], "minimum": 0},
+        "opening_windows": {"type": "array", "items": {"$ref": "#/$defs/openingWindow"}},
+        "price": {
+          "oneOf": [{"$ref": "#/$defs/price"}, {"type": "null"}]
+        },
+        "deep_links": {"type": "array", "items": {"$ref": "#/$defs/url"}},
+        "claim_ids": {"$ref": "#/$defs/idList"}
+      }
+    },
+    "claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claim_id",
+        "subject_ref",
+        "field_path",
+        "value",
+        "source_url",
+        "provider",
+        "queried_at",
+        "status",
+        "confidence",
+        "mode",
+        "as_of",
+        "raw_ref",
+        "response_hash",
+        "json_path"
+      ],
+      "properties": {
+        "claim_id": {"type": "string", "minLength": 1},
+        "subject_ref": {"type": "string", "minLength": 1},
+        "field_path": {"type": "string", "pattern": "^/"},
+        "value": {},
+        "source_url": {"$ref": "#/$defs/url"},
+        "provider": {"type": "string", "minLength": 1},
+        "queried_at": {"type": "string", "format": "date-time"},
+        "status": {
+          "type": "string",
+          "enum": ["verified", "partial", "hypothesis", "unknown", "stale", "conflict", "unavailable", "mock"]
+        },
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "mode": {"$ref": "#/$defs/dataMode"},
+        "as_of": {"type": ["string", "null"], "format": "date-time"},
+        "raw_ref": {"type": ["string", "null"]},
+        "response_hash": {"type": ["string", "null"], "pattern": "^sha256:[a-f0-9]{64}$"},
+        "json_path": {"type": ["string", "null"]}
+      }
+    },
+    "providerHealth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "version", "mode", "status", "checked_at", "capabilities", "reason"],
+      "properties": {
+        "provider": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1},
+        "mode": {"$ref": "#/$defs/dataMode"},
+        "status": {
+          "type": "string",
+          "enum": ["ready", "missing", "expired", "forbidden", "rate_limited", "degraded", "unavailable", "contract_mismatch"]
+        },
+        "checked_at": {"type": "string", "format": "date-time"},
+        "capabilities": {"$ref": "#/$defs/stringList"},
+        "reason": {"type": "string", "minLength": 1}
+      }
+    },
+    "unknown": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["field_path", "reason", "provider", "claim_id"],
+      "properties": {
+        "field_path": {"type": "string", "pattern": "^/"},
+        "reason": {"type": "string", "minLength": 1},
+        "provider": {"type": ["string", "null"]},
+        "claim_id": {"type": ["string", "null"]}
+      }
+    },
+    "revision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["number", "parent_revision", "created_at", "reason", "created_by"],
+      "properties": {
+        "number": {"type": "integer", "minimum": 1},
+        "parent_revision": {"type": ["integer", "null"], "minimum": 1},
+        "created_at": {"type": "string", "format": "date-time"},
+        "reason": {"type": "string", "minLength": 1},
+        "created_by": {"type": "string", "enum": ["system", "user"]}
+      }
+    },
+    "patchOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "path"],
+      "properties": {
+        "op": {"type": "string", "enum": ["add", "remove", "replace", "move", "copy", "test"]},
+        "path": {"type": "string", "pattern": "^/"},
+        "from": {"type": "string", "pattern": "^/"},
+        "value": {}
+      }
+    },
+    "patch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "patch_id",
+        "base_revision",
+        "target_revision",
+        "created_at",
+        "trigger",
+        "reason",
+        "scope",
+        "operations",
+        "reverify_claim_ids",
+        "stability"
+      ],
+      "properties": {
+        "patch_id": {"type": "string", "minLength": 1},
+        "base_revision": {"type": "integer", "minimum": 1},
+        "target_revision": {"type": "integer", "minimum": 2},
+        "created_at": {"type": "string", "format": "date-time"},
+        "trigger": {
+          "type": "string",
+          "enum": ["user_edit", "disruption", "weather", "closure", "delay", "provider_change"]
+        },
+        "reason": {"type": "string", "minLength": 1},
+        "scope": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["day_ids", "affected_refs", "locked_refs"],
+          "properties": {
+            "day_ids": {"$ref": "#/$defs/idList"},
+            "affected_refs": {"$ref": "#/$defs/idList"},
+            "locked_refs": {"$ref": "#/$defs/idList"}
+          }
+        },
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/patchOperation"}
+        },
+        "reverify_claim_ids": {"$ref": "#/$defs/idList"},
+        "stability": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["preserved_refs", "changed_refs", "score"],
+          "properties": {
+            "preserved_refs": {"$ref": "#/$defs/idList"},
+            "changed_refs": {"$ref": "#/$defs/idList"},
+            "score": {"type": "number", "minimum": 0, "maximum": 1}
+          }
+        }
+      }
+    }
+  }
+}

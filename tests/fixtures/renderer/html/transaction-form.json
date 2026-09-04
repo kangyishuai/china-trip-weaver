@@ -1,0 +1,16 @@
+{
+  "base_fixture": "tests/fixtures/trips/schema/valid/weekend-live.json",
+  "case_id": "transaction-form",
+  "expected": {
+    "codes": [
+      "E101",
+      "E204"
+    ]
+  },
+  "fixture_version": 1,
+  "replace": {
+    "count": 1,
+    "new": "<form><button>立即购买</button></form></main>",
+    "old": "</main>"
+  }
+}

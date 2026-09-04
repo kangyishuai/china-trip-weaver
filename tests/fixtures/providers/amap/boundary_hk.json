@@ -1,0 +1,63 @@
+{
+  "captured_at": "2026-09-04T00:00:00+08:00",
+  "case": "boundary_hk",
+  "contains_personal_data": false,
+  "credential_state": "configured",
+  "expected": {
+    "error_class": null,
+    "health_status": "ready",
+    "item_count": 1,
+    "sanitized": false,
+    "schema_refs": [
+      "#/$defs/poi"
+    ],
+    "transport_calls": 1
+  },
+  "fixture_version": 1,
+  "provider": "amap",
+  "provider_version": "web-service-v5-v3-route",
+  "redacted": false,
+  "request": {
+    "as_of": "2026-10-16",
+    "cache_policy": "bypass",
+    "capability": "poi",
+    "deadline_ms": 1000,
+    "parameters": {
+      "city": "上海",
+      "keywords": "上海博物馆",
+      "page_num": 1,
+      "page_size": 1
+    },
+    "request_id": "fixture-request",
+    "trace": {
+      "stage": "provider-fixture"
+    }
+  },
+  "source": "locally generated synthetic contract response; never captured from a provider",
+  "transport": {
+    "body": {
+      "api": "poi-v5",
+      "count": "1",
+      "info": "OK",
+      "infocode": "10000",
+      "page_num": 1,
+      "page_size": 1,
+      "pois": [
+        {
+          "adcode": "310000",
+          "address": "示例大道100号",
+          "cityname": "香港",
+          "id": "SYNTHETIC-HK-1001",
+          "location": "114.000000,22.000000",
+          "name": "香港边界测试点",
+          "type": "科教文化服务;博物馆;博物馆",
+          "typecode": "140100"
+        }
+      ],
+      "status": "1"
+    },
+    "headers": {},
+    "kind": "response",
+    "status_code": 200
+  }
+}

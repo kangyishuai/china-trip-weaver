@@ -1,0 +1,34 @@
+{
+  "origin": {
+    "ref_id": "city-beijing",
+    "name": "北京",
+    "city": "北京"
+  },
+  "destinations": [
+    {
+      "ref_id": "city-shanghai",
+      "name": "上海",
+      "city": "上海"
+    }
+  ],
+  "start_date": "2026-10-16",
+  "end_date": "2026-10-18",
+  "travelers": 2,
+  "budget_cny": 5000,
+  "interests": [
+    "建筑",
+    "博物馆",
+    "本帮菜"
+  ],
+  "pace": "balanced",
+  "constraints": [
+    "优先高铁",
+    "不执行任何交易动作"
+  ],
+  "assumptions": [
+    "地面预算按两人合计理解",
+    "无 API Key 时路线使用保守静态估算并在出发前复核"
+  ],
+  "locale": "zh-CN",
+  "pasted_notes": null
+}

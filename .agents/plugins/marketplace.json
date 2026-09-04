@@ -1,0 +1,20 @@
+{
+  "name": "china-trip-weaver-local",
+  "interface": {
+    "displayName": "China Trip Weaver Local"
+  },
+  "plugins": [
+    {
+      "name": "china-trip-weaver",
+      "source": {
+        "source": "local",
+        "path": "./plugins/china-trip-weaver"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_USE"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

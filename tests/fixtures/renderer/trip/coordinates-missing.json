@@ -1,0 +1,19 @@
+{
+  "base_fixture": "tests/fixtures/trips/schema/valid/weekend-live.json",
+  "case_id": "coordinates-missing",
+  "expected": {
+    "codes": [],
+    "outcome": "render-ok"
+  },
+  "fixture_version": 1,
+  "mutations": [
+    {
+      "path": "/lodgings/0/coordinates",
+      "value": null
+    },
+    {
+      "path": "/pois/0/coordinates",
+      "value": null
+    }
+  ]
+}

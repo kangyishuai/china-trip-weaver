@@ -1,0 +1,20 @@
+{
+  "base_fixture": "tests/fixtures/trips/schema/valid/weekend-live.json",
+  "case_id": "user-delete",
+  "event": {
+    "reason": "用户删除备选活动",
+    "reverify_claim_ids": [],
+    "subject_ref": "slot-3",
+    "type": "user_delete"
+  },
+  "expected": {
+    "affected_day": "day-2",
+    "operation_count": 1,
+    "trigger": "user_edit",
+    "unchanged_day_indexes": [
+      0
+    ]
+  },
+  "fixture_version": 1,
+  "user_locked_refs": []
+}

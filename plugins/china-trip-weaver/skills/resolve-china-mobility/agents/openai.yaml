@@ -1,0 +1,6 @@
+interface:
+  display_name: "Resolve China Mobility"
+  short_description: "Resolve coordinates and route-time matrices"
+  default_prompt: "Use $resolve-china-mobility to resolve these candidates and build a truthful route-time matrix."
+policy:
+  allow_implicit_invocation: false

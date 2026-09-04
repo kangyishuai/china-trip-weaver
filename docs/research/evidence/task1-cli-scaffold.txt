@@ -1,0 +1,57 @@
+$ command -v codex
+/Applications/ChatGPT.app/Contents/Resources/codex
+
+$ codex --version
+codex-cli 0.153.0-alpha.5
+
+$ codex plugin marketplace --help
+Add, list, upgrade, or remove configured plugin marketplaces
+
+Usage: codex plugin marketplace [OPTIONS] <COMMAND>
+
+Commands:
+  add      Add a local or Git marketplace to the configured marketplace sources
+  list     List plugin marketplaces Codex is currently considering and their roots
+  upgrade  Refresh configured Git marketplace snapshots
+  remove   Remove a configured marketplace source by name
+  help     Print this message or the help of the given subcommand(s)
+
+$ codex plugin marketplace list
+MARKETPLACE             ROOT
+openai-primary-runtime  ~/.cache/codex-runtimes/codex-primary-runtime/plugins/openai-primary-runtime
+openai-bundled          ~/.codex/.tmp/bundled-marketplaces/openai-bundled
+openai-curated          ~/.codex/.tmp/plugins
+
+$ python3 research/refs/openai-plugins/.agents/skills/plugin-creator/scripts/create_basic_plugin.py "Spec Probe" --path research/evidence/scaffold-output --with-skills --with-hooks --with-scripts --with-assets --with-mcp --with-apps --with-marketplace --marketplace-path research/evidence/scaffold-marketplace/marketplace.json
+Note: Normalized plugin name from 'Spec Probe' to 'spec-probe'.
+Created plugin scaffold: <workspace>/research/evidence/scaffold-output/spec-probe
+plugin manifest: <workspace>/research/evidence/scaffold-output/spec-probe/.codex-plugin/plugin.json
+marketplace manifest: <workspace>/research/evidence/scaffold-marketplace/marketplace.json
+
+$ find research/evidence/scaffold-output/spec-probe -maxdepth 3 -print | sort
+research/evidence/scaffold-output/spec-probe
+research/evidence/scaffold-output/spec-probe/.app.json
+research/evidence/scaffold-output/spec-probe/.codex-plugin
+research/evidence/scaffold-output/spec-probe/.codex-plugin/plugin.json
+research/evidence/scaffold-output/spec-probe/.mcp.json
+research/evidence/scaffold-output/spec-probe/assets
+research/evidence/scaffold-output/spec-probe/hooks
+research/evidence/scaffold-output/spec-probe/scripts
+research/evidence/scaffold-output/spec-probe/skills
+
+$ python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py research/refs/openai-plugins/.agents/skills/plugin-creator
+Skill is valid!
+
+$ codex plugin --help
+Manage Codex plugins
+
+Usage: codex plugin [OPTIONS] <COMMAND>
+
+Commands:
+  add          Install a plugin from a configured or remote marketplace
+  list         List plugins available from configured and remote marketplaces
+  marketplace  Add, list, upgrade, or remove configured plugin marketplaces
+  remove       Uninstall a plugin and remove its local cache
+  help         Print this message or the help of the given subcommand(s)
+
+说明：没有执行 `codex plugin marketplace add` 或实际安装；这会修改用户配置/插件缓存，与本阶段“不得修改 ~/.codex、~/.agents”冲突。脚手架仅生成在 research/evidence/ 下。

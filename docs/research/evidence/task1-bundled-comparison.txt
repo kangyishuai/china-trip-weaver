@@ -1,0 +1,59 @@
+$ sample_root=~/.codex/.tmp/bundled-marketplaces/openai-bundled; find/jq 汇总（2026-09-03）
+
+plugin_count=10
+top_level_keys:
+   1 apps
+  10 author
+   2 bundledContentVariant
+  10 description
+   9 homepage
+   2 hooks
+   9 interface
+   9 keywords
+  10 license
+   4 mcpServers
+  10 name
+   3 repository
+   8 skills
+  10 version
+interface_keys:
+   9 brandColor
+   6 capabilities
+   9 category
+   4 composerIcon
+   9 defaultPrompt
+   9 developerName
+   9 displayName
+   9 logo
+   2 logoDark
+   9 longDescription
+   9 privacyPolicyURL
+   8 screenshots
+   9 shortDescription
+   9 termsOfServiceURL
+   9 websiteURL
+app_ids:
+sites=connector_20205bf7d4e99a89d7154bb849718324
+mcp_server_shapes:
+computer-history/.mcp.json: top=mcpServers servers=computer-history
+computer-use/.mcp.json: top=mcpServers servers=computer-use
+messages/.mcp.json: top=mcpServers servers=messages
+record-and-replay/.mcp.json: top=mcpServers servers=event-stream
+marketplace_shape:
+name=openai-bundled displayName=OpenAI Bundled plugin_count=10
+codex-app-tools local ./plugins/codex-app-tools AVAILABLE ON_INSTALL Developer Tools
+sites local ./plugins/sites AVAILABLE ON_INSTALL Productivity
+browser local ./plugins/browser AVAILABLE ON_INSTALL Engineering
+chrome local ./plugins/chrome AVAILABLE ON_INSTALL Productivity
+computer-use local ./plugins/computer-use AVAILABLE ON_INSTALL Productivity
+messages local ./plugins/messages AVAILABLE ON_INSTALL Productivity
+record-and-replay local ./plugins/record-and-replay AVAILABLE ON_INSTALL Productivity
+computer-history local ./plugins/computer-history AVAILABLE ON_INSTALL Productivity
+latex local ./plugins/latex AVAILABLE ON_INSTALL Education & Research
+visualize local ./plugins/visualize AVAILABLE ON_INSTALL Productivity
+
+原文件均保持只读，入口：
+- ~/.codex/.tmp/bundled-marketplaces/openai-bundled/.agents/plugins/marketplace.json
+- ~/.codex/.tmp/bundled-marketplaces/openai-bundled/plugins/*/.codex-plugin/plugin.json
+- ~/.codex/.tmp/bundled-marketplaces/openai-bundled/plugins/*/.mcp.json
+- ~/.codex/.tmp/bundled-marketplaces/openai-bundled/plugins/*/.app.json

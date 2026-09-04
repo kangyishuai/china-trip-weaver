@@ -1,0 +1,15 @@
+{
+  "base_fixture": "tests/fixtures/trips/schema/valid/weekend-live.json",
+  "case_id": "ansi-provider-text",
+  "expected": {
+    "codes": [],
+    "outcome": "render-ok"
+  },
+  "fixture_version": 1,
+  "mutations": [
+    {
+      "path": "/days/0/slots/0/title",
+      "value": "\u001b[31m外滩\u001b[0m <b>建筑</b>"
+    }
+  ]
+}

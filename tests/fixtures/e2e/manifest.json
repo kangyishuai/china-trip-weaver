@@ -1,0 +1,56 @@
+{
+  "case_count": 3,
+  "files": [
+    {
+      "path": "beijing-hangzhou-4d/candidates.json",
+      "sha256": "52d904b612e1a19c8277bd5e550189b1bd5d0a37ec6022cadce29aef5c59fb58"
+    },
+    {
+      "path": "beijing-hangzhou-4d/rail.json",
+      "sha256": "fd90d892d2722e636c31c747240b00fcb26e2a2ceb129a304646cc6cd01e9aeb"
+    },
+    {
+      "path": "beijing-hangzhou-4d/request.json",
+      "sha256": "47b121a72d252a659226857c647dd0b9a4b2a07f54f19e0a09618266388b189a"
+    },
+    {
+      "path": "beijing-shanghai-3d/candidates.json",
+      "sha256": "2668b3ed8c0862eef9036ef7d62c882b5cedadb37496932f540970dae9ff3f99"
+    },
+    {
+      "path": "beijing-shanghai-3d/rail.json",
+      "sha256": "2064c19f1ee35289c7227db3dcc455c79d54d2a10dd5abe737259598c281715e"
+    },
+    {
+      "path": "beijing-shanghai-3d/request.json",
+      "sha256": "4ff56e0ed639bd6d8398e8f691ff2fbd55ee009a713dca8250ad7e364448955c"
+    },
+    {
+      "path": "candidates-invalid/additional-property.json",
+      "sha256": "d3b47bbb12e857166b97b102b88f3e025a495a91e1b6ecd3975b013201ff012a"
+    },
+    {
+      "path": "candidates-invalid/missing-poi-claim.json",
+      "sha256": "ca00b861c5a98fb61e257f46e6a82f3125318b1d72e133c0ae20b2329f4719d6"
+    },
+    {
+      "path": "candidates-invalid/unknown-claim-ref.json",
+      "sha256": "8f925229d66c506dda2ec6e25b08ca193dde58f4482f2f9aa072273ac5701f94"
+    },
+    {
+      "path": "shanghai-weekend-2d/candidates.json",
+      "sha256": "9e3c7d14f017bcfc959b8d70d2555ccc75039b977a92f6815ba1b161071856e3"
+    },
+    {
+      "path": "shanghai-weekend-2d/rail.json",
+      "sha256": "01fcbdb8d2569b8d9e6c8bf468c7c3fd9c7758fd82be49a91589c109c143dcd4"
+    },
+    {
+      "path": "shanghai-weekend-2d/request.json",
+      "sha256": "60290ac757e6b59b9a42d6cd8b49b650c27e525011451de14dfadd8c01b58d85"
+    }
+  ],
+  "generated_by": "scripts/build_plan_fixtures.py",
+  "invalid_count": 3,
+  "manifest_version": 1
+}

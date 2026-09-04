@@ -1,0 +1,8 @@
+.tmp/
+.npm-cache/
+node_modules/
+__pycache__/
+*.env
+credentials*
+!plugins/china-trip-weaver/src/china_trip_weaver/credentials.py
+!plugins/china-trip-weaver/references/credentials.md

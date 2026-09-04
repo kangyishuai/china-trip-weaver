@@ -1,0 +1,6 @@
+interface:
+  display_name: "Replan China Trip"
+  short_description: "Patch only disruption-affected itinerary scope"
+  default_prompt: "Use $replan-china-trip to patch this current Trip revision after the disruption."
+policy:
+  allow_implicit_invocation: false

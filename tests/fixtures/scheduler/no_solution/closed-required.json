@@ -1,0 +1,41 @@
+{
+  "case_id": "closed-required",
+  "days": [
+    {
+      "budget_cny": null,
+      "buffer_minutes": 10,
+      "candidates": [
+        {
+          "blocked_reason": null,
+          "closed": true,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "closed-required",
+          "required": true,
+          "title": "全天闭馆",
+          "utility": 100,
+          "windows": []
+        }
+      ],
+      "date": "2026-12-10",
+      "day_id": "ns-closed-day",
+      "end_at": "2026-12-10T20:00:00+08:00",
+      "matrix": [],
+      "max_optional": 8,
+      "max_travel_minutes": null,
+      "start_at": "2026-12-10T09:00:00+08:00",
+      "travel_mode": "transit"
+    }
+  ],
+  "expected": {
+    "conflict_code": "closed",
+    "status": "NO_SOLUTION"
+  },
+  "fixture_version": 1,
+  "tags": [
+    "closed-day"
+  ]
+}

@@ -1,0 +1,29 @@
+schema_valid_output
+PASS design/schema/examples/valid/multicity-static.json
+PASS design/schema/examples/valid/weekend-live.json
+schema_valid_exit=0
+schema_invalid_output
+FAIL design/schema/examples/invalid/claim-missing-source.json: 'source_url' is a required property
+FAIL design/schema/examples/invalid/coordinate-missing-crs.json: {'native': {'lng': 116.397, 'lat': 39.918}, 'wgs84': {'lng': 116.391, 'lat': 39.917}, 'gcj02': {'lng': 116.397, 'lat': 39.918}, 'conversion': {'status': 'converted', 'method': 'gcj02-to-wgs84', 'version': 'ctw-1', 'derived_fields': ['wgs84'], 'converted_at': '2026-09-03T09:50:00+08:00', 'accuracy_m': 10}} is not valid under any of the given schemas
+FAIL design/schema/examples/invalid/mock-missing-notice.json: 'mock_notice' is a required property
+FAIL design/schema/examples/invalid/price-missing-type.json: {'amount': 20, 'currency': 'CNY', 'unit': 'per_person', 'includes_taxes': True, 'queried_at': '2026-09-03T09:45:00+08:00', 'claim_id': 'claim-price'} is not valid under any of the given schemas
+schema_invalid_exit=1
+project_notes=11
+top_design_docs=10
+adr_docs=8
+schema_checker_lines=46
+extra_code_files=0
+executable_files
+design/schema/check_schema.py
+research_files_newer_than_task0=0
+top_level_entries
+BLOCKED.md
+PROGRESS.md
+design
+research
+adr_field_failures=0
+local_links_checked=193
+missing_link_targets=0
+bad_link_anchors=0
+link_audit_exit=0
+final_audit_exit=0

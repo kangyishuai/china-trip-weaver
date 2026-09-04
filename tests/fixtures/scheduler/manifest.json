@@ -1,0 +1,139 @@
+{
+  "counts": {
+    "golden": 20,
+    "no_solution": 8,
+    "replan": 4
+  },
+  "files": [
+    {
+      "path": "golden/budget-hard-limit.json",
+      "sha256": "bc0bb6eaa1a22be68975516bf19cb4c8c84f9b69dc949bc658438bb3495e92cf"
+    },
+    {
+      "path": "golden/candidate-prune-threshold.json",
+      "sha256": "b828946584d3a1a382760cf59053e80eeb49b05ad09655d1ed6caf49a45789af"
+    },
+    {
+      "path": "golden/cross-city-2-day.json",
+      "sha256": "a2f93c41a5750104719f572712287ddd0fe1810686fef172e9919b6da94174f1"
+    },
+    {
+      "path": "golden/cross-city-3-day.json",
+      "sha256": "5357d573c19d0c1085361b8cd5a7b6b4bd8549aa9d21954505a1235f335717a1"
+    },
+    {
+      "path": "golden/cross-city-4-day.json",
+      "sha256": "b1b214bec73a7a1dd976604521c99a43713b48d9870aaf30662c871ce858ff95"
+    },
+    {
+      "path": "golden/cross-city-5-day.json",
+      "sha256": "9f01fa7543ee0901a8fda0d5e9cc28a3e38992808a9af97477afa69a09468035"
+    },
+    {
+      "path": "golden/cross-city-7-day.json",
+      "sha256": "561c852da9f8f526a4c9d667e0c88b3c298351fbfbb37c543c31392d43904180"
+    },
+    {
+      "path": "golden/deterministic-tie.json",
+      "sha256": "04dc496f5a14b7b3e7dcb393480c751608fc3f9170633b685e18334002ac3187"
+    },
+    {
+      "path": "golden/moving-day-early.json",
+      "sha256": "16d3e51482240b1ca064649ef1d635b9ebca535a86092cffab71d2cb04cc2866"
+    },
+    {
+      "path": "golden/moving-day-flight.json",
+      "sha256": "85f64e94be53a7a92be4be1b390a1ee68f80996ef0eac4e44dc6cbd6f6c8d46c"
+    },
+    {
+      "path": "golden/moving-day-late.json",
+      "sha256": "0009ef79ca8aa92f16865aef210afa306dfd5e47f3005c9ef4b6102db59ec2a4"
+    },
+    {
+      "path": "golden/overlapping-opening-windows.json",
+      "sha256": "3b9c5952013ae602628f7a48e3b8df313859833747ba623944d345972a32840d"
+    },
+    {
+      "path": "golden/unreachable-optional.json",
+      "sha256": "5143c5ee984b63c378c183533941a05f37588adc874a263186d854521aaa7689"
+    },
+    {
+      "path": "golden/walking-limit.json",
+      "sha256": "a4e4ca1b7079ebfb8c3ef70d040dbbabe4370ae064f2658f6fa1b04e4d78d29e"
+    },
+    {
+      "path": "golden/weekend-1-basic.json",
+      "sha256": "8274c6870905d89604f3cff87296cdc0f5dc9c970c4e342f876b35d73beefb30"
+    },
+    {
+      "path": "golden/weekend-1-meal.json",
+      "sha256": "c090d716b27e277b85e79ecd9c8d86b265a0adc7f8ea75bb8e6b3de7dcb858c4"
+    },
+    {
+      "path": "golden/weekend-1-slow.json",
+      "sha256": "d6e71fecf38ff13454d2651f541a24f746a9679269c24afbb9084cdde452d9c9"
+    },
+    {
+      "path": "golden/weekend-2-basic.json",
+      "sha256": "545badff46fceac4cbc637264cbc219fdc40c09cab6861d2b1b969a854082126"
+    },
+    {
+      "path": "golden/weekend-2-closed.json",
+      "sha256": "63283d4c696245fe04337a5635ddb337db081d0c0910dbae7f6d1aa94a07b962"
+    },
+    {
+      "path": "golden/weekend-2-rain.json",
+      "sha256": "ab4e835019e57080edc5bafba127862cf18501e1a5209f5f5193612d492a9380"
+    },
+    {
+      "path": "no_solution/all-routes-unknown.json",
+      "sha256": "a1e4714f6da84b02b3f8b81cef74214a1e7cd204e01c7f2194e4754818079d34"
+    },
+    {
+      "path": "no_solution/arrival-after-locked.json",
+      "sha256": "cadb2a73363c7c2b3a8f0c5a29f96ee299cc39e1f587eead3defadf1222b5dd1"
+    },
+    {
+      "path": "no_solution/budget-required.json",
+      "sha256": "1cba08bb98834df1c985e149afaeb3fba42cc007a2571bf89277a9f8f727fc83"
+    },
+    {
+      "path": "no_solution/buffer-insufficient.json",
+      "sha256": "5e134a3bddf64a250d487af321eeb262e1645b2bac3ef155856733c344848f0b"
+    },
+    {
+      "path": "no_solution/checkin-conflict.json",
+      "sha256": "4d3852fef32fbe9094d835392e6fbb29b9670dd5c7bd3029af37f0665c2b3e31"
+    },
+    {
+      "path": "no_solution/closed-required.json",
+      "sha256": "b31e724de524ce3862e2c1bb7276f24ebd32d85ce9421d232e6b91698c2f90fd"
+    },
+    {
+      "path": "no_solution/locked-overlap.json",
+      "sha256": "fcb04b46cfa2c12b36cf58f49fdbe43c1b00f79bb4e21be17d02e11530f57f61"
+    },
+    {
+      "path": "no_solution/route-unreachable.json",
+      "sha256": "26852a069bb3f70ba129e9a4e5243a829a5aad2d36c6a1326d2bdf004eb6840a"
+    },
+    {
+      "path": "replan/closure.json",
+      "sha256": "0ecf100dde5a07ef17282df3798875b329a735377b8c64773de3a29b4c07d39d"
+    },
+    {
+      "path": "replan/delay.json",
+      "sha256": "72ec8504a2bd6f81b81790835ff96c84d690955dfe0e3468cd64c8cc487e67b5"
+    },
+    {
+      "path": "replan/user-delete.json",
+      "sha256": "69a324cf2f84bde1f4a28ce89de49629c098443658f21da416c355b5196efe54"
+    },
+    {
+      "path": "replan/weather.json",
+      "sha256": "7a44ef299e8204b79ceab79eabaf64f0a24243a1324d00ce722b287073a5b73f"
+    }
+  ],
+  "generated_by": "scripts/build_scheduler_fixtures.py",
+  "manifest_version": 1
+}

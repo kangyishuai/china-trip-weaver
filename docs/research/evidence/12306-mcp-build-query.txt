@@ -1,0 +1,41 @@
+$ npm_config_cache=<workspace>/research/evidence/npm-cache npm_config_update_notifier=false npm run build
+node probe.mjs
+
+
+> 12306-mcp@0.3.10 prebuild
+> run-script-os
+
+(node:22715) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+> 12306-mcp@0.3.10 prebuild:default
+> rm -rf build/*
+
+
+> 12306-mcp@0.3.10 build
+> tsc
+
+
+> 12306-mcp@0.3.10 postbuild
+> run-script-os
+
+(node:22776) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+> 12306-mcp@0.3.10 postbuild:darwin:linux
+> chmod +x build/index.js
+
+12306 MCP Server running on stdio @Joooook
+TOOLS get-current-date,get-stations-code-in-city,get-station-code-of-citys,get-station-code-by-names,get-station-by-telecode,get-tickets,get-interline-tickets,get-train-route-stations
+CALL get-stations-code-in-city {"city":"北京"}
+RESULT {
+  "content": [
+    {
+      "type": "text",
+      "text": "[{\"station_code\":\"VAP\",\"station_name\":\"北京北\"},{\"station_code\":\"BOP\",\"station_name\":\"北京东\"},{\"station_code\":\"BJP\",\"station_name\":\"北京\"},{\"station_code\":\"VNP\",\"station_name\":\"北京南\"},{\"station_code\":\"IPP\",\"station_name\":\"北京大兴\"},{\"station_code\":\"BXP\",\"station_name\":\"北京西\"},{\"station_code\":\"IFP\",\"station_name\":\"北京朝阳\"},{\"station_code\":\"BUI\",\"station_name\":\"北京通州\"},{\"station_code\":\"CYI\",\"station_name\":\"房山东\"},{\"station_code\":\"HIP\",\"station_name\":\"后吕村\"},{\"station_code\":\"LXI\",\"station_name\":\"礼贤\"},{\"station_code\":\"YMI\",\"station_name\":\"衙门口东\"},{\"station_code\":\"VLP\",\"station_name\":\"八达岭长城\"},{\"station_code\":\"ILP\",\"station_name\":\"八达岭\"},{\"station_code\":\"FTP\",\"station_name\":\"北京丰台\"},{\"station_code\":\"VBP\",\"station_name\":\"昌平北\"},{\"station_code\":\"CPP\",\"station_name\":\"昌平\"},{\"station_code\":\"IWP\",\"station_name\":\"大兴机场\"},{\"station_code\":\"GKP\",\"station_name\":\"古北口\"},{\"station_code\":\"HCP\",\"station_name\":\"黄村\"},{\"station_code\":\"HBP\",\"station_name\":\"怀柔北\"},{\"station_code\":\"IMP\",\"station_name\":\"怀柔南\"},{\"station_code\":\"HRP\",\"station_name\":\"怀柔\"},{\"station_code\":\"HVP\",\"station_name\":\"黑山寺\"},{\"station_code\":\"HKP\",\"station_name\":\"黄土店\"},{\"station_code\":\"KZP\",\"station_name\":\"康庄\"},{\"station_code\":\"LGP\",\"station_name\":\"良各庄\"},{\"station_code\":\"LAP\",\"station_name\":\"良乡\"},{\"station_code\":\"MUP\",\"station_name\":\"密云北\"},{\"station_code\":\"MYP\",\"station_name\":\"密云\"},{\"station_code\":\"NKP\",\"station_name\":\"南口\"},{\"station_code\":\"NLP\",\"station_name\":\"牛栏山\"},{\"station_code\":\"QIP\",\"station_name\":\"清河\"},{\"station_code\":\"QHP\",\"station_name\":\"清华园\"},{\"station_code\":\"QEP\",\"station_name\":\"乔庄东\"},{\"station_code\":\"SEP\",\"station_name\":\"十渡\"},{\"station_code\":\"SHP\",\"station_name\":\"沙河\"},{\"station_code\":\"ODP\",\"station_name\":\"三家店\"},{\"station_code\":\"SRP\",\"station_name\":\"石景山南\"},{\"station_code\":\"SOP\",\"station_name\":\"顺义\"},{\"station_code\":\"IKP\",\"station_name\":\"顺义西\"},{\"station_code\":\"TAP\",\"station_name\":\"通州西\"},{\"station_code\":\"FGP\",\"station_name\":\"雁栖湖\"},{\"station_code\":\"YNP\",\"station_name\":\"延庆\"},{\"station_code\":\"AOP\",\"station_name\":\"燕山\"},{\"station_code\":\"YUP\",\"station_name\":\"亦庄\"},{\"station_code\":\"TOP\",\"station_name\":\"中仓\"},{\"station_code\":\"ADP\",\"station_name\":\"安定\"},{\"station_code\":\"BVP\",\"station_name\":\"北宅\"},{\"station_code\":\"DHP\",\"station_name\":\"大灰厂\"},{\"station_code\":\"GVP\",\"station_name\":\"官高\"},{\"station_code\":\"GSP\",\"station_name\":\"孤山口\"},{\"station_code\":\"LPP\",\"station_name\":\"落坡岭\"},{\"station_code\":\"MAP\",\"station_name\":\"庙城\"},{\"station_code\":\"NGP\",\"station_name\":\"南观村\"},{\"station_code\":\"PYP\",\"station_name\":\"平峪\"},{\"station_code\":\"SVP\",\"station_name\":\"三合庄\"},{\"station_code\":\"SWP\",\"station_name\":\"上万\"},{\"station_code\":\"TZP\",\"station_name\":\"统军庄\"},{\"station_code\":\"EEP\",\"station_name\":\"斜河涧\"},{\"station_code\":\"YAP\",\"station_name\":\"雁翅\"},{\"station_code\":\"YHP\",\"station_name\":\"沿河城\"},{\"station_code\":\"AFP\",\"station_name\":\"云居寺\"},{\"station_code\":\"ZOP\",\"station_name\":\"珠窝\"},{\"station_code\":\"ZIP\",\"station_name\":\"张辛\"}]"
+    }
+  ]
+}
+
+[exit_code=0]
+

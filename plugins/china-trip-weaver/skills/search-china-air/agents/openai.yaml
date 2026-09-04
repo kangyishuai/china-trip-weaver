@@ -1,0 +1,6 @@
+interface:
+  display_name: "Search China Air"
+  short_description: "Compare sourced China flight candidates"
+  default_prompt: "Use $search-china-air to compare dated mainland-China flight candidates without transacting."
+policy:
+  allow_implicit_invocation: false

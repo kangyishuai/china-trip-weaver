@@ -1,0 +1,6 @@
+interface:
+  display_name: "Search China Lodging"
+  short_description: "Find dated lodging areas and safe deep links"
+  default_prompt: "Use $search-china-lodging to find dated lodging areas, candidates, and verifiable price context."
+policy:
+  allow_implicit_invocation: false

@@ -1,0 +1,64 @@
+{
+  "captured_at": "2026-09-04T00:00:00+08:00",
+  "case": "wrong_shape",
+  "contains_personal_data": false,
+  "credential_state": "configured",
+  "expected": {
+    "error_class": "contract_mismatch",
+    "health_status": "contract_mismatch",
+    "item_count": 0,
+    "sanitized": false,
+    "schema_refs": [],
+    "transport_calls": 1
+  },
+  "fixture_version": 1,
+  "provider": "variflight",
+  "provider_version": "1.0.3",
+  "redacted": false,
+  "request": {
+    "as_of": "2026-10-16",
+    "cache_policy": "bypass",
+    "capability": "flight",
+    "deadline_ms": 1000,
+    "parameters": {
+      "action": "search",
+      "arr_city": "SHA",
+      "date": "2026-09-10",
+      "dep_city": "BJS",
+      "from_ref": "airport-pek",
+      "subject_ref": "leg-flight",
+      "subject_refs_by_service": {
+        "XX1001": "leg-flight"
+      },
+      "to_ref": "airport-sha"
+    },
+    "request_id": "fixture-request",
+    "trace": {
+      "stage": "provider-fixture"
+    }
+  },
+  "source": "locally generated synthetic contract response; never captured from a provider",
+  "transport": {
+    "body": {
+      "content": [
+        {
+          "text": "{\"items\":[{\"arrive_at\":\"2026-10-16T10:20:00+08:00\",\"depart_at\":\"2026-10-16T08:00:00+08:00\",\"duration_minutes\":140,\"flight_no\":\"XX1002\",\"price\":1002.0}],\"kind\":\"flights\"}",
+          "type": "text"
+        }
+      ],
+      "tools": [
+        "searchFlightsByDepArr",
+        "searchFlightsByNumber",
+        "getFlightTransferInfo",
+        "flightHappinessIndex",
+        "getRealtimeLocationByAnum",
+        "getTodayDate",
+        "getFutureWeatherByAirport",
+        "searchFlightItineraries"
+      ]
+    },
+    "headers": {},
+    "kind": "response",
+    "status_code": 200
+  }
+}

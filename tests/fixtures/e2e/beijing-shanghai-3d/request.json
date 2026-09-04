@@ -1,0 +1,32 @@
+{
+  "assumptions": [
+    "无地图 Key 时使用保守静态路线估算"
+  ],
+  "budget_cny": 6000,
+  "constraints": [
+    "不执行任何交易动作"
+  ],
+  "destinations": [
+    {
+      "city": "上海",
+      "name": "上海",
+      "ref_id": "city-shanghai"
+    }
+  ],
+  "end_date": "2026-10-18",
+  "interests": [
+    "建筑",
+    "博物馆",
+    "本帮菜"
+  ],
+  "locale": "zh-CN",
+  "origin": {
+    "city": "北京",
+    "name": "北京",
+    "ref_id": "city-beijing"
+  },
+  "pace": "balanced",
+  "pasted_notes": null,
+  "start_date": "2026-10-16",
+  "travelers": 2
+}

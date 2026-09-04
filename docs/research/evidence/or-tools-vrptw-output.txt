@@ -1,0 +1,20 @@
+$ /usr/bin/time -p research/.venv/bin/python research/evidence/or-tools-vrptw.py
+
+ortools=9.15.6755
+status=SOLUTION
+0:Hotel arrival=08:30..08:30 window=08:30..09:00 service=0m
+1:Palace arrival=09:00..10:30 window=09:00..10:30 service=60m
+2:Museum arrival=10:30..12:05 window=10:30..12:30 service=75m
+3:Lunch arrival=12:00..13:30 window=12:00..13:30 service=60m
+4:Garden arrival=14:00..14:45 window=14:00..16:00 service=60m
+5:Viewpoint arrival=16:00..16:00 window=16:00..18:00 service=45m
+0:Hotel return=17:25..17:25
+route=Hotel -> Palace -> Museum -> Lunch -> Garden -> Viewpoint -> Hotel
+visited=6/6 unique=6
+travel_minutes=115
+elapsed_minutes=535
+real 5.07
+user 4.96
+sys 0.07
+
+[exit_code=0]

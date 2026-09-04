@@ -1,0 +1,50 @@
+{
+  "captured_at": "2026-09-04T00:00:00+08:00",
+  "case": "empty",
+  "contains_personal_data": false,
+  "credential_state": "configured",
+  "expected": {
+    "error_class": "no_results",
+    "health_status": "ready",
+    "item_count": 0,
+    "sanitized": false,
+    "schema_refs": [],
+    "transport_calls": 1
+  },
+  "fixture_version": 1,
+  "provider": "amap",
+  "provider_version": "web-service-v5-v3-route",
+  "redacted": false,
+  "request": {
+    "as_of": "2026-10-16",
+    "cache_policy": "bypass",
+    "capability": "poi",
+    "deadline_ms": 1000,
+    "parameters": {
+      "city": "上海",
+      "keywords": "上海博物馆",
+      "page_num": 1,
+      "page_size": 1
+    },
+    "request_id": "fixture-request",
+    "trace": {
+      "stage": "provider-fixture"
+    }
+  },
+  "source": "locally generated synthetic AMap-shaped response; contains no captured provider data; failure case is a labeled synthetic mutation",
+  "transport": {
+    "body": {
+      "api": "poi-v5",
+      "count": "0",
+      "info": "OK",
+      "infocode": "10000",
+      "page_num": 1,
+      "page_size": 1,
+      "pois": [],
+      "status": "1"
+    },
+    "headers": {},
+    "kind": "response",
+    "status_code": 200
+  }
+}

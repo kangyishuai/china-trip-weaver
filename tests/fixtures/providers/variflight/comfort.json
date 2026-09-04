@@ -1,0 +1,61 @@
+{
+  "captured_at": "2026-09-04T00:00:00+08:00",
+  "case": "comfort",
+  "contains_personal_data": false,
+  "credential_state": "configured",
+  "expected": {
+    "error_class": null,
+    "health_status": "ready",
+    "item_count": 0,
+    "sanitized": false,
+    "schema_refs": [],
+    "transport_calls": 1
+  },
+  "fixture_version": 1,
+  "provider": "variflight",
+  "provider_version": "1.0.3",
+  "redacted": false,
+  "request": {
+    "as_of": "2026-10-16",
+    "cache_policy": "bypass",
+    "capability": "flight",
+    "deadline_ms": 1000,
+    "parameters": {
+      "action": "comfort",
+      "date": "2026-09-10",
+      "flight_no": "XX1001",
+      "subject_ref": "leg-flight"
+    },
+    "request_id": "fixture-request",
+    "trace": {
+      "stage": "provider-fixture"
+    }
+  },
+  "source": "locally generated synthetic VariFlight-shaped response; contains no captured provider data",
+  "transport": {
+    "body": {
+      "content": [
+        {
+          "text": "{\"code\":200,\"data\":[{\"ArrOntimeRate\":\"88%\",\"FlightDate\":\"2026-09-10\",\"FlightNo\":\"XX1001\",\"FlightYear\":\"10.0\",\"Food\":\"示例餐食\",\"GenericNew\":\"示例机型-100\",\"Luggage\":{\"carry_on\":[\"synthetic allowance\"]},\"OntimeRate\":\"88%\",\"SeatSpace\":\"示例舒适\",\"SeatTilt\":\"示例标准\",\"SeatWidth\":\"示例舒适\",\"Seatlayout\":\"3-3\",\"Socket\":\"示例有\",\"WiFi\":\"示例无\"}],\"message\":\"Success\",\"request_id\":\"synthetic\",\"timestamp\":0}",
+          "type": "text"
+        }
+      ],
+      "isError": false,
+      "tool": "flightHappinessIndex",
+      "tools": [
+        "searchFlightsByDepArr",
+        "searchFlightsByNumber",
+        "getFlightTransferInfo",
+        "flightHappinessIndex",
+        "getRealtimeLocationByAnum",
+        "getTodayDate",
+        "getFutureWeatherByAirport",
+        "searchFlightItineraries",
+        "getFlightPriceByCities"
+      ]
+    },
+    "headers": {},
+    "kind": "response",
+    "status_code": 200
+  }
+}

@@ -1,0 +1,238 @@
+{
+  "candidates_version": "1.0.0",
+  "claims": [
+    {
+      "as_of": null,
+      "claim_id": "claim-bjs-lodging-price",
+      "confidence": 0,
+      "field_path": "/price",
+      "json_path": null,
+      "mode": "static",
+      "provider": "deep-link",
+      "queried_at": "2026-09-03T12:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "source_url": "https://www.fliggy.com/hotel/search",
+      "status": "unknown",
+      "subject_ref": "lodging-bjs-central",
+      "value": null
+    },
+    {
+      "as_of": null,
+      "claim_id": "claim-bjs-bund-hours",
+      "confidence": 0.55,
+      "field_path": "/opening_windows/0",
+      "json_path": null,
+      "mode": "static",
+      "provider": "official-web",
+      "queried_at": "2026-09-03T12:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "source_url": "https://www.shanghai.gov.cn/",
+      "status": "hypothesis",
+      "subject_ref": "poi-bjs-bund",
+      "value": "date-specific candidate window"
+    },
+    {
+      "as_of": null,
+      "claim_id": "claim-bjs-museum-hours",
+      "confidence": 0.55,
+      "field_path": "/opening_windows/0",
+      "json_path": null,
+      "mode": "static",
+      "provider": "official-web",
+      "queried_at": "2026-09-03T12:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "source_url": "https://www.shanghaimuseum.net/",
+      "status": "hypothesis",
+      "subject_ref": "poi-bjs-museum",
+      "value": "date-specific candidate window"
+    },
+    {
+      "as_of": null,
+      "claim_id": "claim-bjs-food-hours",
+      "confidence": 0.55,
+      "field_path": "/opening_windows/0",
+      "json_path": null,
+      "mode": "static",
+      "provider": "official-web",
+      "queried_at": "2026-09-03T12:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "source_url": "https://www.shanghai.gov.cn/",
+      "status": "hypothesis",
+      "subject_ref": "poi-bjs-food",
+      "value": "date-specific candidate window"
+    },
+    {
+      "as_of": null,
+      "claim_id": "claim-bjs-xuhui-hours",
+      "confidence": 0.55,
+      "field_path": "/opening_windows/0",
+      "json_path": null,
+      "mode": "static",
+      "provider": "official-web",
+      "queried_at": "2026-09-03T12:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "source_url": "https://www.shanghai.gov.cn/",
+      "status": "hypothesis",
+      "subject_ref": "poi-bjs-xuhui",
+      "value": "date-specific candidate window"
+    }
+  ],
+  "lodgings": [
+    {
+      "area": "人民广场",
+      "check_in": "2026-10-16",
+      "check_out": "2026-10-18",
+      "city": "上海",
+      "claim_ids": [
+        "claim-bjs-lodging-price"
+      ],
+      "coordinates": null,
+      "deep_links": [
+        "https://www.fliggy.com/hotel/search"
+      ],
+      "locked": false,
+      "lodging_id": "lodging-bjs-central",
+      "name": "人民广场片区候选",
+      "price": {
+        "amount": null,
+        "claim_id": "claim-bjs-lodging-price",
+        "currency": "CNY",
+        "includes_taxes": null,
+        "price_type": "verify-on-click",
+        "queried_at": "2026-09-03T12:00:00+08:00",
+        "unit": "per_night"
+      }
+    }
+  ],
+  "pois": [
+    {
+      "category": "architecture",
+      "city": "上海",
+      "claim_ids": [
+        "claim-bjs-bund-hours"
+      ],
+      "coordinates": null,
+      "deep_links": [
+        "https://www.shanghai.gov.cn/"
+      ],
+      "name": "外滩建筑步行",
+      "opening_windows": [
+        {
+          "claim_id": "claim-bjs-bund-hours",
+          "end_at": "2026-10-16T19:00:00+08:00",
+          "start_at": "2026-10-16T16:00:00+08:00",
+          "status": "tentative"
+        }
+      ],
+      "poi_id": "poi-bjs-bund",
+      "price": null,
+      "recommended_duration_minutes": 120
+    },
+    {
+      "category": "museum",
+      "city": "上海",
+      "claim_ids": [
+        "claim-bjs-museum-hours"
+      ],
+      "coordinates": null,
+      "deep_links": [
+        "https://www.shanghaimuseum.net/"
+      ],
+      "name": "上海博物馆",
+      "opening_windows": [
+        {
+          "claim_id": "claim-bjs-museum-hours",
+          "end_at": "2026-10-17T12:30:00+08:00",
+          "start_at": "2026-10-17T09:30:00+08:00",
+          "status": "tentative"
+        }
+      ],
+      "poi_id": "poi-bjs-museum",
+      "price": null,
+      "recommended_duration_minutes": 120
+    },
+    {
+      "category": "food",
+      "city": "上海",
+      "claim_ids": [
+        "claim-bjs-food-hours"
+      ],
+      "coordinates": null,
+      "deep_links": [
+        "https://www.shanghai.gov.cn/"
+      ],
+      "name": "本帮菜午餐",
+      "opening_windows": [
+        {
+          "claim_id": "claim-bjs-food-hours",
+          "end_at": "2026-10-17T14:00:00+08:00",
+          "start_at": "2026-10-17T12:30:00+08:00",
+          "status": "tentative"
+        }
+      ],
+      "poi_id": "poi-bjs-food",
+      "price": null,
+      "recommended_duration_minutes": 60
+    },
+    {
+      "category": "architecture",
+      "city": "上海",
+      "claim_ids": [
+        "claim-bjs-xuhui-hours"
+      ],
+      "coordinates": null,
+      "deep_links": [
+        "https://www.shanghai.gov.cn/"
+      ],
+      "name": "徐汇历史建筑",
+      "opening_windows": [
+        {
+          "claim_id": "claim-bjs-xuhui-hours",
+          "end_at": "2026-10-18T12:30:00+08:00",
+          "start_at": "2026-10-18T09:30:00+08:00",
+          "status": "tentative"
+        }
+      ],
+      "poi_id": "poi-bjs-xuhui",
+      "price": null,
+      "recommended_duration_minutes": 120
+    }
+  ],
+  "unknowns": [
+    {
+      "claim_id": "claim-bjs-lodging-price",
+      "field_path": "/lodgings/0/price/amount",
+      "provider": "flyai",
+      "reason": "room total and cancellation terms must be verified on click"
+    },
+    {
+      "claim_id": "claim-bjs-bund-hours",
+      "field_path": "/pois/0/coordinates",
+      "provider": "amap",
+      "reason": "AMap is not configured; coordinates remain unverified"
+    },
+    {
+      "claim_id": "claim-bjs-museum-hours",
+      "field_path": "/pois/1/coordinates",
+      "provider": "amap",
+      "reason": "AMap is not configured; coordinates remain unverified"
+    },
+    {
+      "claim_id": "claim-bjs-food-hours",
+      "field_path": "/pois/2/coordinates",
+      "provider": "amap",
+      "reason": "AMap is not configured; coordinates remain unverified"
+    },
+    {
+      "claim_id": "claim-bjs-xuhui-hours",
+      "field_path": "/pois/3/coordinates",
+      "provider": "amap",
+      "reason": "AMap is not configured; coordinates remain unverified"
+    }
+  ]
+}

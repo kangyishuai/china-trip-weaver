@@ -1,0 +1,33 @@
+{
+  "assumptions": [
+    "无地图 Key 时使用保守静态路线估算"
+  ],
+  "budget_cny": 6000,
+  "constraints": [
+    "不执行任何交易动作"
+  ],
+  "destinations": [
+    {
+      "city": "杭州",
+      "name": "杭州",
+      "ref_id": "city-hangzhou"
+    }
+  ],
+  "end_date": "2026-10-19",
+  "interests": [
+    "湖景",
+    "博物馆",
+    "茶文化",
+    "杭帮菜"
+  ],
+  "locale": "zh-CN",
+  "origin": {
+    "city": "北京",
+    "name": "北京",
+    "ref_id": "city-beijing"
+  },
+  "pace": "balanced",
+  "pasted_notes": null,
+  "start_date": "2026-10-16",
+  "travelers": 2
+}

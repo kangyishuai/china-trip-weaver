@@ -1,0 +1,45 @@
+$ node scripts/test-parse-xhs.mjs
+
+
+=== 标准 xhslink 分享 ===
+looksLikeXhs: true
+result: {
+  title: '杭州法喜寺Citywalk一日游 🌸 路线/拍照点全攻略',
+  body: '第一天从灵隐寺过去，走路 15 分钟。法喜寺氛围超棒，建议早上去人少。',
+  shortLink: 'http://xhslink.com/a/AbCdEf',
+  cleaned: '杭州法喜寺Citywalk一日游 🌸 路线/拍照点全攻略\n第一天从灵隐寺过去，走路 15 分钟。法喜寺氛围超棒，建议早上去人少。'
+}
+
+=== 无编号 + xiaohongshu.com 全链 ===
+looksLikeXhs: true
+result: {
+  title: '杭州 4 天 3 夜亲测路线',
+  body: 'DAY1: 西湖断桥 → 雷峰塔 → 河坊街\nDAY2: 灵隐寺 → 法喜寺 → 龙井村',
+  shortLink: 'https://www.xiaohongshu.com/explore/12345abcdef',
+  cleaned: '杭州 4 天 3 夜亲测路线\nDAY1: 西湖断桥 → 雷峰塔 → 河坊街\nDAY2: 灵隐寺 → 法喜寺 → 龙井村'
+}
+
+=== 只有正文无标题分隔 ===
+looksLikeXhs: true
+result: {
+  title: '去了趟杭州法喜寺氛围真的太好了！',
+  body: '',
+  shortLink: 'http://xhslink.com/a/Xyz123',
+  cleaned: '去了趟杭州法喜寺氛围真的太好了！'
+}
+
+=== 纯正文（无分享格式） ===
+looksLikeXhs: false
+result: {
+  title: '今天去了西湖边的小餐馆，桂花鸡丁特别好吃，人均 80 不到。',
+  body: '',
+  shortLink: '',
+  cleaned: '今天去了西湖边的小餐馆，桂花鸡丁特别好吃，人均 80 不到。'
+}
+
+=== 空字符串 ===
+looksLikeXhs: false
+result: null
+
+[exit_code=0]
+

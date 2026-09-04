@@ -1,0 +1,15 @@
+{
+  "base_fixture": "tests/fixtures/trips/schema/valid/weekend-live.json",
+  "case_id": "attribute-injection",
+  "expected": {
+    "codes": [],
+    "outcome": "render-ok"
+  },
+  "fixture_version": 1,
+  "mutations": [
+    {
+      "path": "/pois/0/name",
+      "value": "\" onmouseover=\"alert(1) 外滩"
+    }
+  ]
+}

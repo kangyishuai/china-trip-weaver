@@ -1,0 +1,16 @@
+克隆日期：2026-09-03（全部 `git clone --depth 1`；or-tools 按任务要求不克隆）
+
+china-travel-assistant commit=c258614293535a2713e1d2311060219107327790 commit_date=2026-08-27T21:54:35+08:00 subject=Merge pull request #1 from 19Chris19/codex/CTA-20260827-OMNIROUTE-V020
+travel-plan-viz commit=07d0155080f72607a6f0a74e063bd05c850dcf01 commit_date=2026-07-15T13:16:15+08:00 subject=docs: 补记 2026-07-15 演进（复盘 P0 / 免 key 地图链接 / 适配拍板），同步红线与文档分层
+trip-planner-skill commit=624196a743327d310e07a7888ebe60f406716525 commit_date=2026-09-03T01:11:48+08:00 subject=Merge pull request #3 from skywain/split-phase-6
+12306-mcp commit=ff6439da6f63d7d72181abea4568abd69878c600 commit_date=2026-07-31T14:22:59+08:00 subject=Merge pull request #65 from bingqilinweimaotai/dependency-maintenance
+12306-skill commit=9942ae99c9517b70c946429426d67d680199913d commit_date=2026-03-09T15:18:11+08:00 subject=add README.md.
+amap-lbs-skill commit=cc418173bed7eaad7f40b67a46a09fce69be84eb commit_date=2026-04-14T19:28:36+08:00 subject=Add appname parameter to requestParams in index.js
+flyai-skill commit=f89974d2bd4822e79cf16d1906c9c2a7c900f979 commit_date=2026-08-21T10:40:56+08:00 subject=Merge pull request #58 from youngfreeFJS/patch-1
+weekend-city-trip commit=f8e3efb9a30350a4935b775be288e984f7c81008 commit_date=2026-07-14T01:15:53+08:00 subject=fix
+variflight-mcp commit=d515d56204684b3179a75fb9cdd3f4600a0cb128 commit_date=2026-04-20T14:40:22+08:00 subject=Add flight price tool and improve tool descriptions
+trippick commit=dbdf53c19fc69a466137471c9f9eb7cfdaa0cd6e commit_date=2026-06-10T17:02:36+08:00 subject=Update README.md
+
+china-travel-assistant clone attempt 1: TLS exit 128；attempt 2 成功。其余 9 个代码仓库首次 clone 成功。
+
+or-tools：官方 docs/PyPI 抓取 2026-09-03；wheel ortools==9.15.6755，SHA-256 见 `or-tools-install.txt`。task 0 `git ls-remote` HEAD=98c165af62df62b3056c2ee0fca66b24e79097cb，仅作连通性记录。

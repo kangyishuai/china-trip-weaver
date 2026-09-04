@@ -1,0 +1,90 @@
+{
+  "counts": {
+    "html": 11,
+    "trip": 9
+  },
+  "files": [
+    {
+      "path": "html/authorization-bearer.json",
+      "sha256": "76be1e8ba7de642fc06fd572df46f491f1f7a153841388c59f98aeff88cdf526"
+    },
+    {
+      "path": "html/csp-loosened.json",
+      "sha256": "7e52be3f76193860c52698a8ed1aca9b81c044cbe47caf00367bc70e34ef0e44"
+    },
+    {
+      "path": "html/invented-train-price-facts.json",
+      "sha256": "66a6603aa555c324a4715d64be8b3858aaa7b8fcf0f2cdb7b624b48d2bee3644"
+    },
+    {
+      "path": "html/missing-link-rel.json",
+      "sha256": "25cdb2319f33b0bf1d3cc8b3b36281657287764dc462d42567d1ab8cc3ee43d8"
+    },
+    {
+      "path": "html/price-type-changed.json",
+      "sha256": "8990ceb9a625eb8af826c0f247f8126291dc5edaa490f4dadf2141055df02046"
+    },
+    {
+      "path": "html/remote-script.json",
+      "sha256": "9f986a3fb6207f7da5d8a625715263c4926f7491f65c217008974d152e6fec59"
+    },
+    {
+      "path": "html/schematic-label-removed.json",
+      "sha256": "00e4c2423f0fbe7a01cbe40731b6fd823123886294292745afc4dccd87ce636b"
+    },
+    {
+      "path": "html/supported-key-assignment.json",
+      "sha256": "8aa73b2a071296a6b92eda065c549974bcf660048854dec6147bc3886fe3d218"
+    },
+    {
+      "path": "html/transaction-form.json",
+      "sha256": "3e2c87231bc2f9bb1a9ab55fd5d273d97e6fbd1cda81ec882b628307e6483655"
+    },
+    {
+      "path": "html/trip-data-mismatch.json",
+      "sha256": "5a203d264260479f4b8ea8efa85987e5a88d6534231b7bcf8054fec621a4af94"
+    },
+    {
+      "path": "html/viewport-removed.json",
+      "sha256": "aa6a0b57bfae403bef4ae514b024375deeaf2c78629a419a3eba3e31be985d76"
+    },
+    {
+      "path": "trip/ansi-provider-text.json",
+      "sha256": "666c842aa9259745763a4b2edb365a7dba5f932d8e882a2fc0f11ce373a4435c"
+    },
+    {
+      "path": "trip/attribute-injection.json",
+      "sha256": "f037dab2b3ff91a3498df6c4046fe99c5a566f75033ee1b217483c037c004f1a"
+    },
+    {
+      "path": "trip/closing-script.json",
+      "sha256": "f278c282d6d53c603cc3e48371072637af96c087b413400838853287c5fb0c34"
+    },
+    {
+      "path": "trip/coordinates-missing.json",
+      "sha256": "200c26889a621696c450a6f212b824a58c75ed32654f7bc3c207e581090d9283"
+    },
+    {
+      "path": "trip/dangerous-scheme.json",
+      "sha256": "daf16a86cf733b3de45128644f48034f977fe424394a0c2a4b01c5fd3545c2bd"
+    },
+    {
+      "path": "trip/duplicate-day-id.json",
+      "sha256": "b8ba4101e6e7dea0c251aafcbd02ed6665075f4adbdf284bca3aadcc15ea4652"
+    },
+    {
+      "path": "trip/fake-secret.json",
+      "sha256": "6930c37024a6ae7dda1cabeed2f9ac3590a91a8a354adc7e082ec323156fc144"
+    },
+    {
+      "path": "trip/rtl-emoji-long.json",
+      "sha256": "37f382fd8eb980c6a5393e234f9325016594514b78ede10db70a1d620cc484ce"
+    },
+    {
+      "path": "trip/url-credentials.json",
+      "sha256": "0f065a37b81483ad21be0a30e2cbcfce33afc25a834d87f8f2327bef43f4f8ba"
+    }
+  ],
+  "generated_by": "scripts/build_renderer_fixtures.py",
+  "manifest_version": 1
+}

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Render China Trip"
+  short_description: "Render and validate deterministic mobile HTML"
+  default_prompt: "Use $render-china-trip to render this validated Trip as secure mobile HTML."
+policy:
+  allow_implicit_invocation: false

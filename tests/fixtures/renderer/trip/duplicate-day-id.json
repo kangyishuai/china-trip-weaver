@@ -1,0 +1,17 @@
+{
+  "base_fixture": "tests/fixtures/trips/schema/valid/weekend-live.json",
+  "case_id": "duplicate-day-id",
+  "expected": {
+    "codes": [
+      "V_DUPLICATE_ID"
+    ],
+    "outcome": "reject-trip"
+  },
+  "fixture_version": 1,
+  "mutations": [
+    {
+      "path": "/days/1/day_id",
+      "value": "day-1"
+    }
+  ]
+}

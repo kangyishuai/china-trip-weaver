@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "china-rail": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "12306-mcp@0.3.10"
+      ]
+    },
+    "variflight": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@variflight-ai/variflight-mcp@1.0.3"
+      ],
+      "env_vars": [
+        "VARIFLIGHT_API_KEY",
+        "X_VARIFLIGHT_KEY",
+        "VARIFLIGHT_API_URL"
+      ]
+    }
+  }
+}

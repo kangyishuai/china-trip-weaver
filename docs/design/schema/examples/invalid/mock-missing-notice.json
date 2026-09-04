@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0.0",
+  "trip_id": "invalid-mock-notice",
+  "revision": {"number": 1, "parent_revision": null, "created_at": "2026-09-03T10:00:00+08:00", "reason": "fixture", "created_by": "system"},
+  "mode": "mock",
+  "request": {
+    "origin": null,
+    "destinations": [{"ref_id": "city-beijing", "name": "北京", "city": "北京"}],
+    "start_date": "2026-09-10",
+    "end_date": "2026-09-10",
+    "travelers": 1,
+    "budget_cny": null,
+    "interests": ["历史"],
+    "pace": "balanced",
+    "constraints": [],
+    "assumptions": [],
+    "locale": "zh-CN",
+    "pasted_notes": null
+  },
+  "days": [{"day_id": "day-1", "date": "2026-09-10", "city": "北京", "timezone": "Asia/Shanghai", "slots": []}],
+  "transport_legs": [],
+  "lodgings": [],
+  "pois": [],
+  "claims": [{"claim_id": "claim-1", "subject_ref": "trip", "field_path": "/mode", "value": "mock", "source_url": "https://example.com/mock-fixture", "provider": "fixture", "queried_at": "2026-09-03T09:45:00+08:00", "status": "mock", "confidence": 0, "mode": "mock", "as_of": null, "raw_ref": null, "response_hash": null, "json_path": null}],
+  "provider_health": [{"provider": "fixture", "version": "1", "mode": "mock", "status": "ready", "checked_at": "2026-09-03T09:45:00+08:00", "capabilities": ["fixture"], "reason": "mock fixture intentionally selected"}],
+  "unknowns": [],
+  "patches": [],
+  "generated_at": "2026-09-03T10:00:00+08:00"
+}

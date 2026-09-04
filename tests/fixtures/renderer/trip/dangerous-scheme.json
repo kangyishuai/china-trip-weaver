@@ -1,0 +1,17 @@
+{
+  "base_fixture": "tests/fixtures/trips/schema/valid/weekend-live.json",
+  "case_id": "dangerous-scheme",
+  "expected": {
+    "codes": [
+      "S_PATTERN"
+    ],
+    "outcome": "reject-trip"
+  },
+  "fixture_version": 1,
+  "mutations": [
+    {
+      "path": "/pois/0/deep_links/0",
+      "value": "javascript:alert(1)"
+    }
+  ]
+}

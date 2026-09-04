@@ -1,0 +1,6 @@
+interface:
+  display_name: "Schedule China Trip"
+  short_description: "Build deterministic, constraint-safe day slots"
+  default_prompt: "Use $schedule-china-trip to schedule this validated candidate set and route matrix."
+policy:
+  allow_implicit_invocation: false

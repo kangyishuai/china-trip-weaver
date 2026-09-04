@@ -1,0 +1,57 @@
+{
+  "captured_at": "2026-09-04T00:00:00+08:00",
+  "case": "weather",
+  "contains_personal_data": false,
+  "credential_state": "configured",
+  "expected": {
+    "error_class": null,
+    "health_status": "ready",
+    "item_count": 0,
+    "sanitized": false,
+    "schema_refs": [],
+    "transport_calls": 1
+  },
+  "fixture_version": 1,
+  "provider": "variflight",
+  "provider_version": "1.0.3",
+  "redacted": false,
+  "request": {
+    "as_of": "2026-10-16",
+    "cache_policy": "bypass",
+    "capability": "weather",
+    "deadline_ms": 1000,
+    "parameters": {
+      "airport": "SHA",
+      "subject_ref": "leg-flight"
+    },
+    "request_id": "fixture-request",
+    "trace": {
+      "stage": "provider-fixture"
+    }
+  },
+  "source": "locally generated synthetic contract response; never captured from a provider",
+  "transport": {
+    "body": {
+      "content": [
+        {
+          "text": "{\"kind\":\"weather\",\"summary\":\"小雨，18°C\"}",
+          "type": "text"
+        }
+      ],
+      "tools": [
+        "searchFlightsByDepArr",
+        "searchFlightsByNumber",
+        "getFlightTransferInfo",
+        "flightHappinessIndex",
+        "getRealtimeLocationByAnum",
+        "getTodayDate",
+        "getFutureWeatherByAirport",
+        "searchFlightItineraries",
+        "getFlightPriceByCities"
+      ]
+    },
+    "headers": {},
+    "kind": "response",
+    "status_code": 200
+  }
+}

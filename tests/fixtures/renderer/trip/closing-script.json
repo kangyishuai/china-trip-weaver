@@ -1,0 +1,15 @@
+{
+  "base_fixture": "tests/fixtures/trips/schema/valid/weekend-live.json",
+  "case_id": "closing-script",
+  "expected": {
+    "codes": [],
+    "outcome": "render-ok"
+  },
+  "fixture_version": 1,
+  "mutations": [
+    {
+      "path": "/request/pasted_notes",
+      "value": "</script><script>alert('x')</script>"
+    }
+  ]
+}

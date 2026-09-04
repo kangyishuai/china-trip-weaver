@@ -1,0 +1,232 @@
+{
+  "case_id": "weekend-2-closed",
+  "days": [
+    {
+      "budget_cny": null,
+      "buffer_minutes": 10,
+      "candidates": [
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "wc1-a",
+          "required": false,
+          "title": "核心候选 A",
+          "utility": 90,
+          "windows": []
+        },
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "wc1-b",
+          "required": false,
+          "title": "核心候选 B",
+          "utility": 70,
+          "windows": []
+        }
+      ],
+      "date": "2026-10-18",
+      "day_id": "w2-closed-1-day",
+      "end_at": "2026-10-18T20:00:00+08:00",
+      "matrix": [
+        {
+          "claim_ids": [
+            "claim-route-wc1-a-wc1-b"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 7500,
+          "duration_minutes": 15,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "wc1-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "wc1-b",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-wc1-b-wc1-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 7500,
+          "duration_minutes": 15,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "wc1-b",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "wc1-a",
+          "travel_mode": "transit"
+        }
+      ],
+      "max_optional": 8,
+      "max_travel_minutes": null,
+      "start_at": "2026-10-18T09:00:00+08:00",
+      "travel_mode": "transit"
+    },
+    {
+      "budget_cny": null,
+      "buffer_minutes": 10,
+      "candidates": [
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "closed-a",
+          "required": false,
+          "title": "开放博物馆",
+          "utility": 90,
+          "windows": []
+        },
+        {
+          "blocked_reason": null,
+          "closed": true,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "closed-b",
+          "required": false,
+          "title": "周一闭馆",
+          "utility": 80,
+          "windows": []
+        }
+      ],
+      "date": "2026-10-19",
+      "day_id": "w2-closed-2-day",
+      "end_at": "2026-10-19T20:00:00+08:00",
+      "matrix": [
+        {
+          "claim_ids": [
+            "claim-route-closed-a-closed-b"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 7500,
+          "duration_minutes": 15,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "closed-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "closed-b",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-closed-b-closed-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 7500,
+          "duration_minutes": 15,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "closed-b",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "closed-a",
+          "travel_mode": "transit"
+        }
+      ],
+      "max_optional": 8,
+      "max_travel_minutes": null,
+      "start_at": "2026-10-19T09:00:00+08:00",
+      "travel_mode": "transit"
+    }
+  ],
+  "expected": {
+    "days": [
+      {
+        "end_at": [
+          "2026-10-18T10:00:00+08:00",
+          "2026-10-18T11:25:00+08:00"
+        ],
+        "excluded": [],
+        "hops": [
+          {
+            "duration_minutes": 15,
+            "from_ref": "wc1-a",
+            "to_ref": "wc1-b"
+          }
+        ],
+        "objective_vector": {
+          "cost_cny": 0,
+          "required_selected": 0,
+          "selected": 2,
+          "travel_minutes": 15,
+          "utility": 160
+        },
+        "selected_ids": [
+          "wc1-a",
+          "wc1-b"
+        ],
+        "start_at": [
+          "2026-10-18T09:00:00+08:00",
+          "2026-10-18T10:25:00+08:00"
+        ]
+      },
+      {
+        "end_at": [
+          "2026-10-19T10:00:00+08:00"
+        ],
+        "excluded": [
+          {
+            "reason": "closed",
+            "ref_id": "closed-b"
+          }
+        ],
+        "hops": [],
+        "objective_vector": {
+          "cost_cny": 0,
+          "required_selected": 0,
+          "selected": 1,
+          "travel_minutes": 0,
+          "utility": 90
+        },
+        "selected_ids": [
+          "closed-a"
+        ],
+        "start_at": [
+          "2026-10-19T09:00:00+08:00"
+        ]
+      }
+    ],
+    "status": "SCHEDULED"
+  },
+  "fixture_version": 1,
+  "tags": [
+    "weekend",
+    "2-day",
+    "closed-day"
+  ]
+}

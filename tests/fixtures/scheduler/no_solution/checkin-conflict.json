@@ -1,0 +1,105 @@
+{
+  "case_id": "checkin-conflict",
+  "days": [
+    {
+      "budget_cny": null,
+      "buffer_minutes": 10,
+      "candidates": [
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 120,
+          "fixed_start": "2026-12-10T15:00:00+08:00",
+          "kind": "transport",
+          "locked": true,
+          "ref_id": "checkin-a",
+          "required": true,
+          "title": "到店交通",
+          "utility": 50,
+          "windows": [
+            {
+              "end_at": "2026-12-10T17:00:00+08:00",
+              "start_at": "2026-12-10T15:00:00+08:00"
+            }
+          ]
+        },
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 30,
+          "fixed_start": "2026-12-10T17:10:00+08:00",
+          "kind": "checkin",
+          "locked": true,
+          "ref_id": "checkin-b",
+          "required": true,
+          "title": "锁定入住",
+          "utility": 50,
+          "windows": [
+            {
+              "end_at": "2026-12-10T17:40:00+08:00",
+              "start_at": "2026-12-10T17:10:00+08:00"
+            }
+          ]
+        }
+      ],
+      "date": "2026-12-10",
+      "day_id": "ns-checkin-day",
+      "end_at": "2026-12-10T20:00:00+08:00",
+      "matrix": [
+        {
+          "claim_ids": [
+            "claim-route-checkin-a-checkin-b"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 10000,
+          "duration_minutes": 20,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "checkin-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "checkin-b",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-checkin-b-checkin-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 10000,
+          "duration_minutes": 20,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "checkin-b",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "checkin-a",
+          "travel_mode": "transit"
+        }
+      ],
+      "max_optional": 8,
+      "max_travel_minutes": null,
+      "start_at": "2026-12-10T09:00:00+08:00",
+      "travel_mode": "transit"
+    }
+  ],
+  "expected": {
+    "conflict_code": "window",
+    "status": "NO_SOLUTION"
+  },
+  "fixture_version": 1,
+  "tags": [
+    "lodging",
+    "checkin"
+  ]
+}

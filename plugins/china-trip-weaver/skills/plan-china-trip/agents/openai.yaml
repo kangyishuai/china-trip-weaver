@@ -1,0 +1,6 @@
+interface:
+  display_name: "Plan a China Trip"
+  short_description: "Plan sourced, read-only China itineraries"
+  default_prompt: "Use $plan-china-trip to plan a three-day mainland-China trip with sources and explicit unknowns."
+policy:
+  allow_implicit_invocation: true

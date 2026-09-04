@@ -1,0 +1,6 @@
+interface:
+  display_name: "Research China Destination"
+  short_description: "Build dated destination claims and candidates"
+  default_prompt: "Use $research-china-destination to research dated, authoritative POI candidates for this city."
+policy:
+  allow_implicit_invocation: false

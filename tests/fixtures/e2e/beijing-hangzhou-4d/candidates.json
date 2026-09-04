@@ -1,0 +1,373 @@
+{
+  "candidates_version": "1.0.0",
+  "claims": [
+    {
+      "as_of": null,
+      "claim_id": "claim-bjh-lodging-price",
+      "confidence": 0,
+      "field_path": "/price",
+      "json_path": null,
+      "mode": "static",
+      "provider": "deep-link",
+      "queried_at": "2026-09-03T12:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "source_url": "https://www.fliggy.com/hotel/search",
+      "status": "unknown",
+      "subject_ref": "lodging-bjh-central",
+      "value": null
+    },
+    {
+      "as_of": null,
+      "claim_id": "claim-bjh-west-lake-hours",
+      "confidence": 0.55,
+      "field_path": "/opening_windows/0",
+      "json_path": null,
+      "mode": "static",
+      "provider": "official-web",
+      "queried_at": "2026-09-03T12:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "source_url": "https://www.hangzhou.gov.cn/",
+      "status": "hypothesis",
+      "subject_ref": "poi-bjh-west-lake",
+      "value": "date-specific candidate window"
+    },
+    {
+      "as_of": null,
+      "claim_id": "claim-bjh-museum-hours",
+      "confidence": 0.55,
+      "field_path": "/opening_windows/0",
+      "json_path": null,
+      "mode": "static",
+      "provider": "official-web",
+      "queried_at": "2026-09-03T12:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "source_url": "https://www.zhejiangmuseum.com/",
+      "status": "hypothesis",
+      "subject_ref": "poi-bjh-museum",
+      "value": "date-specific candidate window"
+    },
+    {
+      "as_of": null,
+      "claim_id": "claim-bjh-food-hours",
+      "confidence": 0.55,
+      "field_path": "/opening_windows/0",
+      "json_path": null,
+      "mode": "static",
+      "provider": "official-web",
+      "queried_at": "2026-09-03T12:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "source_url": "https://www.hangzhou.gov.cn/",
+      "status": "hypothesis",
+      "subject_ref": "poi-bjh-food",
+      "value": "date-specific candidate window"
+    },
+    {
+      "as_of": null,
+      "claim_id": "claim-bjh-tea-hours",
+      "confidence": 0.55,
+      "field_path": "/opening_windows/0",
+      "json_path": null,
+      "mode": "static",
+      "provider": "official-web",
+      "queried_at": "2026-09-03T12:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "source_url": "https://www.hangzhou.gov.cn/",
+      "status": "hypothesis",
+      "subject_ref": "poi-bjh-tea",
+      "value": "date-specific candidate window"
+    },
+    {
+      "as_of": null,
+      "claim_id": "claim-bjh-temple-hours",
+      "confidence": 0.55,
+      "field_path": "/opening_windows/0",
+      "json_path": null,
+      "mode": "static",
+      "provider": "official-web",
+      "queried_at": "2026-09-03T12:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "source_url": "https://www.hangzhou.gov.cn/",
+      "status": "hypothesis",
+      "subject_ref": "poi-bjh-temple",
+      "value": "date-specific candidate window"
+    },
+    {
+      "as_of": null,
+      "claim_id": "claim-bjh-canal-hours",
+      "confidence": 0.55,
+      "field_path": "/opening_windows/0",
+      "json_path": null,
+      "mode": "static",
+      "provider": "official-web",
+      "queried_at": "2026-09-03T12:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "source_url": "https://www.hangzhou.gov.cn/",
+      "status": "hypothesis",
+      "subject_ref": "poi-bjh-canal",
+      "value": "date-specific candidate window"
+    },
+    {
+      "as_of": null,
+      "claim_id": "claim-bjh-market-hours",
+      "confidence": 0.55,
+      "field_path": "/opening_windows/0",
+      "json_path": null,
+      "mode": "static",
+      "provider": "official-web",
+      "queried_at": "2026-09-03T12:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "source_url": "https://www.hangzhou.gov.cn/",
+      "status": "hypothesis",
+      "subject_ref": "poi-bjh-market",
+      "value": "date-specific candidate window"
+    }
+  ],
+  "lodgings": [
+    {
+      "area": "湖滨",
+      "check_in": "2026-10-16",
+      "check_out": "2026-10-19",
+      "city": "杭州",
+      "claim_ids": [
+        "claim-bjh-lodging-price"
+      ],
+      "coordinates": null,
+      "deep_links": [
+        "https://www.fliggy.com/hotel/search"
+      ],
+      "locked": false,
+      "lodging_id": "lodging-bjh-central",
+      "name": "湖滨片区候选",
+      "price": {
+        "amount": null,
+        "claim_id": "claim-bjh-lodging-price",
+        "currency": "CNY",
+        "includes_taxes": null,
+        "price_type": "verify-on-click",
+        "queried_at": "2026-09-03T12:00:00+08:00",
+        "unit": "per_night"
+      }
+    }
+  ],
+  "pois": [
+    {
+      "category": "scenic",
+      "city": "杭州",
+      "claim_ids": [
+        "claim-bjh-west-lake-hours"
+      ],
+      "coordinates": null,
+      "deep_links": [
+        "https://www.hangzhou.gov.cn/"
+      ],
+      "name": "西湖湖滨步行",
+      "opening_windows": [
+        {
+          "claim_id": "claim-bjh-west-lake-hours",
+          "end_at": "2026-10-16T19:00:00+08:00",
+          "start_at": "2026-10-16T16:00:00+08:00",
+          "status": "tentative"
+        }
+      ],
+      "poi_id": "poi-bjh-west-lake",
+      "price": null,
+      "recommended_duration_minutes": 120
+    },
+    {
+      "category": "museum",
+      "city": "杭州",
+      "claim_ids": [
+        "claim-bjh-museum-hours"
+      ],
+      "coordinates": null,
+      "deep_links": [
+        "https://www.zhejiangmuseum.com/"
+      ],
+      "name": "浙江省博物馆候选",
+      "opening_windows": [
+        {
+          "claim_id": "claim-bjh-museum-hours",
+          "end_at": "2026-10-17T12:00:00+08:00",
+          "start_at": "2026-10-17T09:00:00+08:00",
+          "status": "tentative"
+        }
+      ],
+      "poi_id": "poi-bjh-museum",
+      "price": null,
+      "recommended_duration_minutes": 120
+    },
+    {
+      "category": "food",
+      "city": "杭州",
+      "claim_ids": [
+        "claim-bjh-food-hours"
+      ],
+      "coordinates": null,
+      "deep_links": [
+        "https://www.hangzhou.gov.cn/"
+      ],
+      "name": "杭帮菜午餐",
+      "opening_windows": [
+        {
+          "claim_id": "claim-bjh-food-hours",
+          "end_at": "2026-10-17T14:00:00+08:00",
+          "start_at": "2026-10-17T12:30:00+08:00",
+          "status": "tentative"
+        }
+      ],
+      "poi_id": "poi-bjh-food",
+      "price": null,
+      "recommended_duration_minutes": 60
+    },
+    {
+      "category": "tea",
+      "city": "杭州",
+      "claim_ids": [
+        "claim-bjh-tea-hours"
+      ],
+      "coordinates": null,
+      "deep_links": [
+        "https://www.hangzhou.gov.cn/"
+      ],
+      "name": "龙井茶文化候选",
+      "opening_windows": [
+        {
+          "claim_id": "claim-bjh-tea-hours",
+          "end_at": "2026-10-17T18:00:00+08:00",
+          "start_at": "2026-10-17T15:00:00+08:00",
+          "status": "tentative"
+        }
+      ],
+      "poi_id": "poi-bjh-tea",
+      "price": null,
+      "recommended_duration_minutes": 120
+    },
+    {
+      "category": "culture",
+      "city": "杭州",
+      "claim_ids": [
+        "claim-bjh-temple-hours"
+      ],
+      "coordinates": null,
+      "deep_links": [
+        "https://www.hangzhou.gov.cn/"
+      ],
+      "name": "灵隐文化候选",
+      "opening_windows": [
+        {
+          "claim_id": "claim-bjh-temple-hours",
+          "end_at": "2026-10-18T12:00:00+08:00",
+          "start_at": "2026-10-18T09:00:00+08:00",
+          "status": "tentative"
+        }
+      ],
+      "poi_id": "poi-bjh-temple",
+      "price": null,
+      "recommended_duration_minutes": 120
+    },
+    {
+      "category": "history",
+      "city": "杭州",
+      "claim_ids": [
+        "claim-bjh-canal-hours"
+      ],
+      "coordinates": null,
+      "deep_links": [
+        "https://www.hangzhou.gov.cn/"
+      ],
+      "name": "京杭大运河候选",
+      "opening_windows": [
+        {
+          "claim_id": "claim-bjh-canal-hours",
+          "end_at": "2026-10-18T18:00:00+08:00",
+          "start_at": "2026-10-18T15:00:00+08:00",
+          "status": "tentative"
+        }
+      ],
+      "poi_id": "poi-bjh-canal",
+      "price": null,
+      "recommended_duration_minutes": 120
+    },
+    {
+      "category": "architecture",
+      "city": "杭州",
+      "claim_ids": [
+        "claim-bjh-market-hours"
+      ],
+      "coordinates": null,
+      "deep_links": [
+        "https://www.hangzhou.gov.cn/"
+      ],
+      "name": "杭州城市漫步",
+      "opening_windows": [
+        {
+          "claim_id": "claim-bjh-market-hours",
+          "end_at": "2026-10-19T12:00:00+08:00",
+          "start_at": "2026-10-19T09:00:00+08:00",
+          "status": "tentative"
+        }
+      ],
+      "poi_id": "poi-bjh-market",
+      "price": null,
+      "recommended_duration_minutes": 120
+    }
+  ],
+  "unknowns": [
+    {
+      "claim_id": "claim-bjh-lodging-price",
+      "field_path": "/lodgings/0/price/amount",
+      "provider": "flyai",
+      "reason": "room total and cancellation terms must be verified on click"
+    },
+    {
+      "claim_id": "claim-bjh-west-lake-hours",
+      "field_path": "/pois/0/coordinates",
+      "provider": "amap",
+      "reason": "AMap is not configured; coordinates remain unverified"
+    },
+    {
+      "claim_id": "claim-bjh-museum-hours",
+      "field_path": "/pois/1/coordinates",
+      "provider": "amap",
+      "reason": "AMap is not configured; coordinates remain unverified"
+    },
+    {
+      "claim_id": "claim-bjh-food-hours",
+      "field_path": "/pois/2/coordinates",
+      "provider": "amap",
+      "reason": "AMap is not configured; coordinates remain unverified"
+    },
+    {
+      "claim_id": "claim-bjh-tea-hours",
+      "field_path": "/pois/3/coordinates",
+      "provider": "amap",
+      "reason": "AMap is not configured; coordinates remain unverified"
+    },
+    {
+      "claim_id": "claim-bjh-temple-hours",
+      "field_path": "/pois/4/coordinates",
+      "provider": "amap",
+      "reason": "AMap is not configured; coordinates remain unverified"
+    },
+    {
+      "claim_id": "claim-bjh-canal-hours",
+      "field_path": "/pois/5/coordinates",
+      "provider": "amap",
+      "reason": "AMap is not configured; coordinates remain unverified"
+    },
+    {
+      "claim_id": "claim-bjh-market-hours",
+      "field_path": "/pois/6/coordinates",
+      "provider": "amap",
+      "reason": "AMap is not configured; coordinates remain unverified"
+    }
+  ]
+}

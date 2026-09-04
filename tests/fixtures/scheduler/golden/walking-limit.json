@@ -1,0 +1,120 @@
+{
+  "case_id": "walking-limit",
+  "days": [
+    {
+      "budget_cny": null,
+      "buffer_minutes": 10,
+      "candidates": [
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "walk-a",
+          "required": false,
+          "title": "近点",
+          "utility": 100,
+          "windows": []
+        },
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "walk-b",
+          "required": false,
+          "title": "远点",
+          "utility": 50,
+          "windows": []
+        }
+      ],
+      "date": "2026-12-03",
+      "day_id": "walking-day",
+      "end_at": "2026-12-03T20:00:00+08:00",
+      "matrix": [
+        {
+          "claim_ids": [
+            "claim-route-walk-a-walk-b"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 45000,
+          "duration_minutes": 90,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "walk-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "walk-b",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-walk-b-walk-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 45000,
+          "duration_minutes": 90,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "walk-b",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "walk-a",
+          "travel_mode": "transit"
+        }
+      ],
+      "max_optional": 8,
+      "max_travel_minutes": 30,
+      "start_at": "2026-12-03T09:00:00+08:00",
+      "travel_mode": "transit"
+    }
+  ],
+  "expected": {
+    "days": [
+      {
+        "end_at": [
+          "2026-12-03T10:00:00+08:00"
+        ],
+        "excluded": [
+          {
+            "reason": "walking-limit",
+            "ref_id": "walk-b"
+          }
+        ],
+        "hops": [],
+        "objective_vector": {
+          "cost_cny": 0,
+          "required_selected": 0,
+          "selected": 1,
+          "travel_minutes": 0,
+          "utility": 100
+        },
+        "selected_ids": [
+          "walk-a"
+        ],
+        "start_at": [
+          "2026-12-03T09:00:00+08:00"
+        ]
+      }
+    ],
+    "status": "SCHEDULED"
+  },
+  "fixture_version": 1,
+  "tags": [
+    "walking-limit"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "base_fixture": "tests/fixtures/trips/schema/valid/weekend-live.json",
+  "case_id": "closure",
+  "event": {
+    "reason": "外滩临时关闭",
+    "replacement_slot": {
+      "claim_ids": [],
+      "end_at": "2026-10-16T11:30:00+08:00",
+      "kind": "free",
+      "locked": false,
+      "ref_id": null,
+      "slot_id": "slot-1-alt",
+      "start_at": "2026-10-16T09:30:00+08:00",
+      "status": "tentative",
+      "title": "室内备选"
+    },
+    "reverify_claim_ids": [
+      "claim-bund-hours"
+    ],
+    "subject_ref": "slot-1",
+    "type": "closure"
+  },
+  "expected": {
+    "affected_day": "day-1",
+    "operation_count": 1,
+    "trigger": "closure",
+    "unchanged_day_indexes": [
+      1
+    ]
+  },
+  "fixture_version": 1,
+  "user_locked_refs": []
+}

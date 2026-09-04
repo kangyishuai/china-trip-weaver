@@ -1,0 +1,56 @@
+{
+  "captured_at": "2026-09-04T00:00:00+08:00",
+  "case": "usage",
+  "contains_personal_data": false,
+  "credential_state": "configured",
+  "expected": {
+    "error_class": null,
+    "health_status": "ready",
+    "item_count": 1,
+    "sanitized": false,
+    "schema_refs": [
+      "#/$defs/poi"
+    ],
+    "transport_calls": 1
+  },
+  "fixture_version": 1,
+  "provider": "anysearch",
+  "provider_version": "runtime-probe-v1",
+  "redacted": false,
+  "request": {
+    "as_of": "2026-10-16",
+    "cache_policy": "bypass",
+    "capability": "research",
+    "deadline_ms": 1000,
+    "parameters": {
+      "city": "上海",
+      "query": "2026-10-16 博物馆 开放"
+    },
+    "request_id": "fixture-request",
+    "trace": {
+      "stage": "provider-fixture"
+    }
+  },
+  "source": "locally generated synthetic contract response; never captured from a provider",
+  "transport": {
+    "body": {
+      "auto_registered": false,
+      "data": {
+        "results": [
+          {
+            "snippet": "official result",
+            "title": "上海当期活动",
+            "url": "https://www.shanghai.gov.cn/events"
+          }
+        ]
+      },
+      "usage": {
+        "remaining": 999,
+        "requests": 3
+      }
+    },
+    "headers": {},
+    "kind": "response",
+    "status_code": 200
+  }
+}

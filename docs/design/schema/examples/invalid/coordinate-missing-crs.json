@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0.0",
+  "trip_id": "invalid-coordinate-crs",
+  "revision": {"number": 1, "parent_revision": null, "created_at": "2026-09-03T10:00:00+08:00", "reason": "fixture", "created_by": "system"},
+  "mode": "static",
+  "request": {
+    "origin": null,
+    "destinations": [{"ref_id": "city-beijing", "name": "北京", "city": "北京"}],
+    "start_date": "2026-09-10",
+    "end_date": "2026-09-10",
+    "travelers": 1,
+    "budget_cny": null,
+    "interests": ["历史"],
+    "pace": "balanced",
+    "constraints": [],
+    "assumptions": [],
+    "locale": "zh-CN",
+    "pasted_notes": null
+  },
+  "days": [{"day_id": "day-1", "date": "2026-09-10", "city": "北京", "timezone": "Asia/Shanghai", "slots": [{"slot_id": "slot-1", "start_at": "2026-09-10T09:00:00+08:00", "end_at": "2026-09-10T10:00:00+08:00", "kind": "poi", "ref_id": "poi-1", "title": "故宫", "locked": false, "status": "tentative", "claim_ids": ["claim-1"]}]}],
+  "transport_legs": [],
+  "lodgings": [],
+  "pois": [{
+    "poi_id": "poi-1",
+    "name": "故宫博物院",
+    "city": "北京",
+    "category": "museum",
+    "coordinates": {
+      "native": {"lng": 116.397, "lat": 39.918},
+      "wgs84": {"lng": 116.391, "lat": 39.917},
+      "gcj02": {"lng": 116.397, "lat": 39.918},
+      "conversion": {"status": "converted", "method": "gcj02-to-wgs84", "version": "ctw-1", "derived_fields": ["wgs84"], "converted_at": "2026-09-03T09:50:00+08:00", "accuracy_m": 10}
+    },
+    "recommended_duration_minutes": 180,
+    "opening_windows": [],
+    "price": null,
+    "deep_links": ["https://www.dpm.org.cn/"],
+    "claim_ids": ["claim-1"]
+  }],
+  "claims": [{"claim_id": "claim-1", "subject_ref": "poi-1", "field_path": "/name", "value": "故宫博物院", "source_url": "https://www.dpm.org.cn/", "provider": "official-web", "queried_at": "2026-09-03T09:45:00+08:00", "status": "verified", "confidence": 1, "mode": "static", "as_of": null, "raw_ref": null, "response_hash": null, "json_path": null}],
+  "provider_health": [{"provider": "official-web", "version": "host", "mode": "static", "status": "ready", "checked_at": "2026-09-03T09:45:00+08:00", "capabilities": ["research"], "reason": "page read successfully"}],
+  "unknowns": [],
+  "patches": [],
+  "generated_at": "2026-09-03T10:00:00+08:00"
+}

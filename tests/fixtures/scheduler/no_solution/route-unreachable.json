@@ -1,0 +1,94 @@
+{
+  "case_id": "route-unreachable",
+  "days": [
+    {
+      "budget_cny": null,
+      "buffer_minutes": 10,
+      "candidates": [
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "route-a",
+          "required": true,
+          "title": "起点",
+          "utility": 50,
+          "windows": []
+        },
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "route-b",
+          "required": true,
+          "title": "必到点",
+          "utility": 50,
+          "windows": []
+        }
+      ],
+      "date": "2026-12-10",
+      "day_id": "ns-route-day",
+      "end_at": "2026-12-10T20:00:00+08:00",
+      "matrix": [
+        {
+          "claim_ids": [
+            "claim-route-route-a-route-b"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": null,
+          "duration_minutes": null,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "route-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": false,
+          "to_ref": "route-b",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-route-b-route-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": null,
+          "duration_minutes": null,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "route-b",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": false,
+          "to_ref": "route-a",
+          "travel_mode": "transit"
+        }
+      ],
+      "max_optional": 8,
+      "max_travel_minutes": null,
+      "start_at": "2026-12-10T09:00:00+08:00",
+      "travel_mode": "transit"
+    }
+  ],
+  "expected": {
+    "conflict_code": "route-unreachable",
+    "status": "NO_SOLUTION"
+  },
+  "fixture_version": 1,
+  "tags": [
+    "unreachable"
+  ]
+}

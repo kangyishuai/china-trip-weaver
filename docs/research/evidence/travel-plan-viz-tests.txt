@@ -1,0 +1,34 @@
+$ node --test test/*.test.js
+
+✔ buildNavLink 默认（无 ua）生成带 label 的 geo 链接 (0.330459ms)
+✔ buildNavLink 在 iOS ua 下生成 Apple Maps https 链接（iOS 不识别 geo:） (0.074208ms)
+✔ buildNavLink 在 Android ua 下仍用 geo 链接 (0.077458ms)
+✔ buildMapAppLinks 境内点只给高德，position 须为 lng,lat 序且声明 wgs84 (0.060542ms)
+✔ buildMapAppLinks 境外点给 Google 地图在前、高德在后 (0.346416ms)
+✔ routeCoordinates 按顺序提取 [lat,lng] (0.065459ms)
+✔ gcj02ToWgs84 对境内坐标做百米级纠偏（天安门） (0.111208ms)
+✔ gcj02ToWgs84 对境外坐标原样返回（东京） (0.070084ms)
+✔ computeReminders 按截止日期升序排序并正确计算 (1.423583ms)
+✔ renderChecklistHTML 输出含截止日期与事项的清单 (0.107542ms)
+✔ reminderBadgeHTML 输出带提前天数的徽标 (0.048166ms)
+✔ renderChecklistHTML 对 item 文本做 HTML 转义 (0.044125ms)
+✔ validateTrip 对完整 trip 返回零 error (0.684917ms)
+✔ validateTrip 抓住缺字段与非法日期 (0.108166ms)
+✔ validateTrip 抓住 lat/lng 写反（越界） (0.084542ms)
+✔ validateTrip 对离群坐标给 warning（查错城市） (0.05975ms)
+✔ validateTrip 抓住 needsBooking 缺 leadDays (0.0995ms)
+✔ validateHTML 对合规 HTML 返回零 error (0.201375ms)
+✔ validateHTML 抓住缺 trip-data / 缺引擎调用 / 缺响应式 (0.099833ms)
+✔ validateHTML 对免责声明只藏在 JSON 里给 warning (0.075875ms)
+✔ extractTripData 解析内嵌 JSON；validateAll 全链路零 error (0.095959ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 21
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 33.12025
+
+[exit_code=0]
+

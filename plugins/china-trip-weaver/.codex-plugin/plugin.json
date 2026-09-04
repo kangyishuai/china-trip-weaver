@@ -1,0 +1,40 @@
+{
+  "name": "china-trip-weaver",
+  "version": "0.1.0",
+  "description": "Evidence-backed, read-only planning for 1-7 day trips within mainland China, with provider degradation, local replanning, and deterministic mobile HTML.",
+  "author": {
+    "name": "kangyishuai"
+  },
+  "license": "MIT",
+  "keywords": [
+    "china-travel",
+    "itinerary",
+    "12306",
+    "amap",
+    "evidence",
+    "replanning"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "China Trip Weaver",
+    "shortDescription": "Evidence-backed China trip planning",
+    "longDescription": "Plan and locally replan short mainland-China trips with explicit sources, provider health, price types, and a deterministic mobile itinerary.",
+    "developerName": "kangyishuai",
+    "category": "Productivity",
+    "capabilities": [
+      "trip planning",
+      "provider comparison",
+      "local replanning",
+      "mobile HTML"
+    ],
+    "defaultPrompt": [
+      "Plan a three-day China trip with sources and explicit unknowns.",
+      "Replan only the affected part of this itinerary.",
+      "Render this validated Trip as a mobile HTML file."
+    ],
+    "brandColor": "#C94F36"
+  },
+  "homepage": "https://github.com/kangyishuai/china-trip-weaver",
+  "repository": "https://github.com/kangyishuai/china-trip-weaver"
+}

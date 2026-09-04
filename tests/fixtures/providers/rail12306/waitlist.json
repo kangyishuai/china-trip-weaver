@@ -1,0 +1,95 @@
+{
+  "captured_at": "2026-09-04T00:00:00+08:00",
+  "case": "waitlist",
+  "contains_personal_data": false,
+  "credential_state": "configured",
+  "expected": {
+    "error_class": null,
+    "health_status": "ready",
+    "item_count": 1,
+    "sanitized": false,
+    "schema_refs": [
+      "#/$defs/transportLeg"
+    ],
+    "transport_calls": 1
+  },
+  "fixture_version": 1,
+  "provider": "rail12306",
+  "provider_version": "0.3.10",
+  "redacted": false,
+  "request": {
+    "as_of": "2026-10-16",
+    "cache_policy": "bypass",
+    "capability": "rail",
+    "deadline_ms": 1000,
+    "parameters": {
+      "date": "2026-09-10",
+      "from_name": "北京",
+      "from_ref": "city-beijing",
+      "to_name": "上海",
+      "to_ref": "city-shanghai"
+    },
+    "request_id": "fixture-request",
+    "trace": {
+      "stage": "provider-fixture"
+    }
+  },
+  "source": "locally generated synthetic 12306 MCP response; contains no captured provider data",
+  "transport": {
+    "body": {
+      "calls": [
+        {
+          "arguments": {
+            "citys": "北京|上海"
+          },
+          "name": "get-station-code-of-citys",
+          "result": {
+            "content": [
+              {
+                "text": "{\"上海\":{\"station_code\":\"SHX\",\"station_name\":\"上海示例站\"},\"北京\":{\"station_code\":\"BEX\",\"station_name\":\"北京示例站\"}}",
+                "type": "text"
+              }
+            ]
+          }
+        },
+        {
+          "arguments": {
+            "date": "2026-09-10",
+            "format": "json",
+            "fromStation": "BEX",
+            "limitedNum": 1,
+            "toStation": "SHX",
+            "trainFilterFlags": "GD"
+          },
+          "name": "get-tickets",
+          "result": {
+            "content": [
+              {
+                "text": "[{\"arrive_date\":\"2026-09-10\",\"arrive_time\":\"12:00\",\"dw_flag\":[\"示例编组\",\"示例静音车厢\"],\"from_station\":\"北京示例站\",\"from_station_telecode\":\"BEX\",\"lishi\":\"04:00\",\"prices\":[{\"discount\":100,\"num\":\"候补\",\"price\":1000,\"seat_name\":\"商务座\",\"seat_type_code\":\"9\",\"short\":\"swz\"},{\"discount\":100,\"num\":\"候补\",\"price\":500,\"seat_name\":\"一等座\",\"seat_type_code\":\"M\",\"short\":\"zy\"},{\"discount\":100,\"num\":\"候补\",\"price\":300,\"seat_name\":\"二等座\",\"seat_type_code\":\"O\",\"short\":\"ze\"},{\"discount\":100,\"num\":\"候补\",\"price\":300,\"seat_name\":\"无座\",\"seat_type_code\":\"W\",\"short\":\"wz\"}],\"start_date\":\"2026-09-10\",\"start_time\":\"08:00\",\"start_train_code\":\"G1001\",\"to_station\":\"上海示例站\",\"to_station_telecode\":\"SHX\",\"train_no\":\"SYNTHETIC-G1001\"}]",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      ],
+      "protocol_version": "2025-06-18",
+      "server_info": {
+        "name": "12306-mcp",
+        "version": "0.3.10"
+      },
+      "tools": [
+        "get-current-date",
+        "get-stations-code-in-city",
+        "get-station-code-of-citys",
+        "get-station-code-by-names",
+        "get-station-by-telecode",
+        "get-tickets",
+        "get-interline-tickets",
+        "get-train-route-stations"
+      ]
+    },
+    "headers": {},
+    "kind": "response",
+    "status_code": 200
+  }
+}

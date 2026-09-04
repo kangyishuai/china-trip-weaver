@@ -1,0 +1,33 @@
+{
+  "base_fixture": "tests/fixtures/trips/schema/valid/weekend-live.json",
+  "case_id": "weather",
+  "event": {
+    "reason": "暴雨改室内",
+    "replacement_slot": {
+      "claim_ids": [],
+      "end_at": "2026-10-16T11:30:00+08:00",
+      "kind": "free",
+      "locked": false,
+      "ref_id": null,
+      "slot_id": "slot-weather-alt",
+      "start_at": "2026-10-16T09:30:00+08:00",
+      "status": "tentative",
+      "title": "雨天室内备选"
+    },
+    "reverify_claim_ids": [
+      "claim-bund-hours"
+    ],
+    "subject_ref": "poi-bund",
+    "type": "weather"
+  },
+  "expected": {
+    "affected_day": "day-1",
+    "operation_count": 1,
+    "trigger": "weather",
+    "unchanged_day_indexes": [
+      1
+    ]
+  },
+  "fixture_version": 1,
+  "user_locked_refs": []
+}

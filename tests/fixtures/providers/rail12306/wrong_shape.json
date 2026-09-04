@@ -1,0 +1,93 @@
+{
+  "captured_at": "2026-09-04T00:00:00+08:00",
+  "case": "wrong_shape",
+  "contains_personal_data": false,
+  "credential_state": "configured",
+  "expected": {
+    "error_class": "contract_mismatch",
+    "health_status": "contract_mismatch",
+    "item_count": 0,
+    "sanitized": false,
+    "schema_refs": [],
+    "transport_calls": 1
+  },
+  "fixture_version": 1,
+  "provider": "rail12306",
+  "provider_version": "0.3.10",
+  "redacted": false,
+  "request": {
+    "as_of": "2026-10-16",
+    "cache_policy": "bypass",
+    "capability": "rail",
+    "deadline_ms": 1000,
+    "parameters": {
+      "date": "2026-09-10",
+      "from_name": "北京",
+      "from_ref": "city-beijing",
+      "to_name": "上海",
+      "to_ref": "city-shanghai"
+    },
+    "request_id": "fixture-request",
+    "trace": {
+      "stage": "provider-fixture"
+    }
+  },
+  "source": "locally generated synthetic 12306 MCP response; contains no captured provider data",
+  "transport": {
+    "body": {
+      "calls": [
+        {
+          "arguments": {
+            "citys": "北京|上海"
+          },
+          "name": "get-station-code-of-citys",
+          "result": {
+            "content": [
+              {
+                "text": "{\"上海\":{\"station_code\":\"SHX\",\"station_name\":\"上海示例站\"},\"北京\":{\"station_code\":\"BEX\",\"station_name\":\"北京示例站\"}}",
+                "type": "text"
+              }
+            ]
+          }
+        },
+        {
+          "arguments": {
+            "date": "2026-09-10",
+            "format": "json",
+            "fromStation": "BEX",
+            "limitedNum": 1,
+            "toStation": "SHX",
+            "trainFilterFlags": "GD"
+          },
+          "name": "get-tickets",
+          "result": {
+            "content": [
+              {
+                "text": "{}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      ],
+      "protocol_version": "2025-06-18",
+      "server_info": {
+        "name": "12306-mcp",
+        "version": "0.3.10"
+      },
+      "tools": [
+        "get-current-date",
+        "get-stations-code-in-city",
+        "get-station-code-of-citys",
+        "get-station-code-by-names",
+        "get-station-by-telecode",
+        "get-tickets",
+        "get-interline-tickets",
+        "get-train-route-stations"
+      ]
+    },
+    "headers": {},
+    "kind": "response",
+    "status_code": 200
+  }
+}

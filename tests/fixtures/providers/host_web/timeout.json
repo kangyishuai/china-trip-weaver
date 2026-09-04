@@ -1,0 +1,38 @@
+{
+  "captured_at": "2026-09-04T00:00:00+08:00",
+  "case": "timeout",
+  "contains_personal_data": false,
+  "credential_state": "configured",
+  "expected": {
+    "error_class": "timeout",
+    "health_status": "degraded",
+    "item_count": 0,
+    "sanitized": false,
+    "schema_refs": [],
+    "transport_calls": 2
+  },
+  "fixture_version": 1,
+  "provider": "host_web",
+  "provider_version": "host-runtime",
+  "redacted": false,
+  "request": {
+    "as_of": "2026-10-16",
+    "cache_policy": "bypass",
+    "capability": "research",
+    "deadline_ms": 1000,
+    "parameters": {
+      "city": "上海",
+      "dates": [
+        "2026-10-16"
+      ]
+    },
+    "request_id": "fixture-request",
+    "trace": {
+      "stage": "provider-fixture"
+    }
+  },
+  "source": "locally generated synthetic contract response; never captured from a provider",
+  "transport": {
+    "kind": "timeout"
+  }
+}

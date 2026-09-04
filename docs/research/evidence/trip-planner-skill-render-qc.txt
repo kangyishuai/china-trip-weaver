@@ -1,0 +1,13 @@
+$ python3 scripts/render_plan.py examples/kyoto-sample.plan.geo.json -o <workspace>/research/evidence/trip-planner-skill/kyoto.html
+python3 themes/render_clay2.py examples/china-2026/china.geo.json -o <workspace>/research/evidence/trip-planner-skill/china-clay.html
+python3 themes/qc.py <workspace>/research/evidence/trip-planner-skill/china-clay.html
+ls -lh <workspace>/research/evidence/trip-planner-skill/*.html
+
+wrote <workspace>/research/evidence/trip-planner-skill/kyoto.html (2 days)
+china-clay.html: 841KB, days=8, assets=16
+PASS china-clay.html              841KB
+-rw-r--r--@ 1 kangyishuai  staff   841K Sep  3 16:09 <workspace>/research/evidence/trip-planner-skill/china-clay.html
+-rw-r--r--@ 1 kangyishuai  staff    13K Sep  3 16:09 <workspace>/research/evidence/trip-planner-skill/kyoto.html
+
+[exit_code=0]
+

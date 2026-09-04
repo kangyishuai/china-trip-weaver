@@ -1,0 +1,269 @@
+{
+  "schema_version": "1.0.0",
+  "trip_id": "shanghai-weekend-20261016",
+  "revision": {
+    "number": 1,
+    "parent_revision": null,
+    "created_at": "2026-10-01T09:00:00+08:00",
+    "reason": "initial plan",
+    "created_by": "system"
+  },
+  "mode": "live",
+  "request": {
+    "origin": null,
+    "destinations": [{"ref_id": "city-shanghai", "name": "上海", "city": "上海"}],
+    "start_date": "2026-10-16",
+    "end_date": "2026-10-17",
+    "travelers": 2,
+    "budget_cny": 3000,
+    "interests": ["建筑", "博物馆", "本帮菜"],
+    "pace": "balanced",
+    "constraints": [],
+    "assumptions": ["每天 09:00 后开始活动"],
+    "locale": "zh-CN",
+    "pasted_notes": null
+  },
+  "days": [
+    {
+      "day_id": "day-1",
+      "date": "2026-10-16",
+      "city": "上海",
+      "timezone": "Asia/Shanghai",
+      "slots": [
+        {
+          "slot_id": "slot-1",
+          "start_at": "2026-10-16T09:30:00+08:00",
+          "end_at": "2026-10-16T11:30:00+08:00",
+          "kind": "poi",
+          "ref_id": "poi-bund",
+          "title": "外滩建筑步行",
+          "locked": false,
+          "status": "scheduled",
+          "claim_ids": ["claim-bund-hours"]
+        },
+        {
+          "slot_id": "slot-2",
+          "start_at": "2026-10-16T11:30:00+08:00",
+          "end_at": "2026-10-16T12:05:00+08:00",
+          "kind": "transport",
+          "ref_id": "leg-bund-hotel",
+          "title": "前往住宿片区",
+          "locked": false,
+          "status": "scheduled",
+          "claim_ids": ["claim-route-duration"]
+        }
+      ]
+    },
+    {
+      "day_id": "day-2",
+      "date": "2026-10-17",
+      "city": "上海",
+      "timezone": "Asia/Shanghai",
+      "slots": [
+        {
+          "slot_id": "slot-3",
+          "start_at": "2026-10-17T10:00:00+08:00",
+          "end_at": "2026-10-17T12:00:00+08:00",
+          "kind": "free",
+          "ref_id": null,
+          "title": "按天气选择备选活动",
+          "locked": false,
+          "status": "tentative",
+          "claim_ids": []
+        }
+      ]
+    }
+  ],
+  "transport_legs": [
+    {
+      "leg_id": "leg-bund-hotel",
+      "travel_mode": "transit",
+      "data_mode": "live",
+      "from_ref": "poi-bund",
+      "to_ref": "lodging-nanjing-east",
+      "depart_at": "2026-10-16T11:30:00+08:00",
+      "arrive_at": "2026-10-16T12:05:00+08:00",
+      "duration_minutes": 35,
+      "provider": "amap",
+      "service_number": null,
+      "price": {
+        "amount": 4,
+        "currency": "CNY",
+        "price_type": "estimate",
+        "unit": "per_person",
+        "includes_taxes": true,
+        "queried_at": "2026-10-01T08:55:00+08:00",
+        "claim_id": "claim-route-fare"
+      },
+      "booking_url": "https://uri.amap.com/navigation",
+      "claim_ids": ["claim-route-duration", "claim-route-fare"],
+      "locked": false
+    }
+  ],
+  "lodgings": [
+    {
+      "lodging_id": "lodging-nanjing-east",
+      "name": "南京东路片区候选",
+      "city": "上海",
+      "area": "南京东路",
+      "check_in": "2026-10-16",
+      "check_out": "2026-10-18",
+      "coordinates": {
+        "source_crs": "GCJ02",
+        "native": {"lng": 121.4802, "lat": 31.2363},
+        "wgs84": {"lng": 121.4757, "lat": 31.2382},
+        "gcj02": {"lng": 121.4802, "lat": 31.2363},
+        "conversion": {
+          "status": "converted",
+          "method": "gcj02-to-wgs84",
+          "version": "ctw-1",
+          "derived_fields": ["wgs84"],
+          "converted_at": "2026-10-01T08:50:00+08:00",
+          "accuracy_m": 10
+        }
+      },
+      "price": {
+        "amount": null,
+        "currency": "CNY",
+        "price_type": "verify-on-click",
+        "unit": "per_night",
+        "includes_taxes": null,
+        "queried_at": "2026-10-01T08:45:00+08:00",
+        "claim_id": "claim-lodging-price"
+      },
+      "deep_links": ["https://www.fliggy.com/hotel/search"],
+      "claim_ids": ["claim-lodging-price"],
+      "locked": false
+    }
+  ],
+  "pois": [
+    {
+      "poi_id": "poi-bund",
+      "name": "外滩",
+      "city": "上海",
+      "category": "architecture",
+      "coordinates": {
+        "source_crs": "GCJ02",
+        "native": {"lng": 121.4903, "lat": 31.2417},
+        "wgs84": {"lng": 121.4858, "lat": 31.2436},
+        "gcj02": {"lng": 121.4903, "lat": 31.2417},
+        "conversion": {
+          "status": "converted",
+          "method": "gcj02-to-wgs84",
+          "version": "ctw-1",
+          "derived_fields": ["wgs84"],
+          "converted_at": "2026-10-01T08:40:00+08:00",
+          "accuracy_m": 10
+        }
+      },
+      "recommended_duration_minutes": 120,
+      "opening_windows": [
+        {
+          "start_at": "2026-10-16T00:00:00+08:00",
+          "end_at": "2026-10-16T23:59:00+08:00",
+          "status": "verified",
+          "claim_id": "claim-bund-hours"
+        }
+      ],
+      "price": null,
+      "deep_links": ["https://www.amap.com/search?id=poi-bund"],
+      "claim_ids": ["claim-bund-hours"]
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "claim-bund-hours",
+      "subject_ref": "poi-bund",
+      "field_path": "/opening_windows/0",
+      "value": "全天开放",
+      "source_url": "https://www.shanghai.gov.cn/",
+      "provider": "official-web",
+      "queried_at": "2026-10-01T08:30:00+08:00",
+      "status": "verified",
+      "confidence": 0.9,
+      "mode": "live",
+      "as_of": "2026-10-01T08:30:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "json_path": null
+    },
+    {
+      "claim_id": "claim-route-duration",
+      "subject_ref": "leg-bund-hotel",
+      "field_path": "/duration_minutes",
+      "value": 35,
+      "source_url": "https://restapi.amap.com/v3/direction/transit/integrated",
+      "provider": "amap",
+      "queried_at": "2026-10-01T08:55:00+08:00",
+      "status": "verified",
+      "confidence": 0.85,
+      "mode": "live",
+      "as_of": "2026-10-01T08:55:00+08:00",
+      "raw_ref": "fixtures/amap/transit-bund-hotel.redacted.json",
+      "response_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "json_path": "$.route.transits[0].duration"
+    },
+    {
+      "claim_id": "claim-route-fare",
+      "subject_ref": "leg-bund-hotel",
+      "field_path": "/price",
+      "value": 4,
+      "source_url": "https://restapi.amap.com/v3/direction/transit/integrated",
+      "provider": "amap",
+      "queried_at": "2026-10-01T08:55:00+08:00",
+      "status": "partial",
+      "confidence": 0.7,
+      "mode": "live",
+      "as_of": "2026-10-01T08:55:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "json_path": "$.route.transits[0].cost"
+    },
+    {
+      "claim_id": "claim-lodging-price",
+      "subject_ref": "lodging-nanjing-east",
+      "field_path": "/price",
+      "value": null,
+      "source_url": "https://www.fliggy.com/hotel/search",
+      "provider": "flyai",
+      "queried_at": "2026-10-01T08:45:00+08:00",
+      "status": "unknown",
+      "confidence": 0,
+      "mode": "live",
+      "as_of": null,
+      "raw_ref": null,
+      "response_hash": null,
+      "json_path": null
+    }
+  ],
+  "provider_health": [
+    {
+      "provider": "amap",
+      "version": "web-service-2026-09-probe",
+      "mode": "live",
+      "status": "ready",
+      "checked_at": "2026-10-01T08:20:00+08:00",
+      "capabilities": ["geocode", "poi", "route"],
+      "reason": "contract probe passed"
+    },
+    {
+      "provider": "flyai",
+      "version": "1.0.16",
+      "mode": "live",
+      "status": "degraded",
+      "checked_at": "2026-10-01T08:20:00+08:00",
+      "capabilities": ["hotel"],
+      "reason": "property deep links available; room total unverified"
+    }
+  ],
+  "unknowns": [
+    {
+      "field_path": "/lodgings/0/price/amount",
+      "reason": "room-level all-in total requires dated checkout verification",
+      "provider": "flyai",
+      "claim_id": "claim-lodging-price"
+    }
+  ],
+  "patches": [],
+  "generated_at": "2026-10-01T09:00:00+08:00"
+}

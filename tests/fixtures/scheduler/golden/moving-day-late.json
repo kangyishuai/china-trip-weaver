@@ -1,0 +1,130 @@
+{
+  "case_id": "moving-day-late",
+  "days": [
+    {
+      "budget_cny": null,
+      "buffer_minutes": 10,
+      "candidates": [
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "move-late-a",
+          "required": false,
+          "title": "移动日前活动",
+          "utility": 80,
+          "windows": []
+        },
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 120,
+          "fixed_start": "2026-11-12T16:00:00+08:00",
+          "kind": "transport",
+          "locked": true,
+          "ref_id": "move-late-m",
+          "required": true,
+          "title": "已锁跨城rail",
+          "utility": 200,
+          "windows": [
+            {
+              "end_at": "2026-11-12T18:00:00+08:00",
+              "start_at": "2026-11-12T16:00:00+08:00"
+            }
+          ]
+        }
+      ],
+      "date": "2026-11-12",
+      "day_id": "moving-late-day",
+      "end_at": "2026-11-12T22:00:00+08:00",
+      "matrix": [
+        {
+          "claim_ids": [
+            "claim-route-move-late-a-move-late-m"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 10000,
+          "duration_minutes": 20,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "move-late-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "move-late-m",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-move-late-m-move-late-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 10000,
+          "duration_minutes": 20,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "move-late-m",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "move-late-a",
+          "travel_mode": "transit"
+        }
+      ],
+      "max_optional": 8,
+      "max_travel_minutes": null,
+      "start_at": "2026-11-12T07:00:00+08:00",
+      "travel_mode": "transit"
+    }
+  ],
+  "expected": {
+    "days": [
+      {
+        "end_at": [
+          "2026-11-12T08:00:00+08:00",
+          "2026-11-12T18:00:00+08:00"
+        ],
+        "excluded": [],
+        "hops": [
+          {
+            "duration_minutes": 20,
+            "from_ref": "move-late-a",
+            "to_ref": "move-late-m"
+          }
+        ],
+        "objective_vector": {
+          "cost_cny": 0,
+          "required_selected": 1,
+          "selected": 2,
+          "travel_minutes": 20,
+          "utility": 280
+        },
+        "selected_ids": [
+          "move-late-a",
+          "move-late-m"
+        ],
+        "start_at": [
+          "2026-11-12T07:00:00+08:00",
+          "2026-11-12T16:00:00+08:00"
+        ]
+      }
+    ],
+    "status": "SCHEDULED"
+  },
+  "fixture_version": 1,
+  "tags": [
+    "moving-day",
+    "rail"
+  ]
+}

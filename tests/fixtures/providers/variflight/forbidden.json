@@ -1,0 +1,49 @@
+{
+  "captured_at": "2026-09-04T00:00:00+08:00",
+  "case": "forbidden",
+  "contains_personal_data": false,
+  "credential_state": "configured",
+  "expected": {
+    "error_class": "forbidden",
+    "health_status": "forbidden",
+    "item_count": 0,
+    "sanitized": false,
+    "schema_refs": [],
+    "transport_calls": 1
+  },
+  "fixture_version": 1,
+  "provider": "variflight",
+  "provider_version": "1.0.3",
+  "redacted": false,
+  "request": {
+    "as_of": "2026-10-16",
+    "cache_policy": "bypass",
+    "capability": "flight",
+    "deadline_ms": 1000,
+    "parameters": {
+      "action": "search",
+      "arr_city": "SHA",
+      "date": "2026-09-10",
+      "dep_city": "BJS",
+      "from_ref": "airport-pek",
+      "subject_ref": "leg-flight",
+      "subject_refs_by_service": {
+        "XX1001": "leg-flight"
+      },
+      "to_ref": "airport-sha"
+    },
+    "request_id": "fixture-request",
+    "trace": {
+      "stage": "provider-fixture"
+    }
+  },
+  "source": "locally generated synthetic contract response; never captured from a provider",
+  "transport": {
+    "body": {
+      "error": "balance disabled"
+    },
+    "headers": {},
+    "kind": "response",
+    "status_code": 403
+  }
+}

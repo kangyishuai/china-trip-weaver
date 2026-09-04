@@ -1,0 +1,566 @@
+{
+  "case_id": "cross-city-5-day",
+  "days": [
+    {
+      "budget_cny": null,
+      "buffer_minutes": 10,
+      "candidates": [
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 180,
+          "fixed_start": "2026-11-01T09:00:00+08:00",
+          "kind": "transport",
+          "locked": true,
+          "ref_id": "cross5-d1-transport",
+          "required": true,
+          "title": "跨城铁路",
+          "utility": 200,
+          "windows": [
+            {
+              "end_at": "2026-11-01T12:00:00+08:00",
+              "start_at": "2026-11-01T09:00:00+08:00"
+            }
+          ]
+        },
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "cross5-d1-visit",
+          "required": false,
+          "title": "抵达后活动",
+          "utility": 60,
+          "windows": []
+        }
+      ],
+      "date": "2026-11-01",
+      "day_id": "cross5-1-day",
+      "end_at": "2026-11-01T20:00:00+08:00",
+      "matrix": [
+        {
+          "claim_ids": [],
+          "degradation_rung": "R3",
+          "distance_meters": 12500,
+          "duration_minutes": 25,
+          "estimate_method": "fixture-conservative-upper-bound",
+          "fare": null,
+          "from_ref": "cross5-d1-transport",
+          "geometry_ref": null,
+          "mode": "static",
+          "provider": "ctw-static-estimate",
+          "provider_version": "1",
+          "queried_at": null,
+          "reachable": true,
+          "to_ref": "cross5-d1-visit",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [],
+          "degradation_rung": "R3",
+          "distance_meters": 12500,
+          "duration_minutes": 25,
+          "estimate_method": "fixture-conservative-upper-bound",
+          "fare": null,
+          "from_ref": "cross5-d1-visit",
+          "geometry_ref": null,
+          "mode": "static",
+          "provider": "ctw-static-estimate",
+          "provider_version": "1",
+          "queried_at": null,
+          "reachable": true,
+          "to_ref": "cross5-d1-transport",
+          "travel_mode": "transit"
+        }
+      ],
+      "max_optional": 8,
+      "max_travel_minutes": null,
+      "start_at": "2026-11-01T09:00:00+08:00",
+      "travel_mode": "transit"
+    },
+    {
+      "budget_cny": null,
+      "buffer_minutes": 10,
+      "candidates": [
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "cross5-d2-a",
+          "required": false,
+          "title": "核心候选 A",
+          "utility": 90,
+          "windows": []
+        },
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "cross5-d2-b",
+          "required": false,
+          "title": "核心候选 B",
+          "utility": 70,
+          "windows": []
+        }
+      ],
+      "date": "2026-11-02",
+      "day_id": "cross5-2-day",
+      "end_at": "2026-11-02T20:00:00+08:00",
+      "matrix": [
+        {
+          "claim_ids": [
+            "claim-route-cross5-d2-a-cross5-d2-b"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 7500,
+          "duration_minutes": 15,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "cross5-d2-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "cross5-d2-b",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-cross5-d2-b-cross5-d2-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 7500,
+          "duration_minutes": 15,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "cross5-d2-b",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "cross5-d2-a",
+          "travel_mode": "transit"
+        }
+      ],
+      "max_optional": 8,
+      "max_travel_minutes": null,
+      "start_at": "2026-11-02T09:00:00+08:00",
+      "travel_mode": "transit"
+    },
+    {
+      "budget_cny": null,
+      "buffer_minutes": 10,
+      "candidates": [
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "cross5-d3-a",
+          "required": false,
+          "title": "核心候选 A",
+          "utility": 90,
+          "windows": []
+        },
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "cross5-d3-b",
+          "required": false,
+          "title": "核心候选 B",
+          "utility": 70,
+          "windows": []
+        }
+      ],
+      "date": "2026-11-03",
+      "day_id": "cross5-3-day",
+      "end_at": "2026-11-03T20:00:00+08:00",
+      "matrix": [
+        {
+          "claim_ids": [
+            "claim-route-cross5-d3-a-cross5-d3-b"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 7500,
+          "duration_minutes": 15,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "cross5-d3-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "cross5-d3-b",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-cross5-d3-b-cross5-d3-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 7500,
+          "duration_minutes": 15,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "cross5-d3-b",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "cross5-d3-a",
+          "travel_mode": "transit"
+        }
+      ],
+      "max_optional": 8,
+      "max_travel_minutes": null,
+      "start_at": "2026-11-03T09:00:00+08:00",
+      "travel_mode": "transit"
+    },
+    {
+      "budget_cny": null,
+      "buffer_minutes": 10,
+      "candidates": [
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "cross5-d4-a",
+          "required": false,
+          "title": "核心候选 A",
+          "utility": 90,
+          "windows": []
+        },
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "cross5-d4-b",
+          "required": false,
+          "title": "核心候选 B",
+          "utility": 70,
+          "windows": []
+        }
+      ],
+      "date": "2026-11-04",
+      "day_id": "cross5-4-day",
+      "end_at": "2026-11-04T20:00:00+08:00",
+      "matrix": [
+        {
+          "claim_ids": [
+            "claim-route-cross5-d4-a-cross5-d4-b"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 7500,
+          "duration_minutes": 15,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "cross5-d4-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "cross5-d4-b",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-cross5-d4-b-cross5-d4-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 7500,
+          "duration_minutes": 15,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "cross5-d4-b",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "cross5-d4-a",
+          "travel_mode": "transit"
+        }
+      ],
+      "max_optional": 8,
+      "max_travel_minutes": null,
+      "start_at": "2026-11-04T09:00:00+08:00",
+      "travel_mode": "transit"
+    },
+    {
+      "budget_cny": null,
+      "buffer_minutes": 10,
+      "candidates": [
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "cross5-d5-a",
+          "required": false,
+          "title": "核心候选 A",
+          "utility": 90,
+          "windows": []
+        },
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "cross5-d5-b",
+          "required": false,
+          "title": "核心候选 B",
+          "utility": 70,
+          "windows": []
+        }
+      ],
+      "date": "2026-11-05",
+      "day_id": "cross5-5-day",
+      "end_at": "2026-11-05T20:00:00+08:00",
+      "matrix": [
+        {
+          "claim_ids": [
+            "claim-route-cross5-d5-a-cross5-d5-b"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 7500,
+          "duration_minutes": 15,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "cross5-d5-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "cross5-d5-b",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-cross5-d5-b-cross5-d5-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 7500,
+          "duration_minutes": 15,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "cross5-d5-b",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "cross5-d5-a",
+          "travel_mode": "transit"
+        }
+      ],
+      "max_optional": 8,
+      "max_travel_minutes": null,
+      "start_at": "2026-11-05T09:00:00+08:00",
+      "travel_mode": "transit"
+    }
+  ],
+  "expected": {
+    "days": [
+      {
+        "end_at": [
+          "2026-11-01T12:00:00+08:00",
+          "2026-11-01T13:35:00+08:00"
+        ],
+        "excluded": [],
+        "hops": [
+          {
+            "duration_minutes": 25,
+            "from_ref": "cross5-d1-transport",
+            "to_ref": "cross5-d1-visit"
+          }
+        ],
+        "objective_vector": {
+          "cost_cny": 0,
+          "required_selected": 1,
+          "selected": 2,
+          "travel_minutes": 25,
+          "utility": 260
+        },
+        "selected_ids": [
+          "cross5-d1-transport",
+          "cross5-d1-visit"
+        ],
+        "start_at": [
+          "2026-11-01T09:00:00+08:00",
+          "2026-11-01T12:35:00+08:00"
+        ]
+      },
+      {
+        "end_at": [
+          "2026-11-02T10:00:00+08:00",
+          "2026-11-02T11:25:00+08:00"
+        ],
+        "excluded": [],
+        "hops": [
+          {
+            "duration_minutes": 15,
+            "from_ref": "cross5-d2-a",
+            "to_ref": "cross5-d2-b"
+          }
+        ],
+        "objective_vector": {
+          "cost_cny": 0,
+          "required_selected": 0,
+          "selected": 2,
+          "travel_minutes": 15,
+          "utility": 160
+        },
+        "selected_ids": [
+          "cross5-d2-a",
+          "cross5-d2-b"
+        ],
+        "start_at": [
+          "2026-11-02T09:00:00+08:00",
+          "2026-11-02T10:25:00+08:00"
+        ]
+      },
+      {
+        "end_at": [
+          "2026-11-03T10:00:00+08:00",
+          "2026-11-03T11:25:00+08:00"
+        ],
+        "excluded": [],
+        "hops": [
+          {
+            "duration_minutes": 15,
+            "from_ref": "cross5-d3-a",
+            "to_ref": "cross5-d3-b"
+          }
+        ],
+        "objective_vector": {
+          "cost_cny": 0,
+          "required_selected": 0,
+          "selected": 2,
+          "travel_minutes": 15,
+          "utility": 160
+        },
+        "selected_ids": [
+          "cross5-d3-a",
+          "cross5-d3-b"
+        ],
+        "start_at": [
+          "2026-11-03T09:00:00+08:00",
+          "2026-11-03T10:25:00+08:00"
+        ]
+      },
+      {
+        "end_at": [
+          "2026-11-04T10:00:00+08:00",
+          "2026-11-04T11:25:00+08:00"
+        ],
+        "excluded": [],
+        "hops": [
+          {
+            "duration_minutes": 15,
+            "from_ref": "cross5-d4-a",
+            "to_ref": "cross5-d4-b"
+          }
+        ],
+        "objective_vector": {
+          "cost_cny": 0,
+          "required_selected": 0,
+          "selected": 2,
+          "travel_minutes": 15,
+          "utility": 160
+        },
+        "selected_ids": [
+          "cross5-d4-a",
+          "cross5-d4-b"
+        ],
+        "start_at": [
+          "2026-11-04T09:00:00+08:00",
+          "2026-11-04T10:25:00+08:00"
+        ]
+      },
+      {
+        "end_at": [
+          "2026-11-05T10:00:00+08:00",
+          "2026-11-05T11:25:00+08:00"
+        ],
+        "excluded": [],
+        "hops": [
+          {
+            "duration_minutes": 15,
+            "from_ref": "cross5-d5-a",
+            "to_ref": "cross5-d5-b"
+          }
+        ],
+        "objective_vector": {
+          "cost_cny": 0,
+          "required_selected": 0,
+          "selected": 2,
+          "travel_minutes": 15,
+          "utility": 160
+        },
+        "selected_ids": [
+          "cross5-d5-a",
+          "cross5-d5-b"
+        ],
+        "start_at": [
+          "2026-11-05T09:00:00+08:00",
+          "2026-11-05T10:25:00+08:00"
+        ]
+      }
+    ],
+    "status": "SCHEDULED"
+  },
+  "fixture_version": 1,
+  "tags": [
+    "cross-city",
+    "5-day"
+  ]
+}

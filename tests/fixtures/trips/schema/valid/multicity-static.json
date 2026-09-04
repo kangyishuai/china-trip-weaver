@@ -1,0 +1,284 @@
+{
+  "schema_version": "1.0.0",
+  "trip_id": "jiangnan-static-20261101",
+  "revision": {
+    "number": 2,
+    "parent_revision": 1,
+    "created_at": "2026-10-20T14:30:00+08:00",
+    "reason": "user moved the museum visit later",
+    "created_by": "user"
+  },
+  "mode": "static",
+  "request": {
+    "origin": {"ref_id": "city-beijing", "name": "北京", "city": "北京"},
+    "destinations": [
+      {"ref_id": "city-nanjing", "name": "南京", "city": "南京"},
+      {"ref_id": "city-suzhou", "name": "苏州", "city": "苏州"}
+    ],
+    "start_date": "2026-11-01",
+    "end_date": "2026-11-03",
+    "travelers": 1,
+    "budget_cny": 2600,
+    "interests": ["历史", "园林"],
+    "pace": "slow",
+    "constraints": ["不早于 09:00 出发"],
+    "assumptions": ["住宿优先地铁站步行 10 分钟内片区"],
+    "locale": "zh-CN",
+    "pasted_notes": "用户偏好安静园林，已去过热门商业街。"
+  },
+  "days": [
+    {
+      "day_id": "day-1",
+      "date": "2026-11-01",
+      "city": "南京",
+      "timezone": "Asia/Shanghai",
+      "slots": [
+        {
+          "slot_id": "slot-rail",
+          "start_at": "2026-11-01T09:00:00+08:00",
+          "end_at": "2026-11-01T13:30:00+08:00",
+          "kind": "transport",
+          "ref_id": "leg-beijing-nanjing",
+          "title": "北京到南京铁路候选",
+          "locked": true,
+          "status": "tentative",
+          "claim_ids": ["claim-rail-time"]
+        }
+      ]
+    },
+    {
+      "day_id": "day-2",
+      "date": "2026-11-02",
+      "city": "南京",
+      "timezone": "Asia/Shanghai",
+      "slots": [
+        {
+          "slot_id": "slot-museum",
+          "start_at": "2026-11-02T13:00:00+08:00",
+          "end_at": "2026-11-02T15:00:00+08:00",
+          "kind": "poi",
+          "ref_id": "poi-nanjing-museum",
+          "title": "南京博物院（待实时复核）",
+          "locked": false,
+          "status": "tentative",
+          "claim_ids": ["claim-museum-hours"]
+        }
+      ]
+    },
+    {
+      "day_id": "day-3",
+      "date": "2026-11-03",
+      "city": "苏州",
+      "timezone": "Asia/Shanghai",
+      "slots": []
+    }
+  ],
+  "transport_legs": [
+    {
+      "leg_id": "leg-beijing-nanjing",
+      "travel_mode": "rail",
+      "data_mode": "static",
+      "from_ref": "city-beijing",
+      "to_ref": "city-nanjing",
+      "depart_at": "2026-11-01T09:00:00+08:00",
+      "arrive_at": "2026-11-01T13:30:00+08:00",
+      "duration_minutes": 270,
+      "provider": "12306-deep-link",
+      "service_number": null,
+      "price": {
+        "amount": null,
+        "currency": "CNY",
+        "price_type": "verify-on-click",
+        "unit": "per_person",
+        "includes_taxes": true,
+        "queried_at": "2026-10-20T14:00:00+08:00",
+        "claim_id": "claim-rail-price"
+      },
+      "booking_url": "https://www.12306.cn/index/",
+      "claim_ids": ["claim-rail-time", "claim-rail-price"],
+      "locked": true
+    }
+  ],
+  "lodgings": [
+    {
+      "lodging_id": "lodging-xinjiekou",
+      "name": "新街口片区",
+      "city": "南京",
+      "area": "新街口",
+      "check_in": "2026-11-01",
+      "check_out": "2026-11-03",
+      "coordinates": null,
+      "price": {
+        "amount": null,
+        "currency": "CNY",
+        "price_type": "verify-on-click",
+        "unit": "per_night",
+        "includes_taxes": null,
+        "queried_at": "2026-10-20T14:05:00+08:00",
+        "claim_id": "claim-hotel-price"
+      },
+      "deep_links": ["https://www.fliggy.com/hotel/search"],
+      "claim_ids": ["claim-hotel-price"],
+      "locked": false
+    }
+  ],
+  "pois": [
+    {
+      "poi_id": "poi-nanjing-museum",
+      "name": "南京博物院",
+      "city": "南京",
+      "category": "museum",
+      "coordinates": {
+        "source_crs": "WGS84",
+        "native": {"lng": 118.824, "lat": 32.041},
+        "wgs84": {"lng": 118.824, "lat": 32.041},
+        "gcj02": {"lng": 118.8292, "lat": 32.039},
+        "conversion": {
+          "status": "converted",
+          "method": "wgs84-to-gcj02",
+          "version": "ctw-1",
+          "derived_fields": ["gcj02"],
+          "converted_at": "2026-10-20T13:55:00+08:00",
+          "accuracy_m": 15
+        }
+      },
+      "recommended_duration_minutes": 120,
+      "opening_windows": [
+        {
+          "start_at": "2026-11-02T09:00:00+08:00",
+          "end_at": "2026-11-02T17:00:00+08:00",
+          "status": "tentative",
+          "claim_id": "claim-museum-hours"
+        }
+      ],
+      "price": null,
+      "deep_links": ["https://www.njmuseum.com/"],
+      "claim_ids": ["claim-museum-hours"]
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "claim-rail-time",
+      "subject_ref": "leg-beijing-nanjing",
+      "field_path": "/depart_at",
+      "value": "09:00-13:30 candidate window",
+      "source_url": "https://www.12306.cn/index/",
+      "provider": "12306-deep-link",
+      "queried_at": "2026-10-20T14:00:00+08:00",
+      "status": "hypothesis",
+      "confidence": 0.3,
+      "mode": "static",
+      "as_of": null,
+      "raw_ref": null,
+      "response_hash": null,
+      "json_path": null
+    },
+    {
+      "claim_id": "claim-rail-price",
+      "subject_ref": "leg-beijing-nanjing",
+      "field_path": "/price",
+      "value": null,
+      "source_url": "https://www.12306.cn/index/",
+      "provider": "12306-deep-link",
+      "queried_at": "2026-10-20T14:00:00+08:00",
+      "status": "unknown",
+      "confidence": 0,
+      "mode": "static",
+      "as_of": null,
+      "raw_ref": null,
+      "response_hash": null,
+      "json_path": null
+    },
+    {
+      "claim_id": "claim-hotel-price",
+      "subject_ref": "lodging-xinjiekou",
+      "field_path": "/price",
+      "value": null,
+      "source_url": "https://www.fliggy.com/hotel/search",
+      "provider": "flyai-deep-link",
+      "queried_at": "2026-10-20T14:05:00+08:00",
+      "status": "unknown",
+      "confidence": 0,
+      "mode": "static",
+      "as_of": null,
+      "raw_ref": null,
+      "response_hash": null,
+      "json_path": null
+    },
+    {
+      "claim_id": "claim-museum-hours",
+      "subject_ref": "poi-nanjing-museum",
+      "field_path": "/opening_windows/0",
+      "value": "09:00-17:00; verify before visit",
+      "source_url": "https://www.njmuseum.com/",
+      "provider": "official-web",
+      "queried_at": "2026-10-20T13:50:00+08:00",
+      "status": "stale",
+      "confidence": 0.5,
+      "mode": "static",
+      "as_of": null,
+      "raw_ref": null,
+      "response_hash": null,
+      "json_path": null
+    }
+  ],
+  "provider_health": [
+    {
+      "provider": "12306-mcp",
+      "version": "0.3.10",
+      "mode": "static",
+      "status": "unavailable",
+      "checked_at": "2026-10-20T13:45:00+08:00",
+      "capabilities": ["rail"],
+      "reason": "network unavailable; emitted official deep link only"
+    },
+    {
+      "provider": "amap",
+      "version": "not-configured",
+      "mode": "static",
+      "status": "missing",
+      "checked_at": "2026-10-20T13:45:00+08:00",
+      "capabilities": ["geocode", "route"],
+      "reason": "AMAP_WEBSERVICE_KEY is not configured"
+    }
+  ],
+  "unknowns": [
+    {
+      "field_path": "/transport_legs/0/service_number",
+      "reason": "live 12306 query unavailable",
+      "provider": "12306-mcp",
+      "claim_id": "claim-rail-time"
+    },
+    {
+      "field_path": "/lodgings/0/price/amount",
+      "reason": "dated room total must be verified on click",
+      "provider": "flyai-deep-link",
+      "claim_id": "claim-hotel-price"
+    }
+  ],
+  "patches": [
+    {
+      "patch_id": "patch-1-2",
+      "base_revision": 1,
+      "target_revision": 2,
+      "created_at": "2026-10-20T14:30:00+08:00",
+      "trigger": "user_edit",
+      "reason": "move museum visit from morning to afternoon",
+      "scope": {
+        "day_ids": ["day-2"],
+        "affected_refs": ["slot-museum"],
+        "locked_refs": ["leg-beijing-nanjing"]
+      },
+      "operations": [
+        {"op": "replace", "path": "/days/1/slots/0/start_at", "value": "2026-11-02T13:00:00+08:00"}
+      ],
+      "reverify_claim_ids": ["claim-museum-hours"],
+      "stability": {
+        "preserved_refs": ["day-1", "day-3", "leg-beijing-nanjing"],
+        "changed_refs": ["slot-museum"],
+        "score": 0.9
+      }
+    }
+  ],
+  "generated_at": "2026-10-20T14:30:00+08:00"
+}

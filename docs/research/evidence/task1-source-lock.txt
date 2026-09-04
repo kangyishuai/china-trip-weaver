@@ -1,0 +1,34 @@
+抓取日期：2026-09-03（Asia/Shanghai）
+
+在线文档抓取（入口 URL → 最终 URL）：
+
+plugins http=200 final=https://learn.chatgpt.com/docs/plugins.md bytes=12840
+plugins-build http=200 final=https://developers.openai.com/plugins/build/plugins.md bytes=22899
+skills http=200 final=https://learn.chatgpt.com/docs/build-skills.md bytes=10925
+mcp http=200 final=https://learn.chatgpt.com/docs/extend/mcp.md?surface=cli bytes=18227
+sandbox http=200 final=https://learn.chatgpt.com/docs/agent-approvals-security.md bytes=32012
+config-reference http=200 final=https://learn.chatgpt.com/docs/config-file/config-reference.md bytes=93802
+agentskills http=200 final=https://agentskills.io/specification.md bytes=8157
+
+SHA-256：
+
+06b5ffc92327a4123a3f7b3f2e8425f58c59b6d7050b6ccbd437a924c1ef70ae  research/evidence/spec-sources/plugins.md
+605face331e44ea6befdc54c63b3d1e560f0595635db9083a20b9bbd19554e18  research/evidence/spec-sources/plugins-build.md
+d15791562748e64a53dfec534b8558aa522e732cec0fdedcf7257fa4ef486a20  research/evidence/spec-sources/skills.md
+978cad2319d28ce8e888e890cb6bd5c5a0631d3dc0b463fc66928ba419982f1a  research/evidence/spec-sources/mcp.md
+58c06f5bdb41655f810d2c39c41f782fccd6d77508f709c601da5fe55ca18acd  research/evidence/spec-sources/sandbox.md
+9d6a413bfb3ba34acd49a13882a7b17597053c2b0c59c34df9d01a6e63059465  research/evidence/spec-sources/config-reference.md
+2b1dbb4fd80c31748d15812c4ebd3e66c09383d0c792801f617718684489e40d  research/evidence/spec-sources/agentskills-specification.md
+
+仓库锁定：
+
+openai/plugins commit=1e285826e604f66f7208f7ac4dba0fe8341d1f57 date=2026-08-28T13:01:00-07:00 subject=Add CrowdStrike Foundry and Fusion to curated marketplaces (#391)
+openai/skills commit=49f948faa9258a0c61caceaf225e179651397431 date=2026-06-23T19:36:12-07:00 subject=[codex] Update skill installer post-install guidance (#507)
+
+本机版本：
+
+/Applications/ChatGPT.app
+CFBundleShortVersionString=26.901.20858
+CFBundleVersion=7658
+CFBundleIdentifier=com.openai.codex
+codex-cli=0.153.0-alpha.5

@@ -1,0 +1,15 @@
+{
+  "base_fixture": "tests/fixtures/trips/schema/valid/weekend-live.json",
+  "case_id": "missing-link-rel",
+  "expected": {
+    "codes": [
+      "E105"
+    ]
+  },
+  "fixture_version": 1,
+  "replace": {
+    "count": 1,
+    "new": "rel=\"\"",
+    "old": "rel=\"noopener noreferrer\""
+  }
+}

@@ -1,0 +1,120 @@
+{
+  "case_id": "unreachable-optional",
+  "days": [
+    {
+      "budget_cny": null,
+      "buffer_minutes": 10,
+      "candidates": [
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "unreach-a",
+          "required": false,
+          "title": "可达点",
+          "utility": 100,
+          "windows": []
+        },
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "unreach-b",
+          "required": false,
+          "title": "不可达点",
+          "utility": 50,
+          "windows": []
+        }
+      ],
+      "date": "2026-12-04",
+      "day_id": "unreachable-day",
+      "end_at": "2026-12-04T20:00:00+08:00",
+      "matrix": [
+        {
+          "claim_ids": [
+            "claim-route-unreach-a-unreach-b"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": null,
+          "duration_minutes": null,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "unreach-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": false,
+          "to_ref": "unreach-b",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-unreach-b-unreach-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": null,
+          "duration_minutes": null,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "unreach-b",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": false,
+          "to_ref": "unreach-a",
+          "travel_mode": "transit"
+        }
+      ],
+      "max_optional": 8,
+      "max_travel_minutes": null,
+      "start_at": "2026-12-04T09:00:00+08:00",
+      "travel_mode": "transit"
+    }
+  ],
+  "expected": {
+    "days": [
+      {
+        "end_at": [
+          "2026-12-04T10:00:00+08:00"
+        ],
+        "excluded": [
+          {
+            "reason": "route-unreachable",
+            "ref_id": "unreach-b"
+          }
+        ],
+        "hops": [],
+        "objective_vector": {
+          "cost_cny": 0,
+          "required_selected": 0,
+          "selected": 1,
+          "travel_minutes": 0,
+          "utility": 100
+        },
+        "selected_ids": [
+          "unreach-a"
+        ],
+        "start_at": [
+          "2026-12-04T09:00:00+08:00"
+        ]
+      }
+    ],
+    "status": "SCHEDULED"
+  },
+  "fixture_version": 1,
+  "tags": [
+    "unreachable"
+  ]
+}

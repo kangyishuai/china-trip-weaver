@@ -1,0 +1,323 @@
+{
+  "files": [
+    {
+      "path": "amap/api_forbidden.json",
+      "sha256": "a0acfce31ff5b086a15d8da57b6576f61e6497588ac8a8df60aa0dcded2bfe08"
+    },
+    {
+      "path": "amap/auth.json",
+      "sha256": "ec45406982f34cf2da10e555345da6f20bca6d55f7d96485e9fe09bf74f5fd42"
+    },
+    {
+      "path": "amap/boundary_hk.json",
+      "sha256": "1eae5284baba3c18fd8dabe3cf4f1ddf9777de889d3cf378c4ae30635aedade0"
+    },
+    {
+      "path": "amap/driving.json",
+      "sha256": "13d0ba691778dbdfc62025ceea7f3427cc69bbdb711b32904ef870cf962d09da"
+    },
+    {
+      "path": "amap/empty.json",
+      "sha256": "8776f1ba818f5d877ba3d16bb7274b8cd6b3423f7f2f70f598c8e2aba245dc87"
+    },
+    {
+      "path": "amap/geocode.json",
+      "sha256": "31ae674a60992623c970853eb238b712c43978977733c34b9f77e6f98e4bdb8e"
+    },
+    {
+      "path": "amap/http_forbidden.json",
+      "sha256": "77d0a5a141aea4515e34dd225451204996a4b8244e66e0fe0f4087e092b8f8cd"
+    },
+    {
+      "path": "amap/http_unauthorized.json",
+      "sha256": "734c47776190ef9439f1b6557f3180abea4d650a8bbd261e2ad223f7f9e5a372"
+    },
+    {
+      "path": "amap/malicious.json",
+      "sha256": "63ce69346e56a88d54f160410b5d84780ad1b0588264e279afdf203d6c14e0d8"
+    },
+    {
+      "path": "amap/pagination_page2.json",
+      "sha256": "6e0b31348fbd824b3e05f70d722753a7049c5bdab3f0948f87814b898d139f9f"
+    },
+    {
+      "path": "amap/rate_limit.json",
+      "sha256": "256fefd516a3717ef0402a35cd16b4cd4f21ab6c052a6be538604ff18f6eaa57"
+    },
+    {
+      "path": "amap/riding.json",
+      "sha256": "94aaab09ae7c302f7c9ca887fab788cecb42d7db8deb12579dcefcf2a827dd6e"
+    },
+    {
+      "path": "amap/schema_v3_drift.json",
+      "sha256": "cb5b53b9e8b3a8f77adb191aa073dcbca03a8bec41837ea11eb09f37e0a4883d"
+    },
+    {
+      "path": "amap/success.json",
+      "sha256": "209fa7b83bd5c454f00a1828e16f68c004b9b18ddebe531acf3d61d208270975"
+    },
+    {
+      "path": "amap/timeout.json",
+      "sha256": "d7f74448544065409a5950ca207b3cb3f6dab121bf5d00e16bd368345f037db7"
+    },
+    {
+      "path": "amap/transit.json",
+      "sha256": "019f06ba88360f49ab08bfc2d8f4b3837a3ed57bb251322ff0dd909b3d02242c"
+    },
+    {
+      "path": "amap/unreachable.json",
+      "sha256": "b92b044f304dd0ac7572ddb078ca181022d4e0d0b10aaf82948ac429d32a81e0"
+    },
+    {
+      "path": "amap/walking.json",
+      "sha256": "9201b5af2d1ebfbcaac6d6f7faf5b0ccc0acae04b58ebd75d391570308f0248b"
+    },
+    {
+      "path": "amap/wrong_shape.json",
+      "sha256": "fd270ef0d5f55b336eeea8f7fb61bd71da75823959f8a008091b71b1b9d915e0"
+    },
+    {
+      "path": "anysearch/auth.json",
+      "sha256": "b6fe430805e314d726046ea7f69ad4e6a32155fc08e6e100bb6b671dfbdd65f3"
+    },
+    {
+      "path": "anysearch/auto_register.json",
+      "sha256": "a4acb3e89f26da1acf5326eba35e08b26c48bc4f29aaaeea3ed8c05833cb839a"
+    },
+    {
+      "path": "anysearch/empty.json",
+      "sha256": "507f0e3a3272bc46f8e4d81ddaf62b49633c52d0db55346c9406b3713f3b42fd"
+    },
+    {
+      "path": "anysearch/malicious.json",
+      "sha256": "8e2a636863679d61077a5372fde2802923327e1da2c97e9beadfdbfdedfebdbc"
+    },
+    {
+      "path": "anysearch/payment_required.json",
+      "sha256": "956ef50743b4310d017f13483ccc746cb07f3d9bd3263ec6ada0eba10aee6e0e"
+    },
+    {
+      "path": "anysearch/rate_limit.json",
+      "sha256": "127022345a7367c28134f0b34124d6d28c32bead550af39a66daff0b903bee33"
+    },
+    {
+      "path": "anysearch/success.json",
+      "sha256": "7aef4f9ddc8503222fb57451d843bce8d6470af13996f65282c7c4bd8625d328"
+    },
+    {
+      "path": "anysearch/timeout.json",
+      "sha256": "c21274c71533d77c2cabe68580c8ae759a85e03375c3eff1c0d6581988bab9bb"
+    },
+    {
+      "path": "anysearch/usage.json",
+      "sha256": "ff5eb01851269317a9f84c0c68ea68c77d9985445b5e94886c3f69056f7cdf44"
+    },
+    {
+      "path": "anysearch/wrong_shape.json",
+      "sha256": "db6575f4d0211f71f49e67dc35834b1d8aa34bd7fb60b638110a55a849684dfc"
+    },
+    {
+      "path": "flyai/auth.json",
+      "sha256": "e6fa0546d120c934d919f4272f5c1117b22eb052f8c06fe37be7ea2a5735c93e"
+    },
+    {
+      "path": "flyai/empty.json",
+      "sha256": "f974e45de95ef1041a5a9cfad2d1d8403dc38a37fbc308858a472fab2cbc7a6c"
+    },
+    {
+      "path": "flyai/hotel.json",
+      "sha256": "88b408ba1bfc078cd2272b58432237b43f5f3f59c19f9411ce88c6e1c11330d2"
+    },
+    {
+      "path": "flyai/hotel_exact_price.json",
+      "sha256": "ef51e95d573870f440441186f0d69c0b0531ed88044b7c81abfce6cce00d7cb1"
+    },
+    {
+      "path": "flyai/malicious.json",
+      "sha256": "c950c71b123f026b7044e910ca55897613c4bbcbacf2a06b8858135f9da70b72"
+    },
+    {
+      "path": "flyai/non_json.json",
+      "sha256": "86b444e4e47483ab61b00da2fb752d2234a1e145055c786b33afa9bd8a5ecc18"
+    },
+    {
+      "path": "flyai/price_missing.json",
+      "sha256": "7b69be208c3f1d1ca114a9014fb06dc3be32cf79fedfe9d92e096048dd6ee7cd"
+    },
+    {
+      "path": "flyai/rate_limit.json",
+      "sha256": "6e77137300d16c28b2ba69e18716b0c4d11f0a5a84416d2a52bf19b69bb9cdf5"
+    },
+    {
+      "path": "flyai/stderr_error.json",
+      "sha256": "21a620b6833bce9d73267a78af15802b8aa658fd35618577b9237411dc762f5e"
+    },
+    {
+      "path": "flyai/success.json",
+      "sha256": "0de25fd4c4a1771a8aaedb981c0bf3cc232456d2083e5470a3efa6fbbde47fa7"
+    },
+    {
+      "path": "flyai/timeout.json",
+      "sha256": "f7f799f2d94822087cb10355afd3b180389f8e670d437b385111616415c8a079"
+    },
+    {
+      "path": "flyai/trial_limit.json",
+      "sha256": "79eaae11bc3d9aee240a760de6fe81599e94b649051b8e44da04c653158b9fc8"
+    },
+    {
+      "path": "flyai/version_help.json",
+      "sha256": "ab0acdf3cfad49b4f79f17601774c96ef5fbc73afb0bfca64ff51218f5c151eb"
+    },
+    {
+      "path": "flyai/wrong_shape.json",
+      "sha256": "68ab05dde6c6f7f0cef44b526c9538776fa177ff779526b8469344cd098fc4d3"
+    },
+    {
+      "path": "host_web/auth.json",
+      "sha256": "99b47dc4f69596eb75d23c8ddffd095a839381799b949968e7073fce110c6e7c"
+    },
+    {
+      "path": "host_web/conflict.json",
+      "sha256": "1c4a8659b44dc1fe020b7570a6c6291c8919ff5e824cdc491ea5d11d76df0fee"
+    },
+    {
+      "path": "host_web/empty.json",
+      "sha256": "64ef68f569db3cfe15e50b7b7b007c4f65c19650fceaeb10b5a86f3a62b7c3a3"
+    },
+    {
+      "path": "host_web/malicious.json",
+      "sha256": "1bddd17660071a243bb14f36933b98e599fdcd45a183b0eea71ed31a48b56e0a"
+    },
+    {
+      "path": "host_web/not_found.json",
+      "sha256": "1c08ba68c9e352d67bee60f9e16e86dd3de8cb65ea19273cd5c405b8eba1c846"
+    },
+    {
+      "path": "host_web/rate_limit.json",
+      "sha256": "586f7aefa3aec6b481a9177d1e8dc3b82c54a72c9b7253bf71ed9ad0e57737c8"
+    },
+    {
+      "path": "host_web/success.json",
+      "sha256": "aafc7c4b2f7042b05d3e871f3f6f6d767d4ca54ddbc45a5eb5904031f73c9b6a"
+    },
+    {
+      "path": "host_web/timeout.json",
+      "sha256": "0e1274f1f911818ab18cfd87ff4bf5fc3a098c81c65d5797119be8c6f5a2dff1"
+    },
+    {
+      "path": "host_web/wrong_shape.json",
+      "sha256": "e6823ece785e84e881581b03b188cab6d44799039a5931acdd6291ef6ea2180e"
+    },
+    {
+      "path": "rail12306/auth.json",
+      "sha256": "33ca23e13040b724cb6bdc1f7e8d96304824ddbb96fd4f2b9e4e46ca148b583e"
+    },
+    {
+      "path": "rail12306/cross_day.json",
+      "sha256": "89b6991518211938e3c104596e00d924b1aaf0ad048a419f73ce1ee133c54bef"
+    },
+    {
+      "path": "rail12306/empty.json",
+      "sha256": "84a74a8f3d1fe85f3040c918952335b608faa5b9656fd5a472db092ef403a47e"
+    },
+    {
+      "path": "rail12306/malicious.json",
+      "sha256": "c40e7a887bc6d6497e681ecf7fab488ab32937c129df0817ab4daa4130034be2"
+    },
+    {
+      "path": "rail12306/no_seat.json",
+      "sha256": "6eabae276888c93936b2c5d01088e121694dcbb6628aa2c40820a1b44e33fa49"
+    },
+    {
+      "path": "rail12306/outside_presale.json",
+      "sha256": "b6c8a0c547bc1080e0d3031eb00b6643fa702077111a99dc9df1f7d6336fd1aa"
+    },
+    {
+      "path": "rail12306/pipe_drift.json",
+      "sha256": "a0f97c951d3ee4612ec00dff24a4dbf1407161070ef182347f1eb75a50c20968"
+    },
+    {
+      "path": "rail12306/rate_limit.json",
+      "sha256": "b405fd633525f0f03f706b1ec3670e2b769b4f82f53acc07e437561159ca89ba"
+    },
+    {
+      "path": "rail12306/station.json",
+      "sha256": "9b8d5c7cf7c83baeb2e5fbfe59b19f3dafaa43b21d29a28f007001aa972381ab"
+    },
+    {
+      "path": "rail12306/success.json",
+      "sha256": "b0075c6f78b6f255dc7bc50391d3112030e47cbec147d4d33b1e378a3902a1e2"
+    },
+    {
+      "path": "rail12306/timeout.json",
+      "sha256": "25a831fd757306613c8f53b90ca66c204d86030884c3d28810da8f51951e1411"
+    },
+    {
+      "path": "rail12306/transfer.json",
+      "sha256": "dd5056484e156de2dd517a831602375eb42ee10027ac50d4994d5d68ecdd84fc"
+    },
+    {
+      "path": "rail12306/waitlist.json",
+      "sha256": "b754d97f7e00d9a4b599a5bb413749fcc43431b5b49d2669a0627bffe5d24be9"
+    },
+    {
+      "path": "rail12306/wrong_shape.json",
+      "sha256": "cafec4a15fe28ac1ee6e8bfc1951bab5ef20c8c7ee354ba1c6c7794710219beb"
+    },
+    {
+      "path": "variflight/any_wrong_shape.json",
+      "sha256": "842a3a426098083bece41409583cdda3bda8423407080f0ac39d5fd69e230798"
+    },
+    {
+      "path": "variflight/auth.json",
+      "sha256": "dd1dfb9cbcb9e4cc93f29482a1991a7910a28f206e24150421515b90d02a172a"
+    },
+    {
+      "path": "variflight/comfort.json",
+      "sha256": "8680607c20877a849373f06dd2f0e7645ca99a325ddeca4ad4fb28dc7d04a4e9"
+    },
+    {
+      "path": "variflight/empty.json",
+      "sha256": "4904e0be37c32584b72ca4e204310f26c59e87935a834b0db9fd4783e1aabd08"
+    },
+    {
+      "path": "variflight/forbidden.json",
+      "sha256": "d4c4b500e3b1475ae9896ab442718cb0dc893d8b3fc56a2486a3c33058b30480"
+    },
+    {
+      "path": "variflight/malicious.json",
+      "sha256": "b0f4c8b941b3a5aaae981ee7cd1700bdbae345c01e86887d8e3e11192a874895"
+    },
+    {
+      "path": "variflight/rate_limit.json",
+      "sha256": "35d1556f3fd353870964e5fdb456b76c976c34d56b439d0754faafce5c049c54"
+    },
+    {
+      "path": "variflight/raw_price.json",
+      "sha256": "12fea0eec4e9259f7885d33f69451e3fa738fa28ab3258c87cbaee514dfdb461"
+    },
+    {
+      "path": "variflight/success.json",
+      "sha256": "e9e8db8612aef153012747a486a0d165bac6087895a3ce22f9e7f291fa6573ec"
+    },
+    {
+      "path": "variflight/timeout.json",
+      "sha256": "a8d034caa7a41e719ad03feda6a6b4670533b41c0285c8492d06d8e511b576be"
+    },
+    {
+      "path": "variflight/tools_fingerprint.json",
+      "sha256": "7fb483c505bdd0381ec4c9ad2298ed228c9741804acde5ec3d7cd3c0083715e4"
+    },
+    {
+      "path": "variflight/weather.json",
+      "sha256": "06c342906b1b5ba4d5ce89540a89c3130ef341c464aae68b8a21f9de758607b7"
+    },
+    {
+      "path": "variflight/wrong_shape.json",
+      "sha256": "46fd6e92dfa195da7d89386332f94ba20a9279229c78bec2ec1eaf2296321f2e"
+    }
+  ],
+  "fixture_count": 79,
+  "generated_by": "scripts/build_provider_fixtures.py",
+  "manifest_version": 1
+}

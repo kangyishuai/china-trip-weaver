@@ -1,0 +1,15 @@
+{
+  "base_fixture": "tests/fixtures/trips/schema/valid/weekend-live.json",
+  "case_id": "price-type-changed",
+  "expected": {
+    "codes": [
+      "E202"
+    ]
+  },
+  "fixture_version": 1,
+  "replace": {
+    "count": 1,
+    "new": "data-price-type=\"live\"",
+    "old": "data-price-type=\"estimate\""
+  }
+}

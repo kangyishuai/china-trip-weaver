@@ -1,0 +1,24 @@
+$ PYTHONDONTWRITEBYTECODE=1 python3 scripts/12306_apis.py list-tools
+
+Attempt 1, exit 1:
+~/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'.
+Error: Error: get station name js file failed.
+
+Attempt 2, exit 1:
+~/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'.
+Error: Error: get station name js file failed.
+
+Attempt 3, exit 1:
+~/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'.
+Error: Error: get station name js file failed.
+
+$ PYTHONDONTWRITEBYTECODE=1 ~/miniconda3/bin/python3.13 scripts/12306_apis.py list-tools
+Error: Error: get station name js file failed.
+[exit_code=1]
+
+诊断（只读探针）：
+
+- Python 3.13.12 + requests 2.32.5 仍复现，故不是仅由系统 Python 3.9 低于项目要求导致。
+- `requests.get("https://kyfw.12306.cn/otn/lcQuery/init")` 返回 HTTP 200，但最终 URL 是 `https://kyfw.12306.cn/otn/resources/login.html`，页面无 `lc_search_url`。MCP 版对该请求添加 `Accept-Language`，Python Skill 版没有。
+- 缓存原始路径为 `.../scripts/12306_apis.py/../lcquery_path`；`os.stat` 其 parent 得到 `NotADirectoryError: [Errno 20] Not a directory`。正确写法应从 `os.path.dirname(__file__)` 或 `Path(__file__).parent` 起算。
+- 因初始化在所有命令前执行，连 `list-tools` 与 `get-current-date` 都被上述网络/缓存路径阻塞。

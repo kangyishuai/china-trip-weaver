@@ -1,0 +1,104 @@
+{
+  "case_id": "buffer-insufficient",
+  "days": [
+    {
+      "budget_cny": null,
+      "buffer_minutes": 15,
+      "candidates": [
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": "2026-12-10T09:00:00+08:00",
+          "kind": "poi",
+          "locked": true,
+          "ref_id": "buffer-a",
+          "required": true,
+          "title": "前项",
+          "utility": 50,
+          "windows": [
+            {
+              "end_at": "2026-12-10T10:00:00+08:00",
+              "start_at": "2026-12-10T09:00:00+08:00"
+            }
+          ]
+        },
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": "2026-12-10T10:10:00+08:00",
+          "kind": "poi",
+          "locked": true,
+          "ref_id": "buffer-b",
+          "required": true,
+          "title": "后项",
+          "utility": 50,
+          "windows": [
+            {
+              "end_at": "2026-12-10T11:10:00+08:00",
+              "start_at": "2026-12-10T10:10:00+08:00"
+            }
+          ]
+        }
+      ],
+      "date": "2026-12-10",
+      "day_id": "ns-buffer-day",
+      "end_at": "2026-12-10T20:00:00+08:00",
+      "matrix": [
+        {
+          "claim_ids": [
+            "claim-route-buffer-a-buffer-b"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 0,
+          "duration_minutes": 0,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "buffer-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "buffer-b",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-buffer-b-buffer-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 0,
+          "duration_minutes": 0,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "buffer-b",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "buffer-a",
+          "travel_mode": "transit"
+        }
+      ],
+      "max_optional": 8,
+      "max_travel_minutes": null,
+      "start_at": "2026-12-10T09:00:00+08:00",
+      "travel_mode": "transit"
+    }
+  ],
+  "expected": {
+    "conflict_code": "window",
+    "status": "NO_SOLUTION"
+  },
+  "fixture_version": 1,
+  "tags": [
+    "buffer"
+  ]
+}

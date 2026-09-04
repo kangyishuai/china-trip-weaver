@@ -1,0 +1,27 @@
+$ git ls-remote -q <url> HEAD  # 每个 URL 失败时最多重试 3 次
+
+china-travel-assistant attempt=1 exit=0 c258614293535a2713e1d2311060219107327790\tHEAD
+travel-plan-viz attempt=1 exit=0 07d0155080f72607a6f0a74e063bd05c850dcf01\tHEAD
+trip-planner-skill attempt=1 exit=0 624196a743327d310e07a7888ebe60f406716525\tHEAD
+12306-mcp attempt=1 exit=0 ff6439da6f63d7d72181abea4568abd69878c600\tHEAD
+12306-skill attempt=1 exit=0 9942ae99c9517b70c946429426d67d680199913d\tHEAD
+amap-lbs-skill attempt=1 exit=0 cc418173bed7eaad7f40b67a46a09fce69be84eb\tHEAD
+flyai-skill attempt=1 exit=0 f89974d2bd4822e79cf16d1906c9c2a7c900f979\tHEAD
+weekend-city-trip attempt=1 exit=0 f8e3efb9a30350a4935b775be288e984f7c81008\tHEAD
+variflight-mcp attempt=1 exit=0 d515d56204684b3179a75fb9cdd3f4600a0cb128\tHEAD
+trippick attempt=1 exit=0 dbdf53c19fc69a466137471c9f9eb7cfdaa0cd6e\tHEAD
+or-tools attempt=1 exit=0 98c165af62df62b3056c2ee0fca66b24e79097cb\tHEAD
+
+URL 映射：
+
+- `https://github.com/19Chris19/china-travel-assistant.git`
+- `https://github.com/zexuanw958-svg/travel-plan-viz.git`
+- `https://github.com/skywain/trip-planner-skill.git`
+- `https://github.com/Joooook/12306-mcp.git`
+- `https://github.com/Joooook/12306-skill.git`
+- `https://github.com/AMap-Web/amap-lbs-skill.git`
+- `https://github.com/alibaba-flyai/flyai-skill.git`
+- `https://github.com/liangdabiao/weekend-city-trip.git`
+- `https://github.com/variflight/variflight-mcp.git`
+- `https://github.com/zjgttz/trippick.git`
+- `https://github.com/google/or-tools.git`

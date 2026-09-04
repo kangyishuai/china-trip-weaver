@@ -1,0 +1,235 @@
+{
+  "case_id": "weekend-2-basic",
+  "days": [
+    {
+      "budget_cny": null,
+      "buffer_minutes": 10,
+      "candidates": [
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "w2d1-a",
+          "required": false,
+          "title": "核心候选 A",
+          "utility": 90,
+          "windows": []
+        },
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "w2d1-b",
+          "required": false,
+          "title": "核心候选 B",
+          "utility": 70,
+          "windows": []
+        }
+      ],
+      "date": "2026-10-16",
+      "day_id": "w2-basic-1-day",
+      "end_at": "2026-10-16T20:00:00+08:00",
+      "matrix": [
+        {
+          "claim_ids": [
+            "claim-route-w2d1-a-w2d1-b"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 7500,
+          "duration_minutes": 15,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "w2d1-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "w2d1-b",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-w2d1-b-w2d1-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 7500,
+          "duration_minutes": 15,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "w2d1-b",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "w2d1-a",
+          "travel_mode": "transit"
+        }
+      ],
+      "max_optional": 8,
+      "max_travel_minutes": null,
+      "start_at": "2026-10-16T09:00:00+08:00",
+      "travel_mode": "transit"
+    },
+    {
+      "budget_cny": null,
+      "buffer_minutes": 10,
+      "candidates": [
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "w2d2-a",
+          "required": false,
+          "title": "核心候选 A",
+          "utility": 90,
+          "windows": []
+        },
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "w2d2-b",
+          "required": false,
+          "title": "核心候选 B",
+          "utility": 70,
+          "windows": []
+        }
+      ],
+      "date": "2026-10-17",
+      "day_id": "w2-basic-2-day",
+      "end_at": "2026-10-17T20:00:00+08:00",
+      "matrix": [
+        {
+          "claim_ids": [
+            "claim-route-w2d2-a-w2d2-b"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 7500,
+          "duration_minutes": 15,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "w2d2-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "w2d2-b",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-w2d2-b-w2d2-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 7500,
+          "duration_minutes": 15,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "w2d2-b",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "w2d2-a",
+          "travel_mode": "transit"
+        }
+      ],
+      "max_optional": 8,
+      "max_travel_minutes": null,
+      "start_at": "2026-10-17T09:00:00+08:00",
+      "travel_mode": "transit"
+    }
+  ],
+  "expected": {
+    "days": [
+      {
+        "end_at": [
+          "2026-10-16T10:00:00+08:00",
+          "2026-10-16T11:25:00+08:00"
+        ],
+        "excluded": [],
+        "hops": [
+          {
+            "duration_minutes": 15,
+            "from_ref": "w2d1-a",
+            "to_ref": "w2d1-b"
+          }
+        ],
+        "objective_vector": {
+          "cost_cny": 0,
+          "required_selected": 0,
+          "selected": 2,
+          "travel_minutes": 15,
+          "utility": 160
+        },
+        "selected_ids": [
+          "w2d1-a",
+          "w2d1-b"
+        ],
+        "start_at": [
+          "2026-10-16T09:00:00+08:00",
+          "2026-10-16T10:25:00+08:00"
+        ]
+      },
+      {
+        "end_at": [
+          "2026-10-17T10:00:00+08:00",
+          "2026-10-17T11:25:00+08:00"
+        ],
+        "excluded": [],
+        "hops": [
+          {
+            "duration_minutes": 15,
+            "from_ref": "w2d2-a",
+            "to_ref": "w2d2-b"
+          }
+        ],
+        "objective_vector": {
+          "cost_cny": 0,
+          "required_selected": 0,
+          "selected": 2,
+          "travel_minutes": 15,
+          "utility": 160
+        },
+        "selected_ids": [
+          "w2d2-a",
+          "w2d2-b"
+        ],
+        "start_at": [
+          "2026-10-17T09:00:00+08:00",
+          "2026-10-17T10:25:00+08:00"
+        ]
+      }
+    ],
+    "status": "SCHEDULED"
+  },
+  "fixture_version": 1,
+  "tags": [
+    "weekend",
+    "2-day"
+  ]
+}

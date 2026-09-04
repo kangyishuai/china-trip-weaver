@@ -1,0 +1,1966 @@
+{
+  "case_id": "candidate-prune-threshold",
+  "days": [
+    {
+      "budget_cny": null,
+      "buffer_minutes": 5,
+      "candidates": [
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 30,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "prune-a",
+          "required": false,
+          "title": "候选 0",
+          "utility": 100,
+          "windows": []
+        },
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 30,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "prune-b",
+          "required": false,
+          "title": "候选 1",
+          "utility": 99,
+          "windows": []
+        },
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 30,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "prune-c",
+          "required": false,
+          "title": "候选 2",
+          "utility": 98,
+          "windows": []
+        },
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 30,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "prune-d",
+          "required": false,
+          "title": "候选 3",
+          "utility": 97,
+          "windows": []
+        },
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 30,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "prune-e",
+          "required": false,
+          "title": "候选 4",
+          "utility": 96,
+          "windows": []
+        },
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 30,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "prune-f",
+          "required": false,
+          "title": "候选 5",
+          "utility": 95,
+          "windows": []
+        },
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 30,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "prune-g",
+          "required": false,
+          "title": "候选 6",
+          "utility": 94,
+          "windows": []
+        },
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 30,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "prune-h",
+          "required": false,
+          "title": "候选 7",
+          "utility": 93,
+          "windows": []
+        },
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 30,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "prune-i",
+          "required": false,
+          "title": "候选 8",
+          "utility": 92,
+          "windows": []
+        },
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 30,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "prune-j",
+          "required": false,
+          "title": "候选 9",
+          "utility": 91,
+          "windows": []
+        }
+      ],
+      "date": "2026-12-06",
+      "day_id": "prune-day",
+      "end_at": "2026-12-06T20:00:00+08:00",
+      "matrix": [
+        {
+          "claim_ids": [
+            "claim-route-prune-a-prune-b"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-b",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-a-prune-c"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-c",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-a-prune-d"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-d",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-a-prune-e"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-e",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-a-prune-f"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-f",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-a-prune-g"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-g",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-a-prune-h"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-h",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-a-prune-i"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-i",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-a-prune-j"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-j",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-b-prune-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-b",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-a",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-b-prune-c"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-b",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-c",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-b-prune-d"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-b",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-d",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-b-prune-e"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-b",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-e",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-b-prune-f"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-b",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-f",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-b-prune-g"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-b",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-g",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-b-prune-h"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-b",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-h",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-b-prune-i"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-b",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-i",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-b-prune-j"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-b",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-j",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-c-prune-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-c",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-a",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-c-prune-b"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-c",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-b",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-c-prune-d"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-c",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-d",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-c-prune-e"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-c",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-e",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-c-prune-f"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-c",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-f",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-c-prune-g"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-c",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-g",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-c-prune-h"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-c",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-h",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-c-prune-i"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-c",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-i",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-c-prune-j"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-c",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-j",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-d-prune-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-d",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-a",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-d-prune-b"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-d",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-b",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-d-prune-c"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-d",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-c",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-d-prune-e"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-d",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-e",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-d-prune-f"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-d",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-f",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-d-prune-g"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-d",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-g",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-d-prune-h"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-d",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-h",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-d-prune-i"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-d",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-i",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-d-prune-j"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-d",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-j",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-e-prune-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-e",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-a",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-e-prune-b"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-e",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-b",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-e-prune-c"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-e",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-c",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-e-prune-d"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-e",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-d",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-e-prune-f"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-e",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-f",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-e-prune-g"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-e",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-g",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-e-prune-h"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-e",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-h",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-e-prune-i"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-e",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-i",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-e-prune-j"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-e",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-j",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-f-prune-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-f",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-a",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-f-prune-b"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-f",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-b",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-f-prune-c"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-f",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-c",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-f-prune-d"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-f",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-d",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-f-prune-e"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-f",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-e",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-f-prune-g"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-f",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-g",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-f-prune-h"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-f",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-h",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-f-prune-i"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-f",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-i",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-f-prune-j"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-f",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-j",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-g-prune-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-g",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-a",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-g-prune-b"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-g",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-b",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-g-prune-c"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-g",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-c",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-g-prune-d"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-g",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-d",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-g-prune-e"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-g",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-e",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-g-prune-f"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-g",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-f",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-g-prune-h"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-g",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-h",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-g-prune-i"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-g",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-i",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-g-prune-j"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-g",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-j",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-h-prune-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-h",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-a",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-h-prune-b"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-h",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-b",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-h-prune-c"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-h",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-c",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-h-prune-d"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-h",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-d",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-h-prune-e"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-h",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-e",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-h-prune-f"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-h",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-f",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-h-prune-g"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-h",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-g",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-h-prune-i"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-h",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-i",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-h-prune-j"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-h",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-j",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-i-prune-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-i",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-a",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-i-prune-b"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-i",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-b",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-i-prune-c"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-i",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-c",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-i-prune-d"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-i",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-d",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-i-prune-e"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-i",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-e",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-i-prune-f"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-i",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-f",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-i-prune-g"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-i",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-g",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-i-prune-h"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-i",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-h",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-i-prune-j"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-i",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-j",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-j-prune-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-j",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-a",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-j-prune-b"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-j",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-b",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-j-prune-c"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-j",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-c",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-j-prune-d"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-j",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-d",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-j-prune-e"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-j",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-e",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-j-prune-f"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-j",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-f",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-j-prune-g"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-j",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-g",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-j-prune-h"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-j",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-h",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-prune-j-prune-i"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 2500,
+          "duration_minutes": 5,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "prune-j",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "prune-i",
+          "travel_mode": "transit"
+        }
+      ],
+      "max_optional": 8,
+      "max_travel_minutes": null,
+      "start_at": "2026-12-06T09:00:00+08:00",
+      "travel_mode": "transit"
+    }
+  ],
+  "expected": {
+    "days": [
+      {
+        "end_at": [
+          "2026-12-06T09:30:00+08:00",
+          "2026-12-06T10:10:00+08:00",
+          "2026-12-06T10:50:00+08:00",
+          "2026-12-06T11:30:00+08:00",
+          "2026-12-06T12:10:00+08:00",
+          "2026-12-06T12:50:00+08:00",
+          "2026-12-06T13:30:00+08:00",
+          "2026-12-06T14:10:00+08:00"
+        ],
+        "excluded": [
+          {
+            "reason": "capacity",
+            "ref_id": "prune-i"
+          },
+          {
+            "reason": "capacity",
+            "ref_id": "prune-j"
+          }
+        ],
+        "hops": [
+          {
+            "duration_minutes": 5,
+            "from_ref": "prune-a",
+            "to_ref": "prune-b"
+          },
+          {
+            "duration_minutes": 5,
+            "from_ref": "prune-b",
+            "to_ref": "prune-c"
+          },
+          {
+            "duration_minutes": 5,
+            "from_ref": "prune-c",
+            "to_ref": "prune-d"
+          },
+          {
+            "duration_minutes": 5,
+            "from_ref": "prune-d",
+            "to_ref": "prune-e"
+          },
+          {
+            "duration_minutes": 5,
+            "from_ref": "prune-e",
+            "to_ref": "prune-f"
+          },
+          {
+            "duration_minutes": 5,
+            "from_ref": "prune-f",
+            "to_ref": "prune-g"
+          },
+          {
+            "duration_minutes": 5,
+            "from_ref": "prune-g",
+            "to_ref": "prune-h"
+          }
+        ],
+        "objective_vector": {
+          "cost_cny": 0,
+          "required_selected": 0,
+          "selected": 8,
+          "travel_minutes": 35,
+          "utility": 772
+        },
+        "selected_ids": [
+          "prune-a",
+          "prune-b",
+          "prune-c",
+          "prune-d",
+          "prune-e",
+          "prune-f",
+          "prune-g",
+          "prune-h"
+        ],
+        "start_at": [
+          "2026-12-06T09:00:00+08:00",
+          "2026-12-06T09:40:00+08:00",
+          "2026-12-06T10:20:00+08:00",
+          "2026-12-06T11:00:00+08:00",
+          "2026-12-06T11:40:00+08:00",
+          "2026-12-06T12:20:00+08:00",
+          "2026-12-06T13:00:00+08:00",
+          "2026-12-06T13:40:00+08:00"
+        ]
+      }
+    ],
+    "status": "SCHEDULED"
+  },
+  "fixture_version": 1,
+  "tags": [
+    "candidate>8",
+    "capacity"
+  ]
+}

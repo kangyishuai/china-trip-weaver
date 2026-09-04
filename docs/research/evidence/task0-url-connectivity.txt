@@ -1,0 +1,15 @@
+$ curl -sL -o /dev/null -w '%{http_code}' <url>  # 失败时最多重试 3 次
+
+https://developers.openai.com/codex/plugins attempt=1 exit=0 http=200
+https://developers.openai.com/codex/plugins/build attempt=1 exit=0 http=200
+https://developers.openai.com/codex/skills attempt=1 exit=0 http=200
+https://developers.openai.com/codex/mcp attempt=1 exit=0 http=200
+https://developers.openai.com/codex/sandbox attempt=1 exit=0 http=200
+https://developers.openai.com/codex/config-reference attempt=1 exit=35 http=000
+https://developers.openai.com/codex/config-reference attempt=2 exit=35 http=000
+https://developers.openai.com/codex/config-reference attempt=3 exit=35 http=000
+https://developers.openai.com/codex/config-reference FINAL=FAILED_AFTER_3
+https://agentskills.io/specification attempt=1 exit=35 http=000
+https://agentskills.io/specification attempt=2 exit=0 http=200
+https://github.com/openai/plugins attempt=1 exit=0 http=200
+https://github.com/openai/skills attempt=1 exit=0 http=200

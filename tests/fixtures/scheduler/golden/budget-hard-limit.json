@@ -1,0 +1,120 @@
+{
+  "case_id": "budget-hard-limit",
+  "days": [
+    {
+      "budget_cny": 100,
+      "buffer_minutes": 10,
+      "candidates": [
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 70,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "budget-a",
+          "required": false,
+          "title": "高优先候选",
+          "utility": 100,
+          "windows": []
+        },
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 60,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "budget-b",
+          "required": false,
+          "title": "低优先候选",
+          "utility": 60,
+          "windows": []
+        }
+      ],
+      "date": "2026-12-02",
+      "day_id": "budget-day",
+      "end_at": "2026-12-02T20:00:00+08:00",
+      "matrix": [
+        {
+          "claim_ids": [
+            "claim-route-budget-a-budget-b"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 7500,
+          "duration_minutes": 15,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "budget-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "budget-b",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-budget-b-budget-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 7500,
+          "duration_minutes": 15,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "budget-b",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "budget-a",
+          "travel_mode": "transit"
+        }
+      ],
+      "max_optional": 8,
+      "max_travel_minutes": null,
+      "start_at": "2026-12-02T09:00:00+08:00",
+      "travel_mode": "transit"
+    }
+  ],
+  "expected": {
+    "days": [
+      {
+        "end_at": [
+          "2026-12-02T10:00:00+08:00"
+        ],
+        "excluded": [
+          {
+            "reason": "budget",
+            "ref_id": "budget-b"
+          }
+        ],
+        "hops": [],
+        "objective_vector": {
+          "cost_cny": 70,
+          "required_selected": 0,
+          "selected": 1,
+          "travel_minutes": 0,
+          "utility": 100
+        },
+        "selected_ids": [
+          "budget-a"
+        ],
+        "start_at": [
+          "2026-12-02T09:00:00+08:00"
+        ]
+      }
+    ],
+    "status": "SCHEDULED"
+  },
+  "fixture_version": 1,
+  "tags": [
+    "budget"
+  ]
+}

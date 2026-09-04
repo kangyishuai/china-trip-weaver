@@ -1,0 +1,34 @@
+$ python3 scripts/validate_map.py example/广州地图_Anysearch版.html --verbose
+
+🔍 验证: 广州地图_Anysearch版.html
+--------------------------------------------------
+  ✅ 文件大小: 35493 bytes
+  ✅ 无未替换的模板占位符
+  ✅ 中心坐标 (113.303, 23.120) 不是北京回退(除非无地点)
+  ✅ 坐标: 58/58 已编码
+  ✅ 无 NaN 坐标 (发现 0 个)
+  ✅ 坐标在中国范围内 (超出: 0)
+  📊 总计: 58 地点, 58 已编码
+  🎯 中心: (113.303, 23.120) zoom=13
+  📅 日期: 2026/7/18-19
+  ✅ 全部通过
+
+[exit_code=0]
+
+$ python3 scripts/md_to_html.py --help
+  File ".../scripts/md_to_html.py", line 359
+    html.append(f'<li>{inline_format(re.sub(r"^[-*+]\s+", "", stripped))}</li>')
+                                                                               ^
+SyntaxError: f-string expression part cannot include a backslash
+
+系统 python3=3.9.6；README 声称 Python 3.7+，故该错误违反声明的最低版本。
+
+$ ~/miniconda3/bin/python3.13 scripts/md_to_html.py example/广州本周末调查报告_Anysearch版.md research/evidence/weekend-city-trip-report.html
+✓ 已生成: <workspace>/research/evidence/weekend-city-trip-report.html
+  源文件: example/广州本周末调查报告_Anysearch版.md
+  大小: 57.2 KB
+  引擎: fallback
+  提示: 使用了兜底转换器(无外部依赖),如需完整 GFM 支持请安装:
+        pip install markdown pymdown-extensions
+
+[exit_code=0]

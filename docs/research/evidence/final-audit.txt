@@ -1,0 +1,33 @@
+$ final audit
+
+audit_time=2026-09-03T16:46:10+0800
+top_level:
+./BLOCKED.md
+./PROGRESS.md
+./research
+workspace_git=absent
+project_docs=11
+summary_docs=5
+reference_status:
+research/refs/12306-mcp: CLEAN
+research/refs/12306-skill: CLEAN
+research/refs/amap-lbs-skill: CLEAN
+research/refs/china-travel-assistant: CLEAN
+research/refs/flyai-skill: CLEAN
+research/refs/openai-plugins: CLEAN
+research/refs/openai-skills: CLEAN
+research/refs/travel-plan-viz: CLEAN
+research/refs/trip-planner-skill: CLEAN
+research/refs/trippick: CLEAN
+research/refs/variflight-mcp: CLEAN
+research/refs/weekend-city-trip: CLEAN
+matrix_status_links=132
+matrix_rows=12
+project_docs_with_12_anchors=11
+design_insights=23
+open_questions=14
+structural_checks=OK
+mandatory_evidence=OK
+
+[exit_code=0]
+

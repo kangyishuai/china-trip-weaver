@@ -1,0 +1,75 @@
+{
+  "captured_at": "2026-09-04T00:00:00+08:00",
+  "case": "hotel",
+  "contains_personal_data": false,
+  "credential_state": "missing",
+  "expected": {
+    "error_class": null,
+    "health_status": "ready",
+    "item_count": 1,
+    "sanitized": false,
+    "schema_refs": [
+      "#/$defs/lodging"
+    ],
+    "transport_calls": 1
+  },
+  "fixture_version": 1,
+  "provider": "flyai",
+  "provider_version": "1.0.16",
+  "redacted": false,
+  "request": {
+    "as_of": "2026-10-16",
+    "cache_policy": "bypass",
+    "capability": "lodging",
+    "deadline_ms": 1000,
+    "parameters": {
+      "check_in": "2026-09-10",
+      "check_out": "2026-09-11",
+      "city": "上海",
+      "travelers": 2
+    },
+    "request_id": "fixture-request",
+    "trace": {
+      "stage": "provider-fixture"
+    }
+  },
+  "source": "locally generated synthetic keyless FlyAI-shaped response; contains no captured provider data",
+  "transport": {
+    "body": {
+      "cliVersion": "1.0.16",
+      "commands": [
+        "search-hotel",
+        "search-flight"
+      ],
+      "data": {
+        "itemList": [
+          {
+            "address": "示例路100号",
+            "detailUrl": "https://www.fliggy.com/hotel/search",
+            "interestsPoi": "近示例地标",
+            "latitude": "31.000000",
+            "longitude": "121.000000",
+            "name": "示例酒店·人民广场店",
+            "price": "¥1xx",
+            "shId": "SYNTHETIC-HOTEL-1001",
+            "star": "示例型"
+          }
+        ]
+      },
+      "message": "success",
+      "probe": {
+        "command": "search-hotel",
+        "flags": [
+          "--dest-name",
+          "--check-in-date",
+          "--check-out-date"
+        ]
+      },
+      "status": 0,
+      "systemMessage": "synthetic fixture; no provider request was made"
+    },
+    "headers": {},
+    "kind": "response",
+    "status_code": 200
+  }
+}

@@ -1,0 +1,232 @@
+{
+  "case_id": "weekend-2-rain",
+  "days": [
+    {
+      "budget_cny": null,
+      "buffer_minutes": 10,
+      "candidates": [
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "wr1-a",
+          "required": false,
+          "title": "核心候选 A",
+          "utility": 90,
+          "windows": []
+        },
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "wr1-b",
+          "required": false,
+          "title": "核心候选 B",
+          "utility": 70,
+          "windows": []
+        }
+      ],
+      "date": "2026-10-20",
+      "day_id": "w2-rain-1-day",
+      "end_at": "2026-10-20T20:00:00+08:00",
+      "matrix": [
+        {
+          "claim_ids": [
+            "claim-route-wr1-a-wr1-b"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 7500,
+          "duration_minutes": 15,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "wr1-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "wr1-b",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-wr1-b-wr1-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 7500,
+          "duration_minutes": 15,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "wr1-b",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "wr1-a",
+          "travel_mode": "transit"
+        }
+      ],
+      "max_optional": 8,
+      "max_travel_minutes": null,
+      "start_at": "2026-10-20T09:00:00+08:00",
+      "travel_mode": "transit"
+    },
+    {
+      "budget_cny": null,
+      "buffer_minutes": 10,
+      "candidates": [
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "rain-a",
+          "required": false,
+          "title": "室内展览",
+          "utility": 90,
+          "windows": []
+        },
+        {
+          "blocked_reason": "weather",
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "rain-b",
+          "required": false,
+          "title": "户外步行",
+          "utility": 80,
+          "windows": []
+        }
+      ],
+      "date": "2026-10-21",
+      "day_id": "w2-rain-2-day",
+      "end_at": "2026-10-21T20:00:00+08:00",
+      "matrix": [
+        {
+          "claim_ids": [
+            "claim-route-rain-a-rain-b"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 7500,
+          "duration_minutes": 15,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "rain-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "rain-b",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-rain-b-rain-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 7500,
+          "duration_minutes": 15,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "rain-b",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "rain-a",
+          "travel_mode": "transit"
+        }
+      ],
+      "max_optional": 8,
+      "max_travel_minutes": null,
+      "start_at": "2026-10-21T09:00:00+08:00",
+      "travel_mode": "transit"
+    }
+  ],
+  "expected": {
+    "days": [
+      {
+        "end_at": [
+          "2026-10-20T10:00:00+08:00",
+          "2026-10-20T11:25:00+08:00"
+        ],
+        "excluded": [],
+        "hops": [
+          {
+            "duration_minutes": 15,
+            "from_ref": "wr1-a",
+            "to_ref": "wr1-b"
+          }
+        ],
+        "objective_vector": {
+          "cost_cny": 0,
+          "required_selected": 0,
+          "selected": 2,
+          "travel_minutes": 15,
+          "utility": 160
+        },
+        "selected_ids": [
+          "wr1-a",
+          "wr1-b"
+        ],
+        "start_at": [
+          "2026-10-20T09:00:00+08:00",
+          "2026-10-20T10:25:00+08:00"
+        ]
+      },
+      {
+        "end_at": [
+          "2026-10-21T10:00:00+08:00"
+        ],
+        "excluded": [
+          {
+            "reason": "weather",
+            "ref_id": "rain-b"
+          }
+        ],
+        "hops": [],
+        "objective_vector": {
+          "cost_cny": 0,
+          "required_selected": 0,
+          "selected": 1,
+          "travel_minutes": 0,
+          "utility": 90
+        },
+        "selected_ids": [
+          "rain-a"
+        ],
+        "start_at": [
+          "2026-10-21T09:00:00+08:00"
+        ]
+      }
+    ],
+    "status": "SCHEDULED"
+  },
+  "fixture_version": 1,
+  "tags": [
+    "weekend",
+    "2-day",
+    "weather"
+  ]
+}

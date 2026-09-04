@@ -1,0 +1,105 @@
+{
+  "case_id": "arrival-after-locked",
+  "days": [
+    {
+      "budget_cny": null,
+      "buffer_minutes": 10,
+      "candidates": [
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": "2026-12-10T09:00:00+08:00",
+          "kind": "transport",
+          "locked": true,
+          "ref_id": "late-a",
+          "required": true,
+          "title": "到达交通",
+          "utility": 100,
+          "windows": [
+            {
+              "end_at": "2026-12-10T10:00:00+08:00",
+              "start_at": "2026-12-10T09:00:00+08:00"
+            }
+          ]
+        },
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 60,
+          "fixed_start": "2026-12-10T10:30:00+08:00",
+          "kind": "poi",
+          "locked": true,
+          "ref_id": "late-b",
+          "required": true,
+          "title": "锁定活动",
+          "utility": 100,
+          "windows": [
+            {
+              "end_at": "2026-12-10T11:30:00+08:00",
+              "start_at": "2026-12-10T10:30:00+08:00"
+            }
+          ]
+        }
+      ],
+      "date": "2026-12-10",
+      "day_id": "ns-late-day",
+      "end_at": "2026-12-10T20:00:00+08:00",
+      "matrix": [
+        {
+          "claim_ids": [
+            "claim-route-late-a-late-b"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 30000,
+          "duration_minutes": 60,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "late-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "late-b",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-late-b-late-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 30000,
+          "duration_minutes": 60,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "late-b",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "late-a",
+          "travel_mode": "transit"
+        }
+      ],
+      "max_optional": 8,
+      "max_travel_minutes": null,
+      "start_at": "2026-12-10T09:00:00+08:00",
+      "travel_mode": "transit"
+    }
+  ],
+  "expected": {
+    "conflict_code": "window",
+    "status": "NO_SOLUTION"
+  },
+  "fixture_version": 1,
+  "tags": [
+    "transport",
+    "locked"
+  ]
+}

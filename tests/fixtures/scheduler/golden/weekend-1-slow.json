@@ -1,0 +1,126 @@
+{
+  "case_id": "weekend-1-slow",
+  "days": [
+    {
+      "budget_cny": null,
+      "buffer_minutes": 20,
+      "candidates": [
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 150,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "slow-a",
+          "required": false,
+          "title": "慢节奏博物馆",
+          "utility": 90,
+          "windows": []
+        },
+        {
+          "blocked_reason": null,
+          "closed": false,
+          "cost_cny": 0,
+          "duration_minutes": 120,
+          "fixed_start": null,
+          "kind": "poi",
+          "locked": false,
+          "ref_id": "slow-b",
+          "required": false,
+          "title": "慢节奏街区",
+          "utility": 70,
+          "windows": []
+        }
+      ],
+      "date": "2026-10-17",
+      "day_id": "w1-slow-day",
+      "end_at": "2026-10-17T20:00:00+08:00",
+      "matrix": [
+        {
+          "claim_ids": [
+            "claim-route-slow-a-slow-b"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 10000,
+          "duration_minutes": 20,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "slow-a",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "slow-b",
+          "travel_mode": "transit"
+        },
+        {
+          "claim_ids": [
+            "claim-route-slow-b-slow-a"
+          ],
+          "degradation_rung": "R0",
+          "distance_meters": 10000,
+          "duration_minutes": 20,
+          "estimate_method": null,
+          "fare": null,
+          "from_ref": "slow-b",
+          "geometry_ref": null,
+          "mode": "live",
+          "provider": "synthetic-route-fixture",
+          "provider_version": "1",
+          "queried_at": "2026-09-04T00:00:00+08:00",
+          "reachable": true,
+          "to_ref": "slow-a",
+          "travel_mode": "transit"
+        }
+      ],
+      "max_optional": 8,
+      "max_travel_minutes": null,
+      "start_at": "2026-10-17T09:00:00+08:00",
+      "travel_mode": "transit"
+    }
+  ],
+  "expected": {
+    "days": [
+      {
+        "end_at": [
+          "2026-10-17T11:30:00+08:00",
+          "2026-10-17T14:10:00+08:00"
+        ],
+        "excluded": [],
+        "hops": [
+          {
+            "duration_minutes": 20,
+            "from_ref": "slow-a",
+            "to_ref": "slow-b"
+          }
+        ],
+        "objective_vector": {
+          "cost_cny": 0,
+          "required_selected": 0,
+          "selected": 2,
+          "travel_minutes": 20,
+          "utility": 160
+        },
+        "selected_ids": [
+          "slow-a",
+          "slow-b"
+        ],
+        "start_at": [
+          "2026-10-17T09:00:00+08:00",
+          "2026-10-17T12:10:00+08:00"
+        ]
+      }
+    ],
+    "status": "SCHEDULED"
+  },
+  "fixture_version": 1,
+  "tags": [
+    "weekend",
+    "1-day",
+    "pace-slow"
+  ]
+}

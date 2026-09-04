@@ -1,0 +1,20 @@
+{
+  "base_fixture": "tests/fixtures/trips/schema/valid/weekend-live.json",
+  "case_id": "supported-key-assignment",
+  "expected": {
+    "codes": [
+      "E104"
+    ]
+  },
+  "fixture_version": 1,
+  "replace": {
+    "count": 1,
+    "new_parts": [
+      "<p>",
+      "AMAP_",
+      "WEBSERVICE_KEY",
+      " = ctw-render-canary</p></footer>"
+    ],
+    "old": "</footer>"
+  }
+}

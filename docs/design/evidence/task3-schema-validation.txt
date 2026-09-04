@@ -1,0 +1,14 @@
+$ ~/miniconda3/bin/python3 design/schema/check_schema.py design/schema/trip.schema.json design/schema/examples/valid
+PASS design/schema/examples/valid/multicity-static.json
+PASS design/schema/examples/valid/weekend-live.json
+exit 0
+
+$ ~/miniconda3/bin/python3 design/schema/check_schema.py design/schema/trip.schema.json design/schema/examples/invalid
+FAIL design/schema/examples/invalid/claim-missing-source.json: 'source_url' is a required property
+FAIL design/schema/examples/invalid/coordinate-missing-crs.json: {'native': {'lng': 116.397, 'lat': 39.918}, 'wgs84': {'lng': 116.391, 'lat': 39.917}, 'gcj02': {'lng': 116.397, 'lat': 39.918}, 'conversion': {'status': 'converted', 'method': 'gcj02-to-wgs84', 'version': 'ctw-1', 'derived_fields': ['wgs84'], 'converted_at': '2026-09-03T09:50:00+08:00', 'accuracy_m': 10}} is not valid under any of the given schemas
+FAIL design/schema/examples/invalid/mock-missing-notice.json: 'mock_notice' is a required property
+FAIL design/schema/examples/invalid/price-missing-type.json: {'amount': 20, 'currency': 'CNY', 'unit': 'per_person', 'includes_taxes': True, 'queried_at': '2026-09-03T09:45:00+08:00', 'claim_id': 'claim-price'} is not valid under any of the given schemas
+exit 1
+
+$ wc -l design/schema/check_schema.py
+46 design/schema/check_schema.py

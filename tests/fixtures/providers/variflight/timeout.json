@@ -1,0 +1,44 @@
+{
+  "captured_at": "2026-09-04T00:00:00+08:00",
+  "case": "timeout",
+  "contains_personal_data": false,
+  "credential_state": "configured",
+  "expected": {
+    "error_class": "timeout",
+    "health_status": "degraded",
+    "item_count": 0,
+    "sanitized": false,
+    "schema_refs": [],
+    "transport_calls": 2
+  },
+  "fixture_version": 1,
+  "provider": "variflight",
+  "provider_version": "1.0.3",
+  "redacted": false,
+  "request": {
+    "as_of": "2026-10-16",
+    "cache_policy": "bypass",
+    "capability": "flight",
+    "deadline_ms": 1000,
+    "parameters": {
+      "action": "search",
+      "arr_city": "SHA",
+      "date": "2026-09-10",
+      "dep_city": "BJS",
+      "from_ref": "airport-pek",
+      "subject_ref": "leg-flight",
+      "subject_refs_by_service": {
+        "XX1001": "leg-flight"
+      },
+      "to_ref": "airport-sha"
+    },
+    "request_id": "fixture-request",
+    "trace": {
+      "stage": "provider-fixture"
+    }
+  },
+  "source": "locally generated synthetic contract response; never captured from a provider",
+  "transport": {
+    "kind": "timeout"
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "captured_at": "2026-09-04T00:00:00+08:00",
+  "case": "api_forbidden",
+  "contains_personal_data": false,
+  "credential_state": "configured",
+  "expected": {
+    "error_class": "forbidden",
+    "health_status": "forbidden",
+    "item_count": 0,
+    "sanitized": false,
+    "schema_refs": [],
+    "transport_calls": 1
+  },
+  "fixture_version": 1,
+  "provider": "amap",
+  "provider_version": "web-service-v5-v3-route",
+  "redacted": false,
+  "request": {
+    "as_of": "2026-10-16",
+    "cache_policy": "bypass",
+    "capability": "geocode",
+    "deadline_ms": 1000,
+    "parameters": {
+      "address": "上海博物馆",
+      "city": "上海",
+      "subject_ref": "poi-a"
+    },
+    "request_id": "fixture-request",
+    "trace": {
+      "stage": "provider-fixture"
+    }
+  },
+  "source": "locally generated synthetic AMap-shaped response; contains no captured provider data; response used an intentionally invalid canary credential",
+  "transport": {
+    "body": {
+      "api": "geocode-v3",
+      "info": "INVALID_USER_KEY",
+      "infocode": "10001",
+      "status": "0"
+    },
+    "headers": {},
+    "kind": "response",
+    "status_code": 200
+  }
+}

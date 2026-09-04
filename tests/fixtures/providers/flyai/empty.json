@@ -1,0 +1,61 @@
+{
+  "captured_at": "2026-09-04T00:00:00+08:00",
+  "case": "empty",
+  "contains_personal_data": false,
+  "credential_state": "configured",
+  "expected": {
+    "error_class": "no_results",
+    "health_status": "ready",
+    "item_count": 0,
+    "sanitized": false,
+    "schema_refs": [],
+    "transport_calls": 1
+  },
+  "fixture_version": 1,
+  "provider": "flyai",
+  "provider_version": "1.0.16",
+  "redacted": false,
+  "request": {
+    "as_of": "2026-10-16",
+    "cache_policy": "bypass",
+    "capability": "flight",
+    "deadline_ms": 1000,
+    "parameters": {
+      "date": "2026-09-10",
+      "destination": "上海",
+      "from_ref": "city-beijing",
+      "origin": "北京",
+      "to_ref": "city-shanghai"
+    },
+    "request_id": "fixture-request",
+    "trace": {
+      "stage": "provider-fixture"
+    }
+  },
+  "source": "locally generated synthetic configured-key FlyAI-shaped response; contains no captured provider data; synthetic no-result envelope",
+  "transport": {
+    "body": {
+      "cliVersion": "1.0.16",
+      "commands": [
+        "search-hotel",
+        "search-flight"
+      ],
+      "data": null,
+      "message": "示例结果为空",
+      "probe": {
+        "command": "search-flight",
+        "flags": [
+          "--origin",
+          "--destination",
+          "--dep-date",
+          "--journey-type"
+        ]
+      },
+      "status": 1,
+      "systemMessage": "synthetic fixture; no provider request was made"
+    },
+    "headers": {},
+    "kind": "response",
+    "status_code": 200
+  }
+}

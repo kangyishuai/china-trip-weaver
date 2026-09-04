@@ -1,0 +1,58 @@
+{
+  "captured_at": "2026-09-04T00:00:00+08:00",
+  "case": "riding",
+  "contains_personal_data": false,
+  "credential_state": "configured",
+  "expected": {
+    "error_class": null,
+    "health_status": "ready",
+    "item_count": 1,
+    "sanitized": false,
+    "schema_refs": [
+      "#/$defs/transportLeg"
+    ],
+    "transport_calls": 1
+  },
+  "fixture_version": 1,
+  "provider": "amap",
+  "provider_version": "web-service-v5-v3-route",
+  "redacted": false,
+  "request": {
+    "as_of": "2026-10-16",
+    "cache_policy": "bypass",
+    "capability": "route",
+    "deadline_ms": 1000,
+    "parameters": {
+      "city": "上海",
+      "destination": "121.1000000,31.1000000",
+      "destination_city": "上海",
+      "from_ref": "poi-a",
+      "origin": "121.0000000,31.0000000",
+      "to_ref": "poi-b",
+      "travel_mode": "ride"
+    },
+    "request_id": "fixture-request",
+    "trace": {
+      "stage": "provider-fixture"
+    }
+  },
+  "source": "locally generated synthetic AMap-shaped response; contains no captured provider data",
+  "transport": {
+    "body": {
+      "api": "route-riding-v4",
+      "data": {
+        "paths": [
+          {
+            "distance": 1800,
+            "duration": 800
+          }
+        ]
+      },
+      "errcode": 0,
+      "errmsg": "OK"
+    },
+    "headers": {},
+    "kind": "response",
+    "status_code": 200
+  }
+}
