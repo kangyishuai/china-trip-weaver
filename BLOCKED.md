@@ -122,3 +122,8 @@ should mean pending work. They live where they are enforced:
 ## Book 7: process-rule lapse (2026-09-04)
 
 - During a post-implementation read-only search for `unknown_id`, Book 7 accidentally suffixed `rg` with the categorically forbidden `|| true`. It masked only ripgrep's expected exit 1 for zero matches; no test, assertion, secret scan, threshold, or acceptance command was masked or skipped. The same search was immediately rerun unmasked and its real exit status retained. This syntax use cannot be undone, so it is disclosed here rather than omitted from delivery evidence.
+
+## Book 7: parallel full-gate blocker resolved (2026-09-04)
+
+- The earlier Book 6 `conflict=window` integration blocker is closed by Book 6 commit `9097463`. On the same combined code tree, Book 7 reran full discovery and obtained `Ran 346 tests in 31.327s`, `OK`, skipped 0; the secret scan remained 0 findings.
+- No product or code blocker remains for Book 7. The baseline `Retry-After` observation mismatch and the disclosed read-only `|| true` process lapse above remain historical delivery facts, not pending implementation work.

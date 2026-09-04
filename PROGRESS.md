@@ -745,3 +745,22 @@ OK
 
 - 最终静态门禁：`scripts/scan_secrets.py` → `0 finding(s) across 357 file(s)`；`git diff --check`、两文件 `cmp -s`、planning/scheduler `py_compile` 均 exit 0；两份 schema SHA-256 同为 `66a951fc3b52d44b7371202c53ecadcf3559136d142e70bf6a7496c036873f63`；package 与 manifest 版本仍 `0.2.0`。
 - 书 6 最终验收轮次：10/14（3 次意图性反向红不计）；未触发连续三败止损。
+
+## 书 7 最终交付
+
+- 独占代码、测试与两份相关 Skill 已以 `3f2082d Add provider resilience and CLI helpers` 提交；该提交精确 10 个书 7 路径、`1378 insertions(+), 30 deletions(-)`，未夹带书 6 源码。
+- 书 6 随后以 `9097463` 提交其 planning/schema/scheduler 工作和此前共享日志；提交后工作树一度完全干净，证明两份所有权已分离。
+- 最终联合全量（书 6 最后代码 + 书 7 最后代码）`/usr/bin/python3 -m unittest discover -s tests` 原始收尾：
+
+```text
+................
+----------------------------------------------------------------------
+Ran 346 tests in 31.327s
+
+OK
+```
+
+- skipped 0；高于要求的 ≥330。最终 `/usr/bin/python3 scripts/scan_secrets.py` 为 `secret scan: 0 finding(s) across 357 file(s)`。
+- 版本保持 `0.2.0`；未运行 demo、未 pip/npm install、未安装进 Codex、未修改 CI。所有指定红→绿证据、doctor 两模式与 progress 原始事件均在书 7 上述小节。
+- 流程偏差如实保留在 `BLOCKED.md`：一次只读无命中 grep 曾误用禁用的 `|| true`；它未掩盖验收失败，但按任务书的绝对措辞仍是已披露的不合格点。
+- 书 7 最终验收轮次：7/14；无连续三败，代码功能与全部自动验收均完成。
