@@ -59,6 +59,13 @@ AMAP_UNAVAILABLE {"amap_calls": ["geocode"], "candidates": [{"city": "多站城"
 - 额外独立门：providers `Ran 94 ... OK`；packaging+tracked synthetic-data `Ran 8 ... OK`；`py_compile` 与 `git diff --check` exit 0。
 - 最终暂存态：全量 `Ran 402 tests in 26.110s ... OK`、skipped 0；secret scan 0/372；铁路+MCP `Ran 23 tests in 4.769s ... OK`；`ALLOWLIST_OK files=6`，禁改路径组合 diff 为空，`VERSION_DIFF_OK changed_version_lines=0`。`BLOCKED.md` 的车站距离项已据实移到 Closed；当前轮次 7/12，书 14 已可提交。
 
+## 书 14 提交后核验（完成）
+
+- 实现提交 `3d1980a36fc47968648cd346426c086764f007f5`（`Add AMap station distance signals`）：6 个白名单文件、650 insertions/47 deletions；包含 `BLOCKED.md` 关闭记录与全部书 14 进度，未吸入并行书 13 hunks。
+- 与书 13 的提交线性共存后，提交后全量 `/usr/bin/python3 -m unittest discover -s tests` → `Ran 402 tests in 26.901s`、`OK`、skipped 0；铁路+MCP 精准门 → `Ran 23 tests in 4.749s`、`OK`、skipped 0；secret scan → `0 finding(s) across 372 file(s)`。
+- 提交范围复核：`FORBIDDEN_DIFF_OK paths=13`、`VERSION_DIFF_OK changed_version_lines=0`；`git show --stat 3d1980a` 仅列 6 个白名单文件。只读版本仍为 `plugin_version=0.4.0`、`package_version=0.4.0`。
+- 最终可读输出仍为 AMap 可用时 `BBX=104m, AAX=1045m, CCX=unknown`，不可用时三站全部保留、无距离且 `rail_health=ready`。代码提交后 `git diff --stat` 无输出；未安装 Codex、未改 CI、未 push。当前轮次 8/12。
+
 ## 住宿链锚定修复开工理解（2026-09-05，≤10 行）
 1. 目标：Journey 必须把候选住宿的 city/check_in/check_out 当作用户已表达的逐夜事实，段边界和每日城市都与它对齐。
 2. 顺序：任务 0 双失败复现 → 先修段边界/城市推进 → 再补无解最近住宿与 unknown 下标校验 → 固化 16 天 6 城 3 人回归。
@@ -1585,3 +1592,12 @@ OK：china-trip-weaver@china-trip-weaver-local 0.3.0 已安装且缓存与源码
 - Journey Schema 新增可选 `segmentation` 事实块；fresh 产物记录 requested/max/actual/strategy/assumptions，且同一说明进入每个子 Trip assumptions。validator 会以 `J_SEGMENT_LENGTHS` 拒绝篡改的实际段长，旧 0.4.0 demo 未被重写且仍兼容。
 - 反向红态：临时令期望参数生成两个 8 天逻辑段，精准测试 exit 1；原始错误为 `ValueError: request must cover between one and seven inclusive days`（`planning.py:370`），`Ran 1 test in 0.013s`、`FAILED (errors=1)`。
 - 还原绿态：撤销临时 8 天注入后 `/usr/bin/python3 -m unittest tests.test_journey -v` → `Ran 32 tests in 2.556s`、`OK`、skipped 0。当前轮次 3/12。
+
+## 书 13 最终验收与提交
+
+- 最终合并态 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）原始摘要：`Ran 402 tests in 28.230s`、`OK`、skipped 0；满足本书要求的 ≥397。
+- 最终 `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 372 file(s)`。
+- 改后同夹具 CLI 原始核心输出：`JOURNEY_PLAN_COMPLETE ... trips=3 days=16 max_trip_days=6 ... journey_sha256=14827632538f31bed68939dd0a8da703d980f0a51ff239aa57a185f3540a2438 errors=0`；紧接 `JOURNEY VALID ... trips=3`；结构核验为 `actual_segment_days=[5,6,5]`、`all_trip_days_at_most_seven=true`、`selected_night_count=15`。
+- 期望值 5 的独立原始摘要：`trips=4`、`actual_segment_days=[4,4,5,3]`、`max_trip_days=5`、`night_city_matches=15/15`、`journey_valid=true`，assumptions 写明 requested/actual 与住宿变化/7 天上限原因。
+- 书 13 代码提交 `279bed2` 只含 Journey Schema、`journey.py`、`tests/test_journey.py`；记录提交 `b28d9c6` 只含 `PROGRESS.md`/`BLOCKED.md`。并行书 14 提交 `3d1980a` 独立夹在两者之间，未混入书 13 提交。
+- 两个书 13 提交对 Trip/candidates Schema、`planning.py`、`candidates.py`、CLI、providers、render、demo、mobility、scheduler、Trip validator、manifest/docs 的路径审计均为空；版本保持 0.4.0，未安装 Codex。`BLOCKED.md` 本轮为“无”。当前轮次 5/12。
