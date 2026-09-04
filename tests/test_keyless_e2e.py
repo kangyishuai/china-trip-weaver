@@ -19,7 +19,15 @@ from china_trip_weaver.clock import FixedClock
 from china_trip_weaver.contracts import canonical_json
 from china_trip_weaver.credentials import resolve_credentials
 from china_trip_weaver.flyai_inventory import AMapLodgingBackend, FlyAIBackend
-from china_trip_weaver.planning import RailBackend, SUPPORTED_KEY_NAMES, _route_specs, plan_trip
+from china_trip_weaver.mobility import MobilityResult
+from china_trip_weaver.planning import (
+    RailBackend,
+    SUPPORTED_KEY_NAMES,
+    _cost_range,
+    _route_specs,
+    _schedule_problems,
+    plan_trip,
+)
 from china_trip_weaver.providers.base import ProviderTimeout, ReplayTransport
 from china_trip_weaver.providers.variflight_mcp import VariFlightMCPTransport
 from china_trip_weaver.render import validate_html
@@ -36,6 +44,79 @@ VARIFLIGHT_SERVER = ROOT / "tests" / "fixtures" / "variflight_mcp_server.py"
 
 def load(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def synthetic_pace_input(pace, poi_count=7, request_overrides=None):
+    request = {
+        "origin": None,
+        "destinations": [{"ref_id": "city-shanghai", "name": "上海", "city": "上海"}],
+        "start_date": "2026-10-16",
+        "end_date": "2026-10-16",
+        "travelers": 2,
+        "budget_cny": 5000,
+        "interests": ["architecture"],
+        "pace": pace,
+        "constraints": [],
+        "assumptions": ["synthetic pace acceptance input"],
+        "locale": "zh-CN",
+        "pasted_notes": None,
+    }
+    if request_overrides:
+        request.update(request_overrides)
+    pois = []
+    claims = []
+    for index in range(poi_count):
+        poi_id = "poi-pace-%d" % (index + 1)
+        claim_id = "claim-pace-%d" % (index + 1)
+        point = {"lng": 121.470 + index * 0.001, "lat": 31.230}
+        pois.append({
+            "poi_id": poi_id,
+            "name": "节奏候选 %d" % (index + 1),
+            "city": "上海",
+            "category": "architecture",
+            "coordinates": {
+                "source_crs": "WGS84",
+                "native": point,
+                "wgs84": point,
+                "gcj02": None,
+                "conversion": {
+                    "status": "not-needed",
+                    "method": "identity",
+                    "version": "1",
+                    "derived_fields": [],
+                    "converted_at": None,
+                    "accuracy_m": None,
+                },
+            },
+            "recommended_duration_minutes": 45,
+            "opening_windows": [],
+            "price": None,
+            "deep_links": ["https://example.com/synthetic-pace/%d" % (index + 1)],
+            "claim_ids": [claim_id],
+        })
+        claims.append({
+            "claim_id": claim_id,
+            "subject_ref": poi_id,
+            "field_path": "/name",
+            "value": "synthetic pace candidate",
+            "source_url": "https://example.com/synthetic-pace/%d" % (index + 1),
+            "provider": "synthetic-e2e",
+            "queried_at": FIXED_NOW,
+            "status": "hypothesis",
+            "confidence": 0.5,
+            "mode": "static",
+            "as_of": None,
+            "raw_ref": None,
+            "response_hash": None,
+            "json_path": None,
+        })
+    return request, {
+        "candidates_version": "1.0.0",
+        "pois": pois,
+        "lodgings": [],
+        "claims": claims,
+        "unknowns": [],
+    }
 
 
 def run_flyai_total_failure_plan():
@@ -123,6 +204,177 @@ class KeylessE2ETests(unittest.TestCase):
         self.assertGreaterEqual(len(result.trip["pois"]), 4)
         self.assertIn("food", {poi["category"] for poi in result.trip["pois"]})
         self.assertGreaterEqual(len(result.trip["unknowns"]), 9)
+
+    def test_same_complete_plan_has_distinct_slow_balanced_full_results(self):
+        outputs = {}
+        expected_counts = {"slow": 3, "balanced": 5, "full": 7}
+        for pace in ("slow", "balanced", "full"):
+            request, candidates = synthetic_pace_input(pace)
+            result = plan_trip(
+                request,
+                candidates,
+                FixedClock.from_iso(FIXED_NOW),
+                RailBackend.from_spec("off", ROOT),
+            )
+            slots = result.trip["days"][0]["slots"]
+            poi_slots = [item for item in slots if item["kind"] == "poi"]
+            self.assertEqual(expected_counts[pace], len(poi_slots), pace)
+            outputs[pace] = [(item["ref_id"], item["start_at"], item["end_at"]) for item in slots]
+            self.assertTrue(validate_trip(result.trip).ok)
+        self.assertEqual(3, len({canonical_json(value) for value in outputs.values()}))
+
+    def test_trip_budget_is_not_copied_into_daily_scheduler_problems(self):
+        request, candidates = synthetic_pace_input("balanced", poi_count=2)
+        problems, _, _ = _schedule_problems(
+            request,
+            [],
+            [],
+            candidates["pois"],
+            MobilityResult((), (), (), {}, ()),
+        )
+        self.assertTrue(problems)
+        self.assertTrue(all("budget_cny" not in problem for problem in problems))
+
+    def test_poi_transport_and_lodging_prices_use_comparable_trip_totals_or_ranges(self):
+        request, _ = synthetic_pace_input("balanced", poi_count=1)
+        request["rooms"] = 1
+
+        def item(amount, unit):
+            return {
+                "price": {
+                    "amount": amount,
+                    "currency": "CNY",
+                    "price_type": "live",
+                    "unit": unit,
+                    "includes_taxes": True,
+                    "claim_id": "claim-price",
+                }
+            }
+
+        poi = _cost_range("poi", item(25, "per_person"), request)
+        transport = _cost_range("transport", item(120, "per_person"), request)
+        lodging_item = item(300, "per_night")
+        lodging_item["selected_nights"] = ["2026-10-16", "2026-10-17"]
+        lodging = _cost_range("lodging", lodging_item, request)
+        self.assertEqual((50, 50), (poi.minimum_cny, poi.maximum_cny))
+        self.assertEqual((240, 240), (transport.minimum_cny, transport.maximum_cny))
+        self.assertEqual((600, 600), (lodging.minimum_cny, lodging.maximum_cny))
+
+        request.pop("rooms")
+        ranged = _cost_range("lodging", lodging_item, request)
+        self.assertEqual((600, 1200), (ranged.minimum_cny, ranged.maximum_cny))
+        self.assertIn("room count is missing", ranged.reason)
+
+    def test_g9_balanced_senior_gets_meals_rest_recovery_and_pace_limits(self):
+        request, candidates = synthetic_pace_input(
+            "balanced",
+            poi_count=4,
+            request_overrides={
+                "mobility_profile": {
+                    "senior": True,
+                    "age": 66,
+                    "fitness_level": "good",
+                },
+            },
+        )
+        heavy_ids = set()
+        for poi in candidates["pois"]:
+            poi["physical_intensity"] = "heavy"
+            heavy_ids.add(poi["poi_id"])
+        result = plan_trip(
+            request,
+            candidates,
+            FixedClock.from_iso(FIXED_NOW),
+            RailBackend.from_spec("off", ROOT),
+        )
+        self.assertTrue(validate_trip(result.trip).ok)
+        day = result.trip["days"][0]
+        slots = day["slots"]
+        meal_slots = [item for item in slots if item["kind"] == "meal"]
+        rest_slots = [item for item in slots if item["kind"] == "rest"]
+        poi_slots = [item for item in slots if item["kind"] == "poi"]
+        self.assertEqual(2, len(meal_slots))
+        self.assertTrue(any("午餐" in item["title"] for item in meal_slots))
+        self.assertTrue(any("晚餐" in item["title"] for item in meal_slots))
+        self.assertGreaterEqual(len(rest_slots), 3)
+        self.assertLessEqual(len(poi_slots), 5)
+        self.assertGreater(day["planned_walking_km"], 0)
+        self.assertLessEqual(
+            day["planned_walking_km"],
+            2.5 * max(1, len(poi_slots) + len(meal_slots) - 1),
+        )
+        self.assertGreaterEqual(min(item["start_at"][11:16] for item in slots), "08:30")
+        self.assertLessEqual(max(item["end_at"][11:16] for item in slots), "21:30")
+        heavy_positions = [
+            index for index, item in enumerate(slots) if item["ref_id"] in heavy_ids
+        ]
+        self.assertGreaterEqual(len(heavy_positions), 2)
+        for left, right in zip(heavy_positions, heavy_positions[1:]):
+            self.assertTrue(
+                any(item["kind"] == "rest" for item in slots[left + 1:right]),
+                slots[left:right + 1],
+            )
+
+    def test_complete_plan_uses_known_poi_costs_for_budget_downgrade(self):
+        request, candidates = synthetic_pace_input("balanced", poi_count=2)
+        request["budget_cny"] = 150
+        for index, poi in enumerate(candidates["pois"]):
+            claim_id = "claim-pace-price-%d" % (index + 1)
+            poi["price"] = {
+                "amount": 60,
+                "currency": "CNY",
+                "price_type": "estimate",
+                "unit": "per_person",
+                "includes_taxes": True,
+                "queried_at": FIXED_NOW,
+                "claim_id": claim_id,
+            }
+            poi["claim_ids"].append(claim_id)
+            candidates["claims"].append({
+                "claim_id": claim_id,
+                "subject_ref": poi["poi_id"],
+                "field_path": "/price",
+                "value": 60,
+                "source_url": "https://example.com/synthetic-pace-price/%d" % (index + 1),
+                "provider": "synthetic-e2e",
+                "queried_at": FIXED_NOW,
+                "status": "hypothesis",
+                "confidence": 0.5,
+                "mode": "static",
+                "as_of": None,
+                "raw_ref": None,
+                "response_hash": None,
+                "json_path": None,
+            })
+        within = plan_trip(
+            request,
+            candidates,
+            FixedClock.from_iso(FIXED_NOW),
+            RailBackend.from_spec("off", ROOT),
+        ).trip
+        self.assertEqual(1, len([item for item in within["days"][0]["slots"] if item["kind"] == "poi"]))
+        self.assertEqual(120, within["budget_ledger"]["known_cost_cny"])
+        self.assertLessEqual(within["budget_ledger"]["known_cost_cny"], request["budget_cny"])
+
+        request["budget_cny"] = 100
+        downgraded = plan_trip(
+            request,
+            candidates,
+            FixedClock.from_iso(FIXED_NOW),
+            RailBackend.from_spec("off", ROOT),
+        ).trip
+        self.assertEqual([], [item for item in downgraded["days"][0]["slots"] if item["kind"] == "poi"])
+        self.assertEqual(0, downgraded["budget_ledger"]["known_cost_cny"])
+
+    def test_every_day_has_required_meals_and_rest_and_cross_city_days_add_buffer(self):
+        trip = self.run_direct().trip
+        for day in trip["days"]:
+            titles = [item["title"] for item in day["slots"]]
+            self.assertTrue(any("午餐" in title for title in titles), day)
+            self.assertTrue(any("晚餐" in title for title in titles), day)
+            self.assertTrue(any(item["kind"] == "rest" and "午休" in item["title"] for item in day["slots"]), day)
+            if any(item["kind"] == "transport" for item in day["slots"]):
+                self.assertTrue(any("换乘缓冲" in title for title in titles), day)
 
     def test_every_dynamic_entity_fact_and_price_is_typed(self):
         trip = self.run_direct().trip

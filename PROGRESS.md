@@ -495,3 +495,253 @@ FAILED (failures=1)
 - `git diff --check` 与白名单审计均 exit 0；当前 17 个 diff 路径全在书 5 白名单，`cli.py`、`planning.py`、schema/、providers/、mobility.py、flyai/variflight inventory、demo/ 与 `tests/test_packaging.py` 的当前 diff 原始输出为空。
 - 插件版本仍 `0.2.0`；本机安装缓存目录最新 mtime 仍为 `Sep 4 17:15:59 2026`，早于本轮，且安装脚本从未以 install 模式运行。
 - 全量门禁同一确定性冲突已复验 2 次；没有放宽断言、改禁碰测试或撤掉必需 manifest 字段。阻塞证据与唯一授权解法已写入 `BLOCKED.md`。
+
+## 书 6 开工理解（2026-09-04，≤10 行）
+
+1. 目标：让 pace 真正约束日窗、POI 数、步行与午休，并让 slow/balanced/full 对同一输入产生可区分日程。
+2. 第二步把预算改为一次性的全程 ledger；已知 POI/交通/住宿成本参与排程，口径不可比或未知价格只进区间与 unknowns，绝不按 0 隐去。
+3. 第三步把午餐、晚餐、午休、跨城 buffer 作为 required candidates；senior 的连续重体力项目之间强制恢复窗。
+4. 实现范围只限书 6 白名单；不碰 CLI、candidates、providers、mobility、render、demo、manifest、版本与安装。
+5. 每项先补强断言，再做意图性反向红、还原全绿；同一验收连续三败即转下一项，最多 14 轮。
+6. 最大风险：现有逐日 scheduler 与全程 ledger 的边界、未知价格的 schema 表达、required 餐休挤压已有 golden 的可行性。
+7. 任务 0 实测：HEAD=origin/main=`176dbc7`、工作树干净；324 tests OK、skipped 0；secret scan 0/357；两组 `rg` 均 exit 1 且零输出。
+## 书 7 开工理解与任务 0（2026-09-04，≤10 行）
+1. 目标：让 FlyAI 限流可控可见，并补齐 NDJSON 进度、四层 doctor probe 与候选文件生成器。
+2. 顺序：并发闸门/一次重试 → progress 五类事件 → doctor 四层 → candidates init/add → 全门禁。
+3. FlyAI 默认全实例共享单并发；AMap 只复用既有 `acquire()` qps 闸门，不另建限流体系。
+4. 限流仅重试一次，遵循 `Retry-After` 或固定上限，health 必须永久保留本次 retry 事实。
+5. `--progress ndjson` 默认关闭；开启后每行独立 JSON，且绝不写 Key、凭据或响应正文。
+6. 不带 `--probe` 的 doctor 必须字节级保持旧形状；probe 分 credential/contract/network/business。
+7. candidates 子命令自动生成稳定 ID、claim/unknown ID 与零基数组 JSON Pointer，产物直接可验证。
+8. 最大风险：跨线程共享 probe/闸门状态、CLI stdout 合同、provider health 数据形状与 Schema 必填项。
+9. 基线：HEAD=origin/main=`176dbc7`，324 tests OK/skipped 0，secret scan 0；`Retry-After` 现有 1 处只为响应头摘录，已记 BLOCKED。
+
+## 书 7 任务 1：并发闸门与一次可见重试（完成）
+
+- FlyAI 真实 subprocess transport 使用进程级单许可闸门，等待时间计入调用 deadline；root/command probe 与业务调用处于同一串行区，因此八并发只执行共享的 2 个 probe。
+- 上游 HTTP/FlyAI 429/402 只对显式 opt-in 的 FlyAI、AMap transport 重试一次；AMap 每次尝试仍经过原 `AMapCallBudget.acquire()`。`Retry-After` 支持秒数/HTTP 日期并截到 2 秒，缺失时固定 0.25 秒。
+- 成功或失败的 Adapter health `reason` 均保留 `rate_limit_retries=1` 与实际 delay，warnings 保留 `rate_limit_retry`；未给其他 provider 或 replay fixture 改调用次数。
+- 首次整体验收暴露 Rail 子类覆写旧 `_failure` 签名，原始摘要为 `Ran 16 tests ... FAILED (errors=5)`、`TypeError: _failure() got an unexpected keyword argument 'rate_limit_retries'`；已保持旧扩展点签名并由新 helper 包装，未改 rail 文件。
+- G8 正向 `/usr/bin/python3 -m unittest tests.test_flyai_live -v`（exit 0）原始摘要：
+
+```text
+test_g8_concurrent_rate_limits_serialize_retry_once_and_dedupe ... ok
+test_g8_rate_limit_retry_stops_after_one_retry ... ok
+----------------------------------------------------------------------
+Ran 16 tests in 1.688s
+
+OK
+```
+
+- 反向验证：临时将 `MAX_RATE_LIMIT_RETRIES` 从 `1` 改为 `float("inf")`，同命令（exit 1）原始关键输出：
+
+```text
+test_g8_rate_limit_retry_stops_after_one_retry ... FAIL
+AssertionError: 'rate_limited' != None
+----------------------------------------------------------------------
+Ran 16 tests in 1.961s
+
+FAILED (failures=1)
+```
+
+- 还原后 FlyAI + AMap + provider corpus：`/usr/bin/python3 -m unittest tests.test_flyai_live tests.test_amap_live tests.test_providers -v` → `Ran 120 tests in 2.097s`、`OK`、skipped 0。
+- 书 7 当前验收轮次：1/14（意图性反向红不计）。
+
+## 书 7 任务 2：`--progress ndjson`（完成）
+
+- `--progress ndjson` 可置于根命令或 provider 子命令后；默认关闭。事件只写 stderr，stdout 的既有 JSON/完成行不变。
+- emitter 只接受 `probe/query/degrade/retry/completion` 五类事件与十个标量白名单字段，拒绝序列化请求参数、argv、URL、响应正文和 diagnostics；线程锁保证并发下每行仍是一个完整 JSON。
+- G8 CLI 测试逐行 `json.loads`，五类事件集合精确为 `{probe,query,degrade,retry,completion}`，真实 synthetic response 的 `itemList`/酒店名与注入 credential 均不在事件流；默认模式 stderr 精确为空。
+- `/usr/bin/python3 -m unittest tests.test_flyai_live tests.test_credentials -v`（exit 0）原始摘要：
+
+```text
+test_progress_is_silent_by_default_and_root_position_is_supported ... ok
+test_progress_ndjson_has_five_allowlisted_event_types_and_scans_clean ... ok
+----------------------------------------------------------------------
+Ran 32 tests in 19.925s
+
+OK
+```
+
+- 反向 secret 验证：向临时 NDJSON 事件加入一个合成 credential prefix 后，`/usr/bin/python3 scripts/scan_secrets.py <temp-event>`（exit 1）原始输出：
+
+```text
+SECRET /private/tmp/ctw-progress-red.JNGl8U:1 credential prefix
+secret scan: 1 finding(s) across 1 file(s)
+```
+
+- 临时事件已删除；还原后的仓库扫描 `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）原始输出：`secret scan: 0 finding(s) across 357 file(s)`。
+- 书 7 当前验收轮次：2/14。
+
+## 书 7 任务 3：`doctor --probe` 四层报告（完成）
+
+- `doctor --probe` 对 amap/flyai/variflight 执行并发、限时、只读的小型 probe；AnySearch 因本 runtime 没有 transport 明确报 `unsupported`，不拿 configured 冒充可用。
+- 每个 provider 只输出 `credential/contract/network/business` 四层枚举，不输出异常文本、URL、请求参数、Key 或响应正文；probe 不改变 doctor 的 conflict exit contract。
+- 改动前后 `plugins/china-trip-weaver/scripts/ctw doctor`（exit 0）原始输出逐字相同：
+
+```text
+{"plugin_version":"0.2.0","providers":{"amap":"configured","anysearch":"configured","flyai":"configured","variflight":"configured"},"python":"3.9.6","schema_exists":true,"schema_version":"1.0.0","skill_conflicts":{"conflicts":{},"status":"clear"}}
+```
+
+- `plugins/china-trip-weaver/scripts/ctw doctor --probe`（exit 0，真实只读调用）原始输出：
+
+```text
+{"plugin_version":"0.2.0","probes":{"amap":{"business":"passed","contract":"passed","credential":"configured","network":"passed"},"anysearch":{"business":"unsupported","contract":"unsupported","credential":"configured","network":"unsupported"},"flyai":{"business":"passed","contract":"passed","credential":"configured","network":"passed"},"variflight":{"business":"not_run","contract":"failed","credential":"configured","network":"passed"}},"providers":{"amap":"configured","anysearch":"configured","flyai":"configured","variflight":"configured"},"python":"3.9.6","schema_exists":true,"schema_version":"1.0.0","skill_conflicts":{"conflicts":{},"status":"clear"}}
+```
+
+- 该实测证明分层有用：VariFlight 的 Key 存在且 MCP 可达，但当前工具指纹契约失败，business 未运行；未把它误报为可用。
+- 反向验证：临时给默认 stdout 加 `DOCTOR ` 前缀，三条冻结测试（exit 1）原始摘要：
+
+```text
+test_runtime_entry_is_executable_and_cwd_independent ... ERROR
+test_cli_validate_and_doctor ... ERROR
+test_doctor_reports_conflict_status_and_keeps_credentials_opaque ... ERROR
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+----------------------------------------------------------------------
+Ran 3 tests in 3.639s
+
+FAILED (errors=3)
+```
+
+- 还原后 `/usr/bin/python3 -m unittest tests.test_credentials tests.test_contracts tests.test_plugin_conflicts tests.test_packaging -v` → `Ran 48 tests in 11.527s`、`OK`、skipped 0；默认 doctor 再次输出上述完全相同字节。
+- 书 7 当前验收轮次：3/14。
+
+## 书 7 任务 4：候选生成器（完成）
+
+- 新增 `ctw candidates init/add-poi/add-lodging`；init 对既有文件 fail closed，只有显式 `--force` 才覆盖。实体与 claim ID 自动按内容稳定生成，未知字段用自动 claim ID 关联。
+- frozen unknown schema 没有 `unknown_id` 字段，因此没有伪造额外字段；unknown 以其自动 `claim_id` 追踪，并按实际 append index 生成可解析 JSON Pointer。
+- POI 可选日期窗、时长、参考价；住宿可选每晚参考价/含税状态。未研究的坐标、窗、时长、价格、含税项均如实成为 unknown，不拿 null 冒充已知。
+- `/usr/bin/python3 -m unittest tests.test_candidates -v`（exit 0）原始摘要：
+
+```text
+test_cli_generator_output_validates_without_manual_edits ... ok
+test_generator_refuses_overwrite_and_duplicate_without_changing_file ... ok
+test_generator_uses_actual_zero_based_index_for_every_append ... ok
+----------------------------------------------------------------------
+Ran 10 tests in 0.381s
+
+OK
+```
+
+- 真实临时文件 CLI 流程（每步 exit 0，文件随后删除）原始输出：
+
+```text
+CANDIDATES_INITIALIZED /tmp/ctw-candidates.en3k1n/candidates.json
+CANDIDATE_POI_ADDED /tmp/ctw-candidates.en3k1n/candidates.json id=poi-3fc6c64453a2
+CANDIDATE_LODGING_ADDED /tmp/ctw-candidates.en3k1n/candidates.json id=lodging-9f19bd21d2a7
+CANDIDATES VALID /tmp/ctw-candidates.en3k1n/candidates.json
+```
+
+- 书 7 当前验收轮次：4/14。
+
+## 书 6 任务 1：pace 真参数（完成）
+
+- scheduler 的唯一 `PACE_PROFILES` 已落地：slow=`09:00–20:00/3 POI/1.5km/90min`，balanced=`08:30–21:30/5/2.5km/60min`，full=`08:00–22:30/7/4km/30min`；planning 将 pace 日窗、POI 上限和步行段阈值传入 scheduler，跨城固定交通仅扩展必要的总包络。
+- 首轮定向验收发现 4 日样例由 10 slots 降至 9：原因是把 transit 全程距离误当步行；改为只有 `travel_mode=walk` 的景点段才应用步行阈值后，`/usr/bin/python3 -m unittest tests.test_scheduler tests.test_keyless_e2e -v` → `Ran 60 tests in 3.471s`、`OK`、skipped 0。
+- 反向红（临时把 slow/full 都同化为 balanced，已还原）原始输出：
+
+```text
+test_same_complete_plan_has_distinct_slow_balanced_full_results ... FAIL
+AssertionError: 3 != 5 : slow
+----------------------------------------------------------------------
+Ran 1 test in 0.022s
+FAILED (failures=1)
+```
+
+- 还原绿原始输出：`Ran 1 test in 0.073s`、`OK`。同一合成候选的原始结果：slow=`09:00` 起，依次 `poi-pace-1..3`，末项 `11:55`；full=`08:00` 起，依次 `poi-pace-1..7`，末项 `15:15`。
+- 书 6 当前验收轮次：2/14（意图性反向红不计）。
+
+## 书 6 任务 2：全程预算与真实成本（完成）
+
+- `schedule_plan(..., budget_cny=...)` 现在先为所有天的 required/locked 已知成本预留，再按剩余全程额度选择 optional；不再向 day problem 写整趟预算。预算 100、后日必选 60、前日可选 70 时保留必选并降配为总成本 60；两日必选 60+50 时返回结构化 `NO_SOLUTION/conflict.code=budget/known_cost_cny=110`。
+- POI/交通的 `per_person` 按 travelers 换算，住宿 `per_night` 按 nights×rooms；缺 rooms 输出 1..travelers 房的区间。unknown/verify-on-click、外币、from-price、税费未确认或单位不适用均不按 0 冒充，scheduler 标记 `unknown_cost_refs`，Trip `budget_ledger` 输出上下界并追加可解析路径的 unknown。
+- 正向：`/usr/bin/python3 -m unittest tests.test_scheduler -v` → `Ran 46 tests in 0.705s`、`OK`、skipped 0；另 `test_trip_budget_is_not_copied_into_daily_scheduler_problems` → `Ran 1 ... OK`。POI 25/人×2=50、交通 120/人×2=240、住宿 300/晚×2晚×1房=600；房数缺失区间=600..1200。
+- 反向红（临时恢复 day problem 的 `"budget_cny": request["budget_cny"]`，已还原）原始输出：
+
+```text
+test_trip_budget_is_not_copied_into_daily_scheduler_problems ... FAIL
+AssertionError: False is not true
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+FAILED (failures=1)
+```
+
+- 还原后书 6 联合验收：`/usr/bin/python3 -m unittest tests.test_scheduler tests.test_keyless_e2e -v` → `Ran 65 tests in 4.431s`、`OK`、skipped 0。
+- 书 6 当前验收轮次：4/14（意图性反向红不计）。
+
+## 书 6 任务 3：餐、休息与恢复窗（完成）
+
+- 每天强制 60 分钟午餐与晚餐；默认允许开始窗分别为 11:00–13:00、16:30–19:30，长途交通覆盖餐窗时选择离目标最近的可行前/后窗口。地点待定餐位以有 planner claim 的 POI 占时，价格为 null 并进 unknown，不虚构店铺或价格。
+- 每天强制 pace 对应午休；每个跨城 rail slot 增加强制 45 分钟行李/进出站换乘 buffer。餐位/休息为 locationless，交通为 route boundary，避免把未知餐厅路线或跨城端点间路线伪造成已知矩阵。
+- request schema 已接受可选 `mobility_profile`（含 senior）、`walking_tolerance_km`、`meal_windows`、`rest_windows`；POI 可标 `physical_intensity`。senior 即使 `fitness_level=good`，两个 heavy POI 之间也必须存在 recovery rest；Trip day 输出 pace 与实际 planned walking km。
+- 首轮餐休联合验收因回程日把未知餐厅间的 4.5km 静态估算当真实移动导致 `window` 无解；改为餐位 locationless 后恢复。最终 `/usr/bin/python3 -m unittest tests.test_scheduler tests.test_keyless_e2e -v` → `Ran 67 tests in 4.489s`、`OK`、skipped 0；G9 单测 `Ran 1 in 0.039s ... OK`。
+- 反向红（临时把午/晚餐、午休与 senior 恢复窗降为 optional，已还原）原始输出：
+
+```text
+test_g9_balanced_senior_gets_meals_rest_recovery_and_pace_limits ... FAIL
+AssertionError: 2 != 1
+----------------------------------------------------------------------
+Ran 1 test in 0.036s
+FAILED (failures=1)
+```
+
+- 还原绿：同一 G9 `Ran 1 test in 0.039s ... OK`。`schedule-china-trip/SKILL.md` 经 bundled skill-creator validator：`Skill is valid!`。
+- 书 6 当前验收轮次：7/14（意图性反向红不计）。
+
+## 书 7 集成门禁（代码与测试完成）
+
+- 第一轮全量在书 6 尚未完成餐休窗口时得到 `Ran 340 tests in 22.464s`、`FAILED (failures=1, errors=16)`；所有 traceback 均止于其独占 `planning.py:255 ... conflict=window`。未越界修补，证据已记 `BLOCKED.md`。
+- 书 6 完成并自行还原窗口可行性后，第二轮 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）原始输出：
+
+```text
+........................................................................................................................................................................................................................................................................................................................................................
+----------------------------------------------------------------------
+Ran 344 tests in 26.739s
+
+OK
+```
+
+- 最终 G8 精确命令 `/usr/bin/python3 -m unittest tests.test_flyai_live -v`（exit 0）：`Ran 20 tests in 2.098s`、`OK`、skipped 0；其中 FlyAI 八并发、一次重试上限、AMap 原 qps gate/Retry-After 两项均 `ok`。
+- 最终 progress/credential 命令 `/usr/bin/python3 -m unittest tests.test_flyai_live tests.test_credentials -v`（exit 0）：`Ran 36 tests in 7.285s`、`OK`、skipped 0。
+- synthetic `--progress ndjson` 原始 stderr（stdout 被单独保留）为：
+
+```text
+{"attempt":1,"capability":"lodging","event":"query","provider":"flyai"}
+{"event":"probe","provider":"flyai","scope":"root","status":"started"}
+{"capability":"search-hotel","event":"probe","provider":"flyai","scope":"command","status":"started"}
+{"attempt":1,"capability":"lodging","error_class":"rate_limited","event":"degrade","provider":"flyai"}
+{"attempt":2,"capability":"lodging","delay_seconds":0.25,"error_class":"rate_limited","event":"retry","provider":"flyai"}
+{"attempt":2,"capability":"lodging","event":"query","provider":"flyai"}
+{"command":"lodging","event":"completion","items":1,"provider":"flyai","status":"ok"}
+```
+
+- `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 357 file(s)`；`git diff --check` 与 compileall 均 exit 0。
+- 书 7 当前验收轮次：6/14；剩余为并行提交归属与最终 forbidden-path/diff 审计。
+
+## 书 6 最终验收（提交前）
+
+- 最终定向：`/usr/bin/python3 -m unittest tests.test_scheduler tests.test_keyless_e2e -v`（exit 0）→ `Ran 69 tests in 4.701s`、`OK`、skipped 0。
+- 最终全量：`/usr/bin/python3 -m unittest discover -s tests`（exit 0）原始输出：
+
+```text
+..........................................................................................................................................................................................................................................................................................................................................................
+----------------------------------------------------------------------
+Ran 346 tests in 26.016s
+
+OK
+```
+
+- 最终 slow 原始日程（同一 7 POI 合成输入）：
+
+```json
+[{"kind":"poi","ref_id":"poi-pace-1","start_at":"2026-10-16T09:00:00+08:00","end_at":"2026-10-16T09:45:00+08:00"},{"kind":"poi","ref_id":"poi-pace-2","start_at":"2026-10-16T10:05:00+08:00","end_at":"2026-10-16T10:50:00+08:00"},{"kind":"poi","ref_id":"poi-pace-3","start_at":"2026-10-16T11:10:00+08:00","end_at":"2026-10-16T11:55:00+08:00"},{"kind":"meal","ref_id":"poi-routine-meal-620a5960f942","start_at":"2026-10-16T11:55:00+08:00","end_at":"2026-10-16T12:55:00+08:00"},{"kind":"rest","ref_id":null,"start_at":"2026-10-16T13:00:00+08:00","end_at":"2026-10-16T14:30:00+08:00"},{"kind":"meal","ref_id":"poi-routine-meal-e3757ee53ef1","start_at":"2026-10-16T16:30:00+08:00","end_at":"2026-10-16T17:30:00+08:00"}]
+```
+
+- 最终 full 原始日程（同一输入）：
+
+```json
+[{"kind":"poi","ref_id":"poi-pace-1","start_at":"2026-10-16T08:00:00+08:00","end_at":"2026-10-16T08:45:00+08:00"},{"kind":"poi","ref_id":"poi-pace-2","start_at":"2026-10-16T09:05:00+08:00","end_at":"2026-10-16T09:50:00+08:00"},{"kind":"poi","ref_id":"poi-pace-3","start_at":"2026-10-16T10:10:00+08:00","end_at":"2026-10-16T10:55:00+08:00"},{"kind":"poi","ref_id":"poi-pace-4","start_at":"2026-10-16T11:15:00+08:00","end_at":"2026-10-16T12:00:00+08:00"},{"kind":"meal","ref_id":"poi-routine-meal-620a5960f942","start_at":"2026-10-16T12:00:00+08:00","end_at":"2026-10-16T13:00:00+08:00"},{"kind":"poi","ref_id":"poi-pace-5","start_at":"2026-10-16T13:20:00+08:00","end_at":"2026-10-16T14:05:00+08:00"},{"kind":"rest","ref_id":null,"start_at":"2026-10-16T14:05:00+08:00","end_at":"2026-10-16T14:35:00+08:00"},{"kind":"poi","ref_id":"poi-pace-6","start_at":"2026-10-16T14:55:00+08:00","end_at":"2026-10-16T15:40:00+08:00"},{"kind":"poi","ref_id":"poi-pace-7","start_at":"2026-10-16T16:00:00+08:00","end_at":"2026-10-16T16:45:00+08:00"},{"kind":"meal","ref_id":"poi-routine-meal-e3757ee53ef1","start_at":"2026-10-16T16:45:00+08:00","end_at":"2026-10-16T17:45:00+08:00"}]
+```
+
+- 最终静态门禁：`scripts/scan_secrets.py` → `0 finding(s) across 357 file(s)`；`git diff --check`、两文件 `cmp -s`、planning/scheduler `py_compile` 均 exit 0；两份 schema SHA-256 同为 `66a951fc3b52d44b7371202c53ecadcf3559136d142e70bf6a7496c036873f63`；package 与 manifest 版本仍 `0.2.0`。
+- 书 6 最终验收轮次：10/14（3 次意图性反向红不计）；未触发连续三败止损。

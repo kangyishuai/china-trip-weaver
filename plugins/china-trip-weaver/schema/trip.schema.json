@@ -27,6 +27,7 @@
     "mode": {"$ref": "#/$defs/dataMode"},
     "mock_notice": {"type": ["string", "null"], "minLength": 1},
     "request": {"$ref": "#/$defs/request"},
+    "budget_ledger": {"$ref": "#/$defs/budgetLedger"},
     "days": {
       "type": "array",
       "minItems": 1,
@@ -203,6 +204,67 @@
         "claim_id": {"type": ["string", "null"]}
       }
     },
+    "costRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minimum", "maximum"],
+      "properties": {
+        "minimum": {"type": ["number", "null"], "minimum": 0},
+        "maximum": {"type": ["number", "null"], "minimum": 0}
+      }
+    },
+    "budgetItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ref_id",
+        "category",
+        "price_type",
+        "amount_min_cny",
+        "amount_max_cny",
+        "basis",
+        "included_in_scheduler",
+        "reason"
+      ],
+      "properties": {
+        "ref_id": {"type": "string", "minLength": 1},
+        "category": {"type": "string", "enum": ["poi", "transport", "lodging"]},
+        "price_type": {
+          "type": ["string", "null"],
+          "enum": ["live", "reference", "estimate", "verify-on-click", "unknown", null]
+        },
+        "amount_min_cny": {"type": ["number", "null"], "minimum": 0},
+        "amount_max_cny": {"type": ["number", "null"], "minimum": 0},
+        "basis": {"type": "string", "minLength": 1},
+        "included_in_scheduler": {"type": "boolean"},
+        "reason": {"type": ["string", "null"], "minLength": 1}
+      }
+    },
+    "budgetLedger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "currency",
+        "budget_cny",
+        "known_cost_cny",
+        "remaining_known_budget_cny",
+        "total_range_cny",
+        "status",
+        "items"
+      ],
+      "properties": {
+        "currency": {"const": "CNY"},
+        "budget_cny": {"type": ["number", "null"], "minimum": 0},
+        "known_cost_cny": {"type": "number", "minimum": 0},
+        "remaining_known_budget_cny": {"type": ["number", "null"]},
+        "total_range_cny": {"$ref": "#/$defs/costRange"},
+        "status": {
+          "type": "string",
+          "enum": ["within_budget", "over_budget", "incomplete", "unbudgeted"]
+        },
+        "items": {"type": "array", "items": {"$ref": "#/$defs/budgetItem"}}
+      }
+    },
     "placeRef": {
       "type": "object",
       "additionalProperties": false,
@@ -211,6 +273,41 @@
         "ref_id": {"type": "string", "minLength": 1},
         "name": {"type": "string", "minLength": 1},
         "city": {"type": "string", "minLength": 1}
+      }
+    },
+    "clockWindow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start_time", "end_time"],
+      "properties": {
+        "start_time": {"type": "string", "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"},
+        "end_time": {"type": "string", "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"},
+        "duration_minutes": {"type": "integer", "minimum": 1, "maximum": 240},
+        "title": {"type": "string", "minLength": 1, "maxLength": 100}
+      }
+    },
+    "mealWindow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["meal_type", "start_time", "end_time"],
+      "properties": {
+        "meal_type": {"type": "string", "enum": ["lunch", "dinner"]},
+        "start_time": {"type": "string", "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"},
+        "end_time": {"type": "string", "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"},
+        "duration_minutes": {"type": "integer", "minimum": 1, "maximum": 240},
+        "title": {"type": "string", "minLength": 1, "maxLength": 100}
+      }
+    },
+    "mobilityProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["senior"],
+      "properties": {
+        "senior": {"type": "boolean"},
+        "age": {"type": "integer", "minimum": 0, "maximum": 120},
+        "fitness_level": {"type": "string", "enum": ["limited", "average", "good"]},
+        "fitness": {"type": "string", "enum": ["limited", "average", "good"]},
+        "uses_wheelchair": {"type": "boolean"}
       }
     },
     "request": {
@@ -260,6 +357,30 @@
         "budget_cny": {"type": ["number", "null"], "minimum": 0},
         "interests": {"$ref": "#/$defs/stringList"},
         "pace": {"type": "string", "enum": ["slow", "balanced", "full"]},
+        "mobility_profile": {"$ref": "#/$defs/mobilityProfile"},
+        "walking_tolerance_km": {"type": "number", "minimum": 0, "maximum": 50},
+        "meal_windows": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {"$ref": "#/$defs/mealWindow"},
+              "maxItems": 2
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "lunch": {"$ref": "#/$defs/clockWindow"},
+                "dinner": {"$ref": "#/$defs/clockWindow"}
+              }
+            }
+          ]
+        },
+        "rest_windows": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/clockWindow"},
+          "maxItems": 6
+        },
         "constraints": {"$ref": "#/$defs/stringList"},
         "assumptions": {"$ref": "#/$defs/stringList"},
         "locale": {"type": "string", "enum": ["zh-CN", "en"]},
@@ -312,6 +433,8 @@
           "minLength": 1
         },
         "timezone": {"const": "Asia/Shanghai"},
+        "pace": {"type": "string", "enum": ["slow", "balanced", "full"]},
+        "planned_walking_km": {"type": "number", "minimum": 0},
         "slots": {"type": "array", "items": {"$ref": "#/$defs/slot"}}
       }
     },
@@ -474,6 +597,10 @@
           "oneOf": [{"$ref": "#/$defs/coordinates"}, {"type": "null"}]
         },
         "recommended_duration_minutes": {"type": ["integer", "null"], "minimum": 0},
+        "physical_intensity": {
+          "type": "string",
+          "enum": ["light", "moderate", "heavy"]
+        },
         "opening_windows": {"type": "array", "items": {"$ref": "#/$defs/openingWindow"}},
         "price": {
           "oneOf": [{"$ref": "#/$defs/price"}, {"type": "null"}]

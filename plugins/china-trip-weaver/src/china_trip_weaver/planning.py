@@ -24,7 +24,7 @@ from .providers.base import ProviderContext, ReplayTransport, stable_id
 from .providers.mcp_stdio import RailMCPStdioTransport
 from .providers.rail12306 import Rail12306Adapter
 from .render import render_trip, validate_html
-from .scheduler.light import LightScheduler
+from .scheduler.light import LightScheduler, PaceProfile, pace_profile
 from .validate_trip import SchemaSubsetValidator, load_schema, validate_trip
 from .variflight_enrichment import VariFlightBackend
 
@@ -45,6 +45,20 @@ class RouteSpec:
     to_place: Mapping[str, str]
     travel_date: str
     return_leg: bool = False
+
+
+@dataclass(frozen=True)
+class CostRange:
+    minimum_cny: Optional[float]
+    maximum_cny: Optional[float]
+    basis: str
+    reason: Optional[str]
+    price_type: Optional[str]
+    claim_id: Optional[str]
+
+    @property
+    def scheduler_cost_cny(self) -> Optional[float]:
+        return self.maximum_cny
 
 
 @dataclass(frozen=True)
@@ -208,6 +222,14 @@ def plan_trip(
     lodgings, claims, stay_selections = _select_stays(
         normalized_request, transport_legs, lodging_candidates, claims,
     )
+    pois, routine_claims, routine_unknowns = _with_required_meals(
+        normalized_request,
+        transport_legs,
+        lodgings,
+        pois,
+        clock,
+    )
+    claims.extend(routine_claims)
     problems, matrix_cells, live_matrix_cells = _schedule_problems(
         normalized_request, transport_legs, lodgings, pois, mobility,
     )
@@ -224,10 +246,16 @@ def plan_trip(
         1,
         {"amap": "web-service-v5-v3-route", "matrix": "ctw-route-matrix/1"},
     )
-    scheduled = LightScheduler().schedule_plan(problems)
+    scheduled = LightScheduler().schedule_plan(
+        problems,
+        budget_cny=normalized_request["budget_cny"],
+    )
     if scheduled["status"] != "SCHEDULED":
         conflict = scheduled.get("conflict") or {}
-        raise ValueError("plan has no feasible schedule: %s" % conflict.get("code", "unknown"))
+        raise ValueError("plan has no feasible schedule: " + canonical_json({
+            "conflict": conflict,
+            "budget_ledger": scheduled.get("budget_ledger"),
+        }))
     run.advance(
         "SCHEDULED",
         {"slot_counts": [len(day["slots"]) for day in scheduled["days"]]},
@@ -243,6 +271,22 @@ def plan_trip(
     days = _trip_days(normalized_request, scheduled, entities)
     unknowns = _selected_candidate_unknowns(lodging_unknowns, stay_selections)
     unknowns.extend(rail_unknowns)
+    unknowns.extend(routine_unknowns)
+    budget_ledger, budget_unknowns = _budget_ledger(
+        normalized_request,
+        days,
+        transport_legs,
+        lodgings,
+        pois,
+        claims,
+    )
+    scheduler_ledger = scheduled.get("budget_ledger")
+    if (
+        scheduler_ledger is not None
+        and float(scheduler_ledger["known_cost_cny"]) != float(budget_ledger["known_cost_cny"])
+    ):
+        raise ValueError("scheduler and Trip budget ledgers disagree")
+    unknowns.extend(budget_unknowns)
     trip = {
         "schema_version": "1.0.0",
         "trip_id": trip_id,
@@ -255,6 +299,7 @@ def plan_trip(
         },
         "mode": "static",
         "request": normalized_request,
+        "budget_ledger": budget_ledger,
         "days": days,
         "transport_legs": transport_legs,
         "lodgings": lodgings,
@@ -788,6 +833,435 @@ def _deep_link_leg(route: RouteSpec, clock: Clock) -> Tuple[Mapping[str, Any], S
     return leg, (time_claim, price_claim)
 
 
+def _meal_specs(request: Mapping[str, Any]) -> Tuple[Mapping[str, Any], ...]:
+    defaults: Dict[str, Mapping[str, Any]] = {
+        "lunch": {
+            "meal_type": "lunch",
+            "title": "午餐（地点待定）",
+            "start_time": "11:00",
+            "end_time": "13:00",
+            "duration_minutes": 60,
+        },
+        "dinner": {
+            "meal_type": "dinner",
+            "title": "晚餐（地点待定）",
+            "start_time": "16:30",
+            "end_time": "19:30",
+            "duration_minutes": 60,
+        },
+    }
+    supplied = request.get("meal_windows")
+    overrides: Dict[str, Mapping[str, Any]] = {}
+    if isinstance(supplied, Mapping):
+        for meal_type, value in supplied.items():
+            selected = dict(value)
+            selected["meal_type"] = meal_type
+            overrides[str(meal_type)] = selected
+    elif isinstance(supplied, list):
+        for value in supplied:
+            meal_type = str(value["meal_type"])
+            if meal_type in overrides:
+                raise ValueError("meal_windows must contain each meal type at most once")
+            overrides[meal_type] = dict(value)
+    result = []
+    for meal_type in ("lunch", "dinner"):
+        merged = dict(defaults[meal_type])
+        merged.update(overrides.get(meal_type, {}))
+        merged["meal_type"] = meal_type
+        merged["duration_minutes"] = int(merged.get("duration_minutes", 60))
+        _validate_clock_window(merged, "meal_windows.%s" % meal_type)
+        result.append(merged)
+    return tuple(result)
+
+
+def _rest_specs(request: Mapping[str, Any], profile: PaceProfile) -> Tuple[Mapping[str, Any], ...]:
+    supplied = request.get("rest_windows")
+    values = list(supplied) if isinstance(supplied, list) and supplied else [{
+        "title": "午休",
+        "start_time": "13:00",
+        "end_time": "15:00",
+        "duration_minutes": profile.lunch_rest_minutes,
+    }]
+    result = []
+    for index, value in enumerate(values):
+        selected = dict(value)
+        selected.setdefault("title", "休息 %d" % (index + 1))
+        selected.setdefault("duration_minutes", profile.lunch_rest_minutes)
+        selected["duration_minutes"] = int(selected["duration_minutes"])
+        _validate_clock_window(selected, "rest_windows.%d" % index)
+        result.append(selected)
+    return tuple(result)
+
+
+def _validate_clock_window(value: Mapping[str, Any], label: str) -> None:
+    start_minutes = _clock_minutes(str(value["start_time"]))
+    end_minutes = _clock_minutes(str(value["end_time"]))
+    if end_minutes <= start_minutes:
+        raise ValueError("%s end_time must be after start_time" % label)
+    if int(value["duration_minutes"]) <= 0:
+        raise ValueError("%s duration must be positive" % label)
+
+
+def _clock_minutes(value: str) -> int:
+    hour, minute = value.split(":", 1)
+    return int(hour) * 60 + int(minute)
+
+
+def _clock_at(day: str, value: str) -> datetime:
+    return datetime.fromisoformat("%sT%s:00+08:00" % (day, value))
+
+
+def _subtract_interval(
+    segments: Sequence[Tuple[datetime, datetime]],
+    blocked_start: datetime,
+    blocked_end: datetime,
+) -> List[Tuple[datetime, datetime]]:
+    result = []
+    for start_at, end_at in segments:
+        if blocked_end <= start_at or blocked_start >= end_at:
+            result.append((start_at, end_at))
+            continue
+        if start_at < blocked_start:
+            result.append((start_at, blocked_start))
+        if blocked_end < end_at:
+            result.append((blocked_end, end_at))
+    return result
+
+
+def _routine_availability(
+    day: str,
+    spec: Mapping[str, Any],
+    profile: PaceProfile,
+    legs: Sequence[Mapping[str, Any]],
+) -> List[Mapping[str, str]]:
+    duration = timedelta(minutes=int(spec["duration_minutes"]))
+    pace_start = _clock_at(day, profile.start_time)
+    pace_end = _clock_at(day, profile.end_time)
+    target_start = max(pace_start, _clock_at(day, str(spec["start_time"])))
+    latest_start = min(pace_end - duration, _clock_at(day, str(spec["end_time"])))
+    base_end = min(pace_end, latest_start + duration)
+    transport_ranges = sorted([
+        (
+            datetime.fromisoformat(str(leg["depart_at"]).replace("Z", "+00:00")),
+            datetime.fromisoformat(str(leg["arrive_at"]).replace("Z", "+00:00")),
+        )
+        for leg in legs
+        if leg.get("travel_mode") != "flight"
+        and isinstance(leg.get("depart_at"), str)
+        and isinstance(leg.get("arrive_at"), str)
+        and str(leg["depart_at"])[:10] == day
+    ])
+    available: List[Tuple[datetime, datetime]] = [(target_start, base_end)]
+    for blocked_start, blocked_end in transport_ranges:
+        available = _subtract_interval(available, blocked_start, blocked_end)
+    available = [item for item in available if item[1] - item[0] >= duration]
+    if not available:
+        available = [(pace_start, pace_end)]
+        for blocked_start, blocked_end in transport_ranges:
+            available = _subtract_interval(available, blocked_start, blocked_end)
+        available = [item for item in available if item[1] - item[0] >= duration]
+        if available:
+            selected_start, selected_end = min(
+                available,
+                key=lambda item: (
+                    abs((min(max(target_start, item[0]), item[1] - duration) - target_start).total_seconds()),
+                    item[0],
+                ),
+            )
+            adjusted_start = min(max(target_start, selected_start), selected_end - duration)
+            available = [(adjusted_start, adjusted_start + duration)]
+    return [
+        {
+            "start_at": start_at.isoformat(timespec="seconds"),
+            "end_at": end_at.isoformat(timespec="seconds"),
+        }
+        for start_at, end_at in available
+    ]
+
+
+def _with_required_meals(
+    request: Mapping[str, Any],
+    legs: Sequence[Mapping[str, Any]],
+    lodgings: Sequence[Mapping[str, Any]],
+    pois: Sequence[Mapping[str, Any]],
+    clock: Clock,
+) -> Tuple[List[Mapping[str, Any]], List[Mapping[str, Any]], List[Mapping[str, Any]]]:
+    result = [copy.deepcopy(dict(item)) for item in pois]
+    routine_claims: List[Mapping[str, Any]] = []
+    routine_unknowns: List[Mapping[str, Any]] = []
+    profile = pace_profile(str(request["pace"]))
+    city_by_date = _day_city_by_date(request, legs)
+    for day in _trip_dates(request):
+        city = city_by_date[day]
+        anchors = [item for item in result if item["city"] == city and item.get("coordinates")]
+        anchors.extend(item for item in lodgings if item["city"] == city and item.get("coordinates"))
+        anchor_coordinates = copy.deepcopy(anchors[0]["coordinates"]) if anchors else None
+        for spec in _meal_specs(request):
+            meal_type = str(spec["meal_type"])
+            poi_id = stable_id("poi-routine-meal", day, meal_type)
+            windows = _routine_availability(day, spec, profile, legs)
+            claim = make_claim(
+                subject_ref=poi_id,
+                field_path="/opening_windows",
+                value={
+                    "meal_type": meal_type,
+                    "start_time": spec["start_time"],
+                    "end_time": spec["end_time"],
+                    "duration_minutes": spec["duration_minutes"],
+                    "travel_day_adjusted": windows,
+                },
+                source_url="https://china-trip-weaver.local/planning/routine-meals",
+                provider="ctw-planner",
+                status="hypothesis",
+                confidence=0.5,
+                mode="static",
+                clock=clock,
+            )
+            poi_index = len(result)
+            result.append({
+                "poi_id": poi_id,
+                "name": str(spec.get("title") or ("午餐" if meal_type == "lunch" else "晚餐")),
+                "city": city,
+                "category": "food",
+                "coordinates": anchor_coordinates,
+                "recommended_duration_minutes": int(spec["duration_minutes"]),
+                "physical_intensity": "light",
+                "opening_windows": [
+                    {
+                        "start_at": window["start_at"],
+                        "end_at": window["end_at"],
+                        "status": "tentative",
+                        "claim_id": claim["claim_id"],
+                    }
+                    for window in windows
+                ],
+                "price": None,
+                "deep_links": [],
+                "claim_ids": [claim["claim_id"]],
+            })
+            routine_claims.append(claim)
+            routine_unknowns.append({
+                "field_path": "/pois/%d/price" % poi_index,
+                "reason": "exact %s venue and price remain unselected; the slot reserves time only" % meal_type,
+                "provider": None,
+                "claim_id": None,
+            })
+    return result, routine_claims, routine_unknowns
+
+
+def _cost_range(
+    category: str,
+    item: Mapping[str, Any],
+    request: Mapping[str, Any],
+) -> CostRange:
+    price = item.get("price")
+    if not isinstance(price, Mapping):
+        return CostRange(None, None, "price unavailable", "no comparable price was supplied", None, None)
+    claim_id = price.get("claim_id") if isinstance(price.get("claim_id"), str) else None
+    price_type = str(price.get("price_type")) if price.get("price_type") is not None else None
+    amount = price.get("amount")
+    if amount is None or price_type in ("unknown", "verify-on-click"):
+        return CostRange(
+            None,
+            None,
+            "%s/%s" % (price_type or "unknown", price.get("unit", "unknown-unit")),
+            "price amount is not verified and cannot be compared with the trip budget",
+            price_type,
+            claim_id,
+        )
+    if price.get("currency") != "CNY":
+        return CostRange(
+            None,
+            None,
+            "%s %s" % (price.get("currency"), price.get("unit")),
+            "price currency is not CNY and no exchange-rate claim is available",
+            price_type,
+            claim_id,
+        )
+
+    numeric_amount = float(amount)
+    unit = str(price.get("unit"))
+    travelers = int(request["travelers"])
+    minimum: Optional[float]
+    maximum: Optional[float]
+    basis: str
+    reason: Optional[str] = None
+    if unit == "total":
+        minimum = maximum = numeric_amount
+        basis = "quoted total"
+    elif unit == "per_person":
+        minimum = maximum = numeric_amount * travelers
+        basis = "%s per person × %d travelers" % (_money(numeric_amount), travelers)
+    elif unit == "per_night" and category == "lodging":
+        selected_nights = item.get("selected_nights")
+        if isinstance(selected_nights, list) and selected_nights:
+            nights = len(selected_nights)
+        else:
+            nights = max(
+                1,
+                (date.fromisoformat(str(item["check_out"])) - date.fromisoformat(str(item["check_in"]))).days,
+            )
+        rooms = request.get("rooms")
+        if rooms is not None:
+            minimum = maximum = numeric_amount * nights * int(rooms)
+            basis = "%s per night × %d nights × %d rooms" % (
+                _money(numeric_amount), nights, int(rooms),
+            )
+        else:
+            minimum = numeric_amount * nights
+            maximum = numeric_amount * nights * travelers
+            basis = "%s per night × %d nights × 1..%d rooms" % (
+                _money(numeric_amount), nights, travelers,
+            )
+            reason = "room count is missing, so lodging cost is a bounded 1-to-traveler room range"
+    elif unit == "from":
+        minimum = numeric_amount
+        maximum = None
+        basis = "advertised from-price lower bound"
+        reason = "from-price has no comparable upper bound"
+    else:
+        return CostRange(
+            None,
+            None,
+            "%s/%s" % (category, unit),
+            "price unit is not comparable for this item category",
+            price_type,
+            claim_id,
+        )
+
+    minimum = _money(minimum)
+    maximum = _money(maximum) if maximum is not None else None
+    if price.get("includes_taxes") is not True:
+        maximum = None
+        tax_reason = "tax inclusion is not confirmed, so the price has no comparable upper bound"
+        reason = "%s; %s" % (reason, tax_reason) if reason else tax_reason
+    return CostRange(minimum, maximum, basis, reason, price_type, claim_id)
+
+
+def _money(value: float) -> float:
+    rounded = round(float(value) + 0.0, 2)
+    return int(rounded) if rounded.is_integer() else rounded
+
+
+def _budget_ledger(
+    request: Mapping[str, Any],
+    days: Sequence[Mapping[str, Any]],
+    legs: Sequence[Mapping[str, Any]],
+    lodgings: Sequence[Mapping[str, Any]],
+    pois: Sequence[Mapping[str, Any]],
+    claims: Sequence[Mapping[str, Any]],
+) -> Tuple[Mapping[str, Any], List[Mapping[str, Any]]]:
+    scheduled_refs = {
+        slot["ref_id"]
+        for day_item in days
+        for slot in day_item["slots"]
+        if slot["ref_id"] is not None
+    }
+    selected = []
+    selected.extend(("transport", item["leg_id"], item) for item in legs if item["leg_id"] in scheduled_refs)
+    selected.extend(("lodging", item["lodging_id"], item) for item in lodgings if item["lodging_id"] in scheduled_refs)
+    selected.extend(("poi", item["poi_id"], item) for item in pois if item["poi_id"] in scheduled_refs)
+    claim_by_id = {claim["claim_id"]: claim for claim in claims}
+    ledger_items = []
+    unknowns: List[Mapping[str, Any]] = []
+    ranges: List[CostRange] = []
+    for category, ref_id, item in selected:
+        cost = _cost_range(category, item, request)
+        ranges.append(cost)
+        ledger_items.append({
+            "ref_id": ref_id,
+            "category": category,
+            "price_type": cost.price_type,
+            "amount_min_cny": cost.minimum_cny,
+            "amount_max_cny": cost.maximum_cny,
+            "basis": cost.basis,
+            "included_in_scheduler": cost.maximum_cny is not None,
+            "reason": cost.reason,
+        })
+        if cost.reason is not None or cost.maximum_cny is None:
+            claim = claim_by_id.get(cost.claim_id) if cost.claim_id else None
+            unknowns.append({
+                "field_path": "/budget_ledger/items/%d/amount_max_cny" % (len(ledger_items) - 1),
+                "reason": cost.reason or "price has no comparable upper bound",
+                "provider": claim["provider"] if claim is not None else None,
+                "claim_id": cost.claim_id,
+            })
+
+    complete_minimum = all(cost.minimum_cny is not None for cost in ranges)
+    complete_maximum = all(cost.maximum_cny is not None for cost in ranges)
+    total_minimum = _money(sum(float(cost.minimum_cny) for cost in ranges)) if complete_minimum else None
+    total_maximum = _money(sum(float(cost.maximum_cny) for cost in ranges)) if complete_maximum else None
+    known_cost = _money(sum(float(cost.maximum_cny) for cost in ranges if cost.maximum_cny is not None))
+    budget = request["budget_cny"]
+    if budget is None:
+        status = "unbudgeted"
+        remaining = None
+    elif total_maximum is None:
+        status = "incomplete"
+        remaining = _money(float(budget) - float(known_cost))
+    elif float(total_maximum) <= float(budget):
+        status = "within_budget"
+        remaining = _money(float(budget) - float(total_maximum))
+    else:
+        status = "over_budget"
+        remaining = _money(float(budget) - float(total_maximum))
+    return {
+        "currency": "CNY",
+        "budget_cny": budget,
+        "known_cost_cny": known_cost,
+        "remaining_known_budget_cny": remaining,
+        "total_range_cny": {
+            "minimum": total_minimum,
+            "maximum": total_maximum,
+        },
+        "status": status,
+        "items": ledger_items,
+    }, unknowns
+
+
+def _cross_city_buffer_candidate(
+    leg: Mapping[str, Any],
+    day: str,
+    profile: PaceProfile,
+) -> Mapping[str, Any]:
+    duration_minutes = 45
+    duration = timedelta(minutes=duration_minutes)
+    depart = datetime.fromisoformat(str(leg["depart_at"]).replace("Z", "+00:00"))
+    arrive = datetime.fromisoformat(str(leg["arrive_at"]).replace("Z", "+00:00"))
+    pace_start = _clock_at(day, profile.start_time)
+    pace_end = _clock_at(day, profile.end_time)
+    if depart - duration >= pace_start:
+        window_start = max(pace_start, depart - timedelta(minutes=150))
+        window_end = depart
+        title = "行李与进站换乘缓冲"
+    else:
+        window_start = arrive
+        window_end = max(arrive + duration, min(pace_end, arrive + timedelta(minutes=180)))
+        title = "到站、行李与换乘缓冲"
+    return {
+        "ref_id": stable_id("routine-transfer-buffer", leg["leg_id"]),
+        "public_ref_id": None,
+        "title": title,
+        "kind": "rest",
+        "duration_minutes": duration_minutes,
+        "windows": [{
+            "start_at": window_start.isoformat(timespec="seconds"),
+            "end_at": window_end.isoformat(timespec="seconds"),
+        }],
+        "utility": 0,
+        "required": True,
+        "locked": False,
+        "fixed_start": None,
+        "cost_cny": 0,
+        "locationless": True,
+        "route_boundary": False,
+        "physical_intensity": "light",
+        "recovery": False,
+        "closed": False,
+        "blocked_reason": None,
+    }
+
+
 def _schedule_problems(
     request: Mapping[str, Any],
     legs: Sequence[Mapping[str, Any]],
@@ -795,6 +1269,10 @@ def _schedule_problems(
     pois: Sequence[Mapping[str, Any]],
     mobility: MobilityResult,
 ) -> Tuple[List[Mapping[str, Any]], int, int]:
+    profile = pace_profile(str(request["pace"]))
+    walking_tolerance_km = float(
+        request.get("walking_tolerance_km", profile.max_walking_segment_km)
+    )
     start = date.fromisoformat(request["start_date"])
     end = date.fromisoformat(request["end_date"])
     dates = [(start + timedelta(days=index)).isoformat() for index in range((end - start).days + 1)]
@@ -810,6 +1288,7 @@ def _schedule_problems(
             raise ValueError("rail leg is outside the request date range")
         by_date[day].append({
             "ref_id": leg["leg_id"],
+            "public_ref_id": leg["leg_id"],
             "title": "%s → %s 铁路" % (_place_name(request, leg["from_ref"]), _place_name(request, leg["to_ref"])),
             "kind": "transport",
             "duration_minutes": leg["duration_minutes"],
@@ -818,10 +1297,15 @@ def _schedule_problems(
             "required": True,
             "locked": False,
             "fixed_start": leg["depart_at"],
-            "cost_cny": 0,
+            "cost_cny": _cost_range("transport", leg, request).scheduler_cost_cny,
+            "locationless": False,
+            "route_boundary": True,
+            "physical_intensity": "light",
+            "recovery": False,
             "closed": False,
             "blocked_reason": None,
         })
+        by_date[day].append(_cross_city_buffer_candidate(leg, day, profile))
 
     for lodging in lodgings:
         day = lodging["check_in"]
@@ -838,17 +1322,26 @@ def _schedule_problems(
         ]
         fixed_at = max([default_checkin] + [arrival + timedelta(minutes=30) for arrival in inbound_arrivals])
         fixed = fixed_at.isoformat(timespec="seconds")
+        checkin_end = max(
+            _clock_at(day, profile.end_time),
+            fixed_at + timedelta(minutes=45),
+        ).isoformat(timespec="seconds")
         by_date[day].append({
             "ref_id": lodging["lodging_id"],
+            "public_ref_id": lodging["lodging_id"],
             "title": "%s 入住" % lodging["name"],
             "kind": "checkin",
             "duration_minutes": 45,
-            "windows": [{"start_at": fixed, "end_at": "%sT23:30:00+08:00" % day}],
+            "windows": [{"start_at": fixed, "end_at": checkin_end}],
             "utility": 900,
             "required": True,
             "locked": False,
-            "fixed_start": fixed,
-            "cost_cny": 0,
+            "fixed_start": None,
+            "cost_cny": _cost_range("lodging", lodging, request).scheduler_cost_cny,
+            "locationless": False,
+            "route_boundary": False,
+            "physical_intensity": "light",
+            "recovery": False,
             "closed": False,
             "blocked_reason": None,
         })
@@ -868,7 +1361,13 @@ def _schedule_problems(
         else:
             unslotted.append(poi)
             continue
-        by_date[day].append(_poi_candidate(poi, matching))
+        by_date[day].append(_poi_candidate(
+            poi,
+            [window for window in matching if window["start_at"][:10] == day],
+            day,
+            profile,
+            request,
+        ))
     city_offsets: Dict[str, int] = {}
     for poi in unslotted:
         matching_dates = [day for day in dates if city_by_date[day] == poi["city"]]
@@ -877,7 +1376,62 @@ def _schedule_problems(
         offset = city_offsets.get(poi["city"], 0)
         day = matching_dates[offset % len(matching_dates)]
         city_offsets[poi["city"]] = offset + 1
-        by_date[day].append(_poi_candidate(poi, []))
+        by_date[day].append(_poi_candidate(poi, [], day, profile, request))
+
+    senior = bool((request.get("mobility_profile") or {}).get("senior", False))
+    for day in dates:
+        rest_count = 0
+        for rest_index, spec in enumerate(_rest_specs(request, profile)):
+            windows = _routine_availability(day, spec, profile, legs)
+            by_date[day].append({
+                "ref_id": stable_id("routine-rest", day, rest_index),
+                "public_ref_id": None,
+                "title": str(spec["title"]),
+                "kind": "rest",
+                "duration_minutes": int(spec["duration_minutes"]),
+                "windows": windows,
+                "utility": 0,
+                "required": True,
+                "locked": False,
+                "fixed_start": None,
+                "cost_cny": 0,
+                "locationless": True,
+                "route_boundary": False,
+                "physical_intensity": "light",
+                "recovery": True,
+                "closed": False,
+                "blocked_reason": None if windows else "rest-window-unavailable",
+            })
+            rest_count += 1
+        if senior:
+            heavy_count = sum(
+                1 for item in by_date[day]
+                if item["kind"] == "poi" and item.get("physical_intensity") == "heavy"
+            )
+            required_recoveries = max(0, min(heavy_count, profile.max_pois) - 1)
+            for extra_index in range(max(0, required_recoveries - rest_count)):
+                by_date[day].append({
+                    "ref_id": stable_id("routine-senior-recovery", day, extra_index),
+                    "public_ref_id": None,
+                    "title": "体力恢复",
+                    "kind": "rest",
+                    "duration_minutes": 30,
+                    "windows": [{
+                        "start_at": "%sT%s:00+08:00" % (day, profile.start_time),
+                        "end_at": "%sT%s:00+08:00" % (day, profile.end_time),
+                    }],
+                    "utility": 0,
+                    "required": True,
+                    "locked": False,
+                    "fixed_start": None,
+                    "cost_cny": 0,
+                    "locationless": True,
+                    "route_boundary": False,
+                    "physical_intensity": "light",
+                    "recovery": True,
+                    "closed": False,
+                    "blocked_reason": None,
+                })
 
     problems = []
     cell_count = 0
@@ -893,6 +1447,13 @@ def _schedule_problems(
             for right in candidates:
                 if left["ref_id"] == right["ref_id"]:
                     continue
+                if (
+                    left.get("locationless")
+                    or right.get("locationless")
+                    or left.get("route_boundary")
+                    or right.get("route_boundary")
+                ):
+                    continue
                 live = live_cells.get((left["ref_id"], right["ref_id"], "transit"))
                 if live is not None:
                     matrix.append(live.as_dict())
@@ -903,37 +1464,88 @@ def _schedule_problems(
                         left["ref_id"], right["ref_id"], "transit", distance, 22.0, 8
                     ).as_dict())
         cell_count += len(matrix)
+        pace_start = datetime.fromisoformat("%sT%s:00+08:00" % (day, profile.start_time))
+        pace_end = datetime.fromisoformat("%sT%s:00+08:00" % (day, profile.end_time))
+        fixed_ranges = [
+            (
+                datetime.fromisoformat(str(item["fixed_start"]).replace("Z", "+00:00")),
+                datetime.fromisoformat(str(item["fixed_start"]).replace("Z", "+00:00"))
+                + timedelta(minutes=int(item["duration_minutes"])),
+            )
+            for item in candidates if item.get("fixed_start")
+        ]
+        required_window_ends = [
+            datetime.fromisoformat(str(item["windows"][0]["start_at"]).replace("Z", "+00:00"))
+            + timedelta(minutes=int(item["duration_minutes"]))
+            for item in candidates
+            if item.get("required") and item.get("windows")
+        ]
+        day_start = min([pace_start] + [item[0] for item in fixed_ranges])
+        day_end = max([pace_end] + [item[1] for item in fixed_ranges] + required_window_ends)
         problems.append({
             "day_id": "day-%d" % (index + 1),
             "date": day,
-            "start_at": "%sT07:00:00+08:00" % day,
-            "end_at": "%sT23:30:00+08:00" % day,
+            "pace": request["pace"],
+            "start_at": day_start.isoformat(timespec="seconds"),
+            "end_at": day_end.isoformat(timespec="seconds"),
             "travel_mode": "transit",
             "buffer_minutes": 10,
-            "budget_cny": request["budget_cny"],
             "max_optional": 8,
+            "max_pois": profile.max_pois,
+            "max_walking_segment_meters": int(round(walking_tolerance_km * 1000)),
             "max_travel_minutes": None,
+            "requires_senior_recovery": senior,
             "candidates": candidates,
             "matrix": matrix,
         })
     return problems, cell_count, live_cell_count
 
 
-def _poi_candidate(poi: Mapping[str, Any], windows: Sequence[Mapping[str, Any]]) -> Mapping[str, Any]:
+def _poi_candidate(
+    poi: Mapping[str, Any],
+    windows: Sequence[Mapping[str, Any]],
+    day: str,
+    profile: PaceProfile,
+    request: Mapping[str, Any],
+) -> Mapping[str, Any]:
     duration = poi["recommended_duration_minutes"] or 90
+    required_meal = str(poi["poi_id"]).startswith("poi-routine-meal-")
+    pace_start = datetime.fromisoformat("%sT%s:00+08:00" % (day, profile.start_time))
+    pace_end = datetime.fromisoformat("%sT%s:00+08:00" % (day, profile.end_time))
+    bounded_windows = []
+    for item in windows:
+        window_start = datetime.fromisoformat(item["start_at"].replace("Z", "+00:00"))
+        window_end = datetime.fromisoformat(item["end_at"].replace("Z", "+00:00"))
+        bounded_start = max(window_start, pace_start)
+        bounded_end = min(window_end, pace_end)
+        if bounded_end > bounded_start:
+            bounded_windows.append({
+                "start_at": bounded_start.isoformat(timespec="seconds"),
+                "end_at": bounded_end.isoformat(timespec="seconds"),
+            })
+    if not windows:
+        bounded_windows.append({
+            "start_at": pace_start.isoformat(timespec="seconds"),
+            "end_at": pace_end.isoformat(timespec="seconds"),
+        })
     return {
         "ref_id": poi["poi_id"],
+        "public_ref_id": poi["poi_id"],
         "title": poi["name"],
         "kind": "meal" if poi["category"] == "food" else "poi",
         "duration_minutes": duration,
-        "windows": [{"start_at": item["start_at"], "end_at": item["end_at"]} for item in windows],
-        "utility": 100,
-        "required": False,
+        "windows": bounded_windows,
+        "utility": 0 if required_meal else 100,
+        "required": required_meal,
         "locked": False,
         "fixed_start": None,
-        "cost_cny": 0,
+        "cost_cny": _cost_range("poi", poi, request).scheduler_cost_cny,
+        "locationless": required_meal,
+        "route_boundary": False,
+        "physical_intensity": str(poi.get("physical_intensity", "light")),
+        "recovery": False,
         "closed": False,
-        "blocked_reason": None,
+        "blocked_reason": "outside-pace-window" if windows and not bounded_windows else None,
     }
 
 
@@ -992,7 +1604,7 @@ def _trip_days(
                 "title": slot["title"],
                 "locked": slot["locked"],
                 "status": "scheduled",
-                "claim_ids": list(claim_ids[slot["ref_id"]]),
+                "claim_ids": list(claim_ids.get(slot["ref_id"], ())),
             })
         travel_date = (date.fromisoformat(request["start_date"]) + timedelta(days=index)).isoformat()
         covering_stays = [
@@ -1006,6 +1618,11 @@ def _trip_days(
             "date": travel_date,
             "city": city_by_date[travel_date],
             "timezone": "Asia/Shanghai",
+            "pace": request["pace"],
+            "planned_walking_km": round(
+                float(result["objective_vector"].get("walking_distance_meters", 0)) / 1000,
+                3,
+            ),
             "stay_id": covering_stays[0]["lodging_id"] if covering_stays else None,
             "slots": slots,
         })

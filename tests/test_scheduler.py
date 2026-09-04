@@ -18,7 +18,7 @@ sys.path.insert(0, str(SRC))
 from china_trip_weaver.contracts import canonical_json
 from china_trip_weaver.matrix import MatrixError, RouteCell, RouteMatrix, bounded_query_plan, static_estimate_cell
 from china_trip_weaver.pipeline import PipelineError, PipelineRun
-from china_trip_weaver.scheduler.light import LightScheduler
+from china_trip_weaver.scheduler.light import PACE_PROFILES, LightScheduler
 from china_trip_weaver.scheduler.ortools_bridge import ortools_available, should_use_ortools
 
 
@@ -29,6 +29,34 @@ NO_SOLUTION = FIXTURES / "no_solution"
 
 def load(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def budget_day(day_id, travel_date, cost_cny, required=False):
+    return {
+        "day_id": day_id,
+        "date": travel_date,
+        "start_at": "%sT09:00:00+08:00" % travel_date,
+        "end_at": "%sT20:00:00+08:00" % travel_date,
+        "travel_mode": "transit",
+        "buffer_minutes": 0,
+        "max_optional": 8,
+        "max_travel_minutes": None,
+        "candidates": [{
+            "ref_id": "candidate-" + day_id,
+            "title": "预算候选 " + day_id,
+            "kind": "poi",
+            "duration_minutes": 60,
+            "windows": [],
+            "utility": 100,
+            "required": required,
+            "locked": False,
+            "fixed_start": None,
+            "cost_cny": cost_cny,
+            "closed": False,
+            "blocked_reason": None,
+        }],
+        "matrix": [],
+    }
 
 
 def compare_golden(testcase: unittest.TestCase, path: Path):
@@ -64,6 +92,120 @@ def compare_no_solution(testcase: unittest.TestCase, path: Path):
 
 
 class SchedulerCorpusTests(unittest.TestCase):
+    def test_pace_profiles_match_daily_limits(self):
+        self.assertEqual(
+            {
+                "slow": ("09:00", "20:00", 3, 1.5, 90),
+                "balanced": ("08:30", "21:30", 5, 2.5, 60),
+                "full": ("08:00", "22:30", 7, 4.0, 30),
+            },
+            {
+                name: (
+                    profile.start_time,
+                    profile.end_time,
+                    profile.max_pois,
+                    profile.max_walking_segment_km,
+                    profile.lunch_rest_minutes,
+                )
+                for name, profile in PACE_PROFILES.items()
+            },
+        )
+
+    def test_trip_budget_reserves_later_required_cost_before_optional_fill(self):
+        days = [
+            budget_day("day-1", "2026-10-16", 70, required=False),
+            budget_day("day-2", "2026-10-17", 60, required=True),
+        ]
+        result = LightScheduler().schedule_plan(days, budget_cny=100)
+        self.assertEqual("SCHEDULED", result["status"])
+        self.assertEqual([], result["days"][0]["slots"])
+        self.assertEqual(["candidate-day-2"], [item["ref_id"] for item in result["days"][1]["slots"]])
+        self.assertEqual(60, result["budget_ledger"]["known_cost_cny"])
+        self.assertEqual(40, result["budget_ledger"]["remaining_known_cny"])
+        self.assertEqual("within_budget", result["budget_ledger"]["status"])
+
+    def test_trip_budget_returns_structured_no_solution_when_required_total_exceeds_it(self):
+        days = [
+            budget_day("day-1", "2026-10-16", 60, required=True),
+            budget_day("day-2", "2026-10-17", 50, required=True),
+        ]
+        result = LightScheduler().schedule_plan(days, budget_cny=100)
+        self.assertEqual("NO_SOLUTION", result["status"])
+        self.assertEqual("budget", result["conflict"]["code"])
+        self.assertEqual("over_budget", result["budget_ledger"]["status"])
+        self.assertEqual(110, result["budget_ledger"]["known_cost_cny"])
+
+    def test_unknown_candidate_cost_is_reported_instead_of_coerced_to_zero(self):
+        result = LightScheduler().schedule_plan(
+            [budget_day("day-1", "2026-10-16", None)],
+            budget_cny=100,
+        )
+        self.assertEqual("SCHEDULED", result["status"])
+        self.assertEqual("incomplete", result["budget_ledger"]["status"])
+        self.assertEqual(["candidate-day-1"], result["budget_ledger"]["unknown_cost_refs"])
+        self.assertEqual(
+            ["candidate-day-1"],
+            result["days"][0]["objective_vector"]["unknown_cost_refs"],
+        )
+
+    def test_senior_heavy_candidates_require_a_recovery_between_them(self):
+        problem = {
+            "day_id": "senior-day",
+            "date": "2026-10-16",
+            "pace": "balanced",
+            "travel_mode": "transit",
+            "buffer_minutes": 0,
+            "max_optional": 8,
+            "requires_senior_recovery": True,
+            "candidates": [
+                {
+                    "ref_id": "heavy-a", "title": "重体力 A", "kind": "poi",
+                    "duration_minutes": 60, "windows": [], "utility": 100,
+                    "required": True, "locked": False, "fixed_start": None,
+                    "cost_cny": 0, "physical_intensity": "heavy",
+                    "closed": False, "blocked_reason": None,
+                },
+                {
+                    "ref_id": "recovery", "public_ref_id": None, "title": "恢复",
+                    "kind": "rest", "duration_minutes": 30, "windows": [],
+                    "utility": 0, "required": True, "locked": False,
+                    "fixed_start": None, "cost_cny": 0, "locationless": True,
+                    "recovery": True, "closed": False, "blocked_reason": None,
+                },
+                {
+                    "ref_id": "heavy-b", "title": "重体力 B", "kind": "poi",
+                    "duration_minutes": 60, "windows": [], "utility": 90,
+                    "required": True, "locked": False, "fixed_start": None,
+                    "cost_cny": 0, "physical_intensity": "heavy",
+                    "closed": False, "blocked_reason": None,
+                },
+            ],
+            "matrix": [
+                {
+                    "from_ref": left, "to_ref": right, "travel_mode": "transit",
+                    "duration_minutes": 10, "distance_meters": 500,
+                    "provider": "synthetic-recovery", "provider_version": "1",
+                    "mode": "static", "queried_at": None, "claim_ids": [],
+                    "reachable": True, "degradation_rung": "R3",
+                    "estimate_method": "synthetic", "fare": None, "geometry_ref": None,
+                }
+                for left, right in (("heavy-a", "heavy-b"), ("heavy-b", "heavy-a"))
+            ],
+        }
+        result = LightScheduler().schedule_day(problem)
+        self.assertEqual("SCHEDULED", result.status)
+        kinds = [item["kind"] for item in result.slots]
+        heavy_positions = [index for index, item in enumerate(result.slots) if item["ref_id"] in ("heavy-a", "heavy-b")]
+        self.assertIn("rest", kinds[heavy_positions[0] + 1:heavy_positions[1]])
+
+        without_recovery = copy.deepcopy(problem)
+        without_recovery["candidates"] = [
+            item for item in without_recovery["candidates"] if item["ref_id"] != "recovery"
+        ]
+        failed = LightScheduler().schedule_day(without_recovery)
+        self.assertEqual("NO_SOLUTION", failed.status)
+        self.assertEqual("senior-recovery-required", failed.conflict["code"])
+
     def test_manifest_hashes_counts_and_coverage(self):
         manifest = load(FIXTURES / "manifest.json")
         self.assertEqual({"golden": 20, "no_solution": 8, "replan": 4}, manifest["counts"])
