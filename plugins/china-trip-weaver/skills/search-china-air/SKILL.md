@@ -5,6 +5,8 @@ description: Normalize dated mainland-China flight candidates and booking deep l
 
 # Search China Air
 
+FlyAI is an optional, best-effort third-party wrapper. When it is unavailable or its contract has drifted, report the degraded health and continue with rail comparison rather than inventing a flight.
+
 Use FlyAI as the candidate/deep-link source and VariFlight only as optional enrichment.
 
 - Probe `@fly-ai/flyai-cli@1.0.16` version/help and current command envelope before use; never infer a command from stale documentation.

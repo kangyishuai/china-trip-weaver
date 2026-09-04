@@ -182,5 +182,60 @@ class FlyAISubprocessTests(unittest.TestCase):
         self.assertEqual(3, len([item for item in result.business_calls if item.startswith("flyai.")]))
 
 
+class FlyAIIsAnOptionalSourceTests(unittest.TestCase):
+    """FlyAI is a third-party wrapper, so its failure must never block a plan."""
+
+    class FailingTransport:
+        """A transport whose every call fails the way an abandoned CLI would."""
+
+        def __init__(self):
+            self.calls = 0
+
+        def execute(self, provider, request):
+            self.calls += 1
+            raise ProviderTimeout("flyai transport is unavailable")
+
+    def plan_without_flyai_results(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            resolved = resolve_credentials({}, Path(temporary) / "missing")
+            transport = self.FailingTransport()
+            flyai = FlyAIBackend("live", resolved, transport)
+            rail = RailBackend.from_spec("fixture:" + str(E2E / "rail.json"), ROOT)
+            result = plan_trip(
+                load(E2E / "request.json"),
+                load(E2E / "candidates.json"),
+                CLOCK,
+                rail,
+                flyai_backend=flyai,
+            )
+        return result, transport
+
+    def test_a_failing_flyai_still_produces_a_valid_trip(self):
+        from china_trip_weaver.render import render_trip, validate_html
+        from china_trip_weaver.validate_trip import validate_trip
+
+        result, transport = self.plan_without_flyai_results()
+        self.assertGreater(transport.calls, 0)
+        self.assertTrue(validate_trip(result.trip).ok)
+        html = render_trip(result.trip)
+        self.assertTrue(validate_html(html, result.trip).ok)
+
+    def test_the_failure_is_reported_as_health_not_hidden(self):
+        result, _ = self.plan_without_flyai_results()
+        health = next(item for item in result.trip["provider_health"] if item["provider"] == "flyai")
+        self.assertNotEqual("ready", health["status"])
+        self.assertTrue(health["reason"])
+
+    def test_no_flight_candidate_is_invented_when_flyai_fails(self):
+        result, _ = self.plan_without_flyai_results()
+        flights = [item for item in result.trip["transport_legs"] if item["travel_mode"] == "flight"]
+        self.assertEqual([], flights)
+
+    def test_lodging_falls_back_to_the_candidate_file(self):
+        result, _ = self.plan_without_flyai_results()
+        for lodging in result.trip["lodgings"]:
+            self.assertNotEqual("live", lodging["price"]["price_type"])
+
+
 if __name__ == "__main__":
     unittest.main()

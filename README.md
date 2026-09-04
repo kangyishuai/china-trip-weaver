@@ -19,6 +19,8 @@ Licensed under the [MIT License](LICENSE). The licence covers this repository's 
 
 ## Local credentials
 
+FlyAI is an optional, best-effort source. It is an unofficial third-party wrapper around Fliggy whose command surface has drifted before, so `--lodging` defaults to `off` and any FlyAI failure degrades only lodging and flight inventory, never the plan.
+
 `ctw doctor` reports only `configured` or `missing` for AMap, FlyAI, VariFlight, and AnySearch. It never prints a value, prefix, suffix, hash, or length. It also reports `skill_conflicts`, which detects another enabled plugin exposing a Skill of the same name and exits non-zero on a conflict.
 
 Credentials come from the launching environment first, then from `~/.config/china-trip-weaver/credentials.env`. On POSIX that file must be a current-user-owned regular file at mode exactly `0600`. Do not pass a value on a command line or paste it into chat.
@@ -154,7 +156,7 @@ The runtime uses no third-party Python package. `render` refuses an invalid Trip
 
 The suite has zero skips. It covers the frozen Trip schema, candidate validation, credential/process/home isolation, exact-value and captured-data scans, evidence/cache/coordinates, 79 unmistakably synthetic provider fixtures with AMap/FlyAI/VariFlight contract shapes, 20 scheduling goldens, 8 no-solution cases, 4 replan goldens, renderer adversarial cases and offline browser viewports, Skill/package metadata, and deterministic plus live-path integration scenarios.
 
-Design authority lives in [`docs/design/`](docs/design/00-README.md). Implementation-only additions are [ADR-0009](docs/design/adr/0009-rename-rail-air-skills.md), [ADR-0010](docs/design/adr/0010-candidate-file-planning-and-live-rail.md), and [ADR-0011](docs/design/adr/0011-live-amap-flyai-variflight-boundaries.md); [ADR-0012](docs/design/adr/0012-open-source-under-mit.md) records the MIT licensing decision. See [`docs/manual-acceptance.md`](docs/manual-acceptance.md) for Codex Desktop acceptance.
+Design authority lives in [`docs/design/`](docs/design/00-README.md). Implementation-only additions are [ADR-0009](docs/design/adr/0009-rename-rail-air-skills.md), [ADR-0010](docs/design/adr/0010-candidate-file-planning-and-live-rail.md), and [ADR-0011](docs/design/adr/0011-live-amap-flyai-variflight-boundaries.md); [ADR-0012](docs/design/adr/0012-open-source-under-mit.md) records the MIT licensing decision and [ADR-0013](docs/design/adr/0013-stay-off-the-public-marketplace.md) records why this plugin is not listed on a public marketplace. See [`docs/manual-acceptance.md`](docs/manual-acceptance.md) for Codex Desktop acceptance.
 
 ## Contributing and security
 

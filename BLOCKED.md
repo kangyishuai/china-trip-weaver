@@ -1,47 +1,34 @@
 # Unresolved items
 
-This file lists what is still undecided for this project. Items about a single
-maintainer's machine, one-off development incidents, and internal process
-deviations were removed when the repository was prepared for publication; they
-were never product behaviour.
+None. Every item that stood here has been closed.
 
-Two items that stood here before 2026-09-04 are now closed. Same-name Skill
-detection became automatic once `codex plugin list --json` shipped; `ctw doctor`
-reads it, walks each enabled plugin's `skills/` directory, and reports
-`skill_conflicts`. Sample-data redistribution ended when `demo/` and
-`tests/fixtures/providers/` became locally generated synthetic values, which a
-regression test now enforces on every Git-tracked file.
+Standing constraints are not listed here, because a list of unresolved items
+should mean pending work. They live where they are enforced:
 
-## Public marketplace listing metadata
+- Provider terms, attribution, caching, and the licences commercial use would
+  require: `THIRD_PARTY_NOTICES.md`.
+- Provider pins, deadlines, degradation, and FlyAI's optional status:
+  `plugins/china-trip-weaver/references/provider-contracts.md`.
+- Architecture decisions, including why this plugin is not listed on a public
+  marketplace: `docs/design/adr/`.
 
-- Fact: this plugin installs from a local marketplace pointed at a clone. A
-  public Codex marketplace listing would additionally require a privacy policy
-  URL, a terms-of-service URL, a listing category, and an authentication policy
-  that the maintainer must own and publish.
-- Still to decide: whether to publish at all, and under whose name and policies.
-- Impact: does not block local or self-hosted use. It does block a public
-  marketplace listing.
+## What was closed, and when
 
-## Commercial use requires provider licences the maintainer does not hold
-
-- Fact: AMap requires a purchased technical service licence for any commercial
-  purpose and forbids transferring or sublicensing it. VariFlight requires a
-  written contract before its data may be redistributed, repackaged, or resold.
-  See `THIRD_PARTY_NOTICES.md` for the cited clauses.
-- Current position: the repository is documented as personal and
-  non-commercial. No provider response is cached, and every contributing
-  provider is named in the rendered page.
-- Still to decide: nothing, unless someone intends commercial use, in which
-  case they must obtain those licences themselves.
-- Impact: does not block personal use. It does block commercial use.
-
-## Fliggy/FlyAI wrapper terms were not located
-
-- Fact: the pinned `@fly-ai/flyai-cli` is a third-party wrapper over Fliggy
-  services. A terms page governing the wrapper itself was not found on
-  2026-09-04, so its obligations are assumed rather than verified.
-- Current position: its data is treated under the same no-cache,
-  no-redistribution rule applied to AMap and VariFlight, which is the
-  conservative reading.
-- Still to verify: the wrapper's actual terms, if its authors publish them.
-- Impact: does not block use under the conservative rule.
+- 2026-09-04, same-name Skill detection. Codex shipped
+  `codex plugin list --json`, so `ctw doctor` now reads it, walks each enabled
+  plugin's `skills/` directory, and reports `skill_conflicts`, exiting non-zero
+  on a collision. Verified against a real installation of the older
+  `china-travel-assistant`, which does expose `plan-china-trip`.
+- 2026-09-04, sample-data redistribution. `demo/` and
+  `tests/fixtures/providers/` hold only locally generated synthetic values, and
+  a regression test scans every Git-tracked file for the retired markers.
+- 2026-09-04, provider terms. AMap and VariFlight were reviewed clause by
+  clause. Caching is forbidden and no provider response is cached; attribution
+  is required and the rendered footer names every contributing provider;
+  commercial use needs licences this project does not hold, which the readme
+  and notices state plainly.
+- 2026-09-04, public marketplace listing. Decided against in
+  [ADR-0013](docs/design/adr/0013-stay-off-the-public-marketplace.md).
+- 2026-09-04, FlyAI wrapper terms. Its data is treated under the same
+  no-cache, no-redistribution rule, and the wrapper itself is now documented and
+  tested as an optional, best-effort source.

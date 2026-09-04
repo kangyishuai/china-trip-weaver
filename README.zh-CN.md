@@ -19,6 +19,8 @@
 
 ## 本地凭据
 
+FlyAI 是可选的尽力而为来源。它是飞猪服务的非官方第三方包装器，命令接口曾经漂移过，因此 `--lodging` 默认为 `off`，FlyAI 的任何失败只降级住宿与航班库存，不会影响整份行程。
+
 `ctw doctor` 对高德、FlyAI、飞常准和 AnySearch 只报告 `configured`（已配置）或 `missing`（未配置），永远不打印值、前缀、后缀、哈希或长度。它同时报告 `skill_conflicts`：自动检测是否有另一个已启用插件暴露同名 Skill，发现冲突时退出码非零。
 
 凭据优先取自启动进程的环境变量，其次是 `~/.config/china-trip-weaver/credentials.env`。在 POSIX 系统上，该文件必须是当前用户拥有的普通文件，权限恰为 `0600`。不要把值写在命令行上，也不要粘贴进对话。

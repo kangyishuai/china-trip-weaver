@@ -6,7 +6,7 @@ All providers are read-only adapters. A provider is `ready` only after its pin/f
 |---|---|---|---:|---|
 | Host web | Host runtime with URL-bearing results | Dated destination research | 20s per query | Preferred keyless source; unavailable becomes explicit degradation. |
 | 12306 MCP | `12306-mcp@0.3.10`, exact 8 tools | Station/direct/interline/route-stop rail data | 15s direct; 25s interline | Public query; cache → dated 12306 deep link → unknown. |
-| FlyAI | `@fly-ai/flyai-cli@1.0.16`, version/help/current envelope | Flight and lodging candidates/deep links | 25s | Trial only after probe; cache → dated Fliggy link → unknown. |
+| FlyAI (optional) | `@fly-ai/flyai-cli@1.0.16`, version/help/current envelope | Flight and lodging candidates/deep links | 25s | Trial only after probe; dated Fliggy link → unknown. |
 | AMap | v5 POI, v3 geocode/walk/transit/drive, v4 ride fingerprints | POI/geocode/route matrix | 8s POI/geocode; 12s route | No API call; cache → deep link/static estimate → unknown. |
 | VariFlight | `@variflight-ai/variflight-mcp@1.0.3`, exact 9 tools | Optional flight status/weather/comfort/price enrichment | 15s | Probe/list only; no business call. |
 | AnySearch | Runtime structured-result and usage fingerprint | Optional destination-search supplement | 15s | Disabled without user key; auto-registration is always rejected. |
@@ -24,6 +24,17 @@ R1 is disabled and no provider response is cached today. AMap's terms section
 caching for redistribution without a written contract. Every capability
 therefore falls straight from R0 to R2. A future cache may only be enabled for
 a provider whose terms permit it.
+
+## FlyAI is an optional, best-effort source
+
+`@fly-ai/flyai-cli` is an unofficial third-party wrapper around Fliggy
+services, published by an individual maintainer, and its command surface has
+already drifted once between releases. Lodging and flight inventory are
+therefore optional: `--lodging` defaults to `off`, a probe mismatch fails
+closed, and a failure of any kind degrades that one capability instead of the
+plan. No long-term availability is promised. Tests assert that a failing FlyAI
+still yields a schema-valid Trip, reports its own health honestly, invents no
+flight candidate, and leaves lodging to the candidate file.
 
 ## Attribution
 

@@ -5,6 +5,8 @@ description: Produce dated mainland-China lodging areas, candidate properties, v
 
 # Search China Lodging
 
+FlyAI is an optional, best-effort third-party wrapper. Treat its absence, drift, or failure as a degraded lodging capability, never as a reason to stop the plan or to invent inventory.
+
 Require city/area, check-in, check-out, party, and lodging constraints.
 
 - Probe FlyAI before querying. With no usable inventory response, return appropriate areas and dated official/deep links rather than invented properties or rates.
