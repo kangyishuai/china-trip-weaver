@@ -164,3 +164,7 @@ should mean pending work. They live where they are enforced:
   `test_exact_nine_skill_names_and_descriptions` 失败。已恢复原 description，把 Journey
   路由、完整子 Trip、连续性与 CLI 指令保留在同一 `SKILL.md` 正文；精准测试与
   bundled quick validator 均恢复通过，未修改或放宽既有测试。
+
+## 0.4.0 Journey 总览与本机发布（2026-09-05）
+
+- 本轮新增阻塞：无。

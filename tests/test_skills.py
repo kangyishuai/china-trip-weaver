@@ -17,7 +17,7 @@ PLUGIN = ROOT / "plugins" / "china-trip-weaver"
 INSTALLER = ROOT / "scripts" / "install_local_plugin.sh"
 
 DESCRIPTIONS = {
-    "plan-china-trip": "Plan, compare, or locally replan a read-only trip within mainland China for 1-7 days. Use when the user asks for a China itinerary, a city weekend, cross-city transport and lodging choices, an executable day schedule, a disruption-aware revision, or a sourced mobile trip page. Orchestrate the plugin's explicit-only research, provider, scheduling, replanning, and rendering Skills; never book, log in, submit identity, pay, cancel, or change an order.",
+    "plan-china-trip": "Plan, compare, or locally replan a read-only trip or multi-Trip Journey within mainland China. Use when the user asks for a China itinerary of any length, a city weekend, cross-city transport and lodging choices, an executable day schedule, a disruption-aware revision, or a sourced mobile Trip or Journey overview. Orchestrate the plugin's explicit-only research, provider, scheduling, replanning, and rendering Skills; never book, log in, submit identity, pay, cancel, or change an order.",
     "research-china-destination": "Build date-bound destination and POI claims for a mainland-China city from authoritative web sources and user-pasted notes. Invoke explicitly from plan-china-trip when candidate places, current events, opening information, seasonal constraints, food, or local cautions are missing; do not create or render a full itinerary.",
     "search-china-rail": "Normalize read-only China Railway station, schedule, seat, fare, direct, transfer, and route-stop results from the pinned 12306 MCP. Invoke explicitly from plan-china-trip for a dated rail leg or rail alternative; never log in, hold, purchase, pay, cancel, or change a ticket.",
     "search-china-air": "Normalize dated mainland-China flight candidates and booking deep links from the pinned FlyAI CLI, with optional VariFlight status, comfort, weather, and price enrichment. Invoke explicitly from plan-china-trip for a flight leg or flight-versus-rail comparison; do not transact or present an untyped price.",
@@ -119,7 +119,7 @@ class SkillPackagingTests(unittest.TestCase):
     def test_manifest_uses_repository_website_without_invented_legal_urls(self):
         manifest = json.loads((PLUGIN / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
         interface = manifest["interface"]
-        self.assertEqual("0.3.0", manifest["version"])
+        self.assertEqual("0.4.0", manifest["version"])
         self.assertEqual("https://github.com/kangyishuai/china-trip-weaver", interface["websiteURL"])
         self.assertNotIn("privacyPolicyURL", interface)
         self.assertNotIn("termsOfServiceURL", interface)

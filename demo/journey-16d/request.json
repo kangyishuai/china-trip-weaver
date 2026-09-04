@@ -1,0 +1,42 @@
+{
+  "assumptions": [
+    "synthetic 16-day Journey acceptance input"
+  ],
+  "budget_cny": 20000,
+  "constraints": [
+    "不执行任何交易动作"
+  ],
+  "destinations": [
+    {
+      "city": "上海",
+      "name": "上海",
+      "ref_id": "city-shanghai"
+    },
+    {
+      "city": "杭州",
+      "name": "杭州",
+      "ref_id": "city-hangzhou"
+    },
+    {
+      "city": "苏州",
+      "name": "苏州",
+      "ref_id": "city-suzhou"
+    }
+  ],
+  "end_date": "2026-10-16",
+  "interests": [
+    "architecture",
+    "garden"
+  ],
+  "locale": "zh-CN",
+  "origin": {
+    "city": "北京",
+    "name": "北京",
+    "ref_id": "city-beijing"
+  },
+  "pace": "balanced",
+  "pasted_notes": null,
+  "rooms": 1,
+  "start_date": "2026-10-01",
+  "travelers": 2
+}

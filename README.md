@@ -2,7 +2,7 @@
 
 **English** · [简体中文](README.zh-CN.md)
 
-China Trip Weaver is a Codex plugin for evidence-backed, read-only trips within mainland China. It turns an independent request plus researched candidates into one versioned Trip JSON; queries pinned 12306 rail, AMap route matrices, FlyAI lodging/flight inventory, and optional VariFlight status/comfort enrichment; schedules without conflating comparisons with selected legs; and renders a deterministic phone-first HTML file.
+China Trip Weaver is a Codex plugin for evidence-backed, read-only trips within mainland China. It turns an independent request plus researched candidates into one versioned Trip JSON, or a Journey containing complete Trips for a longer route; queries pinned 12306 rail, AMap route matrices, FlyAI lodging/flight inventory, and optional VariFlight status/comfort enrichment; schedules without conflating comparisons with selected legs; and renders deterministic phone-first HTML.
 
 It never logs in, submits identity, holds inventory, books, pays, cancels, or changes an order. Provider credentials stay in process-local environments and never appear in argv, logs, fixtures, Trip, HTML, or Git.
 
@@ -10,7 +10,9 @@ It never logs in, submits identity, holds inventory, books, pays, cancels, or ch
 
 The planner supports existing one-day and single-city trips plus ordered multi-city trips lasting 2–7 days. For multiple destinations it follows `origin → D1 → D2 → …`; the default is one-way, and a return is added only when the request explicitly says round trip or the final destination is the origin. Each travel day belongs to the city reached by that day's route leg, and every overnight date must resolve to exactly one explicitly selected stay in that city. Researched lodging candidates are not selected stays; if no candidate can cover a night, planning returns a structured no-solution result.
 
-Trips longer than seven days are not supported. Traveler input has two mutually exclusive forms: the existing `origin + travelers` form, or `traveler_groups[] + meeting_anchor`. Every group supplies a stable `group_id`, its own traveler count and origin, plus an optional mobility profile. The meeting anchor supplies a location and `meet_by`; `buffer_minutes` defaults to 60, and any group that cannot arrive with that much buffer produces a structured conflict. Mixed input is rejected and the emitted Trip preserves only the selected representation. Validation, rendering, and inventory lookup consume the grouped form directly. Grouped transport legs carry explicit `group_refs`; `transport_pricing` exposes each group's total and the whole party's transport total separately.
+Requests longer than seven days become one Journey whose complete, standalone child Trips each retain the 1–7 day limit. The split prefers cross-city days, then seven-day boundaries; adjacent dates, boundary lodging, cross-segment transport, and the aggregate budget remain explicit and validated. The Journey overview shows the whole route, segment dates, total budget range, a deadline-ordered booking/verification checklist, and every degraded capability, conflicting claim, and unresolved unknown without exposing internal ids.
+
+Traveler input has two mutually exclusive forms: the existing `origin + travelers` form, or `traveler_groups[] + meeting_anchor`. Every group supplies a stable `group_id`, its own traveler count and origin, plus an optional mobility profile. The meeting anchor supplies a location and `meet_by`; `buffer_minutes` defaults to 60, and any group that cannot arrive with that much buffer produces a structured conflict. Mixed input is rejected and the emitted Trip preserves only the selected representation. Validation, rendering, and inventory lookup consume the grouped form directly. Grouped transport legs carry explicit `group_refs`; `transport_pricing` exposes each group's total and the whole party's transport total separately.
 
 `pace=slow` first uses the strict slow profile. If that schedule has no solution, the planner cumulatively tries a smaller daily POI cap, 70% POI/meal durations, and finally the balanced 21:30 day end. It stops at the first feasible result and appends every applied step to `request.assumptions`; hard conflicts that none of those steps can change keep their original structured conflict and report all attempted relaxations.
 
@@ -71,7 +73,7 @@ CODEX_HOME=/path/to/an/isolated/codex-home \
   plugin list
 ```
 
-The expected result is `china-trip-weaver@china-trip-weaver-local`, version `0.3.0`, status `installed, enabled`. Use a fresh Codex task after installing or updating so its nine Skills and MCP configuration are reloaded.
+The expected result is `china-trip-weaver@china-trip-weaver-local`, version `0.4.0`, status `installed, enabled`. Use a fresh Codex task after installing or updating so its nine Skills and MCP configuration are reloaded.
 
 For Codex Desktop UI installation, add this repository as a local marketplace, ensure `china-travel-assistant` is disabled, install China Trip Weaver Local, restart, and create a new task. The two plugins must not be enabled together because both expose `plan-china-trip`.
 
@@ -113,6 +115,13 @@ The one-day round trip under [`demo/guangzhou-shenzhen/`](demo/guangzhou-shenzhe
 
 The grouped-departure example under [`demo/grouped-departures/`](demo/grouped-departures/) sends two synthetic traveler groups from Beijing and Guangzhou to a Shanghai meeting anchor. Its checked-in Trip keeps the strict grouped request shape and visibly shows each origin, the three-person total, group-owned transport legs, and per-group/whole-party transport pricing.
 
+The fifth example under [`demo/journey-16d/`](demo/journey-16d/) is a fully synthetic 16-day Shanghai → Hangzhou → Suzhou Journey split into three complete Trips. Regenerate it with `/usr/bin/python3 scripts/build_renderer_fixtures.py`, then validate both artifacts with:
+
+```bash
+plugins/china-trip-weaver/scripts/ctw journey validate demo/journey-16d/journey.json
+plugins/china-trip-weaver/scripts/ctw journey validate-html demo/journey-16d/journey.html demo/journey-16d/journey.json
+```
+
 Railway/network/provider failure never becomes fake success. Each capability preserves its own health and either uses a labeled fallback or stops at a typed unknown. AMap is capped at 80 calls per plan and no more than 2 QPS. FlyAI masked prices such as `¥4xx` are always `verify-on-click`; only exact numeric prices are `live`. FlyAI coordinates remain `provider-unknown` and are never converted or mapped.
 
 ## Run without provider keys
@@ -151,9 +160,13 @@ ctw air --origin CITY --destination CITY --date YYYY-MM-DD --output-json air.jso
 ctw replan --trip TRIP.json --event EVENT.json --base-revision N --output-json TRIP-rN.json --output-html TRIP-rN.html
 ctw render TRIP.json --output TRIP.html
 ctw validate-html TRIP.html TRIP.json
+ctw journey plan --request REQUEST.json --candidates CANDIDATES.json --output-json JOURNEY.json
+ctw journey validate JOURNEY.json
+ctw journey render JOURNEY.json --output JOURNEY.html
+ctw journey validate-html JOURNEY.html JOURNEY.json
 ```
 
-The runtime uses no third-party Python package. `render` refuses an invalid Trip, and `validate-html` blocks structural, CSP, remote-resource, unsafe-link, secret, fact-mapping, degradation, and transaction-action violations.
+The runtime uses no third-party Python package. Trip and Journey renderers refuse invalid input; both HTML validators block structural, CSP, remote-resource, unsafe-link, secret, fact-mapping, traceability, and transaction-action violations.
 
 ## Tests
 
@@ -164,7 +177,7 @@ The runtime uses no third-party Python package. `render` refuses an invalid Trip
 /usr/bin/python3 scripts/scan_secrets.py --credential-values --git-history
 ```
 
-The suite has zero skips. It covers the frozen Trip schema, candidate validation, credential/process/home isolation, exact-value and captured-data scans, evidence/cache/coordinates, 79 unmistakably synthetic provider fixtures with AMap/FlyAI/VariFlight contract shapes, 20 scheduling goldens, 8 no-solution cases, 4 replan goldens, renderer adversarial cases and offline browser viewports, Skill/package metadata, and deterministic plus live-path integration scenarios.
+The suite has zero skips. It covers the frozen Trip schema, Journey segmentation and continuity, candidate validation, credential/process/home isolation, exact-value and captured-data scans, evidence/cache/coordinates, 79 unmistakably synthetic provider fixtures with AMap/FlyAI/VariFlight contract shapes, 20 scheduling goldens, 8 no-solution cases, 4 replan goldens, Trip/Journey renderer adversarial cases and offline browser viewports, Skill/package metadata, and deterministic plus live-path integration scenarios.
 
 Design authority lives in [`docs/design/`](docs/design/00-README.md). Implementation-only additions are [ADR-0009](docs/design/adr/0009-rename-rail-air-skills.md), [ADR-0010](docs/design/adr/0010-candidate-file-planning-and-live-rail.md), and [ADR-0011](docs/design/adr/0011-live-amap-flyai-variflight-boundaries.md); [ADR-0012](docs/design/adr/0012-open-source-under-mit.md) records the MIT licensing decision and [ADR-0013](docs/design/adr/0013-stay-off-the-public-marketplace.md) records why this plugin is not listed on a public marketplace. See [`docs/manual-acceptance.md`](docs/manual-acceptance.md) for Codex Desktop acceptance.
 

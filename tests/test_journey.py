@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -18,12 +20,16 @@ sys.path.insert(0, str(SRC))
 from china_trip_weaver.clock import FixedClock
 from china_trip_weaver.journey import (
     assemble_journey,
+    journey_booking_checklist,
     journey_budget_ledger,
+    journey_risk_items,
     plan_journey,
     split_journey_inputs,
     validate_journey,
 )
 from china_trip_weaver.planning import RailBackend, _normalize_request, plan_trip
+from china_trip_weaver.render import render_journey, validate_journey_html
+from china_trip_weaver.render.validate_html import AuditParser
 from china_trip_weaver.replan import replan_trip
 from china_trip_weaver.validate_trip import validate_trip
 from scripts.build_plan_fixtures import journey_sixteen_day_case
@@ -32,6 +38,7 @@ from scripts.build_plan_fixtures import journey_sixteen_day_case
 FIXED_NOW = "2026-09-05T09:00:00+08:00"
 VALID_TRIP = ROOT / "tests" / "fixtures" / "trips" / "schema" / "valid" / "weekend-live.json"
 GROUPED_TRIP = ROOT / "demo" / "grouped-departures" / "trip.json"
+JOURNEY_DEMO = ROOT / "demo" / "journey-16d"
 CTW = PLUGIN / "scripts" / "ctw"
 
 
@@ -161,6 +168,21 @@ class JourneyContinuityTests(unittest.TestCase):
             FixedClock.from_iso(FIXED_NOW),
             RailBackend.from_spec("off", ROOT),
         )
+
+    def assertJourneyItemTraceable(self, journey, item):
+        trip = journey["trips"][item["trip_index"]]
+        refs = {
+            "trip": {trip["trip_id"]},
+            "transport_leg": {value["leg_id"] for value in trip["transport_legs"]},
+            "lodging": {value["lodging_id"] for value in trip["lodgings"]},
+            "poi": {value["poi_id"] for value in trip["pois"]},
+            "day": {value["day_id"] for value in trip["days"]},
+            "provider_health": {value["provider"] for value in trip["provider_health"]},
+        }
+        self.assertIn(item["source_kind"], refs)
+        self.assertIn(item["source_ref"], refs[item["source_kind"]])
+        if item["claim_id"]:
+            self.assertIn(item["claim_id"], {value["claim_id"] for value in trip["claims"]})
 
     def test_g7_sixteen_day_journey_is_contiguous_budgeted_and_replanable(self):
         journey = self.result.journey
@@ -312,6 +334,14 @@ class JourneyContinuityTests(unittest.TestCase):
                 for item in journey["segment_connections"]
             ],
         )
+        rendered = render_journey(journey)
+        parser = AuditParser()
+        parser.feed(rendered)
+        parser.close()
+        visible = " ".join(parser.visible_text)
+        self.assertIn("北京 / 广州 → 上海", visible)
+        self.assertNotIn("北京 → 广州", visible)
+        self.assertTrue(validate_journey_html(rendered, journey).ok)
 
     def test_cli_plans_and_validates_the_sixteen_day_journey(self):
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
@@ -345,6 +375,208 @@ class JourneyContinuityTests(unittest.TestCase):
             self.assertEqual(0, validated.returncode, validated.stdout + validated.stderr)
             self.assertIn("JOURNEY VALID", validated.stdout)
             self.assertEqual(3, len(load(journey_path)["trips"]))
+
+    def test_booking_checklist_covers_every_leg_stay_and_unknown_in_deadline_order(self):
+        journey = self.result.journey
+        checklist = journey_booking_checklist(journey)
+
+        expected_legs = {
+            (trip_index, item["leg_id"])
+            for trip_index, trip in enumerate(journey["trips"])
+            for item in trip["transport_legs"]
+        }
+        expected_stays = {
+            (trip_index, item["lodging_id"])
+            for trip_index, trip in enumerate(journey["trips"])
+            for item in trip["lodgings"]
+        }
+        expected_unknowns = sorted(
+            (trip_index, item["field_path"])
+            for trip_index, trip in enumerate(journey["trips"])
+            for item in trip["unknowns"]
+        )
+        self.assertEqual(
+            expected_legs,
+            {
+                (item["trip_index"], item["source_ref"])
+                for item in checklist if item["kind"] == "transport"
+            },
+        )
+        self.assertEqual(
+            expected_stays,
+            {
+                (item["trip_index"], item["source_ref"])
+                for item in checklist if item["kind"] == "lodging"
+            },
+        )
+        self.assertEqual(
+            expected_unknowns,
+            sorted(
+                (item["trip_index"], item["field_path"])
+                for item in checklist if item["kind"] == "unknown"
+            ),
+        )
+        deadline_keys = [
+            (item["deadline"][:10], 0 if len(item["deadline"]) == 10 else 1, item["deadline"])
+            for item in checklist
+        ]
+        self.assertEqual(sorted(deadline_keys), deadline_keys)
+        for item in checklist:
+            self.assertJourneyItemTraceable(journey, item)
+
+    def test_risks_cover_every_missing_or_degraded_capability_conflict_and_unknown(self):
+        journey = copy.deepcopy(self.result.journey)
+        journey["trips"][0]["provider_health"][0]["status"] = "degraded"
+        journey["trips"][0]["claims"][0]["status"] = "conflict"
+        risks = journey_risk_items(journey)
+        journey_report = validate_journey(journey)
+        self.assertTrue(journey_report.ok, [item.render() for item in journey_report.errors])
+
+        expected_capabilities = {
+            (trip_index, health["provider"], capability, health["status"])
+            for trip_index, trip in enumerate(journey["trips"])
+            for health in trip["provider_health"]
+            if health["status"] in ("degraded", "missing")
+            for capability in health["capabilities"]
+        }
+        actual_capabilities = {
+            (item["trip_index"], item["provider"], item["capability"], item["status"])
+            for item in risks if item["kind"] == "provider_capability"
+        }
+        self.assertEqual(expected_capabilities, actual_capabilities)
+        self.assertEqual(
+            {(0, journey["trips"][0]["claims"][0]["claim_id"])},
+            {
+                (item["trip_index"], item["claim_id"])
+                for item in risks if item["kind"] == "claim_conflict"
+            },
+        )
+        self.assertEqual(
+            sum(len(trip["unknowns"]) for trip in journey["trips"]),
+            sum(item["kind"] == "unresolved_unknown" for item in risks),
+        )
+        for item in risks:
+            self.assertJourneyItemTraceable(journey, item)
+        rendered = render_journey(journey)
+        html_report = validate_journey_html(rendered, journey)
+        self.assertTrue(html_report.ok, [item.render() for item in html_report.errors])
+
+    def test_journey_overview_is_deterministic_valid_and_hides_internal_ids(self):
+        journey = self.result.journey
+        first = render_journey(journey)
+        second = render_journey(copy.deepcopy(journey))
+        self.assertEqual(first.encode("utf-8"), second.encode("utf-8"))
+        self.assertEqual(
+            hashlib.sha256(first.encode("utf-8")).hexdigest(),
+            hashlib.sha256(second.encode("utf-8")).hexdigest(),
+        )
+        report = validate_journey_html(first, journey)
+        self.assertTrue(report.ok, [item.render() for item in report.errors])
+        parser = AuditParser()
+        parser.feed(first)
+        parser.close()
+        visible = " ".join(parser.visible_text)
+        for expected in ("全程路线", "预订与核验清单", "风险与未解决项", "CNY 4200", "北京", "上海", "杭州", "苏州"):
+            self.assertIn(expected, visible)
+        internal_ids = [journey["journey_id"]] + [trip["trip_id"] for trip in journey["trips"]]
+        internal_ids.extend(
+            leg["leg_id"] for trip in journey["trips"] for leg in trip["transport_legs"]
+        )
+        self.assertTrue(all(identifier not in visible for identifier in internal_ids))
+
+    def test_journey_overview_budget_route_and_segment_facts_match_source(self):
+        journey = self.result.journey
+        rendered = render_journey(journey)
+        parser = AuditParser()
+        parser.feed(rendered)
+        parser.close()
+        budget = next(attrs for _, attrs in parser.all_attrs if "data-budget-currency" in attrs)
+        self.assertEqual("4200", budget["data-budget-known"])
+        self.assertEqual("", budget["data-budget-min"])
+        self.assertEqual("", budget["data-budget-max"])
+        self.assertEqual("incomplete", budget["data-budget-status"])
+        self.assertEqual(3, sum("data-route-index" in attrs for _, attrs in parser.all_attrs))
+        self.assertEqual(3, sum("data-segment-index" in attrs for _, attrs in parser.all_attrs))
+
+    def test_journey_html_rejects_loosened_csp(self):
+        journey = self.result.journey
+        rendered = render_journey(journey)
+        mutated = rendered.replace("script-src &#x27;none&#x27;", "script-src https:", 1)
+        self.assertNotEqual(rendered, mutated)
+        codes = {item.code for item in validate_journey_html(mutated, journey).errors}
+        self.assertIn("JH102", codes)
+
+    def test_journey_html_rejects_missing_checklist_item(self):
+        journey = self.result.journey
+        rendered = render_journey(journey)
+        mutated = re.sub(
+            r'<li class="checklist-item".*?</li>',
+            "",
+            rendered,
+            count=1,
+            flags=re.DOTALL,
+        )
+        self.assertNotEqual(rendered, mutated)
+        codes = {item.code for item in validate_journey_html(mutated, journey).errors}
+        self.assertIn("JH202", codes)
+
+    def test_journey_html_rejects_missing_risk_item(self):
+        journey = self.result.journey
+        rendered = render_journey(journey)
+        mutated = re.sub(
+            r'<li class="risk-item".*?</li>',
+            "",
+            rendered,
+            count=1,
+            flags=re.DOTALL,
+        )
+        self.assertNotEqual(rendered, mutated)
+        codes = {item.code for item in validate_journey_html(mutated, journey).errors}
+        self.assertIn("JH203", codes)
+
+    def test_journey_html_rejects_visible_internal_id(self):
+        journey = self.result.journey
+        rendered = render_journey(journey)
+        mutated = rendered.replace(
+            "</footer>",
+            "<p>%s</p></footer>" % journey["journey_id"],
+            1,
+        )
+        codes = {item.code for item in validate_journey_html(mutated, journey).errors}
+        self.assertIn("JH205", codes)
+
+    def test_cli_renders_and_validates_the_journey_overview(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            output = Path(temporary)
+            journey_path = output / "journey.json"
+            html_path = output / "journey.html"
+            journey_path.write_text(
+                json.dumps(self.result.journey, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            rendered = subprocess.run(
+                [str(CTW), "journey", "render", str(journey_path), "--output", str(html_path)],
+                text=True,
+                capture_output=True,
+            )
+            checked = subprocess.run(
+                [str(CTW), "journey", "validate-html", str(html_path), str(journey_path)],
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(0, rendered.returncode, rendered.stdout + rendered.stderr)
+            self.assertIn("JOURNEY_RENDERED", rendered.stdout)
+            self.assertIn("errors=0", rendered.stdout)
+            self.assertEqual(0, checked.returncode, checked.stdout + checked.stderr)
+            self.assertIn("JOURNEY HTML VALID", checked.stdout)
+
+    def test_checked_in_sixteen_day_demo_matches_the_deterministic_renderer(self):
+        journey = load(JOURNEY_DEMO / "journey.json")
+        rendered = (JOURNEY_DEMO / "journey.html").read_text(encoding="utf-8")
+        self.assertEqual(16, sum(len(item["days"]) for item in journey["trips"]))
+        self.assertEqual(render_journey(journey), rendered)
+        report = validate_journey_html(rendered, journey)
+        self.assertTrue(report.ok, [item.render() for item in report.errors])
 
 
 if __name__ == "__main__":

@@ -1,0 +1,4385 @@
+{
+  "budget_ledger": {
+    "budget_cny": 20000,
+    "currency": "CNY",
+    "items": [
+      {
+        "amount_max_cny": null,
+        "amount_min_cny": null,
+        "basis": "standalone Trip budget ledger",
+        "category": "trip",
+        "included_in_total": true,
+        "price_type": null,
+        "reason": "Trip ledger contains an incomparable price bound",
+        "ref_id": "trip-1aae22afc56a7f64"
+      },
+      {
+        "amount_max_cny": null,
+        "amount_min_cny": null,
+        "basis": "standalone Trip budget ledger",
+        "category": "trip",
+        "included_in_total": true,
+        "price_type": null,
+        "reason": "Trip ledger contains an incomparable price bound",
+        "ref_id": "trip-61f6f9be103aff7a"
+      },
+      {
+        "amount_max_cny": null,
+        "amount_min_cny": null,
+        "basis": "standalone Trip budget ledger",
+        "category": "trip",
+        "included_in_total": true,
+        "price_type": null,
+        "reason": "Trip ledger contains an incomparable price bound",
+        "ref_id": "trip-67bb8740dc5834ab"
+      },
+      {
+        "amount_max_cny": 0,
+        "amount_min_cny": 0,
+        "basis": "additional cross-segment transport",
+        "category": "cross_segment_transport",
+        "included_in_total": true,
+        "price_type": "unknown",
+        "reason": "cross-segment transport is already included in trip-61f6f9be103aff7a",
+        "ref_id": "connection-6238f539f1e73e98"
+      },
+      {
+        "amount_max_cny": 0,
+        "amount_min_cny": 0,
+        "basis": "additional cross-segment transport",
+        "category": "cross_segment_transport",
+        "included_in_total": true,
+        "price_type": "unknown",
+        "reason": "cross-segment transport is already included in trip-67bb8740dc5834ab",
+        "ref_id": "connection-b6c0dfd37b816bbd"
+      }
+    ],
+    "known_cost_cny": 4200,
+    "remaining_known_budget_cny": 15800,
+    "status": "incomplete",
+    "total_range_cny": {
+      "maximum": null,
+      "minimum": null
+    }
+  },
+  "end_date": "2026-10-16",
+  "generated_at": "2026-09-05T09:00:00+08:00",
+  "journey_id": "journey-2a5205b65cd09cbb",
+  "origin": {
+    "city": "北京",
+    "name": "北京",
+    "ref_id": "city-beijing"
+  },
+  "revision": {
+    "created_at": "2026-09-05T09:00:00+08:00",
+    "created_by": "system",
+    "number": 1,
+    "parent_revision": null,
+    "reason": "initial multi-Trip journey plan"
+  },
+  "schema_version": "1.0.0",
+  "segment_connections": [
+    {
+      "connection_id": "connection-6238f539f1e73e98",
+      "cross_segment_transport": {
+        "amount_max_cny": null,
+        "amount_min_cny": null,
+        "included_in_trip_id": "trip-61f6f9be103aff7a",
+        "leg_id": "leg-rail-fallback-03178f234e57",
+        "price_type": "unknown",
+        "reason": "price amount is not verified and cannot be compared with the trip budget",
+        "status": "included_in_next_trip"
+      },
+      "from_end_date": "2026-10-05",
+      "from_trip_id": "trip-1aae22afc56a7f64",
+      "lodging_continuity": {
+        "from_lodging_id": "lodging-j16-shanghai-central",
+        "overnight_date": "2026-10-05",
+        "reason": "the preceding lodging covers the boundary night before the next stay begins",
+        "status": "changed",
+        "to_lodging_id": "lodging-j16-hangzhou-central"
+      },
+      "to_start_date": "2026-10-06",
+      "to_trip_id": "trip-61f6f9be103aff7a"
+    },
+    {
+      "connection_id": "connection-b6c0dfd37b816bbd",
+      "cross_segment_transport": {
+        "amount_max_cny": null,
+        "amount_min_cny": null,
+        "included_in_trip_id": "trip-67bb8740dc5834ab",
+        "leg_id": "leg-rail-fallback-b66b4e0b7f99",
+        "price_type": "unknown",
+        "reason": "price amount is not verified and cannot be compared with the trip budget",
+        "status": "included_in_next_trip"
+      },
+      "from_end_date": "2026-10-10",
+      "from_trip_id": "trip-61f6f9be103aff7a",
+      "lodging_continuity": {
+        "from_lodging_id": "lodging-j16-hangzhou-central",
+        "overnight_date": "2026-10-10",
+        "reason": "the preceding lodging covers the boundary night before the next stay begins",
+        "status": "changed",
+        "to_lodging_id": "lodging-j16-suzhou-central"
+      },
+      "to_start_date": "2026-10-11",
+      "to_trip_id": "trip-67bb8740dc5834ab"
+    }
+  ],
+  "start_date": "2026-10-01",
+  "travelers": 2,
+  "trips": [
+    {
+      "budget_ledger": {
+        "budget_cny": 20000,
+        "currency": "CNY",
+        "items": [
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "unknown/per_person",
+            "category": "transport",
+            "included_in_scheduler": false,
+            "price_type": "unknown",
+            "reason": "price amount is not verified and cannot be compared with the trip budget",
+            "ref_id": "leg-rail-fallback-5945359c4de0"
+          },
+          {
+            "amount_max_cny": 1500,
+            "amount_min_cny": 1500,
+            "basis": "300 per night × 5 nights × 1 rooms",
+            "category": "lodging",
+            "included_in_scheduler": true,
+            "price_type": "reference",
+            "reason": null,
+            "ref_id": "lodging-j16-shanghai-central"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-j16-shanghai"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-0e4270b5bf83"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-73427587e6c2"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-1e0ad4479333"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-dd82101e004d"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-6fe6c1ec3822"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-2acb635f18d4"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-54035b633e42"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-7a2c2df8121e"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-7d78c44eb96e"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-1b6979118ddd"
+          }
+        ],
+        "known_cost_cny": 1500,
+        "remaining_known_budget_cny": 18500,
+        "status": "incomplete",
+        "total_range_cny": {
+          "maximum": null,
+          "minimum": null
+        }
+      },
+      "claims": [
+        {
+          "as_of": null,
+          "claim_id": "claim-j16-shanghai-lodging-price",
+          "confidence": 0.8,
+          "field_path": "/price",
+          "json_path": null,
+          "mode": "static",
+          "provider": "deep-link",
+          "queried_at": "2026-09-03T12:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://www.fliggy.com/hotel/search",
+          "status": "partial",
+          "subject_ref": "lodging-j16-shanghai-central",
+          "value": 300
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-j16-shanghai-hours",
+          "confidence": 0.55,
+          "field_path": "/opening_windows/0",
+          "json_path": null,
+          "mode": "static",
+          "provider": "official-web",
+          "queried_at": "2026-09-03T12:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://example.com/synthetic-journey/shanghai",
+          "status": "hypothesis",
+          "subject_ref": "poi-j16-shanghai",
+          "value": "date-specific candidate window"
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-2c31f8fdd5833303",
+          "confidence": 0.3,
+          "field_path": "/depart_at",
+          "json_path": null,
+          "mode": "static",
+          "provider": "12306-deep-link",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc&fs=%E5%8C%97%E4%BA%AC&ts=%E4%B8%8A%E6%B5%B7&date=2026-10-01&flag=N%2CN%2CY",
+          "status": "hypothesis",
+          "subject_ref": "leg-rail-fallback-5945359c4de0",
+          "value": "planning window; verify the actual service on 12306"
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-e5488dd145cf672b",
+          "confidence": 0,
+          "field_path": "/price",
+          "json_path": null,
+          "mode": "static",
+          "provider": "12306-deep-link",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc&fs=%E5%8C%97%E4%BA%AC&ts=%E4%B8%8A%E6%B5%B7&date=2026-10-01&flag=N%2CN%2CY",
+          "status": "unknown",
+          "subject_ref": "leg-rail-fallback-5945359c4de0",
+          "value": null
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-af597fa8f9d975fc",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-0e4270b5bf83",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "13:00",
+            "meal_type": "lunch",
+            "start_time": "11:00",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-01T14:00:00+08:00",
+                "start_at": "2026-10-01T13:00:00+08:00"
+              }
+            ]
+          }
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-0ed65b4b40fa1ec7",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-73427587e6c2",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "19:30",
+            "meal_type": "dinner",
+            "start_time": "16:30",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-01T20:30:00+08:00",
+                "start_at": "2026-10-01T16:30:00+08:00"
+              }
+            ]
+          }
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-73c8c21c256e40df",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-1e0ad4479333",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "13:00",
+            "meal_type": "lunch",
+            "start_time": "11:00",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-02T14:00:00+08:00",
+                "start_at": "2026-10-02T11:00:00+08:00"
+              }
+            ]
+          }
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-d08f000877429d9d",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-dd82101e004d",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "19:30",
+            "meal_type": "dinner",
+            "start_time": "16:30",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-02T20:30:00+08:00",
+                "start_at": "2026-10-02T16:30:00+08:00"
+              }
+            ]
+          }
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-ef063f3d70b1727e",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-6fe6c1ec3822",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "13:00",
+            "meal_type": "lunch",
+            "start_time": "11:00",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-03T14:00:00+08:00",
+                "start_at": "2026-10-03T11:00:00+08:00"
+              }
+            ]
+          }
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-13d152c4d3f42d75",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-2acb635f18d4",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "19:30",
+            "meal_type": "dinner",
+            "start_time": "16:30",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-03T20:30:00+08:00",
+                "start_at": "2026-10-03T16:30:00+08:00"
+              }
+            ]
+          }
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-57dc4f9fcf4e6e3a",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-54035b633e42",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "13:00",
+            "meal_type": "lunch",
+            "start_time": "11:00",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-04T14:00:00+08:00",
+                "start_at": "2026-10-04T11:00:00+08:00"
+              }
+            ]
+          }
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-8474e76b70bd3d63",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-7a2c2df8121e",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "19:30",
+            "meal_type": "dinner",
+            "start_time": "16:30",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-04T20:30:00+08:00",
+                "start_at": "2026-10-04T16:30:00+08:00"
+              }
+            ]
+          }
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-2b32ec2f5eae1446",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-7d78c44eb96e",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "13:00",
+            "meal_type": "lunch",
+            "start_time": "11:00",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-05T14:00:00+08:00",
+                "start_at": "2026-10-05T11:00:00+08:00"
+              }
+            ]
+          }
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-7de70c17e639662c",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-1b6979118ddd",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "19:30",
+            "meal_type": "dinner",
+            "start_time": "16:30",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-05T20:30:00+08:00",
+                "start_at": "2026-10-05T16:30:00+08:00"
+              }
+            ]
+          }
+        }
+      ],
+      "days": [
+        {
+          "city": "上海",
+          "date": "2026-10-01",
+          "day_id": "day-1",
+          "pace": "balanced",
+          "planned_walking_km": 0.0,
+          "slots": [
+            {
+              "claim_ids": [
+                "claim-2c31f8fdd5833303",
+                "claim-e5488dd145cf672b"
+              ],
+              "end_at": "2026-10-01T13:00:00+08:00",
+              "kind": "transport",
+              "locked": false,
+              "ref_id": "leg-rail-fallback-5945359c4de0",
+              "slot_id": "slot-leg-rail-fallback-5945359c4de0",
+              "start_at": "2026-10-01T08:00:00+08:00",
+              "status": "scheduled",
+              "title": "北京 → 上海 铁路"
+            },
+            {
+              "claim_ids": [
+                "claim-af597fa8f9d975fc"
+              ],
+              "end_at": "2026-10-01T14:00:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-0e4270b5bf83",
+              "slot_id": "slot-poi-routine-meal-0e4270b5bf83",
+              "start_at": "2026-10-01T13:00:00+08:00",
+              "status": "scheduled",
+              "title": "午餐（地点待定）"
+            },
+            {
+              "claim_ids": [],
+              "end_at": "2026-10-01T15:00:00+08:00",
+              "kind": "rest",
+              "locked": false,
+              "ref_id": null,
+              "slot_id": "slot-routine-rest-807043b17cd5",
+              "start_at": "2026-10-01T14:00:00+08:00",
+              "status": "scheduled",
+              "title": "午休"
+            },
+            {
+              "claim_ids": [],
+              "end_at": "2026-10-01T15:45:00+08:00",
+              "kind": "rest",
+              "locked": false,
+              "ref_id": null,
+              "slot_id": "slot-routine-transfer-buffer-d766bb400e93",
+              "start_at": "2026-10-01T15:00:00+08:00",
+              "status": "scheduled",
+              "title": "到站、行李与换乘缓冲"
+            },
+            {
+              "claim_ids": [
+                "claim-j16-shanghai-lodging-price"
+              ],
+              "end_at": "2026-10-01T16:30:00+08:00",
+              "kind": "checkin",
+              "locked": false,
+              "ref_id": "lodging-j16-shanghai-central",
+              "slot_id": "slot-lodging-j16-shanghai-central",
+              "start_at": "2026-10-01T15:45:00+08:00",
+              "status": "scheduled",
+              "title": "上海合成住宿 入住"
+            },
+            {
+              "claim_ids": [
+                "claim-0ed65b4b40fa1ec7"
+              ],
+              "end_at": "2026-10-01T17:30:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-73427587e6c2",
+              "slot_id": "slot-poi-routine-meal-73427587e6c2",
+              "start_at": "2026-10-01T16:30:00+08:00",
+              "status": "scheduled",
+              "title": "晚餐（地点待定）"
+            }
+          ],
+          "stay_id": "lodging-j16-shanghai-central",
+          "timezone": "Asia/Shanghai"
+        },
+        {
+          "city": "上海",
+          "date": "2026-10-02",
+          "day_id": "day-2",
+          "pace": "balanced",
+          "planned_walking_km": 0.0,
+          "slots": [
+            {
+              "claim_ids": [
+                "claim-j16-shanghai-hours"
+              ],
+              "end_at": "2026-10-02T10:30:00+08:00",
+              "kind": "poi",
+              "locked": false,
+              "ref_id": "poi-j16-shanghai",
+              "slot_id": "slot-poi-j16-shanghai",
+              "start_at": "2026-10-02T09:00:00+08:00",
+              "status": "scheduled",
+              "title": "上海合成建筑漫步"
+            },
+            {
+              "claim_ids": [
+                "claim-73c8c21c256e40df"
+              ],
+              "end_at": "2026-10-02T12:00:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-1e0ad4479333",
+              "slot_id": "slot-poi-routine-meal-1e0ad4479333",
+              "start_at": "2026-10-02T11:00:00+08:00",
+              "status": "scheduled",
+              "title": "午餐（地点待定）"
+            },
+            {
+              "claim_ids": [],
+              "end_at": "2026-10-02T14:00:00+08:00",
+              "kind": "rest",
+              "locked": false,
+              "ref_id": null,
+              "slot_id": "slot-routine-rest-a170c1487623",
+              "start_at": "2026-10-02T13:00:00+08:00",
+              "status": "scheduled",
+              "title": "午休"
+            },
+            {
+              "claim_ids": [
+                "claim-d08f000877429d9d"
+              ],
+              "end_at": "2026-10-02T17:30:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-dd82101e004d",
+              "slot_id": "slot-poi-routine-meal-dd82101e004d",
+              "start_at": "2026-10-02T16:30:00+08:00",
+              "status": "scheduled",
+              "title": "晚餐（地点待定）"
+            }
+          ],
+          "stay_id": "lodging-j16-shanghai-central",
+          "timezone": "Asia/Shanghai"
+        },
+        {
+          "city": "上海",
+          "date": "2026-10-03",
+          "day_id": "day-3",
+          "pace": "balanced",
+          "planned_walking_km": 0.0,
+          "slots": [
+            {
+              "claim_ids": [
+                "claim-ef063f3d70b1727e"
+              ],
+              "end_at": "2026-10-03T12:00:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-6fe6c1ec3822",
+              "slot_id": "slot-poi-routine-meal-6fe6c1ec3822",
+              "start_at": "2026-10-03T11:00:00+08:00",
+              "status": "scheduled",
+              "title": "午餐（地点待定）"
+            },
+            {
+              "claim_ids": [],
+              "end_at": "2026-10-03T14:00:00+08:00",
+              "kind": "rest",
+              "locked": false,
+              "ref_id": null,
+              "slot_id": "slot-routine-rest-6d3be3614602",
+              "start_at": "2026-10-03T13:00:00+08:00",
+              "status": "scheduled",
+              "title": "午休"
+            },
+            {
+              "claim_ids": [
+                "claim-13d152c4d3f42d75"
+              ],
+              "end_at": "2026-10-03T17:30:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-2acb635f18d4",
+              "slot_id": "slot-poi-routine-meal-2acb635f18d4",
+              "start_at": "2026-10-03T16:30:00+08:00",
+              "status": "scheduled",
+              "title": "晚餐（地点待定）"
+            }
+          ],
+          "stay_id": "lodging-j16-shanghai-central",
+          "timezone": "Asia/Shanghai"
+        },
+        {
+          "city": "上海",
+          "date": "2026-10-04",
+          "day_id": "day-4",
+          "pace": "balanced",
+          "planned_walking_km": 0.0,
+          "slots": [
+            {
+              "claim_ids": [
+                "claim-57dc4f9fcf4e6e3a"
+              ],
+              "end_at": "2026-10-04T12:00:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-54035b633e42",
+              "slot_id": "slot-poi-routine-meal-54035b633e42",
+              "start_at": "2026-10-04T11:00:00+08:00",
+              "status": "scheduled",
+              "title": "午餐（地点待定）"
+            },
+            {
+              "claim_ids": [],
+              "end_at": "2026-10-04T14:00:00+08:00",
+              "kind": "rest",
+              "locked": false,
+              "ref_id": null,
+              "slot_id": "slot-routine-rest-31019e731fcd",
+              "start_at": "2026-10-04T13:00:00+08:00",
+              "status": "scheduled",
+              "title": "午休"
+            },
+            {
+              "claim_ids": [
+                "claim-8474e76b70bd3d63"
+              ],
+              "end_at": "2026-10-04T17:30:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-7a2c2df8121e",
+              "slot_id": "slot-poi-routine-meal-7a2c2df8121e",
+              "start_at": "2026-10-04T16:30:00+08:00",
+              "status": "scheduled",
+              "title": "晚餐（地点待定）"
+            }
+          ],
+          "stay_id": "lodging-j16-shanghai-central",
+          "timezone": "Asia/Shanghai"
+        },
+        {
+          "city": "上海",
+          "date": "2026-10-05",
+          "day_id": "day-5",
+          "pace": "balanced",
+          "planned_walking_km": 0.0,
+          "slots": [
+            {
+              "claim_ids": [
+                "claim-2b32ec2f5eae1446"
+              ],
+              "end_at": "2026-10-05T12:00:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-7d78c44eb96e",
+              "slot_id": "slot-poi-routine-meal-7d78c44eb96e",
+              "start_at": "2026-10-05T11:00:00+08:00",
+              "status": "scheduled",
+              "title": "午餐（地点待定）"
+            },
+            {
+              "claim_ids": [],
+              "end_at": "2026-10-05T14:00:00+08:00",
+              "kind": "rest",
+              "locked": false,
+              "ref_id": null,
+              "slot_id": "slot-routine-rest-b8848661265f",
+              "start_at": "2026-10-05T13:00:00+08:00",
+              "status": "scheduled",
+              "title": "午休"
+            },
+            {
+              "claim_ids": [
+                "claim-7de70c17e639662c"
+              ],
+              "end_at": "2026-10-05T17:30:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-1b6979118ddd",
+              "slot_id": "slot-poi-routine-meal-1b6979118ddd",
+              "start_at": "2026-10-05T16:30:00+08:00",
+              "status": "scheduled",
+              "title": "晚餐（地点待定）"
+            }
+          ],
+          "stay_id": "lodging-j16-shanghai-central",
+          "timezone": "Asia/Shanghai"
+        }
+      ],
+      "generated_at": "2026-09-05T09:00:00+08:00",
+      "lodgings": [
+        {
+          "area": "上海合成片区",
+          "candidate_ref": "lodging-j16-shanghai-central",
+          "check_in": "2026-10-01",
+          "check_out": "2026-10-06",
+          "city": "上海",
+          "claim_ids": [
+            "claim-j16-shanghai-lodging-price"
+          ],
+          "coordinates": null,
+          "deep_links": [
+            "https://www.fliggy.com/hotel/search"
+          ],
+          "locked": false,
+          "lodging_id": "lodging-j16-shanghai-central",
+          "name": "上海合成住宿",
+          "price": {
+            "amount": 300,
+            "claim_id": "claim-j16-shanghai-lodging-price",
+            "currency": "CNY",
+            "includes_taxes": true,
+            "price_type": "reference",
+            "queried_at": "2026-09-03T12:00:00+08:00",
+            "unit": "per_night"
+          },
+          "selected_nights": [
+            "2026-10-01",
+            "2026-10-02",
+            "2026-10-03",
+            "2026-10-04",
+            "2026-10-05"
+          ],
+          "selection_status": "selected"
+        }
+      ],
+      "mode": "static",
+      "patches": [],
+      "pois": [
+        {
+          "category": "architecture",
+          "city": "上海",
+          "claim_ids": [
+            "claim-j16-shanghai-hours"
+          ],
+          "coordinates": null,
+          "deep_links": [
+            "https://example.com/synthetic-journey/shanghai"
+          ],
+          "name": "上海合成建筑漫步",
+          "opening_windows": [
+            {
+              "claim_id": "claim-j16-shanghai-hours",
+              "end_at": "2026-10-02T12:00:00+08:00",
+              "start_at": "2026-10-02T09:00:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "poi_id": "poi-j16-shanghai",
+          "price": null,
+          "recommended_duration_minutes": 90
+        },
+        {
+          "category": "food",
+          "city": "上海",
+          "claim_ids": [
+            "claim-af597fa8f9d975fc"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "午餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-af597fa8f9d975fc",
+              "end_at": "2026-10-01T14:00:00+08:00",
+              "start_at": "2026-10-01T13:00:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-0e4270b5bf83",
+          "price": null,
+          "recommended_duration_minutes": 60
+        },
+        {
+          "category": "food",
+          "city": "上海",
+          "claim_ids": [
+            "claim-0ed65b4b40fa1ec7"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "晚餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-0ed65b4b40fa1ec7",
+              "end_at": "2026-10-01T20:30:00+08:00",
+              "start_at": "2026-10-01T16:30:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-73427587e6c2",
+          "price": null,
+          "recommended_duration_minutes": 60
+        },
+        {
+          "category": "food",
+          "city": "上海",
+          "claim_ids": [
+            "claim-73c8c21c256e40df"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "午餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-73c8c21c256e40df",
+              "end_at": "2026-10-02T14:00:00+08:00",
+              "start_at": "2026-10-02T11:00:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-1e0ad4479333",
+          "price": null,
+          "recommended_duration_minutes": 60
+        },
+        {
+          "category": "food",
+          "city": "上海",
+          "claim_ids": [
+            "claim-d08f000877429d9d"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "晚餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-d08f000877429d9d",
+              "end_at": "2026-10-02T20:30:00+08:00",
+              "start_at": "2026-10-02T16:30:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-dd82101e004d",
+          "price": null,
+          "recommended_duration_minutes": 60
+        },
+        {
+          "category": "food",
+          "city": "上海",
+          "claim_ids": [
+            "claim-ef063f3d70b1727e"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "午餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-ef063f3d70b1727e",
+              "end_at": "2026-10-03T14:00:00+08:00",
+              "start_at": "2026-10-03T11:00:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-6fe6c1ec3822",
+          "price": null,
+          "recommended_duration_minutes": 60
+        },
+        {
+          "category": "food",
+          "city": "上海",
+          "claim_ids": [
+            "claim-13d152c4d3f42d75"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "晚餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-13d152c4d3f42d75",
+              "end_at": "2026-10-03T20:30:00+08:00",
+              "start_at": "2026-10-03T16:30:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-2acb635f18d4",
+          "price": null,
+          "recommended_duration_minutes": 60
+        },
+        {
+          "category": "food",
+          "city": "上海",
+          "claim_ids": [
+            "claim-57dc4f9fcf4e6e3a"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "午餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-57dc4f9fcf4e6e3a",
+              "end_at": "2026-10-04T14:00:00+08:00",
+              "start_at": "2026-10-04T11:00:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-54035b633e42",
+          "price": null,
+          "recommended_duration_minutes": 60
+        },
+        {
+          "category": "food",
+          "city": "上海",
+          "claim_ids": [
+            "claim-8474e76b70bd3d63"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "晚餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-8474e76b70bd3d63",
+              "end_at": "2026-10-04T20:30:00+08:00",
+              "start_at": "2026-10-04T16:30:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-7a2c2df8121e",
+          "price": null,
+          "recommended_duration_minutes": 60
+        },
+        {
+          "category": "food",
+          "city": "上海",
+          "claim_ids": [
+            "claim-2b32ec2f5eae1446"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "午餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-2b32ec2f5eae1446",
+              "end_at": "2026-10-05T14:00:00+08:00",
+              "start_at": "2026-10-05T11:00:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-7d78c44eb96e",
+          "price": null,
+          "recommended_duration_minutes": 60
+        },
+        {
+          "category": "food",
+          "city": "上海",
+          "claim_ids": [
+            "claim-7de70c17e639662c"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "晚餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-7de70c17e639662c",
+              "end_at": "2026-10-05T20:30:00+08:00",
+              "start_at": "2026-10-05T16:30:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-1b6979118ddd",
+          "price": null,
+          "recommended_duration_minutes": 60
+        }
+      ],
+      "provider_health": [
+        {
+          "capabilities": [
+            "rail"
+          ],
+          "checked_at": "2026-09-05T09:00:00+08:00",
+          "mode": "static",
+          "provider": "12306-mcp",
+          "reason": "dated deep-link fallback used: rail disabled",
+          "status": "missing",
+          "version": "0.3.10"
+        },
+        {
+          "capabilities": [
+            "research"
+          ],
+          "checked_at": "2026-09-05T09:00:00+08:00",
+          "mode": "static",
+          "provider": "host-web",
+          "reason": "researched candidate file supplied; no web call was made",
+          "status": "ready",
+          "version": "candidate-file"
+        },
+        {
+          "capabilities": [
+            "lodging",
+            "flight"
+          ],
+          "checked_at": "2026-09-05T09:00:00+08:00",
+          "mode": "static",
+          "provider": "flyai",
+          "reason": "candidate-file lodging retained; FlyAI live inventory and flight comparison were not called",
+          "status": "ready",
+          "version": "1.0.16"
+        },
+        {
+          "capabilities": [
+            "geocode",
+            "poi",
+            "route"
+          ],
+          "checked_at": "2026-09-05T09:00:00+08:00",
+          "mode": "static",
+          "provider": "amap",
+          "reason": "AMap mobility is off; calls=0/80 qps<=2; route matrix uses static estimates",
+          "status": "missing",
+          "version": "web-service-v5-v3-route"
+        },
+        {
+          "capabilities": [
+            "flight",
+            "weather",
+            "comfort"
+          ],
+          "checked_at": "2026-09-05T09:00:00+08:00",
+          "mode": "static",
+          "provider": "variflight",
+          "reason": "VariFlight enrichment is off; no business call was made and tools/list was not run",
+          "status": "missing",
+          "version": "1.0.3"
+        },
+        {
+          "capabilities": [
+            "research"
+          ],
+          "checked_at": "2026-09-05T09:00:00+08:00",
+          "mode": "static",
+          "provider": "anysearch",
+          "reason": "optional search supplement is disabled; no auto-registration or business call was made",
+          "status": "missing",
+          "version": "runtime-probe-v1"
+        }
+      ],
+      "request": {
+        "assumptions": [
+          "synthetic 16-day Journey acceptance input"
+        ],
+        "budget_cny": 20000,
+        "constraints": [
+          "不执行任何交易动作",
+          "单程（Journey 分段不自动返程）"
+        ],
+        "destinations": [
+          {
+            "city": "上海",
+            "name": "上海",
+            "ref_id": "city-shanghai"
+          }
+        ],
+        "end_date": "2026-10-05",
+        "interests": [
+          "architecture",
+          "garden"
+        ],
+        "locale": "zh-CN",
+        "origin": {
+          "city": "北京",
+          "name": "北京",
+          "ref_id": "city-beijing"
+        },
+        "pace": "balanced",
+        "pasted_notes": null,
+        "rooms": 1,
+        "start_date": "2026-10-01",
+        "travelers": 2
+      },
+      "revision": {
+        "created_at": "2026-09-05T09:00:00+08:00",
+        "created_by": "system",
+        "number": 1,
+        "parent_revision": null,
+        "reason": "initial candidate-file plan"
+      },
+      "schema_version": "1.0.0",
+      "transport_legs": [
+        {
+          "arrive_at": "2026-10-01T13:00:00+08:00",
+          "booking_url": "https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc&fs=%E5%8C%97%E4%BA%AC&ts=%E4%B8%8A%E6%B5%B7&date=2026-10-01&flag=N%2CN%2CY",
+          "claim_ids": [
+            "claim-2c31f8fdd5833303",
+            "claim-e5488dd145cf672b"
+          ],
+          "data_mode": "static",
+          "depart_at": "2026-10-01T08:00:00+08:00",
+          "duration_minutes": 300,
+          "from_ref": "city-beijing",
+          "leg_id": "leg-rail-fallback-5945359c4de0",
+          "locked": false,
+          "price": {
+            "amount": null,
+            "claim_id": "claim-e5488dd145cf672b",
+            "currency": "CNY",
+            "includes_taxes": true,
+            "price_type": "unknown",
+            "queried_at": "2026-09-05T09:00:00+08:00",
+            "unit": "per_person"
+          },
+          "provider": "12306-deep-link",
+          "service_number": null,
+          "to_ref": "city-shanghai",
+          "travel_mode": "rail"
+        }
+      ],
+      "trip_id": "trip-1aae22afc56a7f64",
+      "unknowns": [
+        {
+          "claim_id": "claim-j16-shanghai-hours",
+          "field_path": "/pois/0/coordinates",
+          "provider": "amap",
+          "reason": "AMap is not configured; coordinates remain unverified"
+        },
+        {
+          "claim_id": "claim-2c31f8fdd5833303",
+          "field_path": "/transport_legs/0/service_number",
+          "provider": "12306-mcp",
+          "reason": "actual dated service must be selected on 12306"
+        },
+        {
+          "claim_id": "claim-e5488dd145cf672b",
+          "field_path": "/transport_legs/0/price/amount",
+          "provider": "12306-mcp",
+          "reason": "dated fare and availability remain unknown"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/1/price",
+          "provider": null,
+          "reason": "exact lunch venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/2/price",
+          "provider": null,
+          "reason": "exact dinner venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/3/price",
+          "provider": null,
+          "reason": "exact lunch venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/4/price",
+          "provider": null,
+          "reason": "exact dinner venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/5/price",
+          "provider": null,
+          "reason": "exact lunch venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/6/price",
+          "provider": null,
+          "reason": "exact dinner venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/7/price",
+          "provider": null,
+          "reason": "exact lunch venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/8/price",
+          "provider": null,
+          "reason": "exact dinner venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/9/price",
+          "provider": null,
+          "reason": "exact lunch venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/10/price",
+          "provider": null,
+          "reason": "exact dinner venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": "claim-e5488dd145cf672b",
+          "field_path": "/budget_ledger/items/0/amount_max_cny",
+          "provider": "12306-deep-link",
+          "reason": "price amount is not verified and cannot be compared with the trip budget"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/2/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/3/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/4/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/5/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/6/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/7/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/8/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/9/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/10/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/11/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/12/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        }
+      ]
+    },
+    {
+      "budget_ledger": {
+        "budget_cny": 20000,
+        "currency": "CNY",
+        "items": [
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "unknown/per_person",
+            "category": "transport",
+            "included_in_scheduler": false,
+            "price_type": "unknown",
+            "reason": "price amount is not verified and cannot be compared with the trip budget",
+            "ref_id": "leg-rail-fallback-03178f234e57"
+          },
+          {
+            "amount_max_cny": 1400,
+            "amount_min_cny": 1400,
+            "basis": "280 per night × 5 nights × 1 rooms",
+            "category": "lodging",
+            "included_in_scheduler": true,
+            "price_type": "reference",
+            "reason": null,
+            "ref_id": "lodging-j16-hangzhou-central"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-j16-hangzhou"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-5c27039b30de"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-3b6d83bca561"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-699d723aac2b"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-2d631148dcff"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-9d11be34b477"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-388566db72f8"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-11605adfa45f"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-f2006318cc56"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-55dff999f10a"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-88b48365c3d3"
+          }
+        ],
+        "known_cost_cny": 1400,
+        "remaining_known_budget_cny": 18600,
+        "status": "incomplete",
+        "total_range_cny": {
+          "maximum": null,
+          "minimum": null
+        }
+      },
+      "claims": [
+        {
+          "as_of": null,
+          "claim_id": "claim-j16-hangzhou-lodging-price",
+          "confidence": 0.8,
+          "field_path": "/price",
+          "json_path": null,
+          "mode": "static",
+          "provider": "deep-link",
+          "queried_at": "2026-09-03T12:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://www.fliggy.com/hotel/search",
+          "status": "partial",
+          "subject_ref": "lodging-j16-hangzhou-central",
+          "value": 280
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-j16-hangzhou-hours",
+          "confidence": 0.55,
+          "field_path": "/opening_windows/0",
+          "json_path": null,
+          "mode": "static",
+          "provider": "official-web",
+          "queried_at": "2026-09-03T12:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://example.com/synthetic-journey/hangzhou",
+          "status": "hypothesis",
+          "subject_ref": "poi-j16-hangzhou",
+          "value": "date-specific candidate window"
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-7b75152473e88172",
+          "confidence": 0.3,
+          "field_path": "/depart_at",
+          "json_path": null,
+          "mode": "static",
+          "provider": "12306-deep-link",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc&fs=%E4%B8%8A%E6%B5%B7&ts=%E6%9D%AD%E5%B7%9E&date=2026-10-06&flag=N%2CN%2CY",
+          "status": "hypothesis",
+          "subject_ref": "leg-rail-fallback-03178f234e57",
+          "value": "planning window; verify the actual service on 12306"
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-c02db76612427e8c",
+          "confidence": 0,
+          "field_path": "/price",
+          "json_path": null,
+          "mode": "static",
+          "provider": "12306-deep-link",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc&fs=%E4%B8%8A%E6%B5%B7&ts=%E6%9D%AD%E5%B7%9E&date=2026-10-06&flag=N%2CN%2CY",
+          "status": "unknown",
+          "subject_ref": "leg-rail-fallback-03178f234e57",
+          "value": null
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-71ee74e9192b7364",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-5c27039b30de",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "13:00",
+            "meal_type": "lunch",
+            "start_time": "11:00",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-06T14:00:00+08:00",
+                "start_at": "2026-10-06T13:00:00+08:00"
+              }
+            ]
+          }
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-0595af77a6206404",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-3b6d83bca561",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "19:30",
+            "meal_type": "dinner",
+            "start_time": "16:30",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-06T20:30:00+08:00",
+                "start_at": "2026-10-06T16:30:00+08:00"
+              }
+            ]
+          }
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-b3557ae099b1df43",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-699d723aac2b",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "13:00",
+            "meal_type": "lunch",
+            "start_time": "11:00",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-07T14:00:00+08:00",
+                "start_at": "2026-10-07T11:00:00+08:00"
+              }
+            ]
+          }
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-fc80526d7a4a8334",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-2d631148dcff",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "19:30",
+            "meal_type": "dinner",
+            "start_time": "16:30",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-07T20:30:00+08:00",
+                "start_at": "2026-10-07T16:30:00+08:00"
+              }
+            ]
+          }
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-2f28b802bc9a19e2",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-9d11be34b477",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "13:00",
+            "meal_type": "lunch",
+            "start_time": "11:00",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-08T14:00:00+08:00",
+                "start_at": "2026-10-08T11:00:00+08:00"
+              }
+            ]
+          }
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-2c81d69f44fdfeea",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-388566db72f8",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "19:30",
+            "meal_type": "dinner",
+            "start_time": "16:30",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-08T20:30:00+08:00",
+                "start_at": "2026-10-08T16:30:00+08:00"
+              }
+            ]
+          }
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-5d8f52f189ec8f3c",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-11605adfa45f",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "13:00",
+            "meal_type": "lunch",
+            "start_time": "11:00",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-09T14:00:00+08:00",
+                "start_at": "2026-10-09T11:00:00+08:00"
+              }
+            ]
+          }
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-6be1a0f04da47176",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-f2006318cc56",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "19:30",
+            "meal_type": "dinner",
+            "start_time": "16:30",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-09T20:30:00+08:00",
+                "start_at": "2026-10-09T16:30:00+08:00"
+              }
+            ]
+          }
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-381b0c09497b4c17",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-55dff999f10a",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "13:00",
+            "meal_type": "lunch",
+            "start_time": "11:00",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-10T14:00:00+08:00",
+                "start_at": "2026-10-10T11:00:00+08:00"
+              }
+            ]
+          }
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-2953270918cfe9a9",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-88b48365c3d3",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "19:30",
+            "meal_type": "dinner",
+            "start_time": "16:30",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-10T20:30:00+08:00",
+                "start_at": "2026-10-10T16:30:00+08:00"
+              }
+            ]
+          }
+        }
+      ],
+      "days": [
+        {
+          "city": "杭州",
+          "date": "2026-10-06",
+          "day_id": "day-1",
+          "pace": "balanced",
+          "planned_walking_km": 0.0,
+          "slots": [
+            {
+              "claim_ids": [
+                "claim-7b75152473e88172",
+                "claim-c02db76612427e8c"
+              ],
+              "end_at": "2026-10-06T13:00:00+08:00",
+              "kind": "transport",
+              "locked": false,
+              "ref_id": "leg-rail-fallback-03178f234e57",
+              "slot_id": "slot-leg-rail-fallback-03178f234e57",
+              "start_at": "2026-10-06T08:00:00+08:00",
+              "status": "scheduled",
+              "title": "上海 → 杭州 铁路"
+            },
+            {
+              "claim_ids": [
+                "claim-71ee74e9192b7364"
+              ],
+              "end_at": "2026-10-06T14:00:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-5c27039b30de",
+              "slot_id": "slot-poi-routine-meal-5c27039b30de",
+              "start_at": "2026-10-06T13:00:00+08:00",
+              "status": "scheduled",
+              "title": "午餐（地点待定）"
+            },
+            {
+              "claim_ids": [],
+              "end_at": "2026-10-06T15:00:00+08:00",
+              "kind": "rest",
+              "locked": false,
+              "ref_id": null,
+              "slot_id": "slot-routine-rest-5819bfbdf957",
+              "start_at": "2026-10-06T14:00:00+08:00",
+              "status": "scheduled",
+              "title": "午休"
+            },
+            {
+              "claim_ids": [],
+              "end_at": "2026-10-06T15:45:00+08:00",
+              "kind": "rest",
+              "locked": false,
+              "ref_id": null,
+              "slot_id": "slot-routine-transfer-buffer-296b8fc8f8d9",
+              "start_at": "2026-10-06T15:00:00+08:00",
+              "status": "scheduled",
+              "title": "到站、行李与换乘缓冲"
+            },
+            {
+              "claim_ids": [
+                "claim-j16-hangzhou-lodging-price"
+              ],
+              "end_at": "2026-10-06T16:30:00+08:00",
+              "kind": "checkin",
+              "locked": false,
+              "ref_id": "lodging-j16-hangzhou-central",
+              "slot_id": "slot-lodging-j16-hangzhou-central",
+              "start_at": "2026-10-06T15:45:00+08:00",
+              "status": "scheduled",
+              "title": "杭州合成住宿 入住"
+            },
+            {
+              "claim_ids": [
+                "claim-0595af77a6206404"
+              ],
+              "end_at": "2026-10-06T17:30:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-3b6d83bca561",
+              "slot_id": "slot-poi-routine-meal-3b6d83bca561",
+              "start_at": "2026-10-06T16:30:00+08:00",
+              "status": "scheduled",
+              "title": "晚餐（地点待定）"
+            }
+          ],
+          "stay_id": "lodging-j16-hangzhou-central",
+          "timezone": "Asia/Shanghai"
+        },
+        {
+          "city": "杭州",
+          "date": "2026-10-07",
+          "day_id": "day-2",
+          "pace": "balanced",
+          "planned_walking_km": 0.0,
+          "slots": [
+            {
+              "claim_ids": [
+                "claim-j16-hangzhou-hours"
+              ],
+              "end_at": "2026-10-07T10:30:00+08:00",
+              "kind": "poi",
+              "locked": false,
+              "ref_id": "poi-j16-hangzhou",
+              "slot_id": "slot-poi-j16-hangzhou",
+              "start_at": "2026-10-07T09:00:00+08:00",
+              "status": "scheduled",
+              "title": "杭州合成湖滨漫步"
+            },
+            {
+              "claim_ids": [
+                "claim-b3557ae099b1df43"
+              ],
+              "end_at": "2026-10-07T12:00:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-699d723aac2b",
+              "slot_id": "slot-poi-routine-meal-699d723aac2b",
+              "start_at": "2026-10-07T11:00:00+08:00",
+              "status": "scheduled",
+              "title": "午餐（地点待定）"
+            },
+            {
+              "claim_ids": [],
+              "end_at": "2026-10-07T14:00:00+08:00",
+              "kind": "rest",
+              "locked": false,
+              "ref_id": null,
+              "slot_id": "slot-routine-rest-56d28fd9ecc2",
+              "start_at": "2026-10-07T13:00:00+08:00",
+              "status": "scheduled",
+              "title": "午休"
+            },
+            {
+              "claim_ids": [
+                "claim-fc80526d7a4a8334"
+              ],
+              "end_at": "2026-10-07T17:30:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-2d631148dcff",
+              "slot_id": "slot-poi-routine-meal-2d631148dcff",
+              "start_at": "2026-10-07T16:30:00+08:00",
+              "status": "scheduled",
+              "title": "晚餐（地点待定）"
+            }
+          ],
+          "stay_id": "lodging-j16-hangzhou-central",
+          "timezone": "Asia/Shanghai"
+        },
+        {
+          "city": "杭州",
+          "date": "2026-10-08",
+          "day_id": "day-3",
+          "pace": "balanced",
+          "planned_walking_km": 0.0,
+          "slots": [
+            {
+              "claim_ids": [
+                "claim-2f28b802bc9a19e2"
+              ],
+              "end_at": "2026-10-08T12:00:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-9d11be34b477",
+              "slot_id": "slot-poi-routine-meal-9d11be34b477",
+              "start_at": "2026-10-08T11:00:00+08:00",
+              "status": "scheduled",
+              "title": "午餐（地点待定）"
+            },
+            {
+              "claim_ids": [],
+              "end_at": "2026-10-08T14:00:00+08:00",
+              "kind": "rest",
+              "locked": false,
+              "ref_id": null,
+              "slot_id": "slot-routine-rest-0b70a40443cc",
+              "start_at": "2026-10-08T13:00:00+08:00",
+              "status": "scheduled",
+              "title": "午休"
+            },
+            {
+              "claim_ids": [
+                "claim-2c81d69f44fdfeea"
+              ],
+              "end_at": "2026-10-08T17:30:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-388566db72f8",
+              "slot_id": "slot-poi-routine-meal-388566db72f8",
+              "start_at": "2026-10-08T16:30:00+08:00",
+              "status": "scheduled",
+              "title": "晚餐（地点待定）"
+            }
+          ],
+          "stay_id": "lodging-j16-hangzhou-central",
+          "timezone": "Asia/Shanghai"
+        },
+        {
+          "city": "杭州",
+          "date": "2026-10-09",
+          "day_id": "day-4",
+          "pace": "balanced",
+          "planned_walking_km": 0.0,
+          "slots": [
+            {
+              "claim_ids": [
+                "claim-5d8f52f189ec8f3c"
+              ],
+              "end_at": "2026-10-09T12:00:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-11605adfa45f",
+              "slot_id": "slot-poi-routine-meal-11605adfa45f",
+              "start_at": "2026-10-09T11:00:00+08:00",
+              "status": "scheduled",
+              "title": "午餐（地点待定）"
+            },
+            {
+              "claim_ids": [],
+              "end_at": "2026-10-09T14:00:00+08:00",
+              "kind": "rest",
+              "locked": false,
+              "ref_id": null,
+              "slot_id": "slot-routine-rest-aa049de097c0",
+              "start_at": "2026-10-09T13:00:00+08:00",
+              "status": "scheduled",
+              "title": "午休"
+            },
+            {
+              "claim_ids": [
+                "claim-6be1a0f04da47176"
+              ],
+              "end_at": "2026-10-09T17:30:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-f2006318cc56",
+              "slot_id": "slot-poi-routine-meal-f2006318cc56",
+              "start_at": "2026-10-09T16:30:00+08:00",
+              "status": "scheduled",
+              "title": "晚餐（地点待定）"
+            }
+          ],
+          "stay_id": "lodging-j16-hangzhou-central",
+          "timezone": "Asia/Shanghai"
+        },
+        {
+          "city": "杭州",
+          "date": "2026-10-10",
+          "day_id": "day-5",
+          "pace": "balanced",
+          "planned_walking_km": 0.0,
+          "slots": [
+            {
+              "claim_ids": [
+                "claim-381b0c09497b4c17"
+              ],
+              "end_at": "2026-10-10T12:00:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-55dff999f10a",
+              "slot_id": "slot-poi-routine-meal-55dff999f10a",
+              "start_at": "2026-10-10T11:00:00+08:00",
+              "status": "scheduled",
+              "title": "午餐（地点待定）"
+            },
+            {
+              "claim_ids": [],
+              "end_at": "2026-10-10T14:00:00+08:00",
+              "kind": "rest",
+              "locked": false,
+              "ref_id": null,
+              "slot_id": "slot-routine-rest-252229f51794",
+              "start_at": "2026-10-10T13:00:00+08:00",
+              "status": "scheduled",
+              "title": "午休"
+            },
+            {
+              "claim_ids": [
+                "claim-2953270918cfe9a9"
+              ],
+              "end_at": "2026-10-10T17:30:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-88b48365c3d3",
+              "slot_id": "slot-poi-routine-meal-88b48365c3d3",
+              "start_at": "2026-10-10T16:30:00+08:00",
+              "status": "scheduled",
+              "title": "晚餐（地点待定）"
+            }
+          ],
+          "stay_id": "lodging-j16-hangzhou-central",
+          "timezone": "Asia/Shanghai"
+        }
+      ],
+      "generated_at": "2026-09-05T09:00:00+08:00",
+      "lodgings": [
+        {
+          "area": "杭州合成片区",
+          "candidate_ref": "lodging-j16-hangzhou-central",
+          "check_in": "2026-10-06",
+          "check_out": "2026-10-11",
+          "city": "杭州",
+          "claim_ids": [
+            "claim-j16-hangzhou-lodging-price"
+          ],
+          "coordinates": null,
+          "deep_links": [
+            "https://www.fliggy.com/hotel/search"
+          ],
+          "locked": false,
+          "lodging_id": "lodging-j16-hangzhou-central",
+          "name": "杭州合成住宿",
+          "price": {
+            "amount": 280,
+            "claim_id": "claim-j16-hangzhou-lodging-price",
+            "currency": "CNY",
+            "includes_taxes": true,
+            "price_type": "reference",
+            "queried_at": "2026-09-03T12:00:00+08:00",
+            "unit": "per_night"
+          },
+          "selected_nights": [
+            "2026-10-06",
+            "2026-10-07",
+            "2026-10-08",
+            "2026-10-09",
+            "2026-10-10"
+          ],
+          "selection_status": "selected"
+        }
+      ],
+      "mode": "static",
+      "patches": [],
+      "pois": [
+        {
+          "category": "scenic",
+          "city": "杭州",
+          "claim_ids": [
+            "claim-j16-hangzhou-hours"
+          ],
+          "coordinates": null,
+          "deep_links": [
+            "https://example.com/synthetic-journey/hangzhou"
+          ],
+          "name": "杭州合成湖滨漫步",
+          "opening_windows": [
+            {
+              "claim_id": "claim-j16-hangzhou-hours",
+              "end_at": "2026-10-07T12:00:00+08:00",
+              "start_at": "2026-10-07T09:00:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "poi_id": "poi-j16-hangzhou",
+          "price": null,
+          "recommended_duration_minutes": 90
+        },
+        {
+          "category": "food",
+          "city": "杭州",
+          "claim_ids": [
+            "claim-71ee74e9192b7364"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "午餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-71ee74e9192b7364",
+              "end_at": "2026-10-06T14:00:00+08:00",
+              "start_at": "2026-10-06T13:00:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-5c27039b30de",
+          "price": null,
+          "recommended_duration_minutes": 60
+        },
+        {
+          "category": "food",
+          "city": "杭州",
+          "claim_ids": [
+            "claim-0595af77a6206404"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "晚餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-0595af77a6206404",
+              "end_at": "2026-10-06T20:30:00+08:00",
+              "start_at": "2026-10-06T16:30:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-3b6d83bca561",
+          "price": null,
+          "recommended_duration_minutes": 60
+        },
+        {
+          "category": "food",
+          "city": "杭州",
+          "claim_ids": [
+            "claim-b3557ae099b1df43"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "午餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-b3557ae099b1df43",
+              "end_at": "2026-10-07T14:00:00+08:00",
+              "start_at": "2026-10-07T11:00:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-699d723aac2b",
+          "price": null,
+          "recommended_duration_minutes": 60
+        },
+        {
+          "category": "food",
+          "city": "杭州",
+          "claim_ids": [
+            "claim-fc80526d7a4a8334"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "晚餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-fc80526d7a4a8334",
+              "end_at": "2026-10-07T20:30:00+08:00",
+              "start_at": "2026-10-07T16:30:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-2d631148dcff",
+          "price": null,
+          "recommended_duration_minutes": 60
+        },
+        {
+          "category": "food",
+          "city": "杭州",
+          "claim_ids": [
+            "claim-2f28b802bc9a19e2"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "午餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-2f28b802bc9a19e2",
+              "end_at": "2026-10-08T14:00:00+08:00",
+              "start_at": "2026-10-08T11:00:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-9d11be34b477",
+          "price": null,
+          "recommended_duration_minutes": 60
+        },
+        {
+          "category": "food",
+          "city": "杭州",
+          "claim_ids": [
+            "claim-2c81d69f44fdfeea"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "晚餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-2c81d69f44fdfeea",
+              "end_at": "2026-10-08T20:30:00+08:00",
+              "start_at": "2026-10-08T16:30:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-388566db72f8",
+          "price": null,
+          "recommended_duration_minutes": 60
+        },
+        {
+          "category": "food",
+          "city": "杭州",
+          "claim_ids": [
+            "claim-5d8f52f189ec8f3c"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "午餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-5d8f52f189ec8f3c",
+              "end_at": "2026-10-09T14:00:00+08:00",
+              "start_at": "2026-10-09T11:00:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-11605adfa45f",
+          "price": null,
+          "recommended_duration_minutes": 60
+        },
+        {
+          "category": "food",
+          "city": "杭州",
+          "claim_ids": [
+            "claim-6be1a0f04da47176"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "晚餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-6be1a0f04da47176",
+              "end_at": "2026-10-09T20:30:00+08:00",
+              "start_at": "2026-10-09T16:30:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-f2006318cc56",
+          "price": null,
+          "recommended_duration_minutes": 60
+        },
+        {
+          "category": "food",
+          "city": "杭州",
+          "claim_ids": [
+            "claim-381b0c09497b4c17"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "午餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-381b0c09497b4c17",
+              "end_at": "2026-10-10T14:00:00+08:00",
+              "start_at": "2026-10-10T11:00:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-55dff999f10a",
+          "price": null,
+          "recommended_duration_minutes": 60
+        },
+        {
+          "category": "food",
+          "city": "杭州",
+          "claim_ids": [
+            "claim-2953270918cfe9a9"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "晚餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-2953270918cfe9a9",
+              "end_at": "2026-10-10T20:30:00+08:00",
+              "start_at": "2026-10-10T16:30:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-88b48365c3d3",
+          "price": null,
+          "recommended_duration_minutes": 60
+        }
+      ],
+      "provider_health": [
+        {
+          "capabilities": [
+            "rail"
+          ],
+          "checked_at": "2026-09-05T09:00:00+08:00",
+          "mode": "static",
+          "provider": "12306-mcp",
+          "reason": "dated deep-link fallback used: rail disabled",
+          "status": "missing",
+          "version": "0.3.10"
+        },
+        {
+          "capabilities": [
+            "research"
+          ],
+          "checked_at": "2026-09-05T09:00:00+08:00",
+          "mode": "static",
+          "provider": "host-web",
+          "reason": "researched candidate file supplied; no web call was made",
+          "status": "ready",
+          "version": "candidate-file"
+        },
+        {
+          "capabilities": [
+            "lodging",
+            "flight"
+          ],
+          "checked_at": "2026-09-05T09:00:00+08:00",
+          "mode": "static",
+          "provider": "flyai",
+          "reason": "candidate-file lodging retained; FlyAI live inventory and flight comparison were not called",
+          "status": "ready",
+          "version": "1.0.16"
+        },
+        {
+          "capabilities": [
+            "geocode",
+            "poi",
+            "route"
+          ],
+          "checked_at": "2026-09-05T09:00:00+08:00",
+          "mode": "static",
+          "provider": "amap",
+          "reason": "AMap mobility is off; calls=0/80 qps<=2; route matrix uses static estimates",
+          "status": "missing",
+          "version": "web-service-v5-v3-route"
+        },
+        {
+          "capabilities": [
+            "flight",
+            "weather",
+            "comfort"
+          ],
+          "checked_at": "2026-09-05T09:00:00+08:00",
+          "mode": "static",
+          "provider": "variflight",
+          "reason": "VariFlight enrichment is off; no business call was made and tools/list was not run",
+          "status": "missing",
+          "version": "1.0.3"
+        },
+        {
+          "capabilities": [
+            "research"
+          ],
+          "checked_at": "2026-09-05T09:00:00+08:00",
+          "mode": "static",
+          "provider": "anysearch",
+          "reason": "optional search supplement is disabled; no auto-registration or business call was made",
+          "status": "missing",
+          "version": "runtime-probe-v1"
+        }
+      ],
+      "request": {
+        "assumptions": [
+          "synthetic 16-day Journey acceptance input"
+        ],
+        "budget_cny": 20000,
+        "constraints": [
+          "不执行任何交易动作",
+          "单程（Journey 分段不自动返程）"
+        ],
+        "destinations": [
+          {
+            "city": "杭州",
+            "name": "杭州",
+            "ref_id": "city-hangzhou"
+          }
+        ],
+        "end_date": "2026-10-10",
+        "interests": [
+          "architecture",
+          "garden"
+        ],
+        "locale": "zh-CN",
+        "origin": {
+          "city": "上海",
+          "name": "上海",
+          "ref_id": "city-shanghai"
+        },
+        "pace": "balanced",
+        "pasted_notes": null,
+        "rooms": 1,
+        "start_date": "2026-10-06",
+        "travelers": 2
+      },
+      "revision": {
+        "created_at": "2026-09-05T09:00:00+08:00",
+        "created_by": "system",
+        "number": 1,
+        "parent_revision": null,
+        "reason": "initial candidate-file plan"
+      },
+      "schema_version": "1.0.0",
+      "transport_legs": [
+        {
+          "arrive_at": "2026-10-06T13:00:00+08:00",
+          "booking_url": "https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc&fs=%E4%B8%8A%E6%B5%B7&ts=%E6%9D%AD%E5%B7%9E&date=2026-10-06&flag=N%2CN%2CY",
+          "claim_ids": [
+            "claim-7b75152473e88172",
+            "claim-c02db76612427e8c"
+          ],
+          "data_mode": "static",
+          "depart_at": "2026-10-06T08:00:00+08:00",
+          "duration_minutes": 300,
+          "from_ref": "city-shanghai",
+          "leg_id": "leg-rail-fallback-03178f234e57",
+          "locked": false,
+          "price": {
+            "amount": null,
+            "claim_id": "claim-c02db76612427e8c",
+            "currency": "CNY",
+            "includes_taxes": true,
+            "price_type": "unknown",
+            "queried_at": "2026-09-05T09:00:00+08:00",
+            "unit": "per_person"
+          },
+          "provider": "12306-deep-link",
+          "service_number": null,
+          "to_ref": "city-hangzhou",
+          "travel_mode": "rail"
+        }
+      ],
+      "trip_id": "trip-61f6f9be103aff7a",
+      "unknowns": [
+        {
+          "claim_id": "claim-j16-hangzhou-hours",
+          "field_path": "/pois/0/coordinates",
+          "provider": "amap",
+          "reason": "AMap is not configured; coordinates remain unverified"
+        },
+        {
+          "claim_id": "claim-7b75152473e88172",
+          "field_path": "/transport_legs/0/service_number",
+          "provider": "12306-mcp",
+          "reason": "actual dated service must be selected on 12306"
+        },
+        {
+          "claim_id": "claim-c02db76612427e8c",
+          "field_path": "/transport_legs/0/price/amount",
+          "provider": "12306-mcp",
+          "reason": "dated fare and availability remain unknown"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/1/price",
+          "provider": null,
+          "reason": "exact lunch venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/2/price",
+          "provider": null,
+          "reason": "exact dinner venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/3/price",
+          "provider": null,
+          "reason": "exact lunch venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/4/price",
+          "provider": null,
+          "reason": "exact dinner venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/5/price",
+          "provider": null,
+          "reason": "exact lunch venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/6/price",
+          "provider": null,
+          "reason": "exact dinner venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/7/price",
+          "provider": null,
+          "reason": "exact lunch venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/8/price",
+          "provider": null,
+          "reason": "exact dinner venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/9/price",
+          "provider": null,
+          "reason": "exact lunch venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/10/price",
+          "provider": null,
+          "reason": "exact dinner venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": "claim-c02db76612427e8c",
+          "field_path": "/budget_ledger/items/0/amount_max_cny",
+          "provider": "12306-deep-link",
+          "reason": "price amount is not verified and cannot be compared with the trip budget"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/2/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/3/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/4/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/5/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/6/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/7/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/8/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/9/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/10/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/11/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/12/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        }
+      ]
+    },
+    {
+      "budget_ledger": {
+        "budget_cny": 20000,
+        "currency": "CNY",
+        "items": [
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "unknown/per_person",
+            "category": "transport",
+            "included_in_scheduler": false,
+            "price_type": "unknown",
+            "reason": "price amount is not verified and cannot be compared with the trip budget",
+            "ref_id": "leg-rail-fallback-b66b4e0b7f99"
+          },
+          {
+            "amount_max_cny": 1300,
+            "amount_min_cny": 1300,
+            "basis": "260 per night × 5 nights × 1 rooms",
+            "category": "lodging",
+            "included_in_scheduler": true,
+            "price_type": "reference",
+            "reason": null,
+            "ref_id": "lodging-j16-suzhou-central"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-j16-suzhou"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-4431ba39e489"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-2ca9babc122a"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-544b207784b8"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-c5b4a8cb0b51"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-484fb9b31f34"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-3a4fd12a5372"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-e5c9dd10223b"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-fe02b49ea83c"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-f47a4eb1ac0c"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-51a30c07ca09"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-620a5960f942"
+          },
+          {
+            "amount_max_cny": null,
+            "amount_min_cny": null,
+            "basis": "price unavailable",
+            "category": "poi",
+            "included_in_scheduler": false,
+            "price_type": null,
+            "reason": "no comparable price was supplied",
+            "ref_id": "poi-routine-meal-e3757ee53ef1"
+          }
+        ],
+        "known_cost_cny": 1300,
+        "remaining_known_budget_cny": 18700,
+        "status": "incomplete",
+        "total_range_cny": {
+          "maximum": null,
+          "minimum": null
+        }
+      },
+      "claims": [
+        {
+          "as_of": null,
+          "claim_id": "claim-j16-suzhou-lodging-price",
+          "confidence": 0.8,
+          "field_path": "/price",
+          "json_path": null,
+          "mode": "static",
+          "provider": "deep-link",
+          "queried_at": "2026-09-03T12:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://www.fliggy.com/hotel/search",
+          "status": "partial",
+          "subject_ref": "lodging-j16-suzhou-central",
+          "value": 260
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-j16-suzhou-hours",
+          "confidence": 0.55,
+          "field_path": "/opening_windows/0",
+          "json_path": null,
+          "mode": "static",
+          "provider": "official-web",
+          "queried_at": "2026-09-03T12:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://example.com/synthetic-journey/suzhou",
+          "status": "hypothesis",
+          "subject_ref": "poi-j16-suzhou",
+          "value": "date-specific candidate window"
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-167b0be43dc37e7e",
+          "confidence": 0.3,
+          "field_path": "/depart_at",
+          "json_path": null,
+          "mode": "static",
+          "provider": "12306-deep-link",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc&fs=%E6%9D%AD%E5%B7%9E&ts=%E8%8B%8F%E5%B7%9E&date=2026-10-11&flag=N%2CN%2CY",
+          "status": "hypothesis",
+          "subject_ref": "leg-rail-fallback-b66b4e0b7f99",
+          "value": "planning window; verify the actual service on 12306"
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-e771c4f1920622e8",
+          "confidence": 0,
+          "field_path": "/price",
+          "json_path": null,
+          "mode": "static",
+          "provider": "12306-deep-link",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc&fs=%E6%9D%AD%E5%B7%9E&ts=%E8%8B%8F%E5%B7%9E&date=2026-10-11&flag=N%2CN%2CY",
+          "status": "unknown",
+          "subject_ref": "leg-rail-fallback-b66b4e0b7f99",
+          "value": null
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-13698d4152de8937",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-4431ba39e489",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "13:00",
+            "meal_type": "lunch",
+            "start_time": "11:00",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-11T14:00:00+08:00",
+                "start_at": "2026-10-11T13:00:00+08:00"
+              }
+            ]
+          }
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-fa73746472879734",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-2ca9babc122a",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "19:30",
+            "meal_type": "dinner",
+            "start_time": "16:30",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-11T20:30:00+08:00",
+                "start_at": "2026-10-11T16:30:00+08:00"
+              }
+            ]
+          }
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-ec7131d054ee8552",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-544b207784b8",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "13:00",
+            "meal_type": "lunch",
+            "start_time": "11:00",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-12T14:00:00+08:00",
+                "start_at": "2026-10-12T11:00:00+08:00"
+              }
+            ]
+          }
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-132b6d6105803cb8",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-c5b4a8cb0b51",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "19:30",
+            "meal_type": "dinner",
+            "start_time": "16:30",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-12T20:30:00+08:00",
+                "start_at": "2026-10-12T16:30:00+08:00"
+              }
+            ]
+          }
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-fe39eaf95da8d82e",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-484fb9b31f34",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "13:00",
+            "meal_type": "lunch",
+            "start_time": "11:00",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-13T14:00:00+08:00",
+                "start_at": "2026-10-13T11:00:00+08:00"
+              }
+            ]
+          }
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-1e95e94a65a3d9a5",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-3a4fd12a5372",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "19:30",
+            "meal_type": "dinner",
+            "start_time": "16:30",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-13T20:30:00+08:00",
+                "start_at": "2026-10-13T16:30:00+08:00"
+              }
+            ]
+          }
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-44d6671f6c670303",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-e5c9dd10223b",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "13:00",
+            "meal_type": "lunch",
+            "start_time": "11:00",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-14T14:00:00+08:00",
+                "start_at": "2026-10-14T11:00:00+08:00"
+              }
+            ]
+          }
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-fffbc844bdd3dd16",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-fe02b49ea83c",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "19:30",
+            "meal_type": "dinner",
+            "start_time": "16:30",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-14T20:30:00+08:00",
+                "start_at": "2026-10-14T16:30:00+08:00"
+              }
+            ]
+          }
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-9289b2887ba82d6b",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-f47a4eb1ac0c",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "13:00",
+            "meal_type": "lunch",
+            "start_time": "11:00",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-15T14:00:00+08:00",
+                "start_at": "2026-10-15T11:00:00+08:00"
+              }
+            ]
+          }
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-08c893034d3f3cff",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-51a30c07ca09",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "19:30",
+            "meal_type": "dinner",
+            "start_time": "16:30",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-15T20:30:00+08:00",
+                "start_at": "2026-10-15T16:30:00+08:00"
+              }
+            ]
+          }
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-6838292cdb87358a",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-620a5960f942",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "13:00",
+            "meal_type": "lunch",
+            "start_time": "11:00",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-16T14:00:00+08:00",
+                "start_at": "2026-10-16T11:00:00+08:00"
+              }
+            ]
+          }
+        },
+        {
+          "as_of": null,
+          "claim_id": "claim-07d36ec9e380e40d",
+          "confidence": 0.5,
+          "field_path": "/opening_windows",
+          "json_path": null,
+          "mode": "static",
+          "provider": "ctw-planner",
+          "queried_at": "2026-09-05T09:00:00+08:00",
+          "raw_ref": null,
+          "response_hash": null,
+          "source_url": "https://china-trip-weaver.local/planning/routine-meals",
+          "status": "hypothesis",
+          "subject_ref": "poi-routine-meal-e3757ee53ef1",
+          "value": {
+            "duration_minutes": 60,
+            "end_time": "19:30",
+            "meal_type": "dinner",
+            "start_time": "16:30",
+            "travel_day_adjusted": [
+              {
+                "end_at": "2026-10-16T20:30:00+08:00",
+                "start_at": "2026-10-16T16:30:00+08:00"
+              }
+            ]
+          }
+        }
+      ],
+      "days": [
+        {
+          "city": "苏州",
+          "date": "2026-10-11",
+          "day_id": "day-1",
+          "pace": "balanced",
+          "planned_walking_km": 0.0,
+          "slots": [
+            {
+              "claim_ids": [
+                "claim-167b0be43dc37e7e",
+                "claim-e771c4f1920622e8"
+              ],
+              "end_at": "2026-10-11T13:00:00+08:00",
+              "kind": "transport",
+              "locked": false,
+              "ref_id": "leg-rail-fallback-b66b4e0b7f99",
+              "slot_id": "slot-leg-rail-fallback-b66b4e0b7f99",
+              "start_at": "2026-10-11T08:00:00+08:00",
+              "status": "scheduled",
+              "title": "杭州 → 苏州 铁路"
+            },
+            {
+              "claim_ids": [
+                "claim-13698d4152de8937"
+              ],
+              "end_at": "2026-10-11T14:00:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-4431ba39e489",
+              "slot_id": "slot-poi-routine-meal-4431ba39e489",
+              "start_at": "2026-10-11T13:00:00+08:00",
+              "status": "scheduled",
+              "title": "午餐（地点待定）"
+            },
+            {
+              "claim_ids": [],
+              "end_at": "2026-10-11T15:00:00+08:00",
+              "kind": "rest",
+              "locked": false,
+              "ref_id": null,
+              "slot_id": "slot-routine-rest-1de225d78437",
+              "start_at": "2026-10-11T14:00:00+08:00",
+              "status": "scheduled",
+              "title": "午休"
+            },
+            {
+              "claim_ids": [],
+              "end_at": "2026-10-11T15:45:00+08:00",
+              "kind": "rest",
+              "locked": false,
+              "ref_id": null,
+              "slot_id": "slot-routine-transfer-buffer-ff669ac60c43",
+              "start_at": "2026-10-11T15:00:00+08:00",
+              "status": "scheduled",
+              "title": "到站、行李与换乘缓冲"
+            },
+            {
+              "claim_ids": [
+                "claim-j16-suzhou-lodging-price"
+              ],
+              "end_at": "2026-10-11T16:30:00+08:00",
+              "kind": "checkin",
+              "locked": false,
+              "ref_id": "lodging-j16-suzhou-central",
+              "slot_id": "slot-lodging-j16-suzhou-central",
+              "start_at": "2026-10-11T15:45:00+08:00",
+              "status": "scheduled",
+              "title": "苏州合成住宿 入住"
+            },
+            {
+              "claim_ids": [
+                "claim-fa73746472879734"
+              ],
+              "end_at": "2026-10-11T17:30:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-2ca9babc122a",
+              "slot_id": "slot-poi-routine-meal-2ca9babc122a",
+              "start_at": "2026-10-11T16:30:00+08:00",
+              "status": "scheduled",
+              "title": "晚餐（地点待定）"
+            }
+          ],
+          "stay_id": "lodging-j16-suzhou-central",
+          "timezone": "Asia/Shanghai"
+        },
+        {
+          "city": "苏州",
+          "date": "2026-10-12",
+          "day_id": "day-2",
+          "pace": "balanced",
+          "planned_walking_km": 0.0,
+          "slots": [
+            {
+              "claim_ids": [
+                "claim-j16-suzhou-hours"
+              ],
+              "end_at": "2026-10-12T10:30:00+08:00",
+              "kind": "poi",
+              "locked": false,
+              "ref_id": "poi-j16-suzhou",
+              "slot_id": "slot-poi-j16-suzhou",
+              "start_at": "2026-10-12T09:00:00+08:00",
+              "status": "scheduled",
+              "title": "苏州合成园林漫步"
+            },
+            {
+              "claim_ids": [
+                "claim-ec7131d054ee8552"
+              ],
+              "end_at": "2026-10-12T12:00:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-544b207784b8",
+              "slot_id": "slot-poi-routine-meal-544b207784b8",
+              "start_at": "2026-10-12T11:00:00+08:00",
+              "status": "scheduled",
+              "title": "午餐（地点待定）"
+            },
+            {
+              "claim_ids": [],
+              "end_at": "2026-10-12T14:00:00+08:00",
+              "kind": "rest",
+              "locked": false,
+              "ref_id": null,
+              "slot_id": "slot-routine-rest-dfaf492242d0",
+              "start_at": "2026-10-12T13:00:00+08:00",
+              "status": "scheduled",
+              "title": "午休"
+            },
+            {
+              "claim_ids": [
+                "claim-132b6d6105803cb8"
+              ],
+              "end_at": "2026-10-12T17:30:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-c5b4a8cb0b51",
+              "slot_id": "slot-poi-routine-meal-c5b4a8cb0b51",
+              "start_at": "2026-10-12T16:30:00+08:00",
+              "status": "scheduled",
+              "title": "晚餐（地点待定）"
+            }
+          ],
+          "stay_id": "lodging-j16-suzhou-central",
+          "timezone": "Asia/Shanghai"
+        },
+        {
+          "city": "苏州",
+          "date": "2026-10-13",
+          "day_id": "day-3",
+          "pace": "balanced",
+          "planned_walking_km": 0.0,
+          "slots": [
+            {
+              "claim_ids": [
+                "claim-fe39eaf95da8d82e"
+              ],
+              "end_at": "2026-10-13T12:00:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-484fb9b31f34",
+              "slot_id": "slot-poi-routine-meal-484fb9b31f34",
+              "start_at": "2026-10-13T11:00:00+08:00",
+              "status": "scheduled",
+              "title": "午餐（地点待定）"
+            },
+            {
+              "claim_ids": [],
+              "end_at": "2026-10-13T14:00:00+08:00",
+              "kind": "rest",
+              "locked": false,
+              "ref_id": null,
+              "slot_id": "slot-routine-rest-d68ae05e3b68",
+              "start_at": "2026-10-13T13:00:00+08:00",
+              "status": "scheduled",
+              "title": "午休"
+            },
+            {
+              "claim_ids": [
+                "claim-1e95e94a65a3d9a5"
+              ],
+              "end_at": "2026-10-13T17:30:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-3a4fd12a5372",
+              "slot_id": "slot-poi-routine-meal-3a4fd12a5372",
+              "start_at": "2026-10-13T16:30:00+08:00",
+              "status": "scheduled",
+              "title": "晚餐（地点待定）"
+            }
+          ],
+          "stay_id": "lodging-j16-suzhou-central",
+          "timezone": "Asia/Shanghai"
+        },
+        {
+          "city": "苏州",
+          "date": "2026-10-14",
+          "day_id": "day-4",
+          "pace": "balanced",
+          "planned_walking_km": 0.0,
+          "slots": [
+            {
+              "claim_ids": [
+                "claim-44d6671f6c670303"
+              ],
+              "end_at": "2026-10-14T12:00:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-e5c9dd10223b",
+              "slot_id": "slot-poi-routine-meal-e5c9dd10223b",
+              "start_at": "2026-10-14T11:00:00+08:00",
+              "status": "scheduled",
+              "title": "午餐（地点待定）"
+            },
+            {
+              "claim_ids": [],
+              "end_at": "2026-10-14T14:00:00+08:00",
+              "kind": "rest",
+              "locked": false,
+              "ref_id": null,
+              "slot_id": "slot-routine-rest-acc41ba643a3",
+              "start_at": "2026-10-14T13:00:00+08:00",
+              "status": "scheduled",
+              "title": "午休"
+            },
+            {
+              "claim_ids": [
+                "claim-fffbc844bdd3dd16"
+              ],
+              "end_at": "2026-10-14T17:30:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-fe02b49ea83c",
+              "slot_id": "slot-poi-routine-meal-fe02b49ea83c",
+              "start_at": "2026-10-14T16:30:00+08:00",
+              "status": "scheduled",
+              "title": "晚餐（地点待定）"
+            }
+          ],
+          "stay_id": "lodging-j16-suzhou-central",
+          "timezone": "Asia/Shanghai"
+        },
+        {
+          "city": "苏州",
+          "date": "2026-10-15",
+          "day_id": "day-5",
+          "pace": "balanced",
+          "planned_walking_km": 0.0,
+          "slots": [
+            {
+              "claim_ids": [
+                "claim-9289b2887ba82d6b"
+              ],
+              "end_at": "2026-10-15T12:00:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-f47a4eb1ac0c",
+              "slot_id": "slot-poi-routine-meal-f47a4eb1ac0c",
+              "start_at": "2026-10-15T11:00:00+08:00",
+              "status": "scheduled",
+              "title": "午餐（地点待定）"
+            },
+            {
+              "claim_ids": [],
+              "end_at": "2026-10-15T14:00:00+08:00",
+              "kind": "rest",
+              "locked": false,
+              "ref_id": null,
+              "slot_id": "slot-routine-rest-c1b71b1bc92b",
+              "start_at": "2026-10-15T13:00:00+08:00",
+              "status": "scheduled",
+              "title": "午休"
+            },
+            {
+              "claim_ids": [
+                "claim-08c893034d3f3cff"
+              ],
+              "end_at": "2026-10-15T17:30:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-51a30c07ca09",
+              "slot_id": "slot-poi-routine-meal-51a30c07ca09",
+              "start_at": "2026-10-15T16:30:00+08:00",
+              "status": "scheduled",
+              "title": "晚餐（地点待定）"
+            }
+          ],
+          "stay_id": "lodging-j16-suzhou-central",
+          "timezone": "Asia/Shanghai"
+        },
+        {
+          "city": "苏州",
+          "date": "2026-10-16",
+          "day_id": "day-6",
+          "pace": "balanced",
+          "planned_walking_km": 0.0,
+          "slots": [
+            {
+              "claim_ids": [
+                "claim-6838292cdb87358a"
+              ],
+              "end_at": "2026-10-16T12:00:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-620a5960f942",
+              "slot_id": "slot-poi-routine-meal-620a5960f942",
+              "start_at": "2026-10-16T11:00:00+08:00",
+              "status": "scheduled",
+              "title": "午餐（地点待定）"
+            },
+            {
+              "claim_ids": [],
+              "end_at": "2026-10-16T14:00:00+08:00",
+              "kind": "rest",
+              "locked": false,
+              "ref_id": null,
+              "slot_id": "slot-routine-rest-749b10d5f377",
+              "start_at": "2026-10-16T13:00:00+08:00",
+              "status": "scheduled",
+              "title": "午休"
+            },
+            {
+              "claim_ids": [
+                "claim-07d36ec9e380e40d"
+              ],
+              "end_at": "2026-10-16T17:30:00+08:00",
+              "kind": "meal",
+              "locked": false,
+              "ref_id": "poi-routine-meal-e3757ee53ef1",
+              "slot_id": "slot-poi-routine-meal-e3757ee53ef1",
+              "start_at": "2026-10-16T16:30:00+08:00",
+              "status": "scheduled",
+              "title": "晚餐（地点待定）"
+            }
+          ],
+          "stay_id": null,
+          "timezone": "Asia/Shanghai"
+        }
+      ],
+      "generated_at": "2026-09-05T09:00:00+08:00",
+      "lodgings": [
+        {
+          "area": "苏州合成片区",
+          "candidate_ref": "lodging-j16-suzhou-central",
+          "check_in": "2026-10-11",
+          "check_out": "2026-10-16",
+          "city": "苏州",
+          "claim_ids": [
+            "claim-j16-suzhou-lodging-price"
+          ],
+          "coordinates": null,
+          "deep_links": [
+            "https://www.fliggy.com/hotel/search"
+          ],
+          "locked": false,
+          "lodging_id": "lodging-j16-suzhou-central",
+          "name": "苏州合成住宿",
+          "price": {
+            "amount": 260,
+            "claim_id": "claim-j16-suzhou-lodging-price",
+            "currency": "CNY",
+            "includes_taxes": true,
+            "price_type": "reference",
+            "queried_at": "2026-09-03T12:00:00+08:00",
+            "unit": "per_night"
+          },
+          "selected_nights": [
+            "2026-10-11",
+            "2026-10-12",
+            "2026-10-13",
+            "2026-10-14",
+            "2026-10-15"
+          ],
+          "selection_status": "selected"
+        }
+      ],
+      "mode": "static",
+      "patches": [],
+      "pois": [
+        {
+          "category": "garden",
+          "city": "苏州",
+          "claim_ids": [
+            "claim-j16-suzhou-hours"
+          ],
+          "coordinates": null,
+          "deep_links": [
+            "https://example.com/synthetic-journey/suzhou"
+          ],
+          "name": "苏州合成园林漫步",
+          "opening_windows": [
+            {
+              "claim_id": "claim-j16-suzhou-hours",
+              "end_at": "2026-10-12T12:00:00+08:00",
+              "start_at": "2026-10-12T09:00:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "poi_id": "poi-j16-suzhou",
+          "price": null,
+          "recommended_duration_minutes": 90
+        },
+        {
+          "category": "food",
+          "city": "苏州",
+          "claim_ids": [
+            "claim-13698d4152de8937"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "午餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-13698d4152de8937",
+              "end_at": "2026-10-11T14:00:00+08:00",
+              "start_at": "2026-10-11T13:00:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-4431ba39e489",
+          "price": null,
+          "recommended_duration_minutes": 60
+        },
+        {
+          "category": "food",
+          "city": "苏州",
+          "claim_ids": [
+            "claim-fa73746472879734"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "晚餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-fa73746472879734",
+              "end_at": "2026-10-11T20:30:00+08:00",
+              "start_at": "2026-10-11T16:30:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-2ca9babc122a",
+          "price": null,
+          "recommended_duration_minutes": 60
+        },
+        {
+          "category": "food",
+          "city": "苏州",
+          "claim_ids": [
+            "claim-ec7131d054ee8552"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "午餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-ec7131d054ee8552",
+              "end_at": "2026-10-12T14:00:00+08:00",
+              "start_at": "2026-10-12T11:00:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-544b207784b8",
+          "price": null,
+          "recommended_duration_minutes": 60
+        },
+        {
+          "category": "food",
+          "city": "苏州",
+          "claim_ids": [
+            "claim-132b6d6105803cb8"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "晚餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-132b6d6105803cb8",
+              "end_at": "2026-10-12T20:30:00+08:00",
+              "start_at": "2026-10-12T16:30:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-c5b4a8cb0b51",
+          "price": null,
+          "recommended_duration_minutes": 60
+        },
+        {
+          "category": "food",
+          "city": "苏州",
+          "claim_ids": [
+            "claim-fe39eaf95da8d82e"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "午餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-fe39eaf95da8d82e",
+              "end_at": "2026-10-13T14:00:00+08:00",
+              "start_at": "2026-10-13T11:00:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-484fb9b31f34",
+          "price": null,
+          "recommended_duration_minutes": 60
+        },
+        {
+          "category": "food",
+          "city": "苏州",
+          "claim_ids": [
+            "claim-1e95e94a65a3d9a5"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "晚餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-1e95e94a65a3d9a5",
+              "end_at": "2026-10-13T20:30:00+08:00",
+              "start_at": "2026-10-13T16:30:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-3a4fd12a5372",
+          "price": null,
+          "recommended_duration_minutes": 60
+        },
+        {
+          "category": "food",
+          "city": "苏州",
+          "claim_ids": [
+            "claim-44d6671f6c670303"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "午餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-44d6671f6c670303",
+              "end_at": "2026-10-14T14:00:00+08:00",
+              "start_at": "2026-10-14T11:00:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-e5c9dd10223b",
+          "price": null,
+          "recommended_duration_minutes": 60
+        },
+        {
+          "category": "food",
+          "city": "苏州",
+          "claim_ids": [
+            "claim-fffbc844bdd3dd16"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "晚餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-fffbc844bdd3dd16",
+              "end_at": "2026-10-14T20:30:00+08:00",
+              "start_at": "2026-10-14T16:30:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-fe02b49ea83c",
+          "price": null,
+          "recommended_duration_minutes": 60
+        },
+        {
+          "category": "food",
+          "city": "苏州",
+          "claim_ids": [
+            "claim-9289b2887ba82d6b"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "午餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-9289b2887ba82d6b",
+              "end_at": "2026-10-15T14:00:00+08:00",
+              "start_at": "2026-10-15T11:00:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-f47a4eb1ac0c",
+          "price": null,
+          "recommended_duration_minutes": 60
+        },
+        {
+          "category": "food",
+          "city": "苏州",
+          "claim_ids": [
+            "claim-08c893034d3f3cff"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "晚餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-08c893034d3f3cff",
+              "end_at": "2026-10-15T20:30:00+08:00",
+              "start_at": "2026-10-15T16:30:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-51a30c07ca09",
+          "price": null,
+          "recommended_duration_minutes": 60
+        },
+        {
+          "category": "food",
+          "city": "苏州",
+          "claim_ids": [
+            "claim-6838292cdb87358a"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "午餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-6838292cdb87358a",
+              "end_at": "2026-10-16T14:00:00+08:00",
+              "start_at": "2026-10-16T11:00:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-620a5960f942",
+          "price": null,
+          "recommended_duration_minutes": 60
+        },
+        {
+          "category": "food",
+          "city": "苏州",
+          "claim_ids": [
+            "claim-07d36ec9e380e40d"
+          ],
+          "coordinates": null,
+          "deep_links": [],
+          "name": "晚餐（地点待定）",
+          "opening_windows": [
+            {
+              "claim_id": "claim-07d36ec9e380e40d",
+              "end_at": "2026-10-16T20:30:00+08:00",
+              "start_at": "2026-10-16T16:30:00+08:00",
+              "status": "tentative"
+            }
+          ],
+          "physical_intensity": "light",
+          "poi_id": "poi-routine-meal-e3757ee53ef1",
+          "price": null,
+          "recommended_duration_minutes": 60
+        }
+      ],
+      "provider_health": [
+        {
+          "capabilities": [
+            "rail"
+          ],
+          "checked_at": "2026-09-05T09:00:00+08:00",
+          "mode": "static",
+          "provider": "12306-mcp",
+          "reason": "dated deep-link fallback used: rail disabled",
+          "status": "missing",
+          "version": "0.3.10"
+        },
+        {
+          "capabilities": [
+            "research"
+          ],
+          "checked_at": "2026-09-05T09:00:00+08:00",
+          "mode": "static",
+          "provider": "host-web",
+          "reason": "researched candidate file supplied; no web call was made",
+          "status": "ready",
+          "version": "candidate-file"
+        },
+        {
+          "capabilities": [
+            "lodging",
+            "flight"
+          ],
+          "checked_at": "2026-09-05T09:00:00+08:00",
+          "mode": "static",
+          "provider": "flyai",
+          "reason": "candidate-file lodging retained; FlyAI live inventory and flight comparison were not called",
+          "status": "ready",
+          "version": "1.0.16"
+        },
+        {
+          "capabilities": [
+            "geocode",
+            "poi",
+            "route"
+          ],
+          "checked_at": "2026-09-05T09:00:00+08:00",
+          "mode": "static",
+          "provider": "amap",
+          "reason": "AMap mobility is off; calls=0/80 qps<=2; route matrix uses static estimates",
+          "status": "missing",
+          "version": "web-service-v5-v3-route"
+        },
+        {
+          "capabilities": [
+            "flight",
+            "weather",
+            "comfort"
+          ],
+          "checked_at": "2026-09-05T09:00:00+08:00",
+          "mode": "static",
+          "provider": "variflight",
+          "reason": "VariFlight enrichment is off; no business call was made and tools/list was not run",
+          "status": "missing",
+          "version": "1.0.3"
+        },
+        {
+          "capabilities": [
+            "research"
+          ],
+          "checked_at": "2026-09-05T09:00:00+08:00",
+          "mode": "static",
+          "provider": "anysearch",
+          "reason": "optional search supplement is disabled; no auto-registration or business call was made",
+          "status": "missing",
+          "version": "runtime-probe-v1"
+        }
+      ],
+      "request": {
+        "assumptions": [
+          "synthetic 16-day Journey acceptance input"
+        ],
+        "budget_cny": 20000,
+        "constraints": [
+          "不执行任何交易动作",
+          "单程（Journey 分段不自动返程）"
+        ],
+        "destinations": [
+          {
+            "city": "苏州",
+            "name": "苏州",
+            "ref_id": "city-suzhou"
+          }
+        ],
+        "end_date": "2026-10-16",
+        "interests": [
+          "architecture",
+          "garden"
+        ],
+        "locale": "zh-CN",
+        "origin": {
+          "city": "杭州",
+          "name": "杭州",
+          "ref_id": "city-hangzhou"
+        },
+        "pace": "balanced",
+        "pasted_notes": null,
+        "rooms": 1,
+        "start_date": "2026-10-11",
+        "travelers": 2
+      },
+      "revision": {
+        "created_at": "2026-09-05T09:00:00+08:00",
+        "created_by": "system",
+        "number": 1,
+        "parent_revision": null,
+        "reason": "initial candidate-file plan"
+      },
+      "schema_version": "1.0.0",
+      "transport_legs": [
+        {
+          "arrive_at": "2026-10-11T13:00:00+08:00",
+          "booking_url": "https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc&fs=%E6%9D%AD%E5%B7%9E&ts=%E8%8B%8F%E5%B7%9E&date=2026-10-11&flag=N%2CN%2CY",
+          "claim_ids": [
+            "claim-167b0be43dc37e7e",
+            "claim-e771c4f1920622e8"
+          ],
+          "data_mode": "static",
+          "depart_at": "2026-10-11T08:00:00+08:00",
+          "duration_minutes": 300,
+          "from_ref": "city-hangzhou",
+          "leg_id": "leg-rail-fallback-b66b4e0b7f99",
+          "locked": false,
+          "price": {
+            "amount": null,
+            "claim_id": "claim-e771c4f1920622e8",
+            "currency": "CNY",
+            "includes_taxes": true,
+            "price_type": "unknown",
+            "queried_at": "2026-09-05T09:00:00+08:00",
+            "unit": "per_person"
+          },
+          "provider": "12306-deep-link",
+          "service_number": null,
+          "to_ref": "city-suzhou",
+          "travel_mode": "rail"
+        }
+      ],
+      "trip_id": "trip-67bb8740dc5834ab",
+      "unknowns": [
+        {
+          "claim_id": "claim-j16-suzhou-hours",
+          "field_path": "/pois/0/coordinates",
+          "provider": "amap",
+          "reason": "AMap is not configured; coordinates remain unverified"
+        },
+        {
+          "claim_id": "claim-167b0be43dc37e7e",
+          "field_path": "/transport_legs/0/service_number",
+          "provider": "12306-mcp",
+          "reason": "actual dated service must be selected on 12306"
+        },
+        {
+          "claim_id": "claim-e771c4f1920622e8",
+          "field_path": "/transport_legs/0/price/amount",
+          "provider": "12306-mcp",
+          "reason": "dated fare and availability remain unknown"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/1/price",
+          "provider": null,
+          "reason": "exact lunch venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/2/price",
+          "provider": null,
+          "reason": "exact dinner venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/3/price",
+          "provider": null,
+          "reason": "exact lunch venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/4/price",
+          "provider": null,
+          "reason": "exact dinner venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/5/price",
+          "provider": null,
+          "reason": "exact lunch venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/6/price",
+          "provider": null,
+          "reason": "exact dinner venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/7/price",
+          "provider": null,
+          "reason": "exact lunch venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/8/price",
+          "provider": null,
+          "reason": "exact dinner venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/9/price",
+          "provider": null,
+          "reason": "exact lunch venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/10/price",
+          "provider": null,
+          "reason": "exact dinner venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/11/price",
+          "provider": null,
+          "reason": "exact lunch venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/pois/12/price",
+          "provider": null,
+          "reason": "exact dinner venue and price remain unselected; the slot reserves time only"
+        },
+        {
+          "claim_id": "claim-e771c4f1920622e8",
+          "field_path": "/budget_ledger/items/0/amount_max_cny",
+          "provider": "12306-deep-link",
+          "reason": "price amount is not verified and cannot be compared with the trip budget"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/2/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/3/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/4/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/5/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/6/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/7/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/8/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/9/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/10/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/11/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/12/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/13/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        },
+        {
+          "claim_id": null,
+          "field_path": "/budget_ledger/items/14/amount_max_cny",
+          "provider": null,
+          "reason": "no comparable price was supplied"
+        }
+      ]
+    }
+  ]
+}

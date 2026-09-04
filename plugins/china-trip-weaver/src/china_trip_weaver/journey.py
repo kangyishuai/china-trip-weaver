@@ -674,6 +674,343 @@ def journey_budget_ledger(
     }
 
 
+def journey_booking_checklist(
+    journey: Mapping[str, Any],
+) -> Tuple[Mapping[str, Any], ...]:
+    """Derive every time-ordered booking or verification action from a Journey."""
+
+    items: List[Mapping[str, Any]] = []
+    for trip_index, trip in enumerate(journey["trips"]):
+        context = _journey_trace_context(trip)
+        for leg_index, leg in enumerate(trip["transport_legs"]):
+            trace = _journey_entity_trace(
+                trip,
+                context,
+                "transport_legs",
+                leg_index,
+            )
+            items.append(_journey_action_item(
+                "checklist",
+                "transport",
+                trip_index,
+                trip,
+                trace,
+                leg.get("depart_at") or trip["request"]["start_date"],
+                None,
+                None,
+                leg.get("provider"),
+            ))
+        for lodging_index, lodging in enumerate(trip["lodgings"]):
+            trace = _journey_entity_trace(
+                trip,
+                context,
+                "lodgings",
+                lodging_index,
+            )
+            items.append(_journey_action_item(
+                "checklist",
+                "lodging",
+                trip_index,
+                trip,
+                trace,
+                lodging["check_in"],
+                None,
+                None,
+                None,
+            ))
+        for unknown_index, unknown in enumerate(trip["unknowns"]):
+            trace = _journey_unknown_trace(trip, context, unknown)
+            items.append(_journey_action_item(
+                "checklist",
+                "unknown",
+                trip_index,
+                trip,
+                trace,
+                _journey_trace_deadline(trip, trace),
+                unknown.get("claim_id"),
+                unknown["field_path"],
+                unknown.get("provider"),
+                reason=unknown["reason"],
+                source_index=unknown_index,
+            ))
+    return tuple(sorted(items, key=_journey_checklist_sort_key))
+
+
+def journey_risk_items(
+    journey: Mapping[str, Any],
+) -> Tuple[Mapping[str, Any], ...]:
+    """Derive all required capability, conflict, and unresolved-unknown risks."""
+
+    items: List[Mapping[str, Any]] = []
+    for trip_index, trip in enumerate(journey["trips"]):
+        context = _journey_trace_context(trip)
+        for health_index, health in enumerate(trip["provider_health"]):
+            if health["status"] not in ("degraded", "missing"):
+                continue
+            for capability_index, capability in enumerate(health["capabilities"]):
+                trace = {
+                    "source_kind": "provider_health",
+                    "source_ref": health["provider"],
+                    "source_name": health["provider"],
+                    "source_value": health,
+                }
+                items.append(_journey_action_item(
+                    "risk",
+                    "provider_capability",
+                    trip_index,
+                    trip,
+                    trace,
+                    trip["request"]["start_date"],
+                    None,
+                    None,
+                    health["provider"],
+                    reason=health["reason"],
+                    status=health["status"],
+                    capability=capability,
+                    source_index=health_index * 1000 + capability_index,
+                ))
+        for claim_index, claim in enumerate(trip["claims"]):
+            if claim["status"] != "conflict":
+                continue
+            trace = _journey_reference_trace(trip, context, claim["subject_ref"])
+            items.append(_journey_action_item(
+                "risk",
+                "claim_conflict",
+                trip_index,
+                trip,
+                trace,
+                _journey_trace_deadline(trip, trace),
+                claim["claim_id"],
+                claim["field_path"],
+                claim["provider"],
+                reason="conflicting source claims require review",
+                status=claim["status"],
+                source_index=claim_index,
+            ))
+        for unknown_index, unknown in enumerate(trip["unknowns"]):
+            trace = _journey_unknown_trace(trip, context, unknown)
+            items.append(_journey_action_item(
+                "risk",
+                "unresolved_unknown",
+                trip_index,
+                trip,
+                trace,
+                _journey_trace_deadline(trip, trace),
+                unknown.get("claim_id"),
+                unknown["field_path"],
+                unknown.get("provider"),
+                reason=unknown["reason"],
+                source_index=unknown_index,
+            ))
+    priority = {"claim_conflict": 0, "provider_capability": 1, "unresolved_unknown": 2}
+    return tuple(sorted(
+        items,
+        key=lambda item: (
+            priority[item["kind"]],
+            _journey_deadline_sort_key(item["deadline"]),
+            item["trip_index"],
+            item["item_id"],
+        ),
+    ))
+
+
+def _journey_action_item(
+    prefix: str,
+    kind: str,
+    trip_index: int,
+    trip: Mapping[str, Any],
+    trace: Mapping[str, Any],
+    deadline: str,
+    claim_id: Optional[str],
+    field_path: Optional[str],
+    provider: Optional[str],
+    *,
+    reason: Optional[str] = None,
+    status: Optional[str] = None,
+    capability: Optional[str] = None,
+    source_index: int = 0,
+) -> Mapping[str, Any]:
+    identity = {
+        "kind": kind,
+        "trip_index": trip_index,
+        "source_index": source_index,
+        "source_kind": trace["source_kind"],
+        "source_ref": trace["source_ref"],
+        "claim_id": claim_id,
+        "field_path": field_path,
+        "capability": capability,
+    }
+    return {
+        "item_id": "%s-%s" % (
+            prefix,
+            hashlib.sha256(canonical_json(identity).encode("utf-8")).hexdigest()[:16],
+        ),
+        "kind": kind,
+        "trip_index": trip_index,
+        "trip_id": trip["trip_id"],
+        "source_kind": trace["source_kind"],
+        "source_ref": trace["source_ref"],
+        "source_name": trace["source_name"],
+        "claim_id": claim_id,
+        "field_path": field_path,
+        "provider": provider,
+        "deadline": deadline,
+        "reason": reason,
+        "status": status,
+        "capability": capability,
+    }
+
+
+def _journey_checklist_sort_key(item: Mapping[str, Any]) -> Tuple[Any, ...]:
+    priority = {"transport": 0, "lodging": 1, "unknown": 2}
+    return (
+        _journey_deadline_sort_key(item["deadline"]),
+        priority[item["kind"]],
+        item["trip_index"],
+        item["item_id"],
+    )
+
+
+def _journey_deadline_sort_key(value: str) -> Tuple[str, int, str]:
+    # Date-only deadlines sort first on that day because their exact time is unknown.
+    return (value[:10], 0 if len(value) == 10 else 1, value)
+
+
+def _journey_trace_context(trip: Mapping[str, Any]) -> Mapping[str, Any]:
+    names: Dict[str, str] = {}
+    request = trip["request"]
+    places: List[Mapping[str, Any]] = []
+    if request.get("origin"):
+        places.append(request["origin"])
+    places.extend(item["origin"] for item in (request.get("traveler_groups") or ()))
+    if request.get("meeting_anchor"):
+        places.append(request["meeting_anchor"]["location"])
+    places.extend(request["destinations"])
+    for place in places:
+        names[place["ref_id"]] = place["name"]
+    for lodging in trip["lodgings"]:
+        names[lodging["lodging_id"]] = lodging["name"]
+    for poi in trip["pois"]:
+        names[poi["poi_id"]] = poi["name"]
+    for leg in trip["transport_legs"]:
+        names[leg["leg_id"]] = "%s → %s" % (
+            names.get(leg["from_ref"], leg["from_ref"]),
+            names.get(leg["to_ref"], leg["to_ref"]),
+        )
+    return {"names": names}
+
+
+def _journey_entity_trace(
+    trip: Mapping[str, Any],
+    context: Mapping[str, Any],
+    collection: str,
+    index: int,
+) -> Mapping[str, Any]:
+    keys = {
+        "transport_legs": ("transport_leg", "leg_id"),
+        "lodgings": ("lodging", "lodging_id"),
+        "pois": ("poi", "poi_id"),
+        "days": ("day", "day_id"),
+    }
+    source_kind, key = keys[collection]
+    value = trip[collection][index]
+    reference = value[key]
+    if source_kind == "day":
+        name = "%s · %s" % (value["date"], value["city"])
+    else:
+        name = context["names"].get(reference, reference)
+    return {
+        "source_kind": source_kind,
+        "source_ref": reference,
+        "source_name": name,
+        "source_value": value,
+    }
+
+
+def _journey_reference_trace(
+    trip: Mapping[str, Any],
+    context: Mapping[str, Any],
+    reference: str,
+) -> Mapping[str, Any]:
+    for collection, key, source_kind in (
+        ("transport_legs", "leg_id", "transport_leg"),
+        ("lodgings", "lodging_id", "lodging"),
+        ("pois", "poi_id", "poi"),
+        ("days", "day_id", "day"),
+    ):
+        for index, item in enumerate(trip[collection]):
+            if item[key] == reference:
+                return _journey_entity_trace(trip, context, collection, index)
+    return {
+        "source_kind": "trip",
+        "source_ref": trip["trip_id"],
+        "source_name": " → ".join(
+            item["name"] for item in trip["request"]["destinations"]
+        ),
+        "source_value": trip,
+    }
+
+
+def _journey_unknown_trace(
+    trip: Mapping[str, Any],
+    context: Mapping[str, Any],
+    unknown: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    parts = _journey_pointer_parts(unknown["field_path"])
+    if len(parts) >= 2 and parts[1].isdigit():
+        index = int(parts[1])
+        if parts[0] in ("transport_legs", "lodgings", "pois", "days"):
+            if index < len(trip[parts[0]]):
+                return _journey_entity_trace(trip, context, parts[0], index)
+    if len(parts) >= 3 and parts[0] == "budget_ledger" and parts[1] == "items" and parts[2].isdigit():
+        index = int(parts[2])
+        budget_items = trip["budget_ledger"]["items"]
+        if index < len(budget_items):
+            return _journey_reference_trace(
+                trip,
+                context,
+                budget_items[index]["ref_id"],
+            )
+    claim_id = unknown.get("claim_id")
+    if claim_id:
+        claim = next(
+            (item for item in trip["claims"] if item["claim_id"] == claim_id),
+            None,
+        )
+        if claim is not None:
+            return _journey_reference_trace(trip, context, claim["subject_ref"])
+    return _journey_reference_trace(trip, context, trip["trip_id"])
+
+
+def _journey_trace_deadline(
+    trip: Mapping[str, Any],
+    trace: Mapping[str, Any],
+) -> str:
+    value = trace["source_value"]
+    if trace["source_kind"] == "transport_leg":
+        return value.get("depart_at") or trip["request"]["start_date"]
+    if trace["source_kind"] == "lodging":
+        return value["check_in"]
+    if trace["source_kind"] == "poi":
+        windows = value.get("opening_windows") or ()
+        dated = sorted(
+            window["start_at"] for window in windows
+            if isinstance(window.get("start_at"), str)
+        )
+        return dated[0] if dated else trip["request"]["end_date"]
+    if trace["source_kind"] == "day":
+        return value["date"]
+    return trip["request"]["end_date"]
+
+
+def _journey_pointer_parts(pointer: str) -> List[str]:
+    return [
+        part.replace("~1", "/").replace("~0", "~")
+        for part in str(pointer).lstrip("/").split("/")
+        if part
+    ]
+
+
 def validate_journey(
     journey: Mapping[str, Any],
     schema_path: Optional[Path] = None,

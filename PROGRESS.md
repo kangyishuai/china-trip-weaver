@@ -1221,3 +1221,67 @@ OK：china-trip-weaver@china-trip-weaver-local 0.3.0 已安装且缓存与源码
 - 禁碰路径（render、demo、plugin.json、Trip/candidates Schema、docs、providers、mobility、scheduler、Trip validator、FlyAI、既有 tests、secret scanner）组合 `git diff` 与 `git diff --name-only` 均无输出。
 - `BLOCKED.md` 已追加本轮“新增阻塞：无”，并保留 Skill description 冻结冲突的已解决证据；没有总览页、booking checklist、demo 重跑、Codex 安装或版本发布动作。
 - 当前验收轮次：7/14；接下来只做暂存态最终门、白名单提交与提交后只读核验。
+
+## 0.4.0 Journey 总览发布开工理解（2026-09-05，≤10 行）
+1. 目标：把 16 天 Journey 渲染为可读、离线、确定且可校验的单页总览，并发布安装 0.4.0。
+2. 顺序：任务 0 基线 → Journey 渲染/校验 → checklist/风险追溯 → 第五组 demo → 10 处版本 → 全量门禁 → 真实安装。
+3. 复用现有 `RENDERER_VERSION`、CSP 与 Trip renderer/validator 约束；新增 `ctw journey render` 与 Journey HTML 校验入口。
+4. checklist 必须覆盖全部交通腿、住宿 check-in 与 unknown，按截止时间排序；风险不得漏 degraded/missing、conflict 或未解决 unknown。
+5. 只改任务书白名单，尤其不碰 `docs/`、Trip/candidates Schema、`planning.py`、scheduler、mobility、Trip validator 与禁碰测试。
+6. 最大风险：Journey/Trip 内引用形状多样，既要完整覆盖、可追溯、无内部 ID，又不能破坏 CSP、离线与字节确定性。
+7. 任务 0 实测：HEAD/origin=`5e14bf8`；`Ran 376 tests in 25.546s ... OK`、skipped 0；secret scan 0/364；16 天 Journey=3 Trip/16 天/max 6/SHA-256 `5bdf15b...`。
+8. 当前验收轮次：1/14；尚未修改产品代码，基线 Journey 保存在系统临时目录供后续渲染验证。
+
+## 0.4.0 任务 1：Journey 总览页（完成）
+
+- 新增 `render_journey` 与 `validate_journey_html`，由 `ctw journey render` / `ctw journey validate-html` 暴露；复用 `RENDERER_VERSION="1"`、同一 `renderer.css`、CSP、转义、canonical JSON、URL/secret/offline/a11y 门，入口用 lazy export 避免 Journey→planning→render 循环且未碰 `planning.py`。
+- 页面继承既有纸色/玉色/朱色视觉系统，以连续分段路线轴为主线；包含全程路线、每段起止、总预算、预订与核验清单、风险与衔接，嵌入完整 Journey，内部 ID 只在校验用 `data-*` 中、不可见文本无泄漏。
+- 当前 CLI 输出对应页面 SHA-256 为 `61dd8c6871a9a75f7fcd982efcffa97205105a1929831ac28c14f5e949a66a94`，并通过 `ctw journey validate-html`；先前落盘命令的输出形状为 `JOURNEY_RENDERED ... sha256=<digest> errors=0`。
+- 精准正向门：`/usr/bin/python3 -m unittest tests.test_renderer tests.test_journey -v` → `Ran 56 tests in 3.586s`、`OK`、skipped 0。
+- 必做反向验证：临时加入 `datetime.now().isoformat()` meta 后确定性测试 exit 1，`Ran 1 ... FAILED (failures=1)`，两次 bytes 仅时间戳 `02.047896`/`02.066575` 不同；移除临时时间戳后同一测试 `Ran 1 test in 0.180s ... OK`。
+- 当前验收轮次：2/14；临时时间戳已完整还原。
+- `craft-frontend-design` R1 首轮机器 QA 四视口均无 overflow/resource/console 错误，但实际查看 1440 截图发现共享 Trip h1 令“杭州”断字且路线卡右侧空置；以 Journey-only 标题/宽屏路线 CSS 修复后同条件重跑。
+- 最终 Chrome QA：320/375/430/1440 的 `failures=[]`、12/12 非空 section、font 16px/line-height 24.8px、min link 44px、resourceRequests/consoleErrors 均空；实际复看 375 与 1440 顶部及移动端 checklist/risk/segment 截图，无剩余 P0–P2。
+
+## 0.4.0 任务 2：checklist 与风险项（完成）
+
+- `journey_booking_checklist` 对每个 Trip 汇总全部交通腿、住宿 check-in 与每条 unknown；日期/时间截止由来源实体确定，缺具体时间保持 date-only 并保守排前，不编造时刻。
+- `journey_risk_items` 对每个 degraded/missing health capability、每个 conflict claim 与每条 unresolved unknown 各生成一项；稳定 id、Trip 序号、source kind/ref、claim/path/capability 只进入结构化追溯属性，页面显示名称与本地化状态。
+- 16 天基线实测：`checklist=85 kinds={'lodging': 3, 'transport': 3, 'unknown': 79} sorted=True traceable=True`；`risks=103 kinds={'unresolved_unknown': 79, 'provider_capability': 24} traceable=True`。
+- 永久回归同时注入 degraded 与 conflict 后精确比较全部 capability/claim/unknown 集合，并验证删任一 checklist/risk DOM 节点分别报 `JH202`/`JH203`；`tests.test_journey` 为 22/22 OK。
+- 当前验收轮次：3/14；未丢弃或合并任何 unresolved unknown。
+
+## 0.4.0 任务 3：第五组 16 天 demo（完成）
+
+- `scripts/build_renderer_fixtures.py` 复用现有 `journey_sixteen_day_case()`、固定时钟与 `RailBackend off`，生成 `demo/journey-16d/request.json|candidates.json|journey.json|journey.html`；写入前先跑 Journey HTML validator。
+- 最终生成器原始输出：`wrote 9 Trip and 11 HTML renderer fixtures; Journey demo trips=3 days=16 journey_sha256=5bdf15b998e51e0931189181b17102ac11290f98c4bb1d72cc5ac4b425982b7d html_sha256=61dd8c6871a9a75f7fcd982efcffa97205105a1929831ac28c14f5e949a66a94`。
+- 五组公开校验全部 exit 0：四组依次输出 `VALID .../trip.json` 与 `HTML VALID .../trip.html errors=0`；Journey 组输出 `JOURNEY VALID demo/journey-16d/journey.json trips=3` 与 `JOURNEY HTML VALID demo/journey-16d/journey.html errors=0`。
+- 对 `rg --files demo` 枚举的全部 20 个文件运行 secret scan：`secret scan: 0 finding(s) across 20 file(s)`。
+- checked-in demo 回归断言 16 天、页面等于 fresh `render_journey` bytes 且 validator 通过；`/usr/bin/python3 -m unittest tests.test_journey -v` → `Ran 23 tests in 1.281s ... OK`、skipped 0。
+- 当前验收轮次：4/14；四组旧 demo 文件未被生成器改写。
+
+## 0.4.0 任务 4：升版本（完成）
+
+- 一次把现状清单的 10 处精确版本从 0.3.0 改为 0.4.0：package、manifest、MCP clientInfo、两份 README、packaging 两处及 credentials/contracts/skills 各一处；所有 manifest/version 断言仍为精确 `assertEqual`。
+- 版本精准门：`/usr/bin/python3 -m unittest tests.test_packaging tests.test_credentials tests.test_contracts tests.test_skills -v` → `Ran 53 tests in 8.942s ... OK`、skipped 0；主 Skill description 随 Journey 发现能力改成精确新文本，`tests/test_skills.py` 只同步同一字面值，九个名称与逐字冻结仍通过、未放宽匹配。
+- 对十处清单运行 `/usr/bin/grep -rnF "0.3.0" ...` → exit 1、无输出；同一清单 grep 0.4.0 → 恰好 10 行。
+- 全量 `/usr/bin/python3 -m unittest discover -s tests` → `Ran 386 tests in 29.192s ... OK`、skipped 0；repo secret scan → `0 finding(s) across 370 file(s)`。
+- `git diff --check` exit 0；`git diff -- docs .../trip.schema.json .../candidates.schema.json .../planning.py .../scheduler .../mobility.py .../validate_trip.py` exit 0、无输出。
+- 当前验收轮次：6/14；已满足 ≥384 且版本门全绿，尚未执行真实 Codex 安装。
+
+## 0.4.0 任务 5：安装进真实 Codex（完成）
+
+- 未设置 `CODEX_HOME`，运行 `scripts/install_local_plugin.sh`，实际目标 `/Users/kangyishuai/.codex`；exit 0，输出含 `SKILL parser smoke: OK (9 SKILL.md via codex debug prompt-input)`、`plugin list: installed, enabled 0.4.0`、`OK：... 0.4.0 已安装且缓存与源码一致`。
+- 独立 `/Applications/ChatGPT.app/Contents/Resources/codex plugin list` 目标行：`china-trip-weaver@china-trip-weaver-local  installed, enabled  0.4.0    /Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/plugins/china-trip-weaver`。
+- 随后 `scripts/install_local_plugin.sh --check` exit 0，输出再次含 `SKILL parser smoke: OK (9 SKILL.md via codex debug prompt-input)`、`plugin list: installed, enabled 0.4.0` 与缓存/源码一致的 `OK`。
+- 当前验收轮次：7/14；真实 Codex 安装与只读复核均一次通过。
+
+## 0.4.0 最终提交前验收
+
+- 最终原始产物命令：`ctw journey render demo/journey-16d/journey.json --output /tmp/.../journey-release.html` → `JOURNEY_RENDERED ... sha256=61dd8c6871a9a75f7fcd982efcffa97205105a1929831ac28c14f5e949a66a94 errors=0`。
+- 五组十条公开校验最终均 exit 0：四组分别为 `VALID .../trip.json` + `HTML VALID .../trip.html errors=0`；长行程为 `JOURNEY VALID demo/journey-16d/journey.json trips=3` + `JOURNEY HTML VALID demo/journey-16d/journey.html errors=0`。
+- 最终全量 `/usr/bin/python3 -m unittest discover -s tests` → `Ran 386 tests in 24.963s ... OK`、skipped 0；repo scan `0 finding(s) across 370 file(s)`；20 个 demo 文件 scan `0 finding(s)`。
+- 最终离线 Chrome R1：四视口 `failures=[]`、无横向溢出/外部资源/console error，12/12 section 非空；同条件截图复看标题、路线、checklist、系统风险与分段，P0–P2 均已关闭。
+- 最终再次无 `CODEX_HOME` 刷新真实安装并 `--check`：两次均 exit 0；独立 plugin list 为 `installed, enabled 0.4.0`，缓存与当前插件源码一致。
+- 修改/新增清单只含任务书白名单；`docs/`、Trip/candidates Schema、`planning.py`、scheduler、mobility、Trip validator diff 为空，mcp_stdio diff 仅 clientInfo 版本串，`git diff --check` 通过。
+- `BLOCKED.md` 保留全部历史事实并追加本轮状态“新增阻塞：无”。当前验收轮次：8/14；下一步仅暂存态复核与提交。

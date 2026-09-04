@@ -163,6 +163,16 @@ def _parser() -> argparse.ArgumentParser:
     )
     journey_validate.add_argument("journey", type=Path)
     journey_validate.add_argument("--schema", type=Path, default=None)
+    journey_render = journey_commands.add_parser(
+        "render", help="render a validated Journey as a deterministic overview page",
+    )
+    journey_render.add_argument("journey", type=Path)
+    journey_render.add_argument("--output", "-o", type=Path, default=None)
+    journey_validate_html = journey_commands.add_parser(
+        "validate-html", help="validate a Journey overview page against its Journey",
+    )
+    journey_validate_html.add_argument("html", type=Path)
+    journey_validate_html.add_argument("journey", type=Path)
 
     replan = commands.add_parser("replan", help="apply a versioned local replan event and render the result")
     replan.add_argument("--trip", type=Path, required=True)
@@ -355,6 +365,66 @@ def main(argv: Optional[Sequence[str]] = None, *, credential_path: Optional[Path
                 len(report.errors),
                 "" if len(report.errors) == 1 else "s",
             ), file=sys.stderr)
+            return 1
+
+        if args.journey_command == "render":
+            import hashlib
+
+            from .render import (
+                RendererError,
+                render_journey,
+                safe_output_name,
+                validate_journey_html,
+            )
+
+            try:
+                journey_value = read_json(args.journey)
+                rendered = render_journey(journey_value)
+                report = validate_journey_html(rendered, journey_value)
+                if not report.ok:
+                    for issue in report.errors:
+                        print(issue.render(), file=sys.stderr)
+                    return 1
+                output = args.output or Path.cwd() / safe_output_name(
+                    journey_value["journey_id"]
+                )
+                output.parent.mkdir(parents=True, exist_ok=True)
+                output.write_text(rendered, encoding="utf-8")
+                digest = hashlib.sha256(rendered.encode("utf-8")).hexdigest()
+                print("JOURNEY_RENDERED %s sha256=%s errors=0" % (output, digest))
+                return 0
+            except (
+                OSError,
+                UnicodeError,
+                ValueError,
+                json.JSONDecodeError,
+                RendererError,
+            ) as exc:
+                print("JOURNEY_RENDER_FAILED %s" % exc, file=sys.stderr)
+                return 1
+
+        if args.journey_command == "validate-html":
+            from .render import validate_journey_html
+
+            try:
+                journey_value = read_json(args.journey)
+                rendered = args.html.read_text(encoding="utf-8")
+                report = validate_journey_html(rendered, journey_value)
+            except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+                print("JOURNEY_HTML_INVALID %s" % exc, file=sys.stderr)
+                return 1
+            if report.ok:
+                print("JOURNEY HTML VALID %s errors=0" % args.html)
+                return 0
+            for issue in report.errors:
+                print(issue.render(), file=sys.stderr)
+            print(
+                "JOURNEY HTML INVALID %s errors=%d" % (
+                    args.html,
+                    len(report.errors),
+                ),
+                file=sys.stderr,
+            )
             return 1
 
         from .clock import FixedClock, SystemClock

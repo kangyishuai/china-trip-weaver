@@ -2,7 +2,7 @@
 
 [English](README.md) · **简体中文**
 
-旅织是一个 Codex 插件，为中国大陆境内的行程做**有据可查、只读**的规划。它把一份出行需求和一份调研候选，织成一个带版本的 Trip JSON：查询固定版本的 12306 铁路、高德路线矩阵、飞猪（FlyAI）住宿与航班库存，以及可选的飞常准状态与舒适度增强；排程时不会把「比较用的候选」混进「已选定的行程段」；最后渲染成一个确定性的、手机优先的单文件 HTML。
+旅织是一个 Codex 插件，为中国大陆境内的行程做**有据可查、只读**的规划。它把一份出行需求和一份调研候选，织成一个带版本的 Trip JSON；长行程则织成一个内含完整 Trip 的 Journey。它查询固定版本的 12306 铁路、高德路线矩阵、飞猪（FlyAI）住宿与航班库存，以及可选的飞常准状态与舒适度增强；排程时不会把「比较用的候选」混进「已选定的行程段」；最后渲染成确定性的、手机优先的单文件 HTML。
 
 它永远不会登录、提交身份信息、占位库存、下单、支付、取消或改签。服务商凭据只存在于各自的进程环境里，不会出现在命令行参数、日志、测试夹具、Trip、HTML 或 Git 中。
 
@@ -10,7 +10,9 @@
 
 planner 继续支持既有的一日游与单城市行程，并支持 2–7 天的有序多城市行程。多个目的地严格按 `origin → D1 → D2 → …` 行进；默认单向，只有用户明确写往返，或最后一个目的地本来就是 origin，行程才包含返程。跨城当天归到到达城市，每个过夜日期都必须在该城市明确选中且仅选中一个 stay。调研得到的住宿候选不等于已选 stay；任一晚没有可覆盖的候选时，规划会返回结构化无解结果。
 
-超过 7 天的行程仍不支持。旅客输入有两种互斥写法：既有 `origin + travelers`，或 `traveler_groups[] + meeting_anchor`。每组提供稳定的 `group_id`、本组人数与 origin，可另带 mobility profile；会合锚点提供地点和 `meet_by`，`buffer_minutes` 缺省为 60。任何一组无法留出足够缓冲都会得到结构化冲突；混合输入会被拒绝，输出 Trip 也只保留被选中的那一种写法。验证、渲染与 inventory 查询都会原生消费分组写法。分组交通腿必须有明确 `group_refs`；`transport_pricing` 分别给出每组交通总价与全团交通总价。
+超过 7 天的请求会生成一个 Journey；其中每个完整、可独立使用的子 Trip 仍严格限制在 1–7 天。拆分优先选跨城日，再按七天边界硬切；相邻日期、边界住宿、跨段交通和全程预算都会显式记录并校验。Journey 总览页展示全程路线、各段日期、总预算区间、按截止时间排序的预订／核验清单，以及全部降级能力、冲突 claim 与未解决 unknown，同时不向可见文本暴露内部 id。
+
+旅客输入有两种互斥写法：既有 `origin + travelers`，或 `traveler_groups[] + meeting_anchor`。每组提供稳定的 `group_id`、本组人数与 origin，可另带 mobility profile；会合锚点提供地点和 `meet_by`，`buffer_minutes` 缺省为 60。任何一组无法留出足够缓冲都会得到结构化冲突；混合输入会被拒绝，输出 Trip 也只保留被选中的那一种写法。验证、渲染与 inventory 查询都会原生消费分组写法。分组交通腿必须有明确 `group_refs`；`transport_pricing` 分别给出每组交通总价与全团交通总价。
 
 `pace=slow` 先按严格慢节奏排程。只要无解，就累计尝试：降低每日 POI 上限、把 POI／餐点时长压到推荐值的 70%、最后把当日结束时间放宽到 balanced 的 21:30。排得出的第一步就停止，实际采用的每一步都会追加到 `request.assumptions`；三步无法改变的硬冲突保留原结构化冲突，并列出全部已尝试降配。
 
@@ -70,7 +72,7 @@ CODEX_HOME=/path/to/an/isolated/codex-home \
   plugin list
 ```
 
-期望结果是 `china-trip-weaver@china-trip-weaver-local`、版本 `0.3.0`、状态 `installed, enabled`。安装或更新后请新建一个 Codex 任务，让它的 9 个 Skill 与 MCP 配置重新加载。
+期望结果是 `china-trip-weaver@china-trip-weaver-local`、版本 `0.4.0`、状态 `installed, enabled`。安装或更新后请新建一个 Codex 任务，让它的 9 个 Skill 与 MCP 配置重新加载。
 
 用 Codex 桌面版界面安装时：把本仓库添加为本地市场，确认 `china-travel-assistant` 已禁用，安装 China Trip Weaver Local，重启，再新建任务。两个插件不能同时启用，因为它们都暴露 `plan-china-trip`。
 
@@ -112,6 +114,13 @@ plugins/china-trip-weaver/scripts/ctw validate-html demo/trip.html demo/trip.jso
 
 [`demo/grouped-departures/`](demo/grouped-departures/) 下的分组出发示例让两组合成旅客分别从北京、广州前往上海会合点。提交的 Trip 保持严格的分组 request 形状，并可见地展示各组出发地、3 人总数、分组归属交通腿，以及分组/全团交通价格。
 
+第五组示例位于 [`demo/journey-16d/`](demo/journey-16d/)：一份完全合成的上海→杭州→苏州 16 天 Journey，拆成三个完整 Trip。用 `/usr/bin/python3 scripts/build_renderer_fixtures.py` 可重复生成，再运行：
+
+```bash
+plugins/china-trip-weaver/scripts/ctw journey validate demo/journey-16d/journey.json
+plugins/china-trip-weaver/scripts/ctw journey validate-html demo/journey-16d/journey.html demo/journey-16d/journey.json
+```
+
 铁路、网络或服务商失败，永远不会变成假成功。每项能力保留自己的健康状态，要么使用带标记的降级方案，要么停在一个有类型的 unknown 上。高德每次规划最多 80 次调用、不超过 2 QPS。FlyAI 的遮罩价（例如 `¥4xx`）一律是 `verify-on-click`，只有精确数字才是 `live`。FlyAI 的坐标始终是 `provider-unknown`，不做转换也不上图。
 
 ## 不配任何 Key 也能跑
@@ -150,9 +159,13 @@ ctw air --origin CITY --destination CITY --date YYYY-MM-DD --output-json air.jso
 ctw replan --trip TRIP.json --event EVENT.json --base-revision N --output-json TRIP-rN.json --output-html TRIP-rN.html
 ctw render TRIP.json --output TRIP.html
 ctw validate-html TRIP.html TRIP.json
+ctw journey plan --request REQUEST.json --candidates CANDIDATES.json --output-json JOURNEY.json
+ctw journey validate JOURNEY.json
+ctw journey render JOURNEY.json --output JOURNEY.html
+ctw journey validate-html JOURNEY.html JOURNEY.json
 ```
 
-运行时不使用任何第三方 Python 包。`render` 会拒绝无效的 Trip；`validate-html` 会拦截结构、CSP、远程资源、危险链接、密钥、事实映射、降级标注和交易动作等各类违规。
+运行时不使用任何第三方 Python 包。Trip 与 Journey renderer 都会拒绝无效输入；两套 HTML validator 都会拦截结构、CSP、远程资源、危险链接、密钥、事实映射、追溯缺口和交易动作等违规。
 
 ## 测试
 
@@ -163,7 +176,7 @@ ctw validate-html TRIP.html TRIP.json
 /usr/bin/python3 scripts/scan_secrets.py --credential-values --git-history
 ```
 
-本机不应出现任何跳过。测试覆盖冻结的 Trip Schema、候选校验、凭据与进程／家目录隔离、精确值与抓取数据门禁、证据／缓存／坐标、带高德／FlyAI／飞常准合同形状的 79 个一眼可辨合成服务商夹具、20 个排程 golden、8 个无解用例、4 个局部重排 golden、渲染器对抗用例与离线浏览器视口、Skill 与打包元数据，以及确定性和实网两条集成路径。
+本机不应出现任何跳过。测试覆盖冻结的 Trip Schema、Journey 拆分与连续性、候选校验、凭据与进程／家目录隔离、精确值与抓取数据门禁、证据／缓存／坐标、带高德／FlyAI／飞常准合同形状的 79 个一眼可辨合成服务商夹具、20 个排程 golden、8 个无解用例、4 个局部重排 golden、Trip/Journey 渲染器对抗用例与离线浏览器视口、Skill 与打包元数据，以及确定性和实网两条集成路径。
 
 ## 文档导航
 

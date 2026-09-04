@@ -1,0 +1,269 @@
+{
+  "candidates_version": "1.0.0",
+  "claims": [
+    {
+      "as_of": null,
+      "claim_id": "claim-j16-shanghai-lodging-price",
+      "confidence": 0.8,
+      "field_path": "/price",
+      "json_path": null,
+      "mode": "static",
+      "provider": "deep-link",
+      "queried_at": "2026-09-03T12:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "source_url": "https://www.fliggy.com/hotel/search",
+      "status": "partial",
+      "subject_ref": "lodging-j16-shanghai-central",
+      "value": 300
+    },
+    {
+      "as_of": null,
+      "claim_id": "claim-j16-hangzhou-lodging-price",
+      "confidence": 0.8,
+      "field_path": "/price",
+      "json_path": null,
+      "mode": "static",
+      "provider": "deep-link",
+      "queried_at": "2026-09-03T12:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "source_url": "https://www.fliggy.com/hotel/search",
+      "status": "partial",
+      "subject_ref": "lodging-j16-hangzhou-central",
+      "value": 280
+    },
+    {
+      "as_of": null,
+      "claim_id": "claim-j16-suzhou-lodging-price",
+      "confidence": 0.8,
+      "field_path": "/price",
+      "json_path": null,
+      "mode": "static",
+      "provider": "deep-link",
+      "queried_at": "2026-09-03T12:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "source_url": "https://www.fliggy.com/hotel/search",
+      "status": "partial",
+      "subject_ref": "lodging-j16-suzhou-central",
+      "value": 260
+    },
+    {
+      "as_of": null,
+      "claim_id": "claim-j16-shanghai-hours",
+      "confidence": 0.55,
+      "field_path": "/opening_windows/0",
+      "json_path": null,
+      "mode": "static",
+      "provider": "official-web",
+      "queried_at": "2026-09-03T12:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "source_url": "https://example.com/synthetic-journey/shanghai",
+      "status": "hypothesis",
+      "subject_ref": "poi-j16-shanghai",
+      "value": "date-specific candidate window"
+    },
+    {
+      "as_of": null,
+      "claim_id": "claim-j16-hangzhou-hours",
+      "confidence": 0.55,
+      "field_path": "/opening_windows/0",
+      "json_path": null,
+      "mode": "static",
+      "provider": "official-web",
+      "queried_at": "2026-09-03T12:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "source_url": "https://example.com/synthetic-journey/hangzhou",
+      "status": "hypothesis",
+      "subject_ref": "poi-j16-hangzhou",
+      "value": "date-specific candidate window"
+    },
+    {
+      "as_of": null,
+      "claim_id": "claim-j16-suzhou-hours",
+      "confidence": 0.55,
+      "field_path": "/opening_windows/0",
+      "json_path": null,
+      "mode": "static",
+      "provider": "official-web",
+      "queried_at": "2026-09-03T12:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "source_url": "https://example.com/synthetic-journey/suzhou",
+      "status": "hypothesis",
+      "subject_ref": "poi-j16-suzhou",
+      "value": "date-specific candidate window"
+    }
+  ],
+  "lodgings": [
+    {
+      "area": "上海合成片区",
+      "check_in": "2026-10-01",
+      "check_out": "2026-10-06",
+      "city": "上海",
+      "claim_ids": [
+        "claim-j16-shanghai-lodging-price"
+      ],
+      "coordinates": null,
+      "deep_links": [
+        "https://www.fliggy.com/hotel/search"
+      ],
+      "locked": false,
+      "lodging_id": "lodging-j16-shanghai-central",
+      "name": "上海合成住宿",
+      "price": {
+        "amount": 300,
+        "claim_id": "claim-j16-shanghai-lodging-price",
+        "currency": "CNY",
+        "includes_taxes": true,
+        "price_type": "reference",
+        "queried_at": "2026-09-03T12:00:00+08:00",
+        "unit": "per_night"
+      }
+    },
+    {
+      "area": "杭州合成片区",
+      "check_in": "2026-10-06",
+      "check_out": "2026-10-11",
+      "city": "杭州",
+      "claim_ids": [
+        "claim-j16-hangzhou-lodging-price"
+      ],
+      "coordinates": null,
+      "deep_links": [
+        "https://www.fliggy.com/hotel/search"
+      ],
+      "locked": false,
+      "lodging_id": "lodging-j16-hangzhou-central",
+      "name": "杭州合成住宿",
+      "price": {
+        "amount": 280,
+        "claim_id": "claim-j16-hangzhou-lodging-price",
+        "currency": "CNY",
+        "includes_taxes": true,
+        "price_type": "reference",
+        "queried_at": "2026-09-03T12:00:00+08:00",
+        "unit": "per_night"
+      }
+    },
+    {
+      "area": "苏州合成片区",
+      "check_in": "2026-10-11",
+      "check_out": "2026-10-16",
+      "city": "苏州",
+      "claim_ids": [
+        "claim-j16-suzhou-lodging-price"
+      ],
+      "coordinates": null,
+      "deep_links": [
+        "https://www.fliggy.com/hotel/search"
+      ],
+      "locked": false,
+      "lodging_id": "lodging-j16-suzhou-central",
+      "name": "苏州合成住宿",
+      "price": {
+        "amount": 260,
+        "claim_id": "claim-j16-suzhou-lodging-price",
+        "currency": "CNY",
+        "includes_taxes": true,
+        "price_type": "reference",
+        "queried_at": "2026-09-03T12:00:00+08:00",
+        "unit": "per_night"
+      }
+    }
+  ],
+  "pois": [
+    {
+      "category": "architecture",
+      "city": "上海",
+      "claim_ids": [
+        "claim-j16-shanghai-hours"
+      ],
+      "coordinates": null,
+      "deep_links": [
+        "https://example.com/synthetic-journey/shanghai"
+      ],
+      "name": "上海合成建筑漫步",
+      "opening_windows": [
+        {
+          "claim_id": "claim-j16-shanghai-hours",
+          "end_at": "2026-10-02T12:00:00+08:00",
+          "start_at": "2026-10-02T09:00:00+08:00",
+          "status": "tentative"
+        }
+      ],
+      "poi_id": "poi-j16-shanghai",
+      "price": null,
+      "recommended_duration_minutes": 90
+    },
+    {
+      "category": "scenic",
+      "city": "杭州",
+      "claim_ids": [
+        "claim-j16-hangzhou-hours"
+      ],
+      "coordinates": null,
+      "deep_links": [
+        "https://example.com/synthetic-journey/hangzhou"
+      ],
+      "name": "杭州合成湖滨漫步",
+      "opening_windows": [
+        {
+          "claim_id": "claim-j16-hangzhou-hours",
+          "end_at": "2026-10-07T12:00:00+08:00",
+          "start_at": "2026-10-07T09:00:00+08:00",
+          "status": "tentative"
+        }
+      ],
+      "poi_id": "poi-j16-hangzhou",
+      "price": null,
+      "recommended_duration_minutes": 90
+    },
+    {
+      "category": "garden",
+      "city": "苏州",
+      "claim_ids": [
+        "claim-j16-suzhou-hours"
+      ],
+      "coordinates": null,
+      "deep_links": [
+        "https://example.com/synthetic-journey/suzhou"
+      ],
+      "name": "苏州合成园林漫步",
+      "opening_windows": [
+        {
+          "claim_id": "claim-j16-suzhou-hours",
+          "end_at": "2026-10-12T12:00:00+08:00",
+          "start_at": "2026-10-12T09:00:00+08:00",
+          "status": "tentative"
+        }
+      ],
+      "poi_id": "poi-j16-suzhou",
+      "price": null,
+      "recommended_duration_minutes": 90
+    }
+  ],
+  "unknowns": [
+    {
+      "claim_id": "claim-j16-shanghai-hours",
+      "field_path": "/pois/0/coordinates",
+      "provider": "amap",
+      "reason": "AMap is not configured; coordinates remain unverified"
+    },
+    {
+      "claim_id": "claim-j16-hangzhou-hours",
+      "field_path": "/pois/1/coordinates",
+      "provider": "amap",
+      "reason": "AMap is not configured; coordinates remain unverified"
+    },
+    {
+      "claim_id": "claim-j16-suzhou-hours",
+      "field_path": "/pois/2/coordinates",
+      "provider": "amap",
+      "reason": "AMap is not configured; coordinates remain unverified"
+    }
+  ]
+}

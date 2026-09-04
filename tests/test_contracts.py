@@ -66,7 +66,7 @@ class ContractTests(unittest.TestCase):
         self.assertIn("S_ONE_OF", {item.code for item in issues}, [i.render() for i in issues])
 
     def test_versions_are_frozen(self):
-        self.assertEqual("0.3.0", __version__)
+        self.assertEqual("0.4.0", __version__)
         self.assertEqual("1.0.0", SCHEMA_VERSION)
 
     def test_packaged_schema_is_byte_identical_to_accepted_schema(self):
