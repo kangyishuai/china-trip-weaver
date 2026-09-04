@@ -1,5 +1,52 @@
 # Unresolved items
 
+Two items are open. Everything else on this page is closed and kept only for provenance;
+the per-round evidence lives in `PROGRESS.md`.
+
+## Open
+
+### 12306 station candidates carry no distance signal
+
+Pinned `12306-mcp@0.3.10` returns `station_code` and `station_name` only, so when a city
+has several stations the plugin returns every candidate without ranking them by distance
+to the trip endpoint. Ordering is deterministic and forward-compatible (it sorts by
+`distance_meters` when a source supplies one, unknown distances last), and no candidate is
+silently chosen for the user. Resolving this needs station coordinates, which the AMap POI
+capability could now supply — unscheduled.
+
+### Public-distribution legal links
+
+`interface.websiteURL` points at the real repository. `privacyPolicyURL` and
+`termsOfServiceURL` are deliberately absent rather than invented: [ADR-0013](docs/design/adr/0013-stay-off-the-public-marketplace.md)
+keeps this plugin off the public marketplace and the project publishes no policy pages.
+Before any public distribution, publish reviewed pages, add their real HTTPS URLs, and
+rerun plugin ingestion validation.
+
+## Closed
+
+Every item below was closed during the 2026-09-04/05 audit-remediation rounds. Kept for
+provenance; none of it is pending work.
+
+- **Lodging and flight inventory had a single upstream source** — closed 2026-09-04 by
+  independent fallbacks: VariFlight `searchFlightsByDepArr` for flights and AMap POI
+  accommodation search for lodging, both publishing `verify-on-click` with no price. With
+  FlyAI forced to time out on every call, both capabilities still return candidates.
+- **`pace=slow` refused tight itineraries instead of degrading** — closed 2026-09-04 by a
+  three-step fallback (fewer daily POIs, 0.70 duration compression, balanced end time)
+  that records every applied step in `request.assumptions`.
+- **Grouped Trips crashed outside the planner** — closed in 0.3.0. The validator, renderer,
+  and FlyAI lodging path read `traveler_groups` natively; all compatibility projections
+  were deleted.
+- **The two request shapes were only one-way exclusive** — closed in 0.3.0. The grouped
+  `oneOf` branch now pins `origin` and `travelers` to null, and a contract test asserts
+  `S_ONE_OF` in both directions.
+- **Same-name Skill detection, provider terms, sample-data redistribution, and the public
+  marketplace decision** — all closed 2026-09-04; see the detail preserved below.
+
+---
+
+# Appendix: original per-round records
+
 ## Book 8: standalone grouped Trip consumption (resolved in 0.3.0 on 2026-09-05)
 
 - Previous blocker: Book 8 could not edit the public validator or renderer, so a strict grouped Trip produced `KeyError: 'origin'` outside the planner even though its schema-only validation passed. FlyAI lodging parameter derivation likewise raised `KeyError: 'travelers'` without a planner projection.
