@@ -5,13 +5,14 @@ description: Normalize dated mainland-China flight candidates and booking deep l
 
 # Search China Air
 
-FlyAI is an optional, best-effort third-party wrapper. When it is unavailable or its contract has drifted, report the degraded health and continue with rail comparison rather than inventing a flight.
+FlyAI is an optional, best-effort third-party wrapper. When it is unavailable or its contract has drifted, report the degraded health and continue with rail comparison. With a configured VariFlight key, `searchFlightsByDepArr` may independently supply dated flight identities and schedules.
 
-Use FlyAI as the candidate/deep-link source and VariFlight only as optional enrichment.
+Use FlyAI for priced candidate/deep-link results. Use VariFlight both as optional status/comfort enrichment and as an independent schedule-only fallback.
 
 - Probe `@fly-ai/flyai-cli@1.0.16` version/help and current command envelope before use; never infer a command from stale documentation.
 - Identify a flight by number, departure airport, arrival airport, and local departure date. Keep conflicts between providers as separate claims.
 - Invoke VariFlight business tools only when its key is locally configured and the exact nine-tool fingerprint passes.
+- A VariFlight-only fallback always has `amount: null` and `price_type: verify-on-click`; schedule data never implies a fare.
 - Type every price and preserve currency, party, tax/seat context, query time, and confidence. Do not average incompatible or conflicting prices.
 - Return candidates, deep links, claims, health, and warnings. Never log in or complete a booking.
 

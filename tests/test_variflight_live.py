@@ -114,6 +114,28 @@ class VariFlightLiveTests(unittest.TestCase):
         self.assertNotIn(resolved.get("VARIFLIGHT_API_KEY"), diagnostics)
         self.assertEqual(2, transport.business_calls)
 
+    def test_independent_search_emits_price_less_verify_on_click_candidate(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            resolved = credentials(True)
+            transport = self.transport(temporary, resolved, "require-key")
+            backend = VariFlightBackend("auto", resolved, transport)
+            route = SimpleNamespace(
+                from_place={"name": "北京", "ref_id": "city-beijing"},
+                to_place={"name": "上海", "ref_id": "city-shanghai"},
+                travel_date="2026-09-10",
+            )
+            result = backend.enrich([], [route], CLOCK)
+        self.assertEqual(1, len(result.flights))
+        candidate = result.flights[0]
+        self.assertEqual("variflight", candidate["provider"])
+        self.assertEqual("XX1001", candidate["service_number"])
+        self.assertEqual(120, candidate["duration_minutes"])
+        self.assertIsNone(candidate["price"]["amount"])
+        self.assertEqual("verify-on-click", candidate["price"]["price_type"])
+        self.assertEqual("ready", result.health["status"])
+        self.assertIn("candidates=1", result.health["reason"])
+        self.assertEqual(2, transport.business_calls)
+
     def test_tool_fingerprint_drift_fails_closed(self):
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
             resolved = credentials(False)

@@ -76,6 +76,12 @@ def _parser() -> argparse.ArgumentParser:
     lodging.add_argument("--city", required=True)
     lodging.add_argument("--check-in", required=True)
     lodging.add_argument("--check-out", required=True)
+    lodging.add_argument("--adults", type=int, default=1)
+    lodging.add_argument("--rooms", type=int, default=1)
+    lodging.add_argument("--room-constraint", default=None)
+    lodging.add_argument("--bed-config", default=None)
+    lodging.add_argument("--parking-required", action="store_true")
+    lodging.add_argument("--cancellation-preference", default=None)
     lodging.add_argument("--deadline", type=float, default=25.0)
     lodging.add_argument("--keyless-trial", action="store_true")
     lodging.add_argument("--output-json", type=Path, default=None)
@@ -159,7 +165,7 @@ def main(argv: Optional[Sequence[str]] = None, *, credential_path: Optional[Path
         return 1 if conflicts["status"] == "conflict" else 0
     if args.command == "plan":
         from .clock import FixedClock, SystemClock
-        from .flyai_inventory import FlyAIBackend
+        from .flyai_inventory import AMapLodgingBackend, FlyAIBackend
         from .mobility import MobilityBackend
         from .planning import RailBackend, plan_trip
         from .variflight_enrichment import VariFlightBackend
@@ -184,13 +190,18 @@ def main(argv: Optional[Sequence[str]] = None, *, credential_path: Optional[Path
             flyai_backend = FlyAIBackend.from_spec(
                 args.lodging, repo_root, deadline_seconds=args.flyai_deadline,
             )
+            amap_lodging_backend = AMapLodgingBackend.from_spec(
+                "auto" if args.lodging == "live" else "off",
+                repo_root,
+                deadline_seconds=args.mobility_deadline,
+            )
             aviation_mode = "off" if args.offline_fixture else args.aviation
             variflight_backend = VariFlightBackend.from_spec(
                 aviation_mode, repo_root, deadline_seconds=args.variflight_deadline,
             )
             result = plan_trip(
                 request_value, candidates_value, clock, rail_backend, mobility_backend,
-                flyai_backend, variflight_backend,
+                flyai_backend, variflight_backend, amap_lodging_backend,
             )
             args.output_json.parent.mkdir(parents=True, exist_ok=True)
             args.output_html.parent.mkdir(parents=True, exist_ok=True)
@@ -259,7 +270,19 @@ def main(argv: Optional[Sequence[str]] = None, *, credential_path: Optional[Path
             )
             clock = SystemClock()
             if args.command == "lodging":
-                result = backend.query_lodging(args.city, args.check_in, args.check_out, clock)
+                result = backend.query_lodging(
+                    args.city,
+                    args.check_in,
+                    args.check_out,
+                    clock,
+                    party={"adults": args.adults, "children": 0},
+                    rooms=args.rooms,
+                    adult_count=args.adults,
+                    occupancy=args.room_constraint,
+                    bed_config=args.bed_config,
+                    parking_required=args.parking_required,
+                    cancellation_preference=args.cancellation_preference,
+                )
                 items = list(result.normalized_items)
                 output_key = "lodgings"
             else:

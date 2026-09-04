@@ -242,6 +242,21 @@
         "start_date": {"type": "string", "format": "date"},
         "end_date": {"type": "string", "format": "date"},
         "travelers": {"type": "integer", "minimum": 1, "maximum": 20},
+        "party": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["adults"],
+          "properties": {
+            "adults": {"type": "integer", "minimum": 1, "maximum": 20},
+            "children": {"type": "integer", "minimum": 0, "maximum": 20}
+          }
+        },
+        "rooms": {"type": "integer", "minimum": 1, "maximum": 20},
+        "adult_count": {"type": "integer", "minimum": 1, "maximum": 20},
+        "occupancy": {"type": ["string", "null"], "maxLength": 500},
+        "bed_config": {"type": ["string", "null"], "maxLength": 500},
+        "parking_required": {"type": "boolean"},
+        "cancellation_preference": {"type": ["string", "null"], "maxLength": 500},
         "budget_cny": {"type": ["number", "null"], "minimum": 0},
         "interests": {"$ref": "#/$defs/stringList"},
         "pace": {"type": "string", "enum": ["slow", "balanced", "full"]},

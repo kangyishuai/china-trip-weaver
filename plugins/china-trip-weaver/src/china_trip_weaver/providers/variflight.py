@@ -111,6 +111,8 @@ class VariFlightAdapter(BaseAdapter):
             raise ContractMismatch("VariFlight live data is not a list")
         if tool == "flightHappinessIndex":
             return self._live_comfort(rows, request, clock)
+        if request.parameters.get("candidate_mode") is True:
+            return self._live_candidates(rows, request, clock)
 
         subject_refs = request.parameters.get("subject_refs_by_service")
         if not isinstance(subject_refs, dict):
@@ -148,6 +150,89 @@ class VariFlightAdapter(BaseAdapter):
                 clock=clock,
             ))
         return Normalization((), tuple(claims))
+
+    def _live_candidates(
+        self,
+        rows: List[Any],
+        request: ProviderRequest,
+        clock: Clock,
+    ) -> Normalization:
+        from_ref = request.parameters.get("from_ref")
+        to_ref = request.parameters.get("to_ref")
+        if not isinstance(from_ref, str) or not isinstance(to_ref, str):
+            raise ContractMismatch("VariFlight candidate endpoints are missing")
+        items: List[Mapping[str, Any]] = []
+        claims: List[Mapping[str, Any]] = []
+        for raw in rows:
+            if not isinstance(raw, dict):
+                raise ContractMismatch("VariFlight flight row is not an object")
+            service = sanitize_text(raw.get("FlightNo"), 32)
+            depart = _live_datetime(raw.get("FlightDeptimePlanDate"))
+            arrive = _live_datetime(raw.get("FlightArrtimePlanDate"))
+            duration = _duration_minutes(depart, arrive)
+            leg_id = stable_id("leg-vf", service, depart, from_ref, to_ref)
+            schedule_claim = make_claim(
+                subject_ref=leg_id,
+                field_path="/depart_at",
+                value={"depart_at": depart, "arrive_at": arrive},
+                source_url="https://mcp.variflight.com/",
+                provider=self.provider,
+                status="verified",
+                confidence=0.85,
+                mode="live",
+                clock=clock,
+            )
+            status_claim = make_claim(
+                subject_ref=leg_id,
+                field_path="/status",
+                value=_live_status_value(raw, service, depart, arrive),
+                source_url="https://mcp.variflight.com/",
+                provider=self.provider,
+                status="verified",
+                confidence=0.9,
+                mode="live",
+                clock=clock,
+            )
+            price_claim = make_claim(
+                subject_ref=leg_id,
+                field_path="/price",
+                value=None,
+                source_url="https://mcp.variflight.com/",
+                provider=self.provider,
+                status="unknown",
+                confidence=0,
+                mode="live",
+                clock=clock,
+            )
+            items.append({
+                "leg_id": leg_id,
+                "travel_mode": "flight",
+                "data_mode": "live",
+                "from_ref": sanitize_text(from_ref, 80),
+                "to_ref": sanitize_text(to_ref, 80),
+                "depart_at": depart,
+                "arrive_at": arrive,
+                "duration_minutes": duration,
+                "provider": self.provider,
+                "service_number": service,
+                "price": {
+                    "amount": None,
+                    "currency": "CNY",
+                    "price_type": "verify-on-click",
+                    "unit": "per_person",
+                    "includes_taxes": None,
+                    "queried_at": price_claim["queried_at"],
+                    "claim_id": price_claim["claim_id"],
+                },
+                "booking_url": None,
+                "claim_ids": [
+                    schedule_claim["claim_id"], status_claim["claim_id"],
+                    price_claim["claim_id"],
+                ],
+                "locked": False,
+            })
+            claims.extend((schedule_claim, status_claim, price_claim))
+        return Normalization(tuple(items), tuple(claims))
 
     def _live_comfort(
         self,
@@ -206,6 +291,34 @@ def _live_datetime(value: Any) -> str:
     if parsed.tzinfo is None:
         return parsed.isoformat(timespec="seconds") + "+08:00"
     return parsed.isoformat(timespec="seconds")
+
+
+def _duration_minutes(depart_at: str, arrive_at: str) -> int:
+    depart = datetime.fromisoformat(depart_at)
+    arrive = datetime.fromisoformat(arrive_at)
+    duration = int((arrive - depart).total_seconds() // 60)
+    if duration <= 0:
+        raise ContractMismatch("VariFlight planned duration is invalid")
+    return duration
+
+
+def _live_status_value(
+    raw: Mapping[str, Any],
+    service: str,
+    depart: str,
+    arrive: str,
+) -> Mapping[str, Any]:
+    return {
+        "flight_no": service,
+        "state": _optional_text(raw.get("FlightState"), 80),
+        "state_code": raw.get("FlightStateNum") if isinstance(raw.get("FlightStateNum"), int) else None,
+        "depart_at": depart,
+        "arrive_at": arrive,
+        "dep_airport": _optional_text(raw.get("FlightDepcode"), 12),
+        "arr_airport": _optional_text(raw.get("FlightArrcode"), 12),
+        "on_time_rate": _optional_text(raw.get("OntimeRate"), 20),
+        "arrival_on_time_rate": _optional_text(raw.get("ArrOntimeRate"), 20),
+    }
 
 
 def _optional_text(value: Any, maximum: int) -> Any:

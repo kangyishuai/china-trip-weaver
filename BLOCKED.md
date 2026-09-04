@@ -72,3 +72,15 @@ should mean pending work. They live where they are enforced:
 - 2026-09-04, FlyAI wrapper terms. Its data is treated under the same
   no-cache, no-redistribution rule, and the wrapper itself is now documented and
   tested as an optional, best-effort source.
+
+## Book 4 — single lodging/flight upstream closed
+
+- Status: closed on 2026-09-04. The earlier “Lodging and flight inventory have
+  a single upstream source” item is superseded by tested independent fallbacks.
+- With FlyAI forced to timeout on every call, configured VariFlight
+  `searchFlightsByDepArr` returned two dated schedule candidates and configured
+  AMap POI returned one accommodation-category candidate. Every fallback price
+  was `amount=null` and `price_type=verify-on-click`; FlyAI health remained
+  visibly `degraded` with `errors=timeout`.
+- No new Book 4 blocker remains. The unrelated Book 5 manifest/test conflict is
+  outside Book 4 scope and remains untouched.

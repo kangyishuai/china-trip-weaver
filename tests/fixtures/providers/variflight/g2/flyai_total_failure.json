@@ -1,0 +1,47 @@
+{
+  "case": "g2_flyai_total_failure",
+  "fixture_version": 1,
+  "source": "locally generated synthetic cross-provider fallback scenario; never captured from a provider",
+  "request_overrides": {
+    "adult_count": 3,
+    "bed_config": "three-person room",
+    "cancellation_preference": "free cancellation",
+    "occupancy": "3 adults in one room",
+    "parking_required": true,
+    "party": {
+      "adults": 3,
+      "children": 0
+    },
+    "rooms": 1,
+    "travelers": 3
+  },
+  "amap_response": {
+    "api": "poi-v5",
+    "count": "1",
+    "info": "OK",
+    "infocode": "10000",
+    "page_num": 1,
+    "page_size": 5,
+    "pois": [
+      {
+        "adcode": "310000",
+        "address": "合成路100号",
+        "adname": "合成区",
+        "business": {},
+        "cityname": "上海市",
+        "id": "SYNTHETIC-LODGING-G2",
+        "name": "合成住宿候选乙",
+        "pname": "上海市",
+        "type": "住宿服务;宾馆酒店;合成住宿"
+      }
+    ],
+    "status": "1"
+  },
+  "expected": {
+    "amap_lodging_minimum": 1,
+    "flyai_health_not": "ready",
+    "price_amount": null,
+    "price_type": "verify-on-click",
+    "variflight_flight_minimum": 1
+  }
+}

@@ -116,12 +116,18 @@ class FlyAIAdapter(BaseAdapter):
         name = sanitize_text(raw["name"], 160)
         detail = safe_https_url(raw["detailUrl"])
         lodging_id = stable_id("lodging-flyai", raw.get("shId"), name, request.parameters["check_in"])
-        amount, price_type, price_value = _price(raw.get("price"), require_numeric=False)
+        context_required = _has_lodging_request_context(request.parameters)
+        context = _matching_lodging_context(raw, request.parameters) if context_required else None
+        amount, price_type, price_value = _price(
+            raw.get("price"),
+            require_numeric=False,
+            live_allowed=not context_required or context is not None,
+        )
         price_claim = make_claim(
             subject_ref=lodging_id, field_path="/price", value=price_value,
             source_url=detail, provider=self.provider,
-            status="partial" if price_value is not None else "unknown",
-            confidence=0.55 if price_value is not None else 0,
+            status="partial" if amount is not None else "unknown",
+            confidence=0.55 if amount is not None else 0,
             mode="live", clock=clock,
         )
         coordinates = None
@@ -137,7 +143,8 @@ class FlyAIAdapter(BaseAdapter):
             "coordinates": coordinates,
             "price": {
                 "amount": amount, "currency": "CNY", "price_type": price_type,
-                "unit": "per_night", "includes_taxes": None,
+                "unit": "per_night",
+                "includes_taxes": context["includes_taxes"] if context is not None else None,
                 "queried_at": price_claim["queried_at"], "claim_id": price_claim["claim_id"],
             },
             "deep_links": [detail],
@@ -162,18 +169,27 @@ MASKED_PRICE_RE = re.compile(r"^[¥￥]\d*x+$", re.IGNORECASE)
 EXACT_CNY_PRICE_RE = re.compile(r"^[¥￥](\d+(?:\.\d{1,2})?)$")
 
 
-def _price(value: Any, *, require_numeric: bool) -> Tuple[Optional[float], str, Any]:
+def _price(
+    value: Any,
+    *,
+    require_numeric: bool,
+    live_allowed: bool = True,
+) -> Tuple[Optional[float], str, Any]:
     if isinstance(value, bool) or value is None:
         if require_numeric:
             raise ContractMismatch("FlyAI price lacks numeric context")
         return None, "verify-on-click", None
     if isinstance(value, (int, float)):
+        if not live_allowed:
+            return None, "verify-on-click", None
         return float(value), "live", float(value)
     if isinstance(value, str):
         text = value.strip()
         exact_cny = EXACT_CNY_PRICE_RE.fullmatch(text)
         if exact_cny:
             amount = float(exact_cny.group(1))
+            if not live_allowed:
+                return None, "verify-on-click", None
             return amount, "live", amount
         try:
             amount = float(text)
@@ -181,5 +197,50 @@ def _price(value: Any, *, require_numeric: bool) -> Tuple[Optional[float], str, 
             if not require_numeric and MASKED_PRICE_RE.fullmatch(text):
                 return None, "verify-on-click", text
             raise ContractMismatch("FlyAI price lacks numeric context")
+        if not live_allowed:
+            return None, "verify-on-click", None
         return amount, "live", amount
     raise ContractMismatch("FlyAI price has an unsupported type")
+
+
+LODGING_REQUEST_CONTEXT_FIELDS = frozenset((
+    "party", "rooms", "adult_count", "occupancy", "bed_config",
+    "parking_required", "cancellation_preference",
+))
+
+
+def _has_lodging_request_context(parameters: Mapping[str, Any]) -> bool:
+    """Identify the context-aware request contract used by every public caller."""
+
+    return bool(LODGING_REQUEST_CONTEXT_FIELDS.intersection(parameters))
+
+
+def _matching_lodging_context(
+    raw: Mapping[str, Any],
+    parameters: Mapping[str, Any],
+) -> Optional[Mapping[str, Any]]:
+    """Return complete matching quote context, or ``None`` to force degradation."""
+
+    context = raw.get("lodgingContext")
+    if not isinstance(context, dict):
+        return None
+    cancellation_policy = context.get("cancellation_policy")
+    if not isinstance(cancellation_policy, str) or not cancellation_policy.strip():
+        return None
+    includes_taxes = context.get("includes_taxes")
+    if not isinstance(includes_taxes, bool):
+        return None
+    required_matches = (
+        ("check_in", parameters.get("check_in")),
+        ("check_out", parameters.get("check_out")),
+        ("party", parameters.get("party")),
+        ("rooms", parameters.get("rooms")),
+        ("adult_count", parameters.get("adult_count")),
+        ("occupancy", parameters.get("occupancy")),
+        ("bed_config", parameters.get("bed_config")),
+        ("parking_required", parameters.get("parking_required")),
+        ("cancellation_preference", parameters.get("cancellation_preference")),
+    )
+    if any(context.get(name) != expected for name, expected in required_matches):
+        return None
+    return context

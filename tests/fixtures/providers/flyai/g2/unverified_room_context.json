@@ -1,0 +1,43 @@
+{
+  "case": "g2_unverified_room_context",
+  "fixture_version": 1,
+  "source": "locally generated synthetic FlyAI-shaped scenario; never captured from a provider",
+  "request_parameters": {
+    "adult_count": 3,
+    "bed_config": "three-person room",
+    "cancellation_preference": "free cancellation",
+    "check_in": "2026-09-10",
+    "check_out": "2026-09-11",
+    "city": "上海",
+    "occupancy": "3 adults in one room",
+    "parking_required": true,
+    "party": {
+      "adults": 3,
+      "children": 0
+    },
+    "rooms": 1
+  },
+  "provider_item": {
+    "address": "合成路100号",
+    "detailUrl": "https://www.fliggy.com/hotel/search",
+    "interestsPoi": "近合成地标",
+    "latitude": "31.000000",
+    "longitude": "121.000000",
+    "name": "合成住宿候选乙",
+    "price": 4321.0,
+    "shId": "SYNTHETIC-G2-LODGING"
+  },
+  "expected": {
+    "amount": null,
+    "price_type": "verify-on-click",
+    "required_unknown_fields": [
+      "party",
+      "adult_count",
+      "rooms",
+      "occupancy",
+      "bed_config",
+      "parking_required",
+      "cancellation_policy"
+    ]
+  }
+}

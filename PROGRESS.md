@@ -290,3 +290,120 @@ secret scan: 0 finding(s) across 355 file(s)
 - `git diff --quiet`、禁碰路径 working-tree diff、禁碰路径 `977188e^..977188e` diff 均 exit 0；planning、两处 schema、CLI、MCP stdio、rail12306 均未被书 1 修改。
 - 版本核对：plugin manifest 与 package `__version__` 均为 `0.2.0`；`BLOCKED.md` 已记录书 1“无新增阻塞”。
 - 书 1 最终验收失败轮次：0/10；两个意图性反向红均已还原。
+
+## 书 4 开工理解（2026-09-04，≤10 行）
+1. 目标：住宿价格只有在日期、人数、房间、入住容量、税费与取消语境均可证实时才可标 live；否则 amount=null、verify-on-click。
+2. 顺序：硬约束入请求与价格降级 → live 与调研候选合并 → VariFlight/AMap 独立兜底 → 全量门禁与提交。
+3. live 住宿只能增强候选；必须保留 locked 项、未解决 unknown、claims，并沿用 selection_status，确保每晚恰有一个 stay。
+4. FlyAI 全挂时仍由 VariFlight 产出航班、既有 AMap POI 能力产出住宿；两者绝不提供价格数字。
+5. 基线：311 tests、OK、skipped 0；secret scan 0 finding(s) across 355 file(s)；HEAD=1119c5a 且工作区 clean。
+6. 仅改任务白名单，禁碰 demo/render/candidates/mobility/amap providers/CI/版本/依赖；证据与状态只追加本书小节。
+7. 最大风险：旧请求兼容、每夜唯一 stay 不变量，以及在不修改 AMap provider 的前提下正确复用 POI 能力。
+
+## 书 4 任务 1：硬约束进请求与价格降级（完成）
+
+- request schema 与公开 lodging 调用现携带 party/rooms/adult_count/occupancy/bed_config/parking_required/cancellation_preference；CLI 已提供对应参数。
+- 缺任一 matching `lodgingContext`（日期、party、room、occupancy、tax、cancellation）时，即使 provider 返回数值也强制 amount=null、verify-on-click；未证实硬约束逐项写入有效 `/lodgings/*/price/amount` unknown reason。
+- 正向验收：`/usr/bin/python3 -m unittest tests.test_flyai_live tests.test_keyless_e2e -v` → `Ran 30 tests in 3.734s`、`OK`、skipped 0。
+- 反向红原始输出（临时令 `live_allowed=True`，已还原）：
+
+```text
+test_g2_numeric_lodging_without_quote_context_is_verify_on_click (tests.test_flyai_live.FlyAISubprocessTests) ... FAIL
+AssertionError: 4321.0 is not None
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+FAILED (failures=1)
+```
+
+- 还原绿原始输出：
+
+```text
+test_g2_numeric_lodging_without_quote_context_is_verify_on_click (tests.test_flyai_live.FlyAISubprocessTests) ... ok
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+OK
+```
+- 书 4 当前验收轮次：4/14；前两次失败均为实现期有效发现，意图性反向红不计。
+
+## 书 4 任务 2：live 结果合并不替换（完成）
+
+- 合并顺序为 locked 调研候选 → live FlyAI → AMap 兜底 → 未锁定调研候选；所有候选与 claims 进入既有 selection_status 选择阶段，原 unknown 索引随合并重映射。
+- G2 锁定候选、原 price unknown 与 claim 均保留；每个过夜日期仍恰有一个 selected stay。
+- 反向红原始输出（临时恢复 inventory wholesale replacement，已还原）：
+
+```text
+test_g2_live_plan_merges_inventory_and_preserves_locked_lodging_unknowns (tests.test_flyai_live.FlyAISubprocessTests) ... FAIL
+AssertionError: 'lodging-bjs-central' != 'lodging-flyai-4cbcb48a738a'
+----------------------------------------------------------------------
+Ran 1 test in 0.303s
+FAILED (failures=1)
+```
+
+- 还原绿原始输出：
+
+```text
+test_g2_live_plan_merges_inventory_and_preserves_locked_lodging_unknowns (tests.test_flyai_live.FlyAISubprocessTests) ... ok
+----------------------------------------------------------------------
+Ran 1 test in 0.336s
+OK
+```
+
+## 书 4 任务 3：VariFlight 与 AMap 独立兜底（完成）
+
+- VariFlight 在无 FlyAI 航班时独立调用 `searchFlightsByDepArr`，生成 schedule/identity/status/comfort claims；候选价格恒为 amount=null、verify-on-click。
+- FlyAI 无住宿结果时复用既有 AMap POI transport 搜索住宿类目，生成候选/identity/business claims；不声明库存且价格恒为 amount=null、verify-on-click。
+- 定向验收：`/usr/bin/python3 -m unittest tests.test_variflight_live tests.test_keyless_e2e -v` → `Ran 21 tests in 3.441s`、`OK`、skipped 0。
+- 反向红原始输出（临时令 VariFlight fallback amount=999.0、price_type=live，已还原）：
+
+```text
+test_independent_search_emits_price_less_verify_on_click_candidate (tests.test_variflight_live.VariFlightLiveTests) ... FAIL
+AssertionError: 999.0 is not None
+----------------------------------------------------------------------
+Ran 1 test in 0.109s
+FAILED (failures=1)
+```
+
+- 还原绿原始输出：
+
+```text
+test_independent_search_emits_price_less_verify_on_click_candidate (tests.test_variflight_live.VariFlightLiveTests) ... ok
+----------------------------------------------------------------------
+Ran 1 test in 0.211s
+OK
+```
+
+- FlyAI 全挂实测原始摘要：`flyai.status=degraded; reason=calls=3; credential=keyless-trial; lodging_items=0; flight_items=0; errors=timeout`；`amap.status=ready; lodging_items=1`；`variflight.status=ready; candidates=2`。
+- 候选原始价格摘要：VariFlight 两项与 AMap 一项均为 `{"amount":null,"price_type":"verify-on-click"}`；完整 provider_health 已由同次 exit 0 命令留存。
+
+## 书 4 最终门禁
+
+- G2 正向原始输出：
+
+```text
+test_g2_numeric_lodging_without_quote_context_is_verify_on_click (tests.test_flyai_live.FlyAISubprocessTests) ... ok
+test_g2_live_plan_merges_inventory_and_preserves_locked_lodging_unknowns (tests.test_flyai_live.FlyAISubprocessTests) ... ok
+----------------------------------------------------------------------
+Ran 2 tests in 0.369s
+OK
+```
+
+- 仅含书 4 staged snapshot 的全量原始输出（exit 0）：
+
+```text
+............................................................................................................................................................................................................................................................................................................................
+----------------------------------------------------------------------
+Ran 316 tests in 20.898s
+OK
+```
+
+- 同一 snapshot 秘密扫描原始输出：`secret scan: 0 finding(s) across 357 file(s)`；主工作树含并行书 5 变更时同样为 0/357。
+- FlyAI 全挂同次 provider_health 原始输出：
+
+```json
+[{"capabilities":["rail"],"checked_at":"2026-09-03T12:00:00+08:00","mode":"static","provider":"12306-mcp","reason":"dated deep-link fallback used: no_results","status":"degraded","version":"0.3.10"},{"capabilities":["research"],"checked_at":"2026-09-03T12:00:00+08:00","mode":"static","provider":"host-web","reason":"researched candidate file supplied; no web call was made","status":"ready","version":"candidate-file"},{"capabilities":["lodging","flight"],"checked_at":"2026-09-03T12:00:00+08:00","mode":"static","provider":"flyai","reason":"calls=3; credential=keyless-trial; lodging_items=0; flight_items=0; errors=timeout","status":"degraded","version":"1.0.16"},{"capabilities":["geocode","poi","route","lodging-candidate"],"checked_at":"2026-09-03T12:00:00+08:00","mode":"live","provider":"amap","reason":"lodging=poi_calls=1; lodging_items=1; prices=verify-on-click; errors=none; mobility=AMap mobility is off; calls=0/80 qps<=2; route matrix uses static estimates","status":"ready","version":"web-service-v5-v3-route"},{"capabilities":["flight","weather","comfort"],"checked_at":"2026-09-03T12:00:00+08:00","mode":"live","provider":"variflight","reason":"tools=9; business_calls=4; candidates=2; status_claims=2; comfort_claims=2; errors=none","status":"ready","version":"1.0.3"},{"capabilities":["research"],"checked_at":"2026-09-03T12:00:00+08:00","mode":"static","provider":"anysearch","reason":"optional search supplement is disabled; no auto-registration or business call was made","status":"missing","version":"runtime-probe-v1"}]
+```
+
+- fallback candidate 原始输出：`{"flights":[{"amount":null,"price_type":"verify-on-click","provider":"variflight","service_number":"XX1001"},{"amount":null,"price_type":"verify-on-click","provider":"variflight","service_number":"XX1001"}],"lodgings":[{"amount":null,"candidate_ref":"poi-amap-synthetic-lodging-g2","price_type":"verify-on-click"}]}`。
+- staged `git diff --stat` 仅含 17 个书 4 白名单路径；demo/render/candidates.py/mobility.py/providers/amap*.py/mcp_stdio.py/rail12306.py staged diff 原始输出为空；schema SHA-256 同为 `18087f60c8126aaa15bc21e9f0c4dd7da2af6680f7b4ca5f206d6878da2dfefd`；版本仍为 0.2.0。
+- 主工作树全量另受已记录的并行书 5 manifest/test 冲突影响：`Ran 324 tests ... FAILED (failures=1)`，唯一失败为 `test_plugin_manifest_is_exact_and_version_matches_package`；不属于书 4 staged snapshot，未越权修改。
+- 书 4 最终验收轮次：7/14；无连续三次失败，三处意图性反向红均已还原。

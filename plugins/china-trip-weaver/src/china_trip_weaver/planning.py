@@ -16,7 +16,7 @@ from .clock import Clock, isoformat_seconds
 from .contracts import AdapterResult, ProviderRequest, canonical_json
 from .credentials import SUPPORTED_KEY_NAMES, resolve_credentials
 from .evidence import make_claim
-from .flyai_inventory import FlyAIBackend
+from .flyai_inventory import AMapLodgingBackend, FlyAIBackend
 from .matrix import haversine_meters, static_estimate_cell
 from .mobility import MobilityBackend, MobilityResult, apply_locations
 from .pipeline import PipelineRun
@@ -119,6 +119,7 @@ def plan_trip(
     mobility_backend: Optional[MobilityBackend] = None,
     flyai_backend: Optional[FlyAIBackend] = None,
     variflight_backend: Optional[VariFlightBackend] = None,
+    amap_lodging_backend: Optional[AMapLodgingBackend] = None,
 ) -> PlanResult:
     normalized_request = _normalize_request(request)
     normalized_candidates = _normalize_candidates(candidates, normalized_request)
@@ -152,15 +153,27 @@ def plan_trip(
     claims.extend(rail_claims)
     active_flyai = flyai_backend or FlyAIBackend.from_spec("off", rail_backend.repo_root)
     inventory = active_flyai.resolve(normalized_request, routes, clock)
-    removed_lodging_ids = set()
-    if inventory.lodgings:
-        removed_lodging_ids = {item["lodging_id"] for item in lodging_candidates}
-        claims = [claim for claim in claims if claim["subject_ref"] not in removed_lodging_ids]
-        lodging_candidates = copy.deepcopy(list(inventory.lodgings))
+    amap_lodging = None
+    if not inventory.lodgings and active_flyai.mode == "live":
+        active_amap_lodging = amap_lodging_backend or AMapLodgingBackend.from_spec(
+            "off", rail_backend.repo_root,
+        )
+        amap_lodging = active_amap_lodging.resolve(normalized_request, clock)
+    fallback_lodgings = amap_lodging.lodgings if amap_lodging is not None else ()
+    lodging_candidates, lodging_unknowns = _merge_lodging_candidates(
+        lodging_candidates,
+        normalized_candidates["unknowns"],
+        inventory.lodgings,
+        inventory.unknowns,
+        fallback_lodgings,
+        amap_lodging.unknowns if amap_lodging is not None else (),
+    )
     active_variflight = variflight_backend or VariFlightBackend.from_spec("off", rail_backend.repo_root)
     enrichment = active_variflight.enrich(inventory.flights, routes, clock)
     transport_legs.extend(copy.deepcopy(list(enrichment.flights)))
     claims.extend(copy.deepcopy(list(inventory.claims)))
+    if amap_lodging is not None:
+        claims.extend(copy.deepcopy(list(amap_lodging.claims)))
     claims.extend(copy.deepcopy(list(enrichment.claims)))
     run.advance(
         "CANDIDATES_READY",
@@ -169,7 +182,7 @@ def plan_trip(
             "lodgings": len(lodging_candidates),
             "rail_routes": len(routes),
             "rail_legs": len([item for item in transport_legs if item["travel_mode"] == "rail"]),
-            "flight_comparisons": len(inventory.flights),
+            "flight_comparisons": len(enrichment.flights),
         },
         trip_id,
         1,
@@ -228,9 +241,7 @@ def plan_trip(
         "pois": pois,
     }
     days = _trip_days(normalized_request, scheduled, entities)
-    unknowns = _selected_candidate_unknowns(
-        normalized_candidates["unknowns"], stay_selections, bool(removed_lodging_ids),
-    )
+    unknowns = _selected_candidate_unknowns(lodging_unknowns, stay_selections)
     unknowns.extend(rail_unknowns)
     trip = {
         "schema_version": "1.0.0",
@@ -250,7 +261,14 @@ def plan_trip(
         "pois": pois,
         "claims": claims,
         "provider_health": _provider_health(
-            now, rail_health, inventory.health, mobility.health, enrichment.health,
+            now,
+            rail_health,
+            inventory.health,
+            _combined_amap_health(
+                mobility.health,
+                amap_lodging.health if amap_lodging is not None else None,
+            ),
+            enrichment.health,
         ),
         "unknowns": unknowns,
         "patches": [],
@@ -272,7 +290,9 @@ def plan_trip(
         html=html,
         business_calls=(
             tuple(business_calls) + mobility.business_calls
-            + inventory.business_calls + enrichment.business_calls
+            + inventory.business_calls
+            + (amap_lodging.business_calls if amap_lodging is not None else ())
+            + enrichment.business_calls
         ),
         stages=tuple(item.stage for item in run.checkpoints()),
         trip_sha256=hashlib.sha256(canonical_json(trip).encode("utf-8")).hexdigest(),
@@ -424,6 +444,75 @@ def _day_city_by_date(
     return result
 
 
+def _merge_lodging_candidates(
+    researched: Sequence[Mapping[str, Any]],
+    researched_unknowns: Sequence[Mapping[str, Any]],
+    flyai: Sequence[Mapping[str, Any]],
+    flyai_unknowns: Sequence[Mapping[str, Any]],
+    amap: Sequence[Mapping[str, Any]],
+    amap_unknowns: Sequence[Mapping[str, Any]],
+) -> Tuple[List[Mapping[str, Any]], List[Mapping[str, Any]]]:
+    """Merge sources while keeping locked research ahead of live alternatives."""
+
+    researched_items = copy.deepcopy(list(researched))
+    flyai_items = copy.deepcopy(list(flyai))
+    amap_items = copy.deepcopy(list(amap))
+    locked = [item for item in researched_items if item.get("locked")]
+    unlocked = [item for item in researched_items if not item.get("locked")]
+    merged = []
+    seen_ids = set()
+    for item in locked + flyai_items + amap_items + unlocked:
+        lodging_id = item["lodging_id"]
+        if lodging_id in seen_ids:
+            continue
+        seen_ids.add(lodging_id)
+        merged.append(item)
+    identifiers = [item["lodging_id"] for item in merged]
+    target_indices = {identifier: index for index, identifier in enumerate(identifiers)}
+
+    unknowns = _reindex_lodging_unknowns(
+        researched_unknowns, researched_items, target_indices, include_non_lodging=True,
+    )
+    unknowns.extend(_reindex_lodging_unknowns(
+        flyai_unknowns, flyai_items, target_indices, include_non_lodging=False,
+    ))
+    unknowns.extend(_reindex_lodging_unknowns(
+        amap_unknowns, amap_items, target_indices, include_non_lodging=False,
+    ))
+    return merged, unknowns
+
+
+def _reindex_lodging_unknowns(
+    unknowns: Sequence[Mapping[str, Any]],
+    source_candidates: Sequence[Mapping[str, Any]],
+    target_indices: Mapping[str, int],
+    *,
+    include_non_lodging: bool,
+) -> List[Mapping[str, Any]]:
+    result: List[Mapping[str, Any]] = []
+    for unknown in unknowns:
+        path = unknown["field_path"]
+        if not path.startswith("/lodgings/"):
+            if include_non_lodging:
+                result.append(copy.deepcopy(unknown))
+            continue
+        parts = path.split("/", 3)
+        if len(parts) != 4 or not parts[2].isdigit():
+            raise ValueError("lodging unknown has an invalid candidate path")
+        source_index = int(parts[2])
+        if source_index >= len(source_candidates):
+            raise ValueError("lodging unknown references a missing candidate")
+        lodging_id = source_candidates[source_index]["lodging_id"]
+        if lodging_id not in target_indices:
+            raise ValueError("lodging unknown candidate was lost during merge")
+        selected = copy.deepcopy(unknown)
+        selected["field_path"] = "/lodgings/%d/%s" % (
+            target_indices[lodging_id], parts[3],
+        )
+        result.append(selected)
+    return result
+
+
 def _select_stays(
     request: Mapping[str, Any],
     legs: Sequence[Mapping[str, Any]],
@@ -525,7 +614,6 @@ def _select_stays(
 def _selected_candidate_unknowns(
     unknowns: Sequence[Mapping[str, Any]],
     selections: Sequence[Mapping[str, Any]],
-    replaced_lodging_candidates: bool,
 ) -> List[Mapping[str, Any]]:
     result: List[Mapping[str, Any]] = []
     by_source: Dict[int, List[Mapping[str, Any]]] = {}
@@ -535,8 +623,6 @@ def _selected_candidate_unknowns(
         path = unknown["field_path"]
         if not path.startswith("/lodgings/"):
             result.append(copy.deepcopy(unknown))
-            continue
-        if replaced_lodging_candidates:
             continue
         parts = path.split("/", 3)
         if len(parts) != 4 or not parts[2].isdigit():
@@ -924,6 +1010,44 @@ def _trip_days(
             "slots": slots,
         })
     return days
+
+
+def _combined_amap_health(
+    mobility: Mapping[str, Any],
+    lodging: Optional[Mapping[str, Any]],
+) -> Mapping[str, Any]:
+    if lodging is None:
+        return copy.deepcopy(dict(mobility))
+    severity = {
+        "contract_mismatch": 7,
+        "forbidden": 6,
+        "rate_limited": 5,
+        "unavailable": 4,
+        "degraded": 3,
+        "expired": 2,
+        "missing": 1,
+        "ready": 0,
+    }
+    successful = any(item.get("status") == "ready" and item.get("mode") == "live" for item in (mobility, lodging))
+    if successful:
+        status = "ready"
+    else:
+        status = max(
+            (str(item.get("status", "degraded")) for item in (mobility, lodging)),
+            key=lambda value: severity.get(value, 3),
+        )
+    capabilities = list(dict.fromkeys(
+        list(mobility.get("capabilities", ())) + list(lodging.get("capabilities", ()))
+    ))
+    return {
+        "provider": "amap",
+        "version": mobility["version"],
+        "mode": "live" if any(item.get("mode") == "live" for item in (mobility, lodging)) else "static",
+        "status": status,
+        "checked_at": max(str(mobility["checked_at"]), str(lodging["checked_at"])),
+        "capabilities": capabilities,
+        "reason": "lodging=%s; mobility=%s" % (lodging["reason"], mobility["reason"]),
+    }
 
 
 def _provider_health(

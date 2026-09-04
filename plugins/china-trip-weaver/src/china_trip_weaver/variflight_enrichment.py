@@ -120,18 +120,25 @@ class VariFlightBackend:
                 item["service_number"]: item["leg_id"]
                 for item in route_flights if item.get("service_number")
             }
-            if not service_map:
-                continue
+            candidate_mode = not service_map
+            search_parameters: Dict[str, Any] = {
+                "action": "search",
+                "dep_city": dep_city,
+                "arr_city": arr_city,
+                "date": route.travel_date,
+            }
+            if candidate_mode:
+                search_parameters.update({
+                    "candidate_mode": True,
+                    "from_ref": route.from_place["ref_id"],
+                    "to_ref": route.to_place["ref_id"],
+                })
+            else:
+                search_parameters["subject_refs_by_service"] = service_map
             search_request = ProviderRequest(
                 request_id=stable_id("variflight-search", dep_city, arr_city, route.travel_date),
                 capability="flight",
-                parameters={
-                    "action": "search",
-                    "dep_city": dep_city,
-                    "arr_city": arr_city,
-                    "date": route.travel_date,
-                    "subject_refs_by_service": service_map,
-                },
+                parameters=search_parameters,
                 deadline_ms=int(self.deadline_seconds * 1000),
                 as_of=route.travel_date,
                 cache_policy="bypass",
@@ -143,8 +150,18 @@ class VariFlightBackend:
             if search.error_class:
                 errors.append(search.error_class)
                 continue
-            matched_subjects = {item["subject_ref"] for item in search.claims if item["field_path"] == "/status"}
-            selected = next((item for item in route_flights if item["leg_id"] in matched_subjects), None)
+            if candidate_mode:
+                route_flights = copy.deepcopy(list(search.normalized_items))
+                copied_flights.extend(route_flights)
+                selected = route_flights[0] if route_flights else None
+            else:
+                matched_subjects = {
+                    item["subject_ref"] for item in search.claims
+                    if item["field_path"] == "/status"
+                }
+                selected = next((
+                    item for item in route_flights if item["leg_id"] in matched_subjects
+                ), None)
             if selected is None:
                 errors.append("no_matching_flight")
                 continue
@@ -177,6 +194,7 @@ class VariFlightBackend:
 
         status_claims = sum(item["field_path"] == "/status" for item in claims)
         comfort_claims = sum(item["field_path"] == "/comfort" for item in claims)
+        candidate_count = sum(item.get("provider") == "variflight" for item in copied_flights)
         status = "ready" if claims or not errors else ("contract_mismatch" if "contract_mismatch" in errors else "degraded")
         return VariFlightEnrichmentResult(
             tuple(copied_flights),
@@ -185,8 +203,8 @@ class VariFlightBackend:
                 "live" if claims else "static",
                 status,
                 now,
-                "tools=9; business_calls=%d; status_claims=%d; comfort_claims=%d; errors=%s" % (
-                    len(calls), status_claims, comfort_claims,
+                "tools=9; business_calls=%d; candidates=%d; status_claims=%d; comfort_claims=%d; errors=%s" % (
+                    len(calls), candidate_count, status_claims, comfort_claims,
                     ",".join(sorted(set(errors))) if errors else "none",
                 ),
             ),

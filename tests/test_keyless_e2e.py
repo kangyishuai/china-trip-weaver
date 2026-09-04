@@ -17,19 +17,84 @@ sys.path.insert(0, str(SRC))
 
 from china_trip_weaver.clock import FixedClock
 from china_trip_weaver.contracts import canonical_json
+from china_trip_weaver.credentials import resolve_credentials
+from china_trip_weaver.flyai_inventory import AMapLodgingBackend, FlyAIBackend
 from china_trip_weaver.planning import RailBackend, SUPPORTED_KEY_NAMES, _route_specs, plan_trip
+from china_trip_weaver.providers.base import ProviderTimeout, ReplayTransport
+from china_trip_weaver.providers.variflight_mcp import VariFlightMCPTransport
 from china_trip_weaver.render import validate_html
 from china_trip_weaver.validate_trip import validate_trip
+from china_trip_weaver.variflight_enrichment import VariFlightBackend
 
 
 E2E = ROOT / "tests" / "fixtures" / "e2e"
 CASES = ("beijing-shanghai-3d", "shanghai-weekend-2d", "beijing-hangzhou-4d")
 CTW = PLUGIN / "scripts" / "ctw"
 FIXED_NOW = "2026-09-03T12:00:00+08:00"
+VARIFLIGHT_SERVER = ROOT / "tests" / "fixtures" / "variflight_mcp_server.py"
 
 
 def load(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def run_flyai_total_failure_plan():
+    class TotalFailureTransport:
+        def __init__(self):
+            self.calls = 0
+
+        def execute(self, provider, request):
+            del provider, request
+            self.calls += 1
+            raise ProviderTimeout("synthetic total FlyAI outage")
+
+    folder = E2E / "beijing-shanghai-3d"
+    fallback_fixture = load(
+        ROOT / "tests" / "fixtures" / "providers" / "variflight" / "g2" / "flyai_total_failure.json"
+    )
+    request_value = load(folder / "request.json")
+    request_value.update(fallback_fixture["request_overrides"])
+    with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+        temporary_path = Path(temporary)
+        flyai_credentials = resolve_credentials({}, temporary_path / "no-flyai-key")
+        flyai_transport = TotalFailureTransport()
+        flyai = FlyAIBackend("live", flyai_credentials, flyai_transport)
+        variflight_credentials = resolve_credentials(
+            {"VARIFLIGHT_API_KEY": "ctw-canary-variflight-fallback-not-real"},
+            temporary_path / "no-variflight-file",
+        )
+        variflight_transport = VariFlightMCPTransport(
+            variflight_credentials,
+            cache_dir=temporary_path / "npm-cache",
+            temp_root=temporary_path / "variflight-home",
+            command=(sys.executable, str(VARIFLIGHT_SERVER), "require-key"),
+            cwd=ROOT,
+        )
+        variflight = VariFlightBackend("auto", variflight_credentials, variflight_transport)
+        amap_credentials = resolve_credentials(
+            {"AMAP_WEBSERVICE_KEY": "ctw-canary-amap-fallback-not-real"},
+            temporary_path / "no-amap-file",
+        )
+        amap = AMapLodgingBackend(
+            "auto",
+            amap_credentials,
+            ReplayTransport({
+                "kind": "response",
+                "status_code": 200,
+                "body": fallback_fixture["amap_response"],
+            }),
+        )
+        rail = RailBackend.from_spec("fixture:" + str(folder / "rail.json"), ROOT)
+        result = plan_trip(
+            request_value,
+            load(folder / "candidates.json"),
+            FixedClock.from_iso(FIXED_NOW),
+            rail,
+            flyai_backend=flyai,
+            variflight_backend=variflight,
+            amap_lodging_backend=amap,
+        )
+    return result
 
 
 class KeylessE2ETests(unittest.TestCase):
@@ -96,6 +161,36 @@ class KeylessE2ETests(unittest.TestCase):
         self.assertIn("static estimates", health["amap"]["reason"])
         self.assertIn("no business call was made", health["variflight"]["reason"])
         self.assertIn("no auto-registration or business call was made", health["anysearch"]["reason"])
+
+    def test_flyai_total_failure_uses_price_less_variflight_and_amap_candidates(self):
+        result = run_flyai_total_failure_plan()
+        health = {item["provider"]: item for item in result.trip["provider_health"]}
+        self.assertNotEqual("ready", health["flyai"]["status"])
+        self.assertIn("timeout", health["flyai"]["reason"])
+        self.assertEqual("ready", health["variflight"]["status"])
+        self.assertEqual("ready", health["amap"]["status"])
+        flights = [
+            item for item in result.trip["transport_legs"]
+            if item.get("provider") == "variflight"
+        ]
+        lodgings = [
+            item for item in result.trip["lodgings"]
+            if item["candidate_ref"].startswith("poi-amap-")
+        ]
+        self.assertGreaterEqual(len(flights), 1)
+        self.assertGreaterEqual(len(lodgings), 1)
+        for item in flights + lodgings:
+            self.assertIsNone(item["price"]["amount"])
+            self.assertEqual("verify-on-click", item["price"]["price_type"])
+        lodging_unknowns = [
+            item for item in result.trip["unknowns"]
+            if item["field_path"] == "/lodgings/0/price/amount"
+        ]
+        unknown_reasons = "\n".join(item["reason"] for item in lodging_unknowns)
+        self.assertIn("occupancy", unknown_reasons)
+        self.assertIn("rooms", unknown_reasons)
+        self.assertIn("cancellation_policy", unknown_reasons)
+        self.assertTrue(validate_trip(result.trip).ok)
 
     def test_two_direct_runs_are_canonical_and_byte_deterministic(self):
         first = self.run_direct()
