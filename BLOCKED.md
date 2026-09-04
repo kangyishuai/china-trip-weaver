@@ -1,6 +1,6 @@
 # Unresolved items
 
-Two items are open. Everything else on this page is closed and kept only for provenance;
+One item is open. Everything else on this page is closed and kept only for provenance;
 the per-round evidence lives in `PROGRESS.md`.
 
 ## Current task baseline note (not a blocker)
@@ -13,15 +13,6 @@ does not block the code baseline or the required 386-test and zero-secret gates.
 
 ## Open
 
-### 12306 station candidates carry no distance signal
-
-Pinned `12306-mcp@0.3.10` returns `station_code` and `station_name` only, so when a city
-has several stations the plugin returns every candidate without ranking them by distance
-to the trip endpoint. Ordering is deterministic and forward-compatible (it sorts by
-`distance_meters` when a source supplies one, unknown distances last), and no candidate is
-silently chosen for the user. Resolving this needs station coordinates, which the AMap POI
-capability could now supply — unscheduled.
-
 ### Public-distribution legal links
 
 `interface.websiteURL` points at the real repository. `privacyPolicyURL` and
@@ -32,8 +23,24 @@ rerun plugin ingestion validation.
 
 ## Closed
 
-Every item below was closed during the 2026-09-04/05 audit-remediation rounds. Kept for
-provenance; none of it is pending work.
+### 12306 station candidates now carry best-effort distance signals
+
+Closed on 2026-09-05. Pinned `12306-mcp@0.3.10` still supplies only station names and
+codes; after its process has completed, the rail transport now uses the existing AMap
+geocode capability for the candidate city's centre and the existing AMap POI capability
+for each station coordinate. It computes GCJ-02-to-GCJ-02 distance with the repository's
+existing `haversine_meters` helper and lets the established rail sort place known nearest
+stations first and unknown distances last. It never selects a station for the user.
+
+The enrichment accepts only a unique same-city, exact-normalized rail-station POI. A clean
+miss leaves that candidate untouched; a missing Key, missing city centre, provider outage,
+contract failure, or unexpected exception restores the entire original station resolution.
+Those paths do not change 12306 health. Synthetic three-station coverage proves 3/3 are
+retained with two calculated distances and one unknown; the combined repository gate is
+402 tests, OK, with zero skips, and the repository secret scan has zero findings.
+
+Every other item below was closed during the 2026-09-04/05 audit-remediation rounds. Kept
+for provenance; none of it is pending work.
 
 - **Lodging and flight inventory had a single upstream source** — closed 2026-09-04 by
   independent fallbacks: VariFlight `searchFlightsByDepArr` for flights and AMap POI

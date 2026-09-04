@@ -13,9 +13,10 @@ sys.path.insert(0, str(SRC))
 from china_trip_weaver.clock import FixedClock
 from china_trip_weaver.contracts import ProviderRequest
 from china_trip_weaver.credentials import resolve_credentials
-from china_trip_weaver.providers.base import ProviderContext
+from china_trip_weaver.providers.base import ProviderContext, ProviderEnvelope, ProviderNetworkError
 from china_trip_weaver.providers.mcp_stdio import EXPECTED_12306_TOOLS, RailMCPStdioTransport
 from china_trip_weaver.providers.rail12306 import Rail12306Adapter
+from china_trip_weaver.station_distance import AMapStationDistanceEnricher
 
 
 SERVER = ROOT / "tests" / "fixtures" / "mcp_stdio_server.py"
@@ -31,8 +32,86 @@ EXPECTED_TOOL_FINGERPRINT = (
 )
 
 
+class StationAMapFixtureTransport:
+    """Synthetic AMap-shaped transport; no provider response was captured."""
+
+    def __init__(
+        self,
+        *,
+        centre_available=True,
+        fail=False,
+        station_points=None,
+        station_name_overrides=None,
+    ):
+        self.centre_available = centre_available
+        self.fail = fail
+        self.station_points = dict(station_points or {
+            "多站城近站": "100.001000,20.000000",
+            "多站城远站": "100.010000,20.000000",
+        })
+        self.station_name_overrides = dict(station_name_overrides or {})
+        self.requests = []
+
+    def execute(self, provider, request):
+        self.requests.append(request)
+        if provider != "amap":
+            raise AssertionError("station fixture is restricted to amap")
+        if self.fail:
+            raise ProviderNetworkError("synthetic AMap outage")
+        if request.capability == "geocode":
+            geocodes = []
+            if self.centre_available:
+                geocodes.append({
+                    "formatted_address": "多站城市",
+                    "province": "合成省",
+                    "city": "多站城市",
+                    "district": "合成中心区",
+                    "adcode": "990001",
+                    "location": "100.000000,20.000000",
+                    "level": "市",
+                })
+            body = {
+                "status": "1",
+                "info": "OK",
+                "infocode": "10000",
+                "count": str(len(geocodes)),
+                "api": "geocode-v3",
+                "geocodes": geocodes,
+            }
+        elif request.capability == "poi":
+            station_name = request.parameters["keywords"]
+            location = self.station_points.get(station_name)
+            pois = []
+            if location is not None:
+                amap_name = station_name[:-1] + "火车站" if station_name.endswith("站") else station_name + "站"
+                pois.append({
+                    "id": "SYNTHETIC-STATION-" + request.request_id[-8:],
+                    "name": self.station_name_overrides.get(station_name, amap_name),
+                    "location": location,
+                    "pname": "合成省",
+                    "cityname": "多站城市",
+                    "adname": "合成站区",
+                    "address": "合成铁路大道",
+                    "adcode": "990001",
+                    "type": "交通设施服务;火车站;火车站",
+                })
+            body = {
+                "status": "1",
+                "info": "OK",
+                "infocode": "10000",
+                "count": str(len(pois)),
+                "api": "poi-v5",
+                "page_size": request.parameters["page_size"],
+                "page_num": request.parameters["page_num"],
+                "pois": pois,
+            }
+        else:
+            raise AssertionError("unexpected AMap fixture capability")
+        return ProviderEnvelope(status_code=200, body=body, headers={})
+
+
 class RailStationFallbackTests(unittest.TestCase):
-    def _query(self, mode, from_name, to_name):
+    def _query(self, mode, from_name, to_name, station_distance_enricher=None):
         credentials = resolve_credentials({}, ROOT / ".tmp" / "rail-station-fallback-no-credentials")
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
             transport = RailMCPStdioTransport(
@@ -40,6 +119,7 @@ class RailStationFallbackTests(unittest.TestCase):
                 credentials=credentials,
                 command=(sys.executable, str(SERVER), mode),
                 cwd=ROOT,
+                station_distance_enricher=station_distance_enricher,
             )
             request = ProviderRequest(
                 request_id="rail-station-fallback-" + mode,
@@ -66,6 +146,16 @@ class RailStationFallbackTests(unittest.TestCase):
             result = Rail12306Adapter().query(request, context)
             diagnostics = tuple(transport.last_stderr)
         return result, diagnostics
+
+    @staticmethod
+    def _amap_enricher(transport, *, configured=True):
+        environ = {"AMAP_WEBSERVICE_KEY": "station-distance-fixture-key"} if configured else {}
+        credentials = resolve_credentials(environ, ROOT / ".tmp" / "rail-station-amap-no-file")
+        return AMapStationDistanceEnricher(
+            credentials,
+            transport=transport,
+            clock=FixedClock.from_iso("2026-09-03T20:46:00+08:00"),
+        )
 
     @staticmethod
     def _calls(diagnostics):
@@ -153,15 +243,99 @@ class RailStationFallbackTests(unittest.TestCase):
         )
 
     def test_multiple_city_stations_are_returned_sorted_and_classified_ambiguous(self):
-        result, diagnostics = self._query("station-ambiguous", "多站城", "昆明南")
+        amap = StationAMapFixtureTransport()
+        result, diagnostics = self._query(
+            "station-ambiguous",
+            "多站城",
+            "昆明南",
+            self._amap_enricher(amap),
+        )
         self.assertEqual("ambiguous", result.error_class)
         self.assertEqual("ready", result.health["status"])
         self.assertIn("ambiguous", result.health["reason"])
         self.assertNotIn("contract_mismatch", result.health["reason"])
         from_candidates = [item for item in result.normalized_items if item["resolution_for"] == "from"]
-        self.assertEqual(["BBX", "AAX"], [item["station_code"] for item in from_candidates])
-        self.assertEqual([1000, 8000], [item["distance_meters"] for item in from_candidates])
+        self.assertEqual(["BBX", "AAX", "CCX"], [item["station_code"] for item in from_candidates])
+        self.assertEqual([104, 1045], [item["distance_meters"] for item in from_candidates[:2]])
+        self.assertNotIn("distance_meters", from_candidates[2])
+        self.assertEqual(3, len(from_candidates))
+        self.assertEqual(["geocode", "poi", "poi", "poi"], [request.capability for request in amap.requests])
+        self.assertEqual({"address": "多站城", "city": "多站城"}, amap.requests[0].parameters)
+        self.assertEqual(
+            {"多站城未知站", "多站城近站", "多站城远站"},
+            {request.parameters["keywords"] for request in amap.requests[1:]},
+        )
+        self.assertTrue(all(request.parameters["city"] == "多站城" for request in amap.requests))
+        self.assertTrue(all(request.parameters["page_size"] == 5 for request in amap.requests[1:]))
+        self.assertTrue(all(request.parameters["page_num"] == 1 for request in amap.requests[1:]))
         self.assertNotIn("get-tickets", self._calls(diagnostics))
+
+    def test_nonmatching_poi_does_not_guess_or_remove_the_station(self):
+        amap = StationAMapFixtureTransport(
+            station_points={
+                "多站城近站": "100.001000,20.000000",
+                "多站城远站": "100.010000,20.000000",
+                "多站城未知站": "100.020000,20.000000",
+            },
+            station_name_overrides={"多站城未知站": "不相干合成站"},
+        )
+        result, _ = self._query(
+            "station-ambiguous", "多站城", "昆明南", self._amap_enricher(amap),
+        )
+        candidates = [item for item in result.normalized_items if item["resolution_for"] == "from"]
+        self.assertEqual(["BBX", "AAX", "CCX"], [item["station_code"] for item in candidates])
+        self.assertNotIn("distance_meters", candidates[2])
+
+    def test_amap_network_failure_keeps_all_candidates_and_rail_health_ready(self):
+        amap = StationAMapFixtureTransport(fail=True)
+        result, diagnostics = self._query(
+            "station-ambiguous", "多站城", "昆明南", self._amap_enricher(amap),
+        )
+        self.assertEqual("ready", result.health["status"])
+        self.assertNotIn("degraded", result.health["reason"])
+        self.assertEqual("ambiguous", result.error_class)
+        candidates = [item for item in result.normalized_items if item["resolution_for"] == "from"]
+        self.assertEqual(["CCX", "BBX", "AAX"], [item["station_code"] for item in candidates])
+        self.assertTrue(all("distance_meters" not in item for item in candidates))
+        self.assertNotIn("get-tickets", self._calls(diagnostics))
+        self.assertEqual(1, len(amap.requests))
+
+    def test_missing_amap_key_makes_no_calls_and_keeps_unknown_distances(self):
+        amap = StationAMapFixtureTransport()
+        result, _ = self._query(
+            "station-ambiguous",
+            "多站城",
+            "昆明南",
+            self._amap_enricher(amap, configured=False),
+        )
+        candidates = [item for item in result.normalized_items if item["resolution_for"] == "from"]
+        self.assertEqual(["CCX", "BBX", "AAX"], [item["station_code"] for item in candidates])
+        self.assertTrue(all("distance_meters" not in item for item in candidates))
+        self.assertEqual("ready", result.health["status"])
+        self.assertEqual([], amap.requests)
+
+    def test_missing_city_centre_skips_poi_calls_and_keeps_candidates(self):
+        amap = StationAMapFixtureTransport(centre_available=False)
+        result, _ = self._query(
+            "station-ambiguous", "多站城", "昆明南", self._amap_enricher(amap),
+        )
+        candidates = [item for item in result.normalized_items if item["resolution_for"] == "from"]
+        self.assertEqual(3, len(candidates))
+        self.assertTrue(all("distance_meters" not in item for item in candidates))
+        self.assertEqual(["geocode"], [request.capability for request in amap.requests])
+
+    def test_equal_distances_use_deterministic_name_and_code_tiebreakers(self):
+        amap = StationAMapFixtureTransport(station_points={
+            "多站城近站": "100.001000,20.000000",
+            "多站城远站": "100.001000,20.000000",
+        })
+        result, _ = self._query(
+            "station-ambiguous", "多站城", "昆明南", self._amap_enricher(amap),
+        )
+        candidates = [item for item in result.normalized_items if item["resolution_for"] == "from"]
+        self.assertEqual(["BBX", "AAX", "CCX"], [item["station_code"] for item in candidates])
+        self.assertEqual([104, 104], [item["distance_meters"] for item in candidates[:2]])
+        self.assertNotIn("distance_meters", candidates[2])
 
     def test_station_response_shape_drift_is_still_contract_mismatch(self):
         result, diagnostics = self._query("station-shape-drift", "北京南", "武夷山北")

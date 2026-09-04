@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import queue
@@ -294,12 +295,14 @@ class RailMCPStdioTransport:
         temp_root: Optional[Path] = None,
         command: Sequence[str] = DEFAULT_COMMAND,
         cwd: Optional[Path] = None,
+        station_distance_enricher: Optional[Any] = None,
     ) -> None:
         self.cache_dir = Path(cache_dir)
         self.credentials = credentials
         self.temp_root = Path(temp_root) if temp_root is not None else self.cache_dir.parent / ".tmp" / "rail-runtime"
         self.command = tuple(command)
         self.cwd = Path(cwd) if cwd is not None else None
+        self.station_distance_enricher = station_distance_enricher
         self.calls = 0
         self.last_stderr: Tuple[str, ...] = ()
 
@@ -356,36 +359,41 @@ class RailMCPStdioTransport:
                     to_name = _required_text(request.parameters, "to_name")
                     resolution = _resolve_rail_stations(client, body, from_name, to_name)
                     body["station_resolution"] = resolution
-                    if resolution["status"] != "resolved":
-                        return ProviderEnvelope(status_code=200, body=body, headers={})
-                    from_code = resolution["endpoints"]["from"]["candidates"][0]["station_code"]
-                    to_code = resolution["endpoints"]["to"]["candidates"][0]["station_code"]
-                    ticket_arguments: Dict[str, Any] = {
-                        "date": _required_text(request.parameters, "date"),
-                        "fromStation": from_code,
-                        "toStation": to_code,
-                        "trainFilterFlags": str(request.parameters.get("train_filter_flags", "")),
-                        "format": "json",
-                    }
-                    for parameter_name, argument_name in (
-                        ("earliest_start_time", "earliestStartTime"),
-                        ("latest_start_time", "latestStartTime"),
-                    ):
-                        time_bound = request.parameters.get(parameter_name)
-                        if time_bound is not None:
-                            if isinstance(time_bound, bool) or not isinstance(time_bound, (int, float)) or not 0 <= time_bound <= 24:
-                                raise ContractMismatch("rail time bound must be between 0 and 24")
-                            ticket_arguments[argument_name] = time_bound
-                    limited_num = request.parameters.get("limited_num")
-                    if limited_num is not None:
-                        if not isinstance(limited_num, int) or isinstance(limited_num, bool) or limited_num <= 0:
-                            raise ContractMismatch("rail limited_num must be a positive integer")
-                        ticket_arguments["limitedNum"] = limited_num
-                    result = client.call_tool("get-tickets", ticket_arguments)
-                    body["calls"].append({"name": "get-tickets", "arguments": ticket_arguments, "result": result})
+                    if resolution["status"] == "resolved":
+                        from_code = resolution["endpoints"]["from"]["candidates"][0]["station_code"]
+                        to_code = resolution["endpoints"]["to"]["candidates"][0]["station_code"]
+                        ticket_arguments: Dict[str, Any] = {
+                            "date": _required_text(request.parameters, "date"),
+                            "fromStation": from_code,
+                            "toStation": to_code,
+                            "trainFilterFlags": str(request.parameters.get("train_filter_flags", "")),
+                            "format": "json",
+                        }
+                        for parameter_name, argument_name in (
+                            ("earliest_start_time", "earliestStartTime"),
+                            ("latest_start_time", "latestStartTime"),
+                        ):
+                            time_bound = request.parameters.get(parameter_name)
+                            if time_bound is not None:
+                                if isinstance(time_bound, bool) or not isinstance(time_bound, (int, float)) or not 0 <= time_bound <= 24:
+                                    raise ContractMismatch("rail time bound must be between 0 and 24")
+                                ticket_arguments[argument_name] = time_bound
+                        limited_num = request.parameters.get("limited_num")
+                        if limited_num is not None:
+                            if not isinstance(limited_num, int) or isinstance(limited_num, bool) or limited_num <= 0:
+                                raise ContractMismatch("rail limited_num must be a positive integer")
+                            ticket_arguments["limitedNum"] = limited_num
+                        result = client.call_tool("get-tickets", ticket_arguments)
+                        body["calls"].append({"name": "get-tickets", "arguments": ticket_arguments, "result": result})
                 else:
                     raise ContractMismatch("unsupported 12306 capability")
-                return ProviderEnvelope(status_code=200, body=body, headers={})
+            # Do not keep the rail subprocess open while optional AMap work runs.
+            if request.capability == "rail" and body["station_resolution"]["status"] == "ambiguous":
+                body["station_resolution"] = self._best_effort_station_distances(
+                    body["station_resolution"],
+                    request,
+                )
+            return ProviderEnvelope(status_code=200, body=body, headers={})
         except MCPDeadlineExceeded as exc:
             raise ProviderTimeout("pinned 12306 MCP deadline exceeded") from exc
         except MCPProtocolError as exc:
@@ -395,6 +403,47 @@ class RailMCPStdioTransport:
         finally:
             self.last_stderr = client.stderr_lines
             client.close()
+
+    def _best_effort_station_distances(
+        self,
+        resolution: Mapping[str, Any],
+        request: ProviderRequest,
+    ) -> Mapping[str, Any]:
+        original = copy.deepcopy(dict(resolution))
+        if not _station_resolution_needs_distance(original):
+            return original
+        try:
+            enricher = self.station_distance_enricher
+            if enricher is None:
+                from ..credentials import resolve_credentials
+                from ..station_distance import AMapStationDistanceEnricher
+
+                # AMap is resolved separately and never enters the rail process
+                # environment, even when the caller supplied a shared resolution.
+                amap_credentials = self.credentials
+                if not amap_credentials.get("AMAP_WEBSERVICE_KEY"):
+                    amap_credentials = resolve_credentials()
+                enricher = AMapStationDistanceEnricher(amap_credentials)
+            return enricher.enrich(copy.deepcopy(original), request)
+        except Exception:
+            # Station distance is an optional signal. Its provider must never turn a
+            # successful 12306 resolution into a rail transport or health failure.
+            return original
+
+
+def _station_resolution_needs_distance(resolution: Mapping[str, Any]) -> bool:
+    if resolution.get("status") != "ambiguous":
+        return False
+    endpoints = resolution.get("endpoints")
+    if not isinstance(endpoints, dict):
+        return False
+    for endpoint in ("from", "to"):
+        value = endpoints.get(endpoint)
+        candidates = value.get("candidates") if isinstance(value, dict) else None
+        if isinstance(candidates, list) and len(candidates) > 1:
+            if any(isinstance(candidate, dict) and "distance_meters" not in candidate for candidate in candidates):
+                return True
+    return False
 
 
 def _required_text(parameters: Mapping[str, Any], name: str) -> str:

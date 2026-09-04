@@ -1,5 +1,64 @@
 # PROGRESS
 
+## 书 14 车站距离信号开工理解（2026-09-05，≤10 行）
+1. 目标：保留 12306 多站候选全集，用既有高德 geocode 城市中心与逐站 POI 坐标补充可信的 `distance_meters`，不替用户选站。
+2. 顺序：核对基线 → 独立车站坐标富化模块 → 接入铁路多站 fallback → 完整性/排序/降级测试 → 红绿反向验证 → 全门禁与提交。
+3. 正确 Git 根为本目录；开工 HEAD 与 `origin/main` 均为 `ef3e9f9`，工作树 clean。
+4. 任务 0：全量 `Ran 393 tests ... OK`、skipped 0；secret scan `0 finding(s) across 371 file(s)`。
+5. `distance_meters` 搜索确认站点链目前只有 MCP 可选字段透传及 rail 消费/排序，没有主动坐标生产者；其他命中属于 matrix、mobility 与 AMap 路线距离。
+6. 高德任何失败只撤掉距离信号：未知站原样保留并排最后，不阻断铁路、不污染 12306 health。
+7. 最大风险：既有 provider/MCP 调用的 deadline 与 health 归属耦合；必须让富化尽力而为且严格保持 12306 成功语义。
+8. 边界：只写书 14 白名单，版本保持 0.4.0；不碰 Journey、Schema、planning、mobility、AMap provider、CI、文档或安装态。
+
+## 书 14 任务 1：车站坐标解析（完成）
+
+- 新增独立 `station_distance.py`：高德 geocode 以城市名取 GCJ-02 城市中心；POI 对每个候选精确传 `keywords=站名`、`city=城市`（既有 HTTP transport 映射为 `region`），仅接受同城、站名规范化精确匹配且类型为火车站/铁路的唯一坐标。
+- 距离直接调用既有 `matrix.haversine_meters`；富化深拷贝原候选。三站合成 fixture 中近站=104m、远站=1045m、第三站 POI 为空；最终代码保留 3/3，第三站无 `distance_meters`，并实际发出 1 次 geocode + 3 次 POI。
+- 首次正向精准门 `/usr/bin/python3 -m unittest tests.test_rail_station_fallback -v` → `Ran 17 tests in 0.943s`、`OK`、skipped 0。
+- 反向验证临时过滤无距离候选；单测 exit 1，原始关键输出：
+
+```text
+AssertionError: Lists differ: ['BBX', 'AAX', 'CCX'] != ['BBX', 'AAX']
+First list contains 1 additional elements.
+First extra element 2:
+'CCX'
+Ran 1 test in 0.054s
+FAILED (failures=1)
+```
+
+- 还原过滤逻辑后同一完整精准门 → `Ran 17 tests in 0.919s`、`OK`、skipped 0；另有非匹配 POI、缺 Key、城市中心无结果与同距 tie-break 回归，均不猜、不删站。
+
+## 书 14 任务 2：距离排序与降级（完成）
+
+- `RailMCPStdioTransport` 先完成并关闭 12306 MCP 会话，再对 ambiguous 多站组做独立 AMap 富化；铁路子进程继续只收 rail12306 最小环境，高德 Key 不进入子进程。
+- 新距离写回 station-resolution transcript，`Rail12306Adapter` 既有排序现实际按“有距离 → 距离升序 → name/code tie-break → 未知最后”生效。无 Key、geocode 无结果、POI 无结果、网络/合同/意外异常均保留原始候选；外层异常隔离不改铁路 health。
+- 首次组合门 `/usr/bin/python3 -m unittest tests.test_rail_station_fallback tests.test_mcp_stdio -v` → `Ran 23 tests in 4.716s`、`OK`、skipped 0。
+- 反向验证临时把富化异常升级成 `ProviderNetworkError`；先确认 `error_class` 被污染为 `network`，再让健康断言优先输出，原始红态为：
+
+```text
+AssertionError: 'ready' != 'degraded'
+- ready
++ degraded
+Ran 1 test in 0.104s
+FAILED (failures=1)
+```
+
+- 恢复“异常返回 untouched original resolution”后组合门 → `Ran 23 tests in 4.742s`、`OK`、skipped 0；高德网络失败用例同时断言 3/3 候选、全部无距离、`error_class=ambiguous`、rail health=`ready`。
+
+## 书 14 组合树代码态验收
+
+- 合成三站的可读原始输出（命令 exit 0；坐标为任意合成点，不是真实站点数据）：
+
+```text
+AMAP_AVAILABLE {"amap_calls": ["geocode", "poi", "poi", "poi"], "candidates": [{"city": "多站城", "distance_meters": 104, "name": "多站城近站", "ref_id": "station-bbx", "resolution_for": "from", "station_code": "BBX"}, {"city": "多站城", "distance_meters": 1045, "name": "多站城远站", "ref_id": "station-aax", "resolution_for": "from", "station_code": "AAX"}, {"city": "多站城", "name": "多站城未知站", "ref_id": "station-ccx", "resolution_for": "from", "station_code": "CCX"}], "error_class": "ambiguous", "rail_health": "ready"}
+AMAP_UNAVAILABLE {"amap_calls": ["geocode"], "candidates": [{"city": "多站城", "name": "多站城未知站", "ref_id": "station-ccx", "resolution_for": "from", "station_code": "CCX"}, {"city": "多站城", "name": "多站城近站", "ref_id": "station-bbx", "resolution_for": "from", "station_code": "BBX"}, {"city": "多站城", "name": "多站城远站", "ref_id": "station-aax", "resolution_for": "from", "station_code": "AAX"}], "error_class": "ambiguous", "rail_health": "ready"}
+```
+
+- 首轮全量碰到并行书 13 的临时 Journey 中间态，`Ran 381 ... FAILED (failures=2, errors=2)`，全部 traceback 均落在禁改的 `journey.py`/`test_journey.py`；未触碰或回滚。对方恢复后 `tests.test_journey` 为 32/32 OK。
+- 恢复后的组合树 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）：`Ran 402 tests in 27.018s`、`OK`、skipped 0；`/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 372 file(s)`。
+- 额外独立门：providers `Ran 94 ... OK`；packaging+tracked synthetic-data `Ran 8 ... OK`；`py_compile` 与 `git diff --check` exit 0。
+- 最终暂存态：全量 `Ran 402 tests in 26.110s ... OK`、skipped 0；secret scan 0/372；铁路+MCP `Ran 23 tests in 4.769s ... OK`；`ALLOWLIST_OK files=6`，禁改路径组合 diff 为空，`VERSION_DIFF_OK changed_version_lines=0`。`BLOCKED.md` 的车站距离项已据实移到 Closed；当前轮次 7/12，书 14 已可提交。
+
 ## 住宿链锚定修复开工理解（2026-09-05，≤10 行）
 1. 目标：Journey 必须把候选住宿的 city/check_in/check_out 当作用户已表达的逐夜事实，段边界和每日城市都与它对齐。
 2. 顺序：任务 0 双失败复现 → 先修段边界/城市推进 → 再补无解最近住宿与 unknown 下标校验 → 固化 16 天 6 城 3 人回归。

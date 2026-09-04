@@ -104,8 +104,9 @@ def city_station_payload(mode, city):
         return [{"station_code": "WYX", "station_name": "武夷山北示例站"}]
     if mode == "station-ambiguous" and city == "多站城":
         return [
-            {"station_code": "AAX", "station_name": "多站城远站", "distance_meters": 8000},
-            {"station_code": "BBX", "station_name": "多站城近站", "distance_meters": 1000},
+            {"station_code": "AAX", "station_name": "多站城远站"},
+            {"station_code": "BBX", "station_name": "多站城近站"},
+            {"station_code": "CCX", "station_name": "多站城未知站"},
         ]
     if mode == "station-no-results" or mode in ("g5-station-fallback", "all-stations-fallback", "station-ambiguous"):
         return "Error: City not found. "
