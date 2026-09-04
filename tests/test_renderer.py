@@ -184,3 +184,48 @@ for _path in sorted(HTML_MUTATIONS.glob("*.json")):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ProviderAttributionTests(unittest.TestCase):
+    """Provider terms require naming the source when their data is displayed."""
+
+    def render_with(self, statuses, top_mode="live"):
+        """Render the valid weekend fixture with a substituted provider health list.
+
+        top_mode must stay at least as conservative as the component modes, or
+        the semantic validator rejects the Trip before it reaches the renderer.
+        """
+        trip = load(ROOT / "tests" / "fixtures" / "trips" / "schema" / "valid" / "weekend-live.json")
+        template = trip["provider_health"][0]
+        trip["mode"] = top_mode
+        trip["provider_health"] = [
+            dict(template, provider=provider, status=status, mode=mode)
+            for provider, status, mode in statuses
+        ]
+        return render_trip(trip), trip
+
+    def test_live_provider_is_named_in_the_footer(self):
+        html, trip = self.render_with([("amap", "ready", "live")])
+        self.assertIn('data-attribution="1"', html)
+        self.assertIn("高德地图", html)
+        self.assertTrue(validate_html(html, trip).ok)
+
+    def test_every_contributing_provider_is_named(self):
+        html, trip = self.render_with([
+            ("amap", "ready", "live"),
+            ("variflight", "ready", "live"),
+            ("12306-mcp", "ready", "live"),
+        ])
+        for expected in ("高德地图", "飞常准", "12306"):
+            self.assertIn(expected, html)
+        self.assertEqual(1, html.count('data-attribution="1"'))
+        self.assertTrue(validate_html(html, trip).ok)
+
+    def test_provider_that_contributed_nothing_is_not_named(self):
+        html, trip = self.render_with(
+            [("amap", "missing", "static"), ("variflight", "degraded", "static")],
+            top_mode="static",
+        )
+        self.assertNotIn('data-attribution="1"', html)
+        self.assertNotIn("高德地图", html)
+        self.assertTrue(validate_html(html, trip).ok)

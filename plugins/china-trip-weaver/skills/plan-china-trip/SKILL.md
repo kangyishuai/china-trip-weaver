@@ -12,7 +12,7 @@ Own the full user request and keep one schema-valid Trip as the only source of t
 - Work only on mainland-China trips lasting 1–7 days.
 - Query, compare, schedule, replan, and provide dated official deep links. Never log in, collect identity, hold inventory, book, pay, cancel, or change an order.
 - Do not request provider keys in chat. If a user pastes a credential or personal order data, do not repeat it; stop that provider path and ask them to remove and rotate it.
-- If another `plan-china-trip` from `china-travel-assistant` is active, or the entry source cannot be uniquely identified, stop before provider calls and show the fixed mutual-exclusion notice from `../../references/provider-contracts.md`.
+- Run `scripts/ctw doctor` before the first provider call and read `skill_conflicts`. On `conflict`, stop and show its `notice` verbatim with the reported plugin ids. On `unknown` no Codex CLI could be consulted, so fail closed the same way. Only `clear` may proceed.
 
 ## Workflow
 

@@ -297,11 +297,35 @@ def _health_section(trip: Mapping[str, Any], labels: Mapping[str, str]) -> str:
     return _section("provider-health", labels["health"], table, "panel panel-wide")
 
 
+# Attribution required by each provider's terms when its data is displayed.
+# AMap terms 7.7 require naming 高德地图 as the source; VariFlight's terms of use
+# carry an attribution mandate for permitted non-commercial sharing.
+PROVIDER_ATTRIBUTION = {
+    "amap": "地图与路线数据来源于高德地图",
+    "variflight": "航班状态与舒适度数据来源于飞常准 VariFlight",
+    "12306-mcp": "铁路班次与票价来源于中国铁路 12306 公开查询",
+    "flyai": "住宿与航班候选来源于飞猪 Fliggy",
+}
+
+
+def _attribution(trip: Mapping[str, Any]) -> str:
+    """Name every provider that actually contributed data to this Trip."""
+    contributing = {
+        health["provider"]
+        for health in trip.get("provider_health", ())
+        if health.get("status") == "ready" and health.get("mode") in ("live", "cached")
+    }
+    names = [PROVIDER_ATTRIBUTION[provider] for provider in sorted(contributing) if provider in PROVIDER_ATTRIBUTION]
+    if not names:
+        return ""
+    return '<p class="attribution" data-attribution="1">%s。</p>' % text("；".join(names))
+
+
 def _footer(trip: Mapping[str, Any], labels: Mapping[str, str]) -> str:
     return (
         '<footer class="page-footer" data-section="footer"><p><strong>%s：</strong>本页只做查询、比较和官方深链；不保证库存、价格、准点或开放状态，不执行登录、实名、代下单、支付、取消或改签。</p>'
-        '<p>schema %s · renderer %s · trip %s</p></footer>'
-    ) % (text(labels["readonly"]), text(trip["schema_version"]), RENDERER_VERSION, text(trip["trip_id"]))
+        '%s<p>schema %s · renderer %s · trip %s</p></footer>'
+    ) % (text(labels["readonly"]), _attribution(trip), text(trip["schema_version"]), RENDERER_VERSION, text(trip["trip_id"]))
 
 
 def _section(identifier: str, heading: str, body: str, classes: str) -> str:

@@ -145,14 +145,18 @@ def main(argv: Optional[Sequence[str]] = None, *, credential_path: Optional[Path
                 },
             }), file=sys.stderr)
             return 1
+        from .plugin_conflicts import conflict_report
+
+        conflicts = conflict_report()
         print(canonical_json({
             "plugin_version": __version__,
             "providers": dict(provider_credential_status(credentials)),
             "python": platform.python_version(),
             "schema_exists": default_schema_path().is_file(),
             "schema_version": SCHEMA_VERSION,
+            "skill_conflicts": conflicts,
         }))
-        return 0
+        return 1 if conflicts["status"] == "conflict" else 0
     if args.command == "plan":
         from .clock import FixedClock, SystemClock
         from .flyai_inventory import FlyAIBackend

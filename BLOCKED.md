@@ -1,48 +1,47 @@
 # Unresolved items
 
-This file lists what is still undecided or unverified for this project. Items
-about a single maintainer's machine, one-off development incidents, and internal
-process deviations were removed when the repository was prepared for
-publication; they were never product behaviour.
+This file lists what is still undecided for this project. Items about a single
+maintainer's machine, one-off development incidents, and internal process
+deviations were removed when the repository was prepared for publication; they
+were never product behaviour.
 
-## Same-name `plan-china-trip` source detection has no stable public contract
+Two items that stood here before 2026-09-04 are now closed. Same-name Skill
+detection became automatic once `codex plugin list --json` shipped; `ctw doctor`
+reads it, walks each enabled plugin's `skills/` directory, and reports
+`skill_conflicts`. Sample-data redistribution ended when `demo/` and
+`tests/fixtures/providers/` became locally generated synthetic values, which a
+regression test now enforces on every Git-tracked file.
 
-- Fact: Codex does not merge Skills that share a name, so two plugins exposing
-  `plan-china-trip` both appear in the selector. The runtime interface for
-  identifying which plugin a Skill came from is not publicly specified.
-- Current design: installation and `ctw doctor` prefer supported
-  `codex plugin list` information, and the session layer uses the host-visible
-  Skill catalogue. When either layer cannot uniquely identify the entry point,
-  the plugin fails closed, shows a fixed mutual-exclusion notice, and makes zero
-  provider calls.
-- Still to verify: whether a machine-readable plugin listing exists, whether the
-  Skill catalogue carries source paths, and what the desktop selector actually
-  shows. Until then, only "installation instructions plus fail-closed manual
-  acceptance" is promised, never fully automatic detection of an older plugin.
-- Impact: does not block use. `china-trip-weaver` and `china-travel-assistant`
-  must not be enabled at the same time.
+## Public marketplace listing metadata
 
-## Provider terms, caching, redistribution, and marketplace metadata
+- Fact: this plugin installs from a local marketplace pointed at a clone. A
+  public Codex marketplace listing would additionally require a privacy policy
+  URL, a terms-of-service URL, a listing category, and an authentication policy
+  that the maintainer must own and publish.
+- Still to decide: whether to publish at all, and under whose name and policies.
+- Impact: does not block local or self-hosted use. It does block a public
+  marketplace listing.
 
-- Fact: AMap, FlyAI/Fliggy, VariFlight, AnySearch, and public 12306 data each
-  carry independent terms. A clause-by-clause review has not been completed.
-- Current design: only minimal normalized claims may enter a user-local runtime
-  cache; committed fixtures are locally generated synthetic values. Raw
-  provider payloads, cookies, headers, and account metadata never enter Git.
-- Still to decide: data caching and redistribution rights, map attribution,
-  privacy and terms URLs, and the metadata a public Codex marketplace listing
-  would require.
-- Impact: does not block local or self-hosted use. It does block publishing to a
-  public Codex marketplace and any commercial use.
+## Commercial use requires provider licences the maintainer does not hold
 
-## Demonstrations and fixtures are synthetic data
+- Fact: AMap requires a purchased technical service licence for any commercial
+  purpose and forbids transferring or sublicensing it. VariFlight requires a
+  written contract before its data may be redistributed, repackaged, or resold.
+  See `THIRD_PARTY_NOTICES.md` for the cited clauses.
+- Current position: the repository is documented as personal and
+  non-commercial. No provider response is cached, and every contributing
+  provider is named in the rendered page.
+- Still to decide: nothing, unless someone intends commercial use, in which
+  case they must obtain those licences themselves.
+- Impact: does not block personal use. It does block commercial use.
 
-- Fact: `demo/` and `tests/fixtures/providers/` contain only locally generated,
-  unmistakably synthetic values. They preserve provider contract shapes and
-  failure modes without redistributing captured responses.
-- Current decision: public landmarks and government or venue source URLs may
-  remain in candidate files. Provider names, inventory, prices, schedules,
-  coordinates, route measurements, and tokenized deep links do not.
-- Status: no sample-data redistribution decision remains blocked. A regression
-  test scans every Git-tracked file for the retired domains and hotel-name list;
-  the broader provider-terms question above remains separate.
+## Fliggy/FlyAI wrapper terms were not located
+
+- Fact: the pinned `@fly-ai/flyai-cli` is a third-party wrapper over Fliggy
+  services. A terms page governing the wrapper itself was not found on
+  2026-09-04, so its obligations are assumed rather than verified.
+- Current position: its data is treated under the same no-cache,
+  no-redistribution rule applied to AMap and VariFlight, which is the
+  conservative reading.
+- Still to verify: the wrapper's actual terms, if its authors publish them.
+- Impact: does not block use under the conservative rule.

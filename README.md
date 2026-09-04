@@ -15,11 +15,11 @@ It never logs in, submits identity, holds inventory, books, pays, cancels, or ch
 
 The plugin installs from a local marketplace pointed at a clone of this repository. It is not published to a public Codex marketplace: provider terms, data caching and redistribution, map attribution, and listing metadata are still unresolved. See [`BLOCKED.md`](BLOCKED.md) before changing that.
 
-Licensed under the [MIT License](LICENSE). The licence covers this repository's own code and documentation. It grants no rights over data returned by AMap, Fliggy/FlyAI, VariFlight, or China Railway; see [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+Licensed under the [MIT License](LICENSE). The licence covers this repository's own code and documentation. It grants no rights over data returned by AMap, Fliggy/FlyAI, VariFlight, or China Railway. Those providers forbid caching and redistributing their data and require a paid licence or written contract for commercial use, so this repository is for personal, non-commercial use unless you obtain those licences yourself; see [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 ## Local credentials
 
-`ctw doctor` reports only `configured` or `missing` for AMap, FlyAI, VariFlight, and AnySearch. It never prints a value, prefix, suffix, hash, or length.
+`ctw doctor` reports only `configured` or `missing` for AMap, FlyAI, VariFlight, and AnySearch. It never prints a value, prefix, suffix, hash, or length. It also reports `skill_conflicts`, which detects another enabled plugin exposing a Skill of the same name and exits non-zero on a conflict.
 
 Credentials come from the launching environment first, then from `~/.config/china-trip-weaver/credentials.env`. On POSIX that file must be a current-user-owned regular file at mode exactly `0600`. Do not pass a value on a command line or paste it into chat.
 

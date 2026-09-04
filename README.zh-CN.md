@@ -15,11 +15,11 @@
 
 插件从一个指向本仓库克隆目录的本地市场安装。它没有发布到公开的 Codex 市场：服务商条款、数据缓存与再分发、地图署名和上架元数据都还没有结论。改变这一点之前请先读 [`BLOCKED.md`](BLOCKED.md)。
 
-本项目采用 [MIT 许可证](LICENSE)。该许可证只覆盖本仓库自己的代码和文档，不授予任何对高德、飞猪／FlyAI、飞常准或中国铁路返回数据的权利，详见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
+本项目采用 [MIT 许可证](LICENSE)。该许可证只覆盖本仓库自己的代码和文档，不授予任何对高德、飞猪／FlyAI、飞常准或中国铁路返回数据的权利。这些服务商禁止缓存和再分发其数据，商业用途需另行购买许可或签订书面合同，因此除非你自行取得相应许可，本仓库仅供个人非商业使用；详见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
 
 ## 本地凭据
 
-`ctw doctor` 对高德、FlyAI、飞常准和 AnySearch 只报告 `configured`（已配置）或 `missing`（未配置），永远不打印值、前缀、后缀、哈希或长度。
+`ctw doctor` 对高德、FlyAI、飞常准和 AnySearch 只报告 `configured`（已配置）或 `missing`（未配置），永远不打印值、前缀、后缀、哈希或长度。它同时报告 `skill_conflicts`：自动检测是否有另一个已启用插件暴露同名 Skill，发现冲突时退出码非零。
 
 凭据优先取自启动进程的环境变量，其次是 `~/.config/china-trip-weaver/credentials.env`。在 POSIX 系统上，该文件必须是当前用户拥有的普通文件，权限恰为 `0600`。不要把值写在命令行上，也不要粘贴进对话。
 

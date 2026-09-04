@@ -19,8 +19,22 @@ R0 live → R1 fresh cache → R2 keyless public → R3 dated official link / ty
 
 Every rung preserves provider health, mode, query/freshness time, claim status, and reason. Static estimates are not live routes; an unknown is not zero.
 
+R1 is disabled and no provider response is cached today. AMap's terms section
+3.5 forbid storing or caching its service data, and VariFlight's terms forbid
+caching for redistribution without a written contract. Every capability
+therefore falls straight from R0 to R2. A future cache may only be enabled for
+a provider whose terms permit it.
+
+## Attribution
+
+When a provider actually contributed data, the rendered page names it in the
+footer. AMap's terms section 7.7 require naming 高德地图 as the source wherever
+its data is shown, and VariFlight's terms carry an attribution mandate for
+permitted non-commercial sharing. The renderer emits this automatically from
+`provider_health`, so a provider that was missing or degraded is never named.
+
 ## Mutual exclusion
 
-`china-trip-weaver` and `china-travel-assistant` must not be enabled together because both expose `plan-china-trip`. When the old plugin is detected or the entry source is not uniquely known, make zero provider calls and display:
+Codex does not merge Skills that share a name, so two enabled plugins exposing `plan-china-trip` both reach the selector. `scripts/ctw doctor` detects this automatically: it reads `codex plugin list --json`, walks each enabled plugin's `skills/` directory, and reports `skill_conflicts` as `clear`, `conflict` with the offending plugin ids, or `unknown` when no Codex CLI could be consulted. Treat `conflict` and `unknown` alike: make zero provider calls and display the reported notice:
 
-> 检测到另一个 `plan-china-trip`（`china-travel-assistant`）或无法唯一确认入口来源。Codex 不会合并同名 Skill。请先在 Plugins Directory 中禁用/卸载旧插件，或禁用本插件，然后新建会话再试；当前未运行任何行程查询。
+> 检测到另一个同名 Skill。Codex 不会合并同名 Skill，两个入口会同时出现在选择器里。请先在 Plugins Directory 中禁用或卸载其中一个，然后新建会话再试；当前未运行任何行程查询。
