@@ -1,6 +1,6 @@
 {
   "name": "china-trip-weaver",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Evidence-backed, read-only planning for 1-7 day trips within mainland China, with provider degradation, local replanning, and deterministic mobile HTML.",
   "author": {
     "name": "kangyishuai"

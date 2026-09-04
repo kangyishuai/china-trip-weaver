@@ -63,7 +63,7 @@ CODEX_HOME=/path/to/an/isolated/codex-home \
   plugin list
 ```
 
-The expected result is `china-trip-weaver@china-trip-weaver-local`, version `0.1.0`, status `installed, enabled`. Use a fresh Codex task after installing or updating so its nine Skills and MCP configuration are reloaded.
+The expected result is `china-trip-weaver@china-trip-weaver-local`, version `0.2.0`, status `installed, enabled`. Use a fresh Codex task after installing or updating so its nine Skills and MCP configuration are reloaded.
 
 For Codex Desktop UI installation, add this repository as a local marketplace, ensure `china-travel-assistant` is disabled, install China Trip Weaver Local, restart, and create a new task. The two plugins must not be enabled together because both expose `plan-china-trip`.
 

@@ -14,7 +14,7 @@ All providers are read-only adapters. A provider is `ready` only after its pin/f
 Degrade each capability independently:
 
 ```text
-R0 live → R1 fresh cache → R2 keyless public → R3 dated official link / typed estimate → R4 unknown
+R0 live → R2 keyless public → R3 dated official link / typed estimate → R4 unknown
 ```
 
 Every rung preserves provider health, mode, query/freshness time, claim status, and reason. Static estimates are not live routes; an unknown is not zero.

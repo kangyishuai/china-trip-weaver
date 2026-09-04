@@ -62,7 +62,7 @@ CODEX_HOME=/path/to/an/isolated/codex-home \
   plugin list
 ```
 
-期望结果是 `china-trip-weaver@china-trip-weaver-local`、版本 `0.1.0`、状态 `installed, enabled`。安装或更新后请新建一个 Codex 任务，让它的 9 个 Skill 与 MCP 配置重新加载。
+期望结果是 `china-trip-weaver@china-trip-weaver-local`、版本 `0.2.0`、状态 `installed, enabled`。安装或更新后请新建一个 Codex 任务，让它的 9 个 Skill 与 MCP 配置重新加载。
 
 用 Codex 桌面版界面安装时：把本仓库添加为本地市场，确认 `china-travel-assistant` 已禁用，安装 China Trip Weaver Local，重启，再新建任务。两个插件不能同时启用，因为它们都暴露 `plan-china-trip`。
 

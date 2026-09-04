@@ -8,8 +8,9 @@ task.
 
 ## Preconditions
 
-1. Open a clone of this repository in Codex Desktop and ensure
-   `china-travel-assistant` is disabled so `plan-china-trip` is unambiguous.
+1. Open a clone of this repository in Codex Desktop. `ctw doctor` detects a
+   competing plugin automatically and exits non-zero, so no manual check is
+   needed; act on its `skill_conflicts` report if it is not `clear`.
 2. Install or refresh `china-trip-weaver@china-trip-weaver-local`, then create a
    new task.
 3. In the repository terminal run `plugins/china-trip-weaver/scripts/ctw doctor`.
