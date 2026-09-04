@@ -7,6 +7,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import date, timedelta
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
@@ -23,6 +24,7 @@ from .planning import (
     _normalize_request,
     _no_stay_conflict,
     _route_specs,
+    _transport_pricing,
     plan_trip,
 )
 from .validate_trip import (
@@ -39,6 +41,7 @@ JOURNEY_SCHEMA_VERSION = "1.0.0"
 TRIP_SCHEMA_REFERENCE = "trip.schema.json"
 TRIP_DEFINITION_PREFIX = TRIP_SCHEMA_REFERENCE + "#/$defs/"
 SEGMENT_ONE_WAY_CONSTRAINT = "单程（Journey 分段不自动返程）"
+MAX_TRIP_DAYS = 7
 
 
 @dataclass(frozen=True)
@@ -102,17 +105,13 @@ def resolved_journey_schema(path: Optional[Path] = None) -> Mapping[str, Any]:
 def split_journey_inputs(
     request: Mapping[str, Any],
     candidates: Mapping[str, Any],
+    expected_segment_days: Optional[int] = None,
 ) -> Tuple[JourneySegmentInput, ...]:
-    """Split a request at cross-city days first, then at the seven-day hard limit."""
+    """Split into the fewest Trips, or around an optional preferred length."""
 
+    expected_days = _validate_expected_segment_days(expected_segment_days)
     normalized_request = _normalize_journey_request(request)
-    normalized_candidates = json.loads(canonical_json(candidates))
-    candidate_report = validate_candidates(normalized_candidates)
-    if not candidate_report.ok:
-        raise ValueError(
-            "candidates validation failed: "
-            + "; ".join(item.render() for item in candidate_report.errors)
-        )
+    normalized_candidates = _validated_journey_candidates(candidates)
     shared_routes = _shared_journey_routes(normalized_request)
     lodging_city_by_date = _lodging_city_by_date(
         normalized_request,
@@ -122,7 +121,31 @@ def split_journey_inputs(
         normalized_request,
         shared_routes,
         lodging_city_by_date,
+        expected_days,
     )
+    segment_lengths = _segment_lengths(
+        starts,
+        date.fromisoformat(normalized_request["end_date"]),
+    )
+    source_with_assumption = copy.deepcopy(normalized_request)
+    assumption = _segmentation_assumption(expected_days, segment_lengths)
+    if assumption not in source_with_assumption["assumptions"]:
+        source_with_assumption["assumptions"].append(assumption)
+    return _segment_inputs_from_starts(
+        source_with_assumption,
+        normalized_candidates,
+        starts,
+        lodging_city_by_date,
+    )
+
+
+def _segment_inputs_from_starts(
+    normalized_request: Mapping[str, Any],
+    normalized_candidates: Mapping[str, Any],
+    starts: Sequence[date],
+    lodging_city_by_date: Mapping[str, str],
+) -> Tuple[JourneySegmentInput, ...]:
+    shared_routes = _shared_journey_routes(normalized_request)
     overall_end = date.fromisoformat(normalized_request["end_date"])
     segments: List[JourneySegmentInput] = []
     current_place = _initial_shared_place(normalized_request)
@@ -130,11 +153,12 @@ def split_journey_inputs(
     for index, start in enumerate(starts):
         end = starts[index + 1] - timedelta(days=1) if index + 1 < len(starts) else overall_end
         if lodging_city_by_date:
-            destination = _request_place_for_city(
+            destinations = _lodging_destinations(
                 normalized_request,
-                lodging_city_by_date[start.isoformat()],
+                lodging_city_by_date,
+                start,
+                end,
             )
-            destinations = [destination]
         else:
             while consumed_routes < len(shared_routes) and date.fromisoformat(shared_routes[consumed_routes].travel_date) < start:
                 current_place = shared_routes[consumed_routes].to_place
@@ -163,7 +187,7 @@ def split_journey_inputs(
         )
         segments.append(JourneySegmentInput(normalized_segment, segment_candidates))
         if lodging_city_by_date:
-            current_place = destination
+            current_place = destinations[-1]
         else:
             for route in segment_routes:
                 current_place = route.to_place
@@ -180,35 +204,58 @@ def plan_journey(
     flyai_backend: Optional[FlyAIBackend] = None,
     variflight_backend: Optional[VariFlightBackend] = None,
     amap_lodging_backend: Optional[AMapLodgingBackend] = None,
+    expected_segment_days: Optional[int] = None,
 ) -> JourneyPlanResult:
-    """Plan each compliant Trip independently, then assemble one Journey."""
+    """Plan lodging-aligned units, merge logical Trips, then assemble a Journey."""
 
+    expected_days = _validate_expected_segment_days(expected_segment_days)
     normalized_source = _normalize_journey_request(request)
-    segment_inputs = split_journey_inputs(normalized_source, candidates)
+    segment_inputs = split_journey_inputs(
+        normalized_source,
+        candidates,
+        expected_segment_days=expected_days,
+    )
     trip_documents: List[Dict[str, Any]] = []
     calls: List[str] = []
     stages: List[Tuple[str, ...]] = []
     for segment in segment_inputs:
-        # This explicit call is the invariant: every child must pass the unchanged
-        # one-to-seven-day Trip boundary before the planner sees it.
-        _normalize_request(segment.request)
-        result = plan_trip(
-            segment.request,
-            segment.candidates,
-            clock,
-            rail_backend,
-            mobility_backend,
-            flyai_backend,
-            variflight_backend,
-            amap_lodging_backend,
-        )
-        trip_documents.append(copy.deepcopy(dict(result.trip)))
-        calls.extend(result.business_calls)
-        stages.append(result.stages)
+        atomic_inputs = _planning_inputs_for_segment(segment)
+        atomic_trips: List[Dict[str, Any]] = []
+        segment_stages: List[str] = []
+        for atomic in atomic_inputs:
+            # This explicit call is the invariant: every planning unit passes the
+            # unchanged one-to-seven-day Trip boundary before the planner sees it.
+            _normalize_request(atomic.request)
+            result = plan_trip(
+                atomic.request,
+                atomic.candidates,
+                clock,
+                rail_backend,
+                mobility_backend,
+                flyai_backend,
+                variflight_backend,
+                amap_lodging_backend,
+            )
+            atomic_trips.append(copy.deepcopy(dict(result.trip)))
+            calls.extend(result.business_calls)
+            segment_stages.extend(result.stages)
+        if len(atomic_trips) > 1:
+            _bridge_segment_lodgings(atomic_trips, atomic_inputs)
+            trip_document = _merge_segment_trips(atomic_trips, segment)
+        else:
+            trip_document = atomic_trips[0]
+        trip_documents.append(trip_document)
+        stages.append(tuple(segment_stages))
 
     lodging_links = _bridge_segment_lodgings(trip_documents, segment_inputs)
     connections = _segment_connections(trip_documents, lodging_links)
-    journey = assemble_journey(trip_documents, normalized_source, connections, clock)
+    journey = assemble_journey(
+        trip_documents,
+        normalized_source,
+        connections,
+        clock,
+        expected_segment_days=expected_days,
+    )
     digest = hashlib.sha256(canonical_json(journey).encode("utf-8")).hexdigest()
     return JourneyPlanResult(
         journey=journey,
@@ -241,26 +288,157 @@ def _segment_start_dates(
     request: Mapping[str, Any],
     routes: Sequence[RouteSpec],
     lodging_city_by_date: Mapping[str, str],
+    expected_segment_days: Optional[int],
 ) -> Tuple[date, ...]:
     overall_start = date.fromisoformat(request["start_date"])
     overall_end = date.fromisoformat(request["end_date"])
-    if lodging_city_by_date:
-        preferred: List[date] = []
-        previous_city = lodging_city_by_date[overall_start.isoformat()]
-        cursor = overall_start + timedelta(days=1)
-        while cursor <= overall_end:
-            city = lodging_city_by_date[cursor.isoformat()]
-            if city != previous_city:
-                preferred.append(cursor)
-                previous_city = city
-            cursor += timedelta(days=1)
-    else:
-        preferred = sorted({
+    preferred = _preferred_segment_boundaries(
+        overall_start,
+        overall_end,
+        routes,
+        lodging_city_by_date,
+    )
+    if expected_segment_days is not None:
+        return _expected_segment_starts(
+            overall_start,
+            overall_end,
+            preferred,
+            expected_segment_days,
+        )
+    return _minimum_segment_starts(overall_start, overall_end, preferred)
+
+
+def _preferred_segment_boundaries(
+    overall_start: date,
+    overall_end: date,
+    routes: Sequence[RouteSpec],
+    lodging_city_by_date: Mapping[str, str],
+) -> Tuple[date, ...]:
+    if not lodging_city_by_date:
+        return tuple(sorted({
             date.fromisoformat(route.travel_date)
             for route in routes
             if overall_start < date.fromisoformat(route.travel_date) <= overall_end
-        })
-    boundaries = [overall_start] + preferred
+        }))
+    preferred: List[date] = []
+    previous_city = lodging_city_by_date[overall_start.isoformat()]
+    cursor = overall_start + timedelta(days=1)
+    while cursor <= overall_end:
+        city = lodging_city_by_date[cursor.isoformat()]
+        if city != previous_city:
+            preferred.append(cursor)
+            previous_city = city
+        cursor += timedelta(days=1)
+    return tuple(preferred)
+
+
+def _minimum_segment_starts(
+    overall_start: date,
+    overall_end: date,
+    preferred: Sequence[date],
+) -> Tuple[date, ...]:
+    """Greedily preserve ceil(days / 7), choosing a lodging change when feasible."""
+
+    end_exclusive = overall_end + timedelta(days=1)
+    preferred_set = set(preferred)
+    starts = [overall_start]
+    cursor = overall_start
+    while (end_exclusive - cursor).days > MAX_TRIP_DAYS:
+        remaining_days = (end_exclusive - cursor).days
+        remaining_segments = (
+            remaining_days + MAX_TRIP_DAYS - 1
+        ) // MAX_TRIP_DAYS
+        earliest = end_exclusive - timedelta(
+            days=MAX_TRIP_DAYS * (remaining_segments - 1),
+        )
+        latest = cursor + timedelta(days=MAX_TRIP_DAYS)
+        candidates = [
+            boundary for boundary in preferred_set
+            if earliest <= boundary <= latest
+        ]
+        cursor = max(candidates) if candidates else latest
+        starts.append(cursor)
+    return tuple(starts)
+
+
+def _expected_segment_starts(
+    overall_start: date,
+    overall_end: date,
+    preferred: Sequence[date],
+    expected_segment_days: int,
+) -> Tuple[date, ...]:
+    """Choose the requested segment count, then favor lodging-aligned cuts."""
+
+    total_days = (overall_end - overall_start).days + 1
+    segment_count = (
+        total_days + expected_segment_days - 1
+    ) // expected_segment_days
+    preferred_offsets = {
+        (boundary - overall_start).days for boundary in preferred
+    }
+
+    @lru_cache(maxsize=None)
+    def choose(position: int, remaining_segments: int) -> Tuple[int, Tuple[int, ...]]:
+        if remaining_segments == 1:
+            length = total_days - position
+            if 1 <= length <= MAX_TRIP_DAYS:
+                return (0, (length,))
+            raise ValueError("expected Journey segmentation has no feasible final Trip")
+
+        best: Optional[Tuple[Tuple[Any, ...], int, Tuple[int, ...]]] = None
+        minimum_remaining = remaining_segments - 1
+        maximum_remaining = MAX_TRIP_DAYS * minimum_remaining
+        for length in range(1, MAX_TRIP_DAYS + 1):
+            next_position = position + length
+            days_after = total_days - next_position
+            if not minimum_remaining <= days_after <= maximum_remaining:
+                continue
+            suffix_boundaries, suffix_lengths = choose(
+                next_position,
+                remaining_segments - 1,
+            )
+            boundary_count = suffix_boundaries + int(
+                next_position in preferred_offsets
+            )
+            lengths = (length,) + suffix_lengths
+            score = (
+                -boundary_count,
+                sum((item - expected_segment_days) ** 2 for item in lengths),
+                tuple(abs(item - expected_segment_days) for item in lengths),
+                tuple(-item for item in lengths),
+            )
+            candidate = (score, boundary_count, lengths)
+            if best is None or candidate[0] < best[0]:
+                best = candidate
+        if best is None:
+            raise ValueError("expected Journey segmentation has no feasible partition")
+        return best[1], best[2]
+
+    _, lengths = choose(0, segment_count)
+    starts = [overall_start]
+    cursor = overall_start
+    for length in lengths[:-1]:
+        cursor += timedelta(days=length)
+        starts.append(cursor)
+    return tuple(starts)
+
+
+def _strict_segment_start_dates(
+    request: Mapping[str, Any],
+    routes: Sequence[RouteSpec],
+    lodging_city_by_date: Mapping[str, str],
+) -> Tuple[date, ...]:
+    """Keep city changes hard only for internal lodging-aligned planning units."""
+
+    overall_start = date.fromisoformat(request["start_date"])
+    overall_end = date.fromisoformat(request["end_date"])
+    preferred = _preferred_segment_boundaries(
+        overall_start,
+        overall_end,
+        routes,
+        lodging_city_by_date,
+    )
+    boundaries = [overall_start] + list(preferred)
     starts: List[date] = []
     for index, interval_start in enumerate(boundaries):
         interval_end = (
@@ -271,8 +449,90 @@ def _segment_start_dates(
         cursor = interval_start
         while cursor <= interval_end:
             starts.append(cursor)
-            cursor += timedelta(days=7)
+            cursor += timedelta(days=MAX_TRIP_DAYS)
     return tuple(starts)
+
+
+def _segment_lengths(
+    starts: Sequence[date],
+    overall_end: date,
+) -> Tuple[int, ...]:
+    return tuple(
+        (
+            (starts[index + 1] if index + 1 < len(starts) else overall_end + timedelta(days=1))
+            - start
+        ).days
+        for index, start in enumerate(starts)
+    )
+
+
+def _validate_expected_segment_days(value: Optional[int]) -> Optional[int]:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= MAX_TRIP_DAYS:
+        raise ValueError("expected_segment_days must be an integer between one and seven inclusive")
+    return value
+
+
+def _segmentation_assumption(
+    expected_segment_days: Optional[int],
+    actual_segment_days: Sequence[int],
+) -> str:
+    actual = ",".join(str(item) for item in actual_segment_days)
+    if expected_segment_days is None:
+        return (
+            "JOURNEY_SEGMENTATION expected_days=none actual_days=%s; "
+            "Trip count is minimized under maximum_days=7 and cuts prefer lodging-city changes"
+        ) % actual
+    return (
+        "JOURNEY_SEGMENTATION expected_days=%d actual_days=%s; actual lengths may differ "
+        "because whole days are distributed around lodging-city changes while maximum_days=7 remains hard"
+    ) % (expected_segment_days, actual)
+
+
+def _validated_journey_candidates(
+    candidates: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    normalized = json.loads(canonical_json(candidates))
+    candidate_report = validate_candidates(normalized)
+    if not candidate_report.ok:
+        raise ValueError(
+            "candidates validation failed: "
+            + "; ".join(item.render() for item in candidate_report.errors)
+        )
+    return normalized
+
+
+def _planning_inputs_for_segment(
+    segment: JourneySegmentInput,
+) -> Tuple[JourneySegmentInput, ...]:
+    request = _normalize_journey_request(segment.request)
+    candidates = _validated_journey_candidates(segment.candidates)
+    routes = _shared_journey_routes(request)
+    lodging_city_by_date = dict(
+        _lodging_city_by_date(request, candidates["lodgings"]),
+    )
+    final_date = str(request["end_date"])
+    final_cities = sorted({
+        str(item["city"])
+        for item in candidates["lodgings"]
+        if item["check_in"] <= final_date < item["check_out"]
+    })
+    if len(final_cities) > 1:
+        raise ValueError("Journey lodging chain has conflicting cities: " + canonical_json({
+            "code": "LODGING_CITY_CONFLICT",
+            "date": final_date,
+            "cities": final_cities,
+        }))
+    if final_cities and lodging_city_by_date:
+        lodging_city_by_date[final_date] = final_cities[0]
+    starts = _strict_segment_start_dates(request, routes, lodging_city_by_date)
+    return _segment_inputs_from_starts(
+        request,
+        candidates,
+        starts,
+        lodging_city_by_date,
+    )
 
 
 def _lodging_city_by_date(
@@ -338,6 +598,26 @@ def _request_place_for_city(
         if place["city"] == city:
             return copy.deepcopy(dict(place))
     raise ValueError("Journey lodging city is not a request destination: %s" % city)
+
+
+def _lodging_destinations(
+    request: Mapping[str, Any],
+    lodging_city_by_date: Mapping[str, str],
+    start: date,
+    end: date,
+) -> List[Mapping[str, str]]:
+    """Keep every ordered city run that fits inside one logical Trip."""
+
+    destinations: List[Mapping[str, str]] = []
+    previous_city: Optional[str] = None
+    cursor = start
+    while cursor <= end:
+        city = lodging_city_by_date[cursor.isoformat()]
+        if city != previous_city:
+            destinations.append(_request_place_for_city(request, city))
+            previous_city = city
+        cursor += timedelta(days=1)
+    return destinations
 
 
 def _initial_shared_place(request: Mapping[str, Any]) -> Mapping[str, str]:
@@ -458,6 +738,325 @@ def _rewrite_candidate_unknown(
         parts[1], indexes[int(parts[2])], parts[3],
     )
     return rewritten
+
+
+def _merge_segment_trips(
+    trips: Sequence[Mapping[str, Any]],
+    segment: JourneySegmentInput,
+) -> Dict[str, Any]:
+    """Merge lodging-aligned planning units into one complete logical Trip."""
+
+    if len(trips) < 2:
+        return copy.deepcopy(dict(trips[0]))
+    parts = [copy.deepcopy(dict(item)) for item in trips]
+    request = copy.deepcopy(dict(segment.request))
+    for part in parts:
+        for assumption in part["request"]["assumptions"]:
+            if assumption not in request["assumptions"]:
+                request["assumptions"].append(assumption)
+    trip_id = "trip-" + hashlib.sha256(canonical_json({
+        "request": request,
+        "planning_units": [item["trip_id"] for item in parts],
+    }).encode("utf-8")).hexdigest()[:16]
+    ref_maps: List[Dict[str, str]] = [
+        {str(part["trip_id"]): trip_id} for part in parts
+    ]
+
+    days: List[Mapping[str, Any]] = []
+    day_sources: List[int] = []
+    day_index_maps: List[Dict[int, int]] = [dict() for _ in parts]
+    used_slot_ids = set()
+    for part_index, part in enumerate(parts):
+        for old_day_index, source_day in enumerate(part["days"]):
+            day_item = copy.deepcopy(dict(source_day))
+            new_day_index = len(days)
+            day_index_maps[part_index][old_day_index] = new_day_index
+            old_day_id = str(day_item["day_id"])
+            day_item["day_id"] = "day-%d" % (new_day_index + 1)
+            ref_maps[part_index][old_day_id] = day_item["day_id"]
+            for slot_index, slot in enumerate(day_item["slots"]):
+                old_slot_id = str(slot["slot_id"])
+                new_slot_id = old_slot_id
+                if new_slot_id in used_slot_ids:
+                    new_slot_id = _merged_identifier(
+                        "slot", old_slot_id, part_index, slot_index, trip_id,
+                    )
+                used_slot_ids.add(new_slot_id)
+                slot["slot_id"] = new_slot_id
+                ref_maps[part_index][old_slot_id] = new_slot_id
+            days.append(day_item)
+            day_sources.append(part_index)
+
+    group_specs = (
+        ("transport_legs", "leg_id", "leg"),
+        ("lodgings", "lodging_id", "stay"),
+        ("pois", "poi_id", "poi"),
+    )
+    entity_values: Dict[str, List[Mapping[str, Any]]] = {}
+    entity_sources: Dict[str, List[int]] = {}
+    entity_index_maps: Dict[str, List[Dict[int, int]]] = {}
+    for group, id_key, prefix in group_specs:
+        merged_items: List[Mapping[str, Any]] = []
+        merged_sources: List[int] = []
+        source_indexes: List[Dict[int, int]] = [dict() for _ in parts]
+        by_id: Dict[str, int] = {}
+        for part_index, part in enumerate(parts):
+            for old_index, source_item in enumerate(part[group]):
+                item = copy.deepcopy(dict(source_item))
+                old_id = str(item[id_key])
+                existing_index = by_id.get(old_id)
+                if (
+                    existing_index is not None
+                    and canonical_json(merged_items[existing_index]) == canonical_json(item)
+                ):
+                    new_id = old_id
+                    new_index = existing_index
+                else:
+                    new_id = old_id
+                    if existing_index is not None:
+                        new_id = _merged_identifier(
+                            prefix, old_id, part_index, old_index, trip_id,
+                        )
+                        item[id_key] = new_id
+                    new_index = len(merged_items)
+                    by_id[new_id] = new_index
+                    merged_items.append(item)
+                    merged_sources.append(part_index)
+                source_indexes[part_index][old_index] = new_index
+                ref_maps[part_index][old_id] = new_id
+        entity_values[group] = merged_items
+        entity_sources[group] = merged_sources
+        entity_index_maps[group] = source_indexes
+
+    provider_health, provider_index_maps = _merge_provider_health(parts)
+    claims: List[Mapping[str, Any]] = []
+    claim_maps: List[Dict[str, str]] = [dict() for _ in parts]
+    claim_index_maps: List[Dict[int, int]] = [dict() for _ in parts]
+    claim_by_id: Dict[str, int] = {}
+    for part_index, part in enumerate(parts):
+        for old_index, source_claim in enumerate(part["claims"]):
+            claim = copy.deepcopy(dict(source_claim))
+            old_claim_id = str(claim["claim_id"])
+            claim["subject_ref"] = ref_maps[part_index].get(
+                str(claim["subject_ref"]),
+                str(claim["subject_ref"]),
+            )
+            existing_index = claim_by_id.get(old_claim_id)
+            if (
+                existing_index is not None
+                and canonical_json(claims[existing_index]) == canonical_json(claim)
+            ):
+                new_claim_id = old_claim_id
+                new_index = existing_index
+            else:
+                new_claim_id = old_claim_id
+                if existing_index is not None:
+                    new_claim_id = _merged_identifier(
+                        "claim", old_claim_id, part_index, old_index, trip_id,
+                    )
+                    claim["claim_id"] = new_claim_id
+                new_index = len(claims)
+                claim_by_id[new_claim_id] = new_index
+                claims.append(claim)
+            claim_maps[part_index][old_claim_id] = new_claim_id
+            claim_index_maps[part_index][old_index] = new_index
+
+    for group, _, _ in group_specs:
+        for item, part_index in zip(entity_values[group], entity_sources[group]):
+            _rewrite_claim_references(item, claim_maps[part_index])
+    for day_item, part_index in zip(days, day_sources):
+        lodging_ref = day_item.get("stay_id")
+        if isinstance(lodging_ref, str):
+            day_item["stay_id"] = ref_maps[part_index].get(lodging_ref, lodging_ref)
+        for slot in day_item["slots"]:
+            slot_ref = slot.get("ref_id")
+            if isinstance(slot_ref, str):
+                slot["ref_id"] = ref_maps[part_index].get(slot_ref, slot_ref)
+            _rewrite_claim_references(slot, claim_maps[part_index])
+
+    unknowns: List[Mapping[str, Any]] = []
+    unknown_keys = set()
+    all_index_maps: Dict[str, List[Dict[int, int]]] = dict(entity_index_maps)
+    all_index_maps["days"] = day_index_maps
+    all_index_maps["claims"] = claim_index_maps
+    all_index_maps["provider_health"] = provider_index_maps
+    for part_index, part in enumerate(parts):
+        for source_unknown in part["unknowns"]:
+            field_path = str(source_unknown["field_path"])
+            if field_path.startswith(("/budget_ledger/", "/transport_pricing/")):
+                continue
+            unknown = copy.deepcopy(dict(source_unknown))
+            unknown["field_path"] = _rewrite_merged_unknown_path(
+                field_path,
+                part_index,
+                all_index_maps,
+            )
+            claim_id = unknown.get("claim_id")
+            if isinstance(claim_id, str):
+                unknown["claim_id"] = claim_maps[part_index].get(claim_id, claim_id)
+            encoded = canonical_json(unknown)
+            if encoded not in unknown_keys:
+                unknowns.append(unknown)
+                unknown_keys.add(encoded)
+
+    mode_rank = {"live": 0, "cached": 1, "static": 2, "mock": 3}
+    mode = max((str(item["mode"]) for item in parts), key=lambda item: mode_rank[item])
+    merged: Dict[str, Any] = {
+        "schema_version": str(parts[0]["schema_version"]),
+        "trip_id": trip_id,
+        "revision": {
+            "number": 1,
+            "parent_revision": None,
+            "created_at": str(parts[0]["revision"]["created_at"]),
+            "reason": "initial lodging-aligned Journey segment plan",
+            "created_by": "system",
+        },
+        "mode": mode,
+        "request": request,
+        "days": days,
+        "transport_legs": entity_values["transport_legs"],
+        "lodgings": entity_values["lodgings"],
+        "pois": entity_values["pois"],
+        "claims": claims,
+        "provider_health": provider_health,
+        "unknowns": unknowns,
+        "patches": [],
+        "generated_at": max(str(item["generated_at"]) for item in parts),
+    }
+    if mode == "mock":
+        notices = [str(item["mock_notice"]) for item in parts if item.get("mock_notice")]
+        merged["mock_notice"] = "; ".join(dict.fromkeys(notices)) or "merged mock planning units"
+    if request.get("traveler_groups"):
+        group_refs = [str(item["group_id"]) for item in request["traveler_groups"]]
+        for leg in merged["transport_legs"]:
+            if not leg.get("group_refs"):
+                leg["group_refs"] = list(group_refs)
+        merged["transport_pricing"] = _transport_pricing(
+            request,
+            merged["days"],
+            merged["transport_legs"],
+        )
+    ledger, budget_unknowns = _budget_ledger(
+        request,
+        merged["days"],
+        merged["transport_legs"],
+        merged["lodgings"],
+        merged["pois"],
+        merged["claims"],
+    )
+    merged["budget_ledger"] = ledger
+    merged["unknowns"].extend(budget_unknowns)
+    report = validate_trip(merged)
+    if not report.ok:
+        raise ValueError(
+            "merged Journey segment produced an invalid Trip: "
+            + "; ".join(item.render() for item in report.errors)
+        )
+    return merged
+
+
+def _merged_identifier(
+    prefix: str,
+    original: str,
+    part_index: int,
+    item_index: int,
+    trip_id: str,
+) -> str:
+    digest = hashlib.sha256(canonical_json({
+        "original": original,
+        "part_index": part_index,
+        "item_index": item_index,
+        "trip_id": trip_id,
+    }).encode("utf-8")).hexdigest()[:16]
+    return "%s-merged-%s" % (prefix, digest)
+
+
+def _rewrite_claim_references(
+    item: Dict[str, Any],
+    claim_map: Mapping[str, str],
+) -> None:
+    if isinstance(item.get("claim_ids"), list):
+        item["claim_ids"] = [
+            claim_map.get(str(claim_id), str(claim_id))
+            for claim_id in item["claim_ids"]
+        ]
+    price = item.get("price")
+    if isinstance(price, dict) and isinstance(price.get("claim_id"), str):
+        price["claim_id"] = claim_map.get(price["claim_id"], price["claim_id"])
+    for window in item.get("opening_windows", ()):
+        if isinstance(window, dict) and isinstance(window.get("claim_id"), str):
+            window["claim_id"] = claim_map.get(window["claim_id"], window["claim_id"])
+
+
+def _merge_provider_health(
+    parts: Sequence[Mapping[str, Any]],
+) -> Tuple[List[Mapping[str, Any]], List[Dict[int, int]]]:
+    status_rank = {
+        "ready": 0,
+        "degraded": 1,
+        "missing": 2,
+        "expired": 3,
+        "rate_limited": 4,
+        "unavailable": 5,
+        "forbidden": 6,
+        "contract_mismatch": 7,
+    }
+    mode_rank = {"live": 0, "cached": 1, "static": 2, "mock": 3}
+    merged: List[Mapping[str, Any]] = []
+    by_provider: Dict[str, int] = {}
+    index_maps: List[Dict[int, int]] = [dict() for _ in parts]
+    for part_index, part in enumerate(parts):
+        for old_index, source in enumerate(part["provider_health"]):
+            provider = str(source["provider"])
+            new_index = by_provider.get(provider)
+            if new_index is None:
+                new_index = len(merged)
+                by_provider[provider] = new_index
+                merged.append(copy.deepcopy(dict(source)))
+            else:
+                current = merged[new_index]
+                selected = max(
+                    (current, source),
+                    key=lambda item: status_rank[str(item["status"])],
+                )
+                combined = copy.deepcopy(dict(selected))
+                combined["mode"] = max(
+                    (str(current["mode"]), str(source["mode"])),
+                    key=lambda item: mode_rank[item],
+                )
+                combined["checked_at"] = max(
+                    str(current["checked_at"]),
+                    str(source["checked_at"]),
+                )
+                combined["capabilities"] = list(dict.fromkeys(
+                    list(current["capabilities"]) + list(source["capabilities"])
+                ))
+                combined["reason"] = "; ".join(dict.fromkeys((
+                    str(current["reason"]),
+                    str(source["reason"]),
+                )))
+                merged[new_index] = combined
+            index_maps[part_index][old_index] = new_index
+    return merged, index_maps
+
+
+def _rewrite_merged_unknown_path(
+    field_path: str,
+    part_index: int,
+    index_maps: Mapping[str, Sequence[Mapping[int, int]]],
+) -> str:
+    parts = field_path.split("/")
+    if len(parts) < 3 or parts[0] != "" or not parts[2].isdigit():
+        return field_path
+    group = parts[1]
+    if group not in index_maps:
+        return field_path
+    old_index = int(parts[2])
+    source_map = index_maps[group][part_index]
+    if old_index not in source_map:
+        raise ValueError("merged Journey unknown references a missing source index: %s" % field_path)
+    parts[2] = str(source_map[old_index])
+    return "/".join(parts)
 
 
 def _bridge_segment_lodgings(
@@ -692,6 +1291,7 @@ def assemble_journey(
     source_request: Mapping[str, Any],
     segment_connections: Sequence[Mapping[str, Any]],
     clock: Clock,
+    expected_segment_days: Optional[int] = None,
 ) -> Mapping[str, Any]:
     """Wrap complete standalone Trip documents in one validated Journey."""
 
@@ -699,8 +1299,10 @@ def assemble_journey(
         raise ValueError("Journey requires at least one complete Trip")
     trip_documents = copy.deepcopy(list(trips))
     connections = copy.deepcopy(list(segment_connections))
+    expected_days = _validate_expected_segment_days(expected_segment_days)
     start_date = str(trip_documents[0]["request"]["start_date"])
     end_date = str(trip_documents[-1]["request"]["end_date"])
+    actual_segment_days = tuple(len(item["days"]) for item in trip_documents)
     identity: Dict[str, Any]
     if source_request.get("traveler_groups"):
         identity = {
@@ -722,6 +1324,10 @@ def assemble_journey(
         "start_date": start_date,
         "end_date": end_date,
         "identity": identity_digest,
+        "segmentation": {
+            "expected_segment_days": expected_days,
+            "actual_segment_days": list(actual_segment_days),
+        },
         "trip_ids": [item["trip_id"] for item in trip_documents],
     }).encode("utf-8")).hexdigest()[:16]
     journey: Dict[str, Any] = {
@@ -737,6 +1343,15 @@ def assemble_journey(
         "start_date": start_date,
         "end_date": end_date,
         "budget_ledger": journey_budget_ledger(trip_documents, connections, budget_cny),
+        "segmentation": {
+            "expected_segment_days": expected_days,
+            "maximum_segment_days": MAX_TRIP_DAYS,
+            "actual_segment_days": list(actual_segment_days),
+            "strategy": "expected_length" if expected_days is not None else "minimum_segments",
+            "assumptions": [
+                _segmentation_assumption(expected_days, actual_segment_days),
+            ],
+        },
         "trips": trip_documents,
         "segment_connections": connections,
         "generated_at": now,
@@ -1197,6 +1812,27 @@ def validate_journey(
             )
             for item in report.errors
         )
+
+    segmentation = journey.get("segmentation")
+    if isinstance(segmentation, Mapping):
+        actual_segment_days = [len(item["days"]) for item in trips]
+        if segmentation["actual_segment_days"] != actual_segment_days:
+            issues.append(ValidationIssue(
+                "J_SEGMENT_LENGTHS",
+                "/segmentation/actual_segment_days",
+                "must equal the actual number of days in every embedded Trip",
+            ))
+        expected_strategy = (
+            "expected_length"
+            if segmentation["expected_segment_days"] is not None
+            else "minimum_segments"
+        )
+        if segmentation["strategy"] != expected_strategy:
+            issues.append(ValidationIssue(
+                "J_SEGMENT_STRATEGY",
+                "/segmentation/strategy",
+                "must match whether an expected segment length was supplied",
+            ))
 
     if journey["start_date"] != trips[0]["request"]["start_date"]:
         issues.append(ValidationIssue("J_START_DATE", "/start_date", "must equal the first Trip start_date"))

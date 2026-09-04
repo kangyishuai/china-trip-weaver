@@ -52,6 +52,7 @@
     },
     "meeting_anchor": {"$ref": "trip.schema.json#/$defs/meetingAnchor"},
     "budget_ledger": {"$ref": "#/$defs/journeyBudgetLedger"},
+    "segmentation": {"$ref": "#/$defs/journeySegmentation"},
     "trips": {
       "description": "Complete standalone Trip documents; never a reduced projection.",
       "type": "array",
@@ -65,6 +66,40 @@
     "generated_at": {"type": "string", "format": "date-time"}
   },
   "$defs": {
+    "journeySegmentation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expected_segment_days",
+        "maximum_segment_days",
+        "actual_segment_days",
+        "strategy",
+        "assumptions"
+      ],
+      "properties": {
+        "expected_segment_days": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "maximum": 7
+        },
+        "maximum_segment_days": {"const": 7},
+        "actual_segment_days": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "integer", "minimum": 1, "maximum": 7}
+        },
+        "strategy": {
+          "type": "string",
+          "enum": ["minimum_segments", "expected_length"]
+        },
+        "assumptions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
+      }
+    },
     "journeyBudgetItem": {
       "type": "object",
       "additionalProperties": false,

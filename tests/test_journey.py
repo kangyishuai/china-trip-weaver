@@ -163,28 +163,133 @@ class JourneySplitTests(unittest.TestCase):
                 self.assertTrue(report.ok, [item.render() for item in report.errors])
                 self.assertLessEqual(len(result.trip["days"]), 7)
 
-    def test_six_city_segment_boundaries_follow_the_lodging_chain(self):
+    def test_six_city_uses_the_minimum_lodging_aligned_segment_count(self):
         case = journey_six_city_lodging_chain_case()
         segments = split_journey_inputs(case["request"], case["candidates"])
+        self.assertEqual(3, len(segments))
         self.assertEqual(
             [
-                ("2026-09-25", "2026-09-25", "合成甲城"),
-                ("2026-09-26", "2026-09-28", "合成乙城"),
-                ("2026-09-29", "2026-09-29", "合成甲城"),
-                ("2026-09-30", "2026-10-02", "合成丙城"),
-                ("2026-10-03", "2026-10-05", "合成丁城"),
-                ("2026-10-06", "2026-10-07", "合成戊城"),
-                ("2026-10-08", "2026-10-08", "合成己城"),
-                ("2026-10-09", "2026-10-10", "合成戊城"),
+                ("2026-09-25", "2026-09-29", ["合成甲城", "合成乙城", "合成甲城"]),
+                ("2026-09-30", "2026-10-05", ["合成丙城", "合成丁城"]),
+                ("2026-10-06", "2026-10-10", ["合成戊城", "合成己城", "合成戊城"]),
             ],
             [
                 (
                     item.request["start_date"],
                     item.request["end_date"],
-                    item.request["destinations"][0]["city"],
+                    [destination["city"] for destination in item.request["destinations"]],
                 )
                 for item in segments
             ],
+        )
+        self.assertEqual(
+            [5, 6, 5],
+            [
+                (
+                    date.fromisoformat(item.request["end_date"])
+                    - date.fromisoformat(item.request["start_date"])
+                ).days + 1
+                for item in segments
+            ],
+        )
+
+    def test_expected_segment_days_five_changes_the_partition(self):
+        case = journey_six_city_lodging_chain_case()
+        default_segments = split_journey_inputs(case["request"], case["candidates"])
+        preferred_segments = split_journey_inputs(
+            case["request"],
+            case["candidates"],
+            expected_segment_days=5,
+        )
+        self.assertEqual(3, len(default_segments))
+        self.assertEqual(4, len(preferred_segments))
+        self.assertEqual(
+            [4, 4, 5, 3],
+            [
+                (
+                    date.fromisoformat(item.request["end_date"])
+                    - date.fromisoformat(item.request["start_date"])
+                ).days + 1
+                for item in preferred_segments
+            ],
+        )
+        self.assertTrue(all(
+            (
+                date.fromisoformat(item.request["end_date"])
+                - date.fromisoformat(item.request["start_date"])
+            ).days + 1 <= 7
+            for item in preferred_segments
+        ))
+
+    def test_expected_segment_days_rejects_values_outside_one_to_seven(self):
+        case = journey_six_city_lodging_chain_case()
+        for value in (0, 8, True, 5.0):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "expected_segment_days must be an integer between one and seven inclusive",
+                ):
+                    split_journey_inputs(
+                        case["request"],
+                        case["candidates"],
+                        expected_segment_days=value,
+                    )
+
+    def test_expected_segment_days_preserves_lodging_chain_and_records_actual_lengths(self):
+        case = journey_six_city_lodging_chain_case()
+        result = plan_journey(
+            case["request"],
+            case["candidates"],
+            FixedClock.from_iso(FIXED_NOW),
+            RailBackend.from_spec("off", ROOT),
+            expected_segment_days=5,
+        )
+        journey = result.journey
+        self.assertTrue(validate_journey(journey).ok)
+        self.assertEqual(
+            {
+                "expected_segment_days": 5,
+                "maximum_segment_days": 7,
+                "actual_segment_days": [4, 4, 5, 3],
+                "strategy": "expected_length",
+                "assumptions": [
+                    "JOURNEY_SEGMENTATION expected_days=5 actual_days=4,4,5,3; actual lengths may differ "
+                    "because whole days are distributed around lodging-city changes while maximum_days=7 remains hard",
+                ],
+            },
+            journey["segmentation"],
+        )
+        assumption = journey["segmentation"]["assumptions"][0]
+        self.assertTrue(all(
+            assumption in trip["request"]["assumptions"]
+            for trip in journey["trips"]
+        ))
+        days = {
+            day_item["date"]: day_item
+            for trip in journey["trips"]
+            for day_item in trip["days"]
+        }
+        start = date.fromisoformat(case["request"]["start_date"])
+        for offset in range(15):
+            night = (start + timedelta(days=offset)).isoformat()
+            lodging_cities = {
+                item["city"] for item in case["candidates"]["lodgings"]
+                if item["check_in"] <= night < item["check_out"]
+            }
+            self.assertEqual({days[night]["city"]}, lodging_cities, night)
+
+    def test_journey_validator_rejects_tampered_actual_segment_lengths(self):
+        case = journey_six_city_lodging_chain_case()
+        journey = copy.deepcopy(plan_journey(
+            case["request"],
+            case["candidates"],
+            FixedClock.from_iso(FIXED_NOW),
+            RailBackend.from_spec("off", ROOT),
+        ).journey)
+        journey["segmentation"]["actual_segment_days"] = [7, 7, 2]
+        self.assertIn(
+            "J_SEGMENT_LENGTHS",
+            {item.code for item in validate_journey(journey).errors},
         )
 
     def test_six_city_fixture_is_reproducible_and_strictly_synthetic(self):
@@ -285,7 +390,7 @@ class JourneySplitTests(unittest.TestCase):
                 capture_output=True,
             )
             self.assertEqual(0, planned.returncode, planned.stdout + planned.stderr)
-            self.assertIn("trips=8 days=16 max_trip_days=3", planned.stdout)
+            self.assertIn("trips=3 days=16 max_trip_days=6", planned.stdout)
             validated = subprocess.run(
                 [str(CTW), "journey", "validate", str(journey_path)],
                 text=True,
