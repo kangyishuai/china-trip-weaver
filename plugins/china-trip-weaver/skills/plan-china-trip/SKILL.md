@@ -13,7 +13,7 @@ Own the full user request and keep one schema-valid Trip as the only source of t
 - Trips longer than seven days and multi-origin groups whose travelers must converge from different cities are not supported yet.
 - Query, compare, schedule, replan, and provide dated official deep links. Never log in, collect identity, hold inventory, book, pay, cancel, or change an order.
 - Do not request provider keys in chat. If a user pastes a credential or personal order data, do not repeat it; stop that provider path and ask them to remove and rotate it.
-- Run `scripts/ctw doctor` before the first provider call and read `skill_conflicts`. On `conflict`, stop and show its `notice` verbatim with the reported plugin ids. On `unknown` no Codex CLI could be consulted, so fail closed the same way. Only `clear` may proceed.
+- Run `scripts/ctw doctor --probe` before the first provider call. Read `skill_conflicts` and each provider's separate `credential`, `contract`, `network`, and `business` status; a configured credential alone is never evidence that the provider works. On a Skill `conflict`, stop and show its `notice` verbatim with the reported plugin ids. On `unknown` no Codex CLI could be consulted, so fail closed the same way. Only `clear` may proceed.
 
 ## Workflow
 
@@ -29,12 +29,15 @@ Own the full user request and keep one schema-valid Trip as the only source of t
 From the plugin root, run:
 
 ```bash
+scripts/ctw candidates init candidates.json
+scripts/ctw candidates add-poi candidates.json --name "..." --city "..." --category "..." --source-url "https://..."
+scripts/ctw candidates add-lodging candidates.json --name "..." --city "..." --check-in YYYY-MM-DD --check-out YYYY-MM-DD --source-url "https://..."
 scripts/ctw validate-candidates candidates.json
-scripts/ctw plan --request request.json --candidates candidates.json --rail live --mobility live --lodging live --output-json trip.json --output-html trip.html
+scripts/ctw plan --progress ndjson --request request.json --candidates candidates.json --rail live --mobility live --lodging live --output-json trip.json --output-html trip.html
 scripts/ctw validate trip.json
 scripts/ctw validate-html trip.html trip.json
 ```
 
-Use `--rail fixture:<file> --offline-fixture --fixed-clock <ISO-8601>` only for deterministic regression runs; use `--rail off` to force dated deep-link degradation without a rail call. For a local edit/disruption, use `scripts/ctw replan --trip trip.json --event event.json --base-revision <N> --output-json trip-r<N+1>.json --output-html trip-r<N+1>.html`.
+`--progress ndjson` writes allowlisted probe/query/degrade/retry/completion events to stderr and never includes credentials or provider response bodies; omit it when progress is not needed. Use `--rail fixture:<file> --offline-fixture --fixed-clock <ISO-8601>` only for deterministic regression runs; use `--rail off` to force dated deep-link degradation without a rail call. For a local edit/disruption, use `scripts/ctw replan --trip trip.json --event event.json --base-revision <N> --output-json trip-r<N+1>.json --output-html trip-r<N+1>.html`.
 
 Read `../../references/candidates.example.json` for the candidate file shape, `../../references/provider-contracts.md` when selecting or degrading providers, and `../../references/credentials.md` when explaining local configuration.

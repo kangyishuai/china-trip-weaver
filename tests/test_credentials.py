@@ -25,7 +25,7 @@ from china_trip_weaver.credentials import (
     redact_text,
     resolve_credentials,
 )
-from china_trip_weaver.cli import main as cli_main
+from china_trip_weaver.cli import _probe_layers, main as cli_main
 from china_trip_weaver.errors import CTWError
 
 
@@ -174,6 +174,54 @@ class CredentialTests(unittest.TestCase):
             with contextlib.redirect_stdout(restored):
                 self.assertEqual(0, cli_main(["doctor"], credential_path=path))
             self.assertEqual("configured", json.loads(restored.getvalue())["providers"]["amap"])
+
+    def test_doctor_probe_reports_credential_contract_network_and_business_only(self):
+        amap = canary("doctor-probe-amap")
+        flyai = canary("doctor-probe-flyai")
+        probe_report = {
+            provider: {
+                "credential": "configured" if provider in ("amap", "flyai") else "missing",
+                "contract": "passed" if provider != "anysearch" else "unsupported",
+                "network": "passed" if provider != "anysearch" else "unsupported",
+                "business": "passed" if provider == "amap" else "not_run",
+            }
+            for provider in ("amap", "flyai", "variflight", "anysearch")
+        }
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            path = self.make_file(
+                Path(temporary),
+                assignment("AMAP_WEBSERVICE_KEY", amap) + assignment("FLYAI_API_KEY", flyai),
+            )
+            stdout = io.StringIO()
+            with mock.patch(
+                "china_trip_weaver.cli._doctor_probe_report", return_value=probe_report,
+            ) as probe:
+                with contextlib.redirect_stdout(stdout):
+                    self.assertEqual(0, cli_main(["doctor", "--probe"], credential_path=path))
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(probe_report, payload["probes"])
+        self.assertTrue(payload["schema_exists"])
+        self.assertEqual("0.2.0", payload["plugin_version"])
+        self.assertNotIn(amap, stdout.getvalue())
+        self.assertNotIn(flyai, stdout.getvalue())
+        self.assertEqual(1, probe.call_count)
+        for layers in payload["probes"].values():
+            self.assertEqual({"credential", "contract", "network", "business"}, set(layers))
+
+    def test_doctor_probe_layers_distinguish_contract_network_and_business_failures(self):
+        cases = (
+            (SimpleNamespace(error_class=None), ("passed", "passed", "passed")),
+            (SimpleNamespace(error_class="contract_mismatch"), ("failed", "passed", "not_run")),
+            (SimpleNamespace(error_class="timeout"), ("not_run", "failed", "not_run")),
+            (SimpleNamespace(error_class="rate_limited"), ("passed", "passed", "degraded")),
+            (SimpleNamespace(error_class="forbidden"), ("passed", "passed", "failed")),
+        )
+        for result, expected in cases:
+            with self.subTest(error_class=result.error_class):
+                layers = _probe_layers("configured", result)
+                self.assertEqual(expected, (
+                    layers["contract"], layers["network"], layers["business"],
+                ))
 
     def test_compatibility_variflight_key_only_used_without_canonical(self):
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:

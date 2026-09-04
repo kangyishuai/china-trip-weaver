@@ -6,17 +6,61 @@ import argparse
 import json
 import platform
 import sys
+import threading
 from pathlib import Path
-from typing import Mapping, Optional, Sequence
+from typing import Any, Mapping, Optional, Sequence, TextIO
 
 from . import SCHEMA_VERSION, __version__
 from .contracts import canonical_json, read_json, write_canonical_json
 from .validate_trip import default_schema_path, validate_file
 
 
+PROGRESS_FIELDS = frozenset((
+    "event", "provider", "capability", "scope", "status", "attempt",
+    "delay_seconds", "command", "error_class", "items",
+))
+PROGRESS_EVENTS = frozenset(("probe", "query", "degrade", "retry", "completion"))
+
+
+class _NDJSONProgress:
+    """Thread-safe, allowlisted progress output that cannot serialize provider data."""
+
+    def __init__(self, mode: Optional[str], stream: Optional[TextIO] = None) -> None:
+        self.enabled = mode == "ndjson"
+        self.stream = stream or sys.stderr
+        self._lock = threading.Lock()
+
+    def emit(self, event: Mapping[str, Any]) -> None:
+        if not self.enabled or event.get("event") not in PROGRESS_EVENTS:
+            return
+        safe = {}
+        for name in PROGRESS_FIELDS:
+            value = event.get(name)
+            if value is None or isinstance(value, bool):
+                continue
+            if isinstance(value, str):
+                safe[name] = value[:80]
+            elif isinstance(value, int):
+                safe[name] = value
+            elif isinstance(value, float):
+                safe[name] = round(value, 3)
+        safe["event"] = event["event"]
+        line = canonical_json(safe)
+        with self._lock:
+            print(line, file=self.stream, flush=True)
+
+
+def _add_progress_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--progress", choices=("ndjson",), default=argparse.SUPPRESS,
+        help="write allowlisted progress events as NDJSON to stderr",
+    )
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="ctw", description="Read-only mainland-China trip planning")
     parser.add_argument("--version", action="version", version="%(prog)s " + __version__)
+    parser.add_argument("--progress", choices=("ndjson",), default=None)
     commands = parser.add_subparsers(dest="command", required=True)
 
     validate = commands.add_parser("validate", help="validate a Trip JSON document")
@@ -27,11 +71,59 @@ def _parser() -> argparse.ArgumentParser:
     validate_candidates = commands.add_parser("validate-candidates", help="validate a researched candidates JSON document")
     validate_candidates.add_argument("candidates", type=Path)
 
+    candidates = commands.add_parser("candidates", help="initialize or append to a researched candidates file")
+    candidate_commands = candidates.add_subparsers(dest="candidate_command", required=True)
+    candidates_init = candidate_commands.add_parser("init", help="create an empty five-key candidate skeleton")
+    candidates_init.add_argument("path", type=Path)
+    candidates_init.add_argument("--force", action="store_true")
+
+    add_poi = candidate_commands.add_parser("add-poi", help="append one researched POI candidate")
+    add_poi.add_argument("path", type=Path)
+    add_poi.add_argument("--name", required=True)
+    add_poi.add_argument("--city", required=True)
+    add_poi.add_argument("--category", required=True)
+    add_poi.add_argument("--source-url", required=True)
+    add_poi.add_argument("--provider", default="user-pasted-only")
+    add_poi.add_argument("--confidence", type=float, default=0.55)
+    add_poi.add_argument("--duration-minutes", type=int, default=None)
+    add_poi.add_argument("--opens-at", default=None)
+    add_poi.add_argument("--closes-at", default=None)
+    add_poi.add_argument(
+        "--opening-status", choices=("verified", "tentative", "closed", "unknown"),
+        default="tentative",
+    )
+    add_poi.add_argument("--price", dest="price_amount", type=float, default=None)
+    add_poi.add_argument("--queried-at", default=None)
+
+    add_lodging = candidate_commands.add_parser("add-lodging", help="append one researched lodging candidate")
+    add_lodging.add_argument("path", type=Path)
+    add_lodging.add_argument("--name", required=True)
+    add_lodging.add_argument("--city", required=True)
+    add_lodging.add_argument("--area", default=None)
+    add_lodging.add_argument("--check-in", required=True)
+    add_lodging.add_argument("--check-out", required=True)
+    add_lodging.add_argument("--source-url", required=True)
+    add_lodging.add_argument("--provider", default="user-pasted-only")
+    add_lodging.add_argument("--confidence", type=float, default=0.55)
+    add_lodging.add_argument("--nightly-price", type=float, default=None)
+    tax_group = add_lodging.add_mutually_exclusive_group()
+    tax_group.add_argument("--includes-taxes", dest="includes_taxes", action="store_true")
+    tax_group.add_argument("--excludes-taxes", dest="includes_taxes", action="store_false")
+    add_lodging.set_defaults(includes_taxes=None)
+    add_lodging.add_argument("--locked", action="store_true")
+    add_lodging.add_argument("--queried-at", default=None)
+
     canonicalize = commands.add_parser("canonicalize", help="print canonical JSON")
     canonicalize.add_argument("trip", type=Path)
 
-    commands.add_parser("doctor", help="show local runtime and schema status")
+    doctor = commands.add_parser("doctor", help="show local runtime and schema status")
+    _add_progress_argument(doctor)
+    doctor.add_argument(
+        "--probe", action="store_true",
+        help="run bounded read-only provider contract, network, and business probes",
+    )
     plan = commands.add_parser("plan", help="build a candidate-file driven read-only Trip and HTML")
+    _add_progress_argument(plan)
     plan.add_argument("--request", type=Path, required=True)
     plan.add_argument("--candidates", type=Path, required=True)
     plan.add_argument("--rail", default="live")
@@ -56,6 +148,7 @@ def _parser() -> argparse.ArgumentParser:
     replan.add_argument("--locked-ref", action="append", default=[])
 
     rail = commands.add_parser("rail", help="query read-only live 12306 inventory through the pinned MCP")
+    _add_progress_argument(rail)
     rail.add_argument("--date", required=True)
     rail.add_argument("--from", dest="from_name", required=True)
     rail.add_argument("--to", dest="to_name", required=True)
@@ -67,12 +160,14 @@ def _parser() -> argparse.ArgumentParser:
     rail.add_argument("--output-json", type=Path, default=None)
 
     mobility = commands.add_parser("mobility", help="build a bounded live AMap route matrix for candidates")
+    _add_progress_argument(mobility)
     mobility.add_argument("--candidates", type=Path, required=True)
     mobility.add_argument("--modes", default="transit,walking")
     mobility.add_argument("--deadline", type=float, default=12.0)
     mobility.add_argument("--output-json", type=Path, default=None)
 
     lodging = commands.add_parser("lodging", help="query FlyAI lodging inventory without booking")
+    _add_progress_argument(lodging)
     lodging.add_argument("--city", required=True)
     lodging.add_argument("--check-in", required=True)
     lodging.add_argument("--check-out", required=True)
@@ -87,6 +182,7 @@ def _parser() -> argparse.ArgumentParser:
     lodging.add_argument("--output-json", type=Path, default=None)
 
     air = commands.add_parser("air", help="query FlyAI flight comparisons without booking")
+    _add_progress_argument(air)
     air.add_argument("--origin", required=True)
     air.add_argument("--destination", required=True)
     air.add_argument("--date", required=True)
@@ -106,6 +202,7 @@ def _parser() -> argparse.ArgumentParser:
 
 def main(argv: Optional[Sequence[str]] = None, *, credential_path: Optional[Path] = None) -> int:
     args = _parser().parse_args(argv)
+    progress = _NDJSONProgress(getattr(args, "progress", None))
     if args.command == "validate":
         report = validate_file(args.trip, schema_path=args.schema, semantic=not args.schema_only)
         if report.ok:
@@ -115,6 +212,54 @@ def main(argv: Optional[Sequence[str]] = None, *, credential_path: Optional[Path
             print(issue.render(), file=sys.stderr)
         print("INVALID %s (%d error%s)" % (args.trip, len(report.errors), "" if len(report.errors) == 1 else "s"), file=sys.stderr)
         return 1
+    if args.command == "candidates":
+        from .candidates import add_lodging_candidate, add_poi_candidate, initialize_candidates
+        from .clock import FixedClock, SystemClock
+
+        try:
+            if args.candidate_command == "init":
+                initialize_candidates(args.path, overwrite=args.force)
+                print("CANDIDATES_INITIALIZED %s" % args.path)
+                return 0
+            clock = FixedClock.from_iso(args.queried_at) if args.queried_at else SystemClock()
+            if args.candidate_command == "add-poi":
+                entity = add_poi_candidate(
+                    args.path,
+                    name=args.name,
+                    city=args.city,
+                    category=args.category,
+                    source_url=args.source_url,
+                    provider=args.provider,
+                    clock=clock,
+                    confidence=args.confidence,
+                    duration_minutes=args.duration_minutes,
+                    opens_at=args.opens_at,
+                    closes_at=args.closes_at,
+                    opening_status=args.opening_status,
+                    price_amount=args.price_amount,
+                )
+                print("CANDIDATE_POI_ADDED %s id=%s" % (args.path, entity["poi_id"]))
+                return 0
+            entity = add_lodging_candidate(
+                args.path,
+                name=args.name,
+                city=args.city,
+                area=args.area,
+                check_in=args.check_in,
+                check_out=args.check_out,
+                source_url=args.source_url,
+                provider=args.provider,
+                clock=clock,
+                confidence=args.confidence,
+                nightly_price=args.nightly_price,
+                includes_taxes=args.includes_taxes,
+                locked=args.locked,
+            )
+            print("CANDIDATE_LODGING_ADDED %s id=%s" % (args.path, entity["lodging_id"]))
+            return 0
+        except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+            print("CANDIDATES_FAILED %s" % exc, file=sys.stderr)
+            return 1
     if args.command == "canonicalize":
         try:
             print(canonical_json(read_json(args.trip)))
@@ -154,14 +299,19 @@ def main(argv: Optional[Sequence[str]] = None, *, credential_path: Optional[Path
         from .plugin_conflicts import conflict_report
 
         conflicts = conflict_report()
-        print(canonical_json({
+        payload = {
             "plugin_version": __version__,
             "providers": dict(provider_credential_status(credentials)),
             "python": platform.python_version(),
             "schema_exists": default_schema_path().is_file(),
             "schema_version": SCHEMA_VERSION,
             "skill_conflicts": conflicts,
-        }))
+        }
+        if args.probe:
+            repo_root = Path(__file__).resolve().parents[4]
+            payload["probes"] = _doctor_probe_report(credentials, repo_root, progress)
+            progress.emit({"event": "completion", "command": "doctor", "status": "ok"})
+        print(canonical_json(payload))
         return 1 if conflicts["status"] == "conflict" else 0
     if args.command == "plan":
         from .clock import FixedClock, SystemClock
@@ -199,6 +349,11 @@ def main(argv: Optional[Sequence[str]] = None, *, credential_path: Optional[Path
             variflight_backend = VariFlightBackend.from_spec(
                 aviation_mode, repo_root, deadline_seconds=args.variflight_deadline,
             )
+            for backend in (
+                rail_backend, mobility_backend, flyai_backend,
+                amap_lodging_backend, variflight_backend,
+            ):
+                _attach_progress(backend, progress)
             result = plan_trip(
                 request_value, candidates_value, clock, rail_backend, mobility_backend,
                 flyai_backend, variflight_backend, amap_lodging_backend,
@@ -216,8 +371,10 @@ def main(argv: Optional[Sequence[str]] = None, *, credential_path: Optional[Path
                 result.trip_sha256,
                 result.html_sha256,
             ))
+            progress.emit({"event": "completion", "command": "plan", "status": "ok"})
             return 0
         except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+            _progress_failed(progress, "plan")
             print("PLAN_FAILED %s" % exc, file=sys.stderr)
             return 1
     if args.command == "mobility":
@@ -232,6 +389,7 @@ def main(argv: Optional[Sequence[str]] = None, *, credential_path: Optional[Path
             modes = normalize_modes(tuple(part for part in args.modes.split(",") if part.strip()))
             repo_root = Path(__file__).resolve().parents[4]
             backend = MobilityBackend.from_spec("live", repo_root, deadline_seconds=args.deadline)
+            _attach_progress(backend, progress)
             result = backend.resolve(candidates_value, SystemClock(), modes)
             output = result.as_dict()
             if args.output_json is not None:
@@ -246,11 +404,18 @@ def main(argv: Optional[Sequence[str]] = None, *, credential_path: Optional[Path
                 ))
             else:
                 print(canonical_json(output))
+            progress.emit({
+                "event": "completion", "command": "mobility",
+                "status": "ok" if result.cells and result.health["status"] == "ready" else "degraded",
+                "items": len(result.cells),
+            })
             return 0 if result.cells and result.health["status"] == "ready" else 1
         except CTWError as exc:
+            _progress_failed(progress, "mobility", exc.error_class)
             print("MOBILITY_FAILED %s %s" % (exc.error_class, exc.code), file=sys.stderr)
             return 1
         except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+            _progress_failed(progress, "mobility")
             print("MOBILITY_FAILED %s" % exc, file=sys.stderr)
             return 1
     if args.command in ("lodging", "air"):
@@ -268,6 +433,7 @@ def main(argv: Optional[Sequence[str]] = None, *, credential_path: Optional[Path
                 deadline_seconds=args.deadline,
                 keyless_trial=args.keyless_trial,
             )
+            _attach_progress(backend, progress)
             clock = SystemClock()
             if args.command == "lodging":
                 result = backend.query_lodging(
@@ -323,11 +489,18 @@ def main(argv: Optional[Sequence[str]] = None, *, credential_path: Optional[Path
                 ))
             else:
                 print(canonical_json(output))
+            progress.emit({
+                "event": "completion", "command": args.command,
+                "provider": result.provider,
+                "status": "ok" if items else "degraded", "items": len(items),
+            })
             return 0 if items else 1
         except CTWError as exc:
+            _progress_failed(progress, args.command, exc.error_class)
             print("%s_FAILED %s %s" % (args.command.upper(), exc.error_class, exc.code), file=sys.stderr)
             return 1
         except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+            _progress_failed(progress, args.command)
             print("%s_FAILED %s" % (args.command.upper(), exc), file=sys.stderr)
             return 1
     if args.command == "rail":
@@ -358,6 +531,7 @@ def main(argv: Optional[Sequence[str]] = None, *, credential_path: Optional[Path
                     credentials=credentials,
                     cwd=repo_root,
                 )
+            _attach_progress(transport, progress)
             request = ProviderRequest(
                 request_id=stable_id("rail-query", args.date, args.from_name, args.to_name, args.train_filter_flags, args.limit),
                 capability="rail",
@@ -402,10 +576,16 @@ def main(argv: Optional[Sequence[str]] = None, *, credential_path: Optional[Path
                 ))
             else:
                 print(canonical_json(output))
+            progress.emit({
+                "event": "completion", "command": "rail", "provider": result.provider,
+                "status": "ok" if result.normalized_items else "degraded",
+                "items": len(result.normalized_items),
+            })
             if result.normalized_items:
                 return 0
             return 2 if result.error_class == "no_results" else 1
         except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+            _progress_failed(progress, "rail")
             print("RAIL_FAILED %s" % exc, file=sys.stderr)
             return 1
     if args.command == "replan":
@@ -508,6 +688,232 @@ def _price_type_counts(items: Sequence[Mapping[str, object]]) -> Mapping[str, in
         if isinstance(price_type, str):
             counts[price_type] = counts.get(price_type, 0) + 1
     return counts
+
+
+def _attach_progress(target: Any, progress: _NDJSONProgress) -> None:
+    if not progress.enabled or target is None:
+        return
+    transport = getattr(target, "transport", target)
+    if transport is None:
+        return
+    try:
+        transport.progress = progress.emit
+    except (AttributeError, TypeError):
+        return
+
+
+def _progress_failed(progress: _NDJSONProgress, command: str, error_class: str = "internal") -> None:
+    progress.emit({
+        "event": "degrade", "command": command,
+        "status": "error", "error_class": error_class,
+    })
+    progress.emit({"event": "completion", "command": command, "status": "error"})
+
+
+def _doctor_probe_report(credentials: Any, repo_root: Path, progress: _NDJSONProgress) -> Mapping[str, Any]:
+    import concurrent.futures
+
+    from .credentials import provider_credential_status
+
+    credential_status = dict(provider_credential_status(credentials))
+    probes = {
+        "amap": lambda: _probe_amap(credentials, repo_root, credential_status["amap"], progress),
+        "flyai": lambda: _probe_flyai(credentials, repo_root, credential_status["flyai"], progress),
+        "variflight": lambda: _probe_variflight(
+            credentials, repo_root, credential_status["variflight"], progress,
+        ),
+    }
+    report = {
+        "anysearch": {
+            "credential": credential_status["anysearch"],
+            "contract": "unsupported",
+            "network": "unsupported",
+            "business": "unsupported",
+        },
+    }
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(probes)) as executor:
+        futures = {provider: executor.submit(run) for provider, run in probes.items()}
+        for provider, future in futures.items():
+            try:
+                report[provider] = future.result()
+            except Exception:
+                report[provider] = {
+                    "credential": credential_status[provider],
+                    "contract": "failed",
+                    "network": "failed",
+                    "business": "not_run",
+                }
+    return report
+
+
+def _probe_flyai(
+    credentials: Any,
+    repo_root: Path,
+    credential_status: str,
+    progress: _NDJSONProgress,
+) -> Mapping[str, str]:
+    from datetime import timedelta
+
+    from .clock import SystemClock
+    from .contracts import ProviderRequest
+    from .providers.base import ProviderContext, stable_id
+    from .providers.flyai import FlyAIAdapter
+    from .providers.flyai_cli import FlyAISubprocessTransport
+
+    progress.emit({"event": "probe", "provider": "flyai", "scope": "doctor", "status": "started"})
+    clock = SystemClock()
+    check_in = (clock.now().date() + timedelta(days=7)).isoformat()
+    check_out = (clock.now().date() + timedelta(days=8)).isoformat()
+    request = ProviderRequest(
+        request_id=stable_id("doctor-flyai", check_in),
+        capability="lodging",
+        parameters={"city": "北京", "check_in": check_in, "check_out": check_out},
+        deadline_ms=8000,
+        as_of=check_in,
+        cache_policy="bypass",
+        trace={"stage": "doctor"},
+    )
+    transport = FlyAISubprocessTransport(
+        credentials,
+        cache_dir=repo_root / ".npm-cache",
+        temp_root=repo_root / ".tmp" / "doctor-flyai",
+        cwd=repo_root,
+        progress=progress.emit if progress.enabled else None,
+    )
+    result = FlyAIAdapter().query(request, ProviderContext(clock, credentials, transport))
+    return _probe_layers(credential_status, result)
+
+
+def _probe_amap(
+    credentials: Any,
+    repo_root: Path,
+    credential_status: str,
+    progress: _NDJSONProgress,
+) -> Mapping[str, str]:
+    del repo_root
+    if credential_status == "missing":
+        return _not_run_probe(credential_status)
+    from .clock import SystemClock
+    from .contracts import ProviderRequest
+    from .providers.amap import AMapAdapter
+    from .providers.amap_http import AMapCallBudget, AMapHTTPTransport
+    from .providers.base import ProviderContext, stable_id
+
+    progress.emit({"event": "probe", "provider": "amap", "scope": "doctor", "status": "started"})
+    clock = SystemClock()
+    request = ProviderRequest(
+        request_id=stable_id("doctor-amap", "北京", "天安门"),
+        capability="poi",
+        parameters={"city": "北京", "keywords": "天安门", "page_size": 1, "page_num": 1},
+        deadline_ms=6000,
+        as_of=clock.now().date().isoformat(),
+        cache_policy="bypass",
+        trace={"stage": "doctor"},
+    )
+    transport = AMapHTTPTransport(credentials, budget=AMapCallBudget(max_calls=2))
+    _attach_progress(transport, progress)
+    result = AMapAdapter().query(request, ProviderContext(clock, credentials, transport))
+    return _probe_layers(credential_status, result)
+
+
+def _probe_variflight(
+    credentials: Any,
+    repo_root: Path,
+    credential_status: str,
+    progress: _NDJSONProgress,
+) -> Mapping[str, str]:
+    from datetime import timedelta
+
+    from .clock import SystemClock
+    from .contracts import ProviderRequest
+    from .providers.base import ProviderContext, stable_id
+    from .providers.variflight import VariFlightAdapter
+    from .providers.variflight_mcp import VariFlightMCPTransport
+
+    progress.emit({"event": "probe", "provider": "variflight", "scope": "doctor", "status": "started"})
+    transport = VariFlightMCPTransport(
+        credentials,
+        cache_dir=repo_root / ".npm-cache",
+        temp_root=repo_root / ".tmp" / "doctor-variflight",
+        cwd=repo_root,
+    )
+    _attach_progress(transport, progress)
+    if credential_status == "missing":
+        try:
+            transport.probe(deadline_seconds=8.0)
+        except Exception as exc:
+            return _probe_exception_layers(credential_status, exc)
+        return {
+            "credential": credential_status,
+            "contract": "passed",
+            "network": "passed",
+            "business": "not_run",
+        }
+    clock = SystemClock()
+    travel_date = (clock.now().date() + timedelta(days=7)).isoformat()
+    request = ProviderRequest(
+        request_id=stable_id("doctor-variflight", travel_date),
+        capability="flight",
+        parameters={
+            "action": "search", "dep_city": "PEK", "arr_city": "SHA",
+            "date": travel_date, "from_ref": "doctor-pek", "to_ref": "doctor-sha",
+            "candidate_mode": True,
+        },
+        deadline_ms=8000,
+        as_of=travel_date,
+        cache_policy="bypass",
+        trace={"stage": "doctor"},
+    )
+    result = VariFlightAdapter().query(request, ProviderContext(clock, credentials, transport))
+    return _probe_layers(credential_status, result)
+
+
+def _probe_layers(credential_status: str, result: Any) -> Mapping[str, str]:
+    error_class = result.error_class
+    if error_class == "contract_mismatch":
+        contract, network, business = "failed", "passed", "not_run"
+    elif error_class in ("network", "timeout"):
+        contract, network, business = "not_run", "failed", "not_run"
+    else:
+        contract, network = "passed", "passed"
+        if error_class is None:
+            business = "passed"
+        elif error_class in ("no_results", "rate_limited", "upstream_5xx"):
+            business = "degraded"
+        else:
+            business = "failed"
+    return {
+        "credential": credential_status,
+        "contract": contract,
+        "network": network,
+        "business": business,
+    }
+
+
+def _probe_exception_layers(credential_status: str, exc: Exception) -> Mapping[str, str]:
+    from .providers.base import ContractMismatch, ProviderNetworkError, ProviderTimeout
+
+    if isinstance(exc, ContractMismatch):
+        contract, network = "failed", "passed"
+    elif isinstance(exc, (ProviderNetworkError, ProviderTimeout, OSError)):
+        contract, network = "not_run", "failed"
+    else:
+        contract, network = "failed", "failed"
+    return {
+        "credential": credential_status,
+        "contract": contract,
+        "network": network,
+        "business": "not_run",
+    }
+
+
+def _not_run_probe(credential_status: str) -> Mapping[str, str]:
+    return {
+        "credential": credential_status,
+        "contract": "not_run",
+        "network": "not_run",
+        "business": "not_run",
+    }
 
 
 if __name__ == "__main__":

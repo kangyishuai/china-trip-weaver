@@ -77,6 +77,8 @@ class AMapCallBudget:
 class AMapHTTPTransport:
     """Map typed ProviderRequests to pinned AMap HTTPS endpoint families."""
 
+    retry_rate_limits = True
+
     def __init__(
         self,
         credentials: CredentialResolution,

@@ -18,10 +18,15 @@ Return structured candidates and claim-level evidence, not an itinerary or prose
 - Treat user-pasted notes as hypothesis/partial evidence. Do not fetch Xiaohongshu links or retain pasted personal data.
 - Stop after candidates, claims, conflicts, and unknowns. The parent Skill owns provider selection and scheduling.
 
-Write `candidates.json` with exactly `candidates_version`, `pois`, `lodgings`, `claims`, and `unknowns`; entity, price, and opening-window claim IDs must resolve. Do not add `transport_legs`. Validate it without provider calls:
+Build `candidates.json` with the candidate editor so entity/claim IDs and zero-based array JSON Pointers are generated rather than hand-written. The file still has exactly `candidates_version`, `pois`, `lodgings`, `claims`, and `unknowns`; entity, price, and opening-window claim IDs must resolve. Do not add `transport_legs`. Initialize, append, and validate it without provider calls:
 
 ```bash
+scripts/ctw candidates init candidates.json
+scripts/ctw candidates add-poi candidates.json --name "..." --city "..." --category "..." --source-url "https://..."
+scripts/ctw candidates add-lodging candidates.json --name "..." --city "..." --check-in YYYY-MM-DD --check-out YYYY-MM-DD --source-url "https://..."
 scripts/ctw validate-candidates candidates.json
 ```
+
+Use `--force` with `candidates init` only when replacement is intentional. Add commands preserve unknown values explicitly and generate `/pois/<index>/...` or `/lodgings/<index>/...` pointers from the actual append index; never substitute an entity ID for an array index.
 
 Use `../../schema/candidates.schema.json` as the contract, read `../../references/provider-contracts.md` for the shared search ladder, and read `../../references/candidates.example.json` when an example is needed.

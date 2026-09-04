@@ -7,9 +7,10 @@ import os
 import re
 import signal
 import subprocess
+import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from ..contracts import ProviderRequest
 from ..credentials import CredentialResolution, provider_environment, redact_text
@@ -34,6 +35,9 @@ DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 class FlyAISubprocessTransport:
     """Run constant argv with provider-only credentials and bounded diagnostics."""
 
+    _provider_gate = threading.BoundedSemaphore(1)
+    retry_rate_limits = True
+
     def __init__(
         self,
         credentials: CredentialResolution,
@@ -42,6 +46,7 @@ class FlyAISubprocessTransport:
         temp_root: Path,
         command: Sequence[str] = DEFAULT_COMMAND,
         cwd: Optional[Path] = None,
+        progress: Optional[Callable[[Mapping[str, Any]], None]] = None,
     ) -> None:
         if not command:
             raise ValueError("FlyAI command is required")
@@ -50,6 +55,7 @@ class FlyAISubprocessTransport:
         self.temp_root = Path(temp_root)
         self.command = tuple(str(item) for item in command)
         self.cwd = Path(cwd) if cwd is not None else None
+        self.progress = progress
         self.calls = 0
         self.probe_calls = 0
         self.last_stderr: Tuple[str, ...] = ()
@@ -65,7 +71,23 @@ class FlyAISubprocessTransport:
         command_name, arguments = _business_arguments(request)
         deadline = time.monotonic() + request.deadline_ms / 1000.0
         environment = self._environment()
+        remaining = deadline - time.monotonic()
+        if remaining <= 0 or not self._provider_gate.acquire(timeout=remaining):
+            raise ProviderTimeout("FlyAI concurrency gate deadline exceeded")
+        try:
+            return self._execute_serial(command_name, arguments, deadline, environment)
+        finally:
+            self._provider_gate.release()
+
+    def _execute_serial(
+        self,
+        command_name: str,
+        arguments: Tuple[str, ...],
+        deadline: float,
+        environment: Mapping[str, str],
+    ) -> ProviderEnvelope:
         if not self._root_probed:
+            self._emit_progress(event="probe", provider="flyai", scope="root", status="started")
             root_help, root_stderr = self._run(self.command + ("--help",), environment, deadline)
             self.probe_calls += 1
             self._remember_stderr(root_stderr)
@@ -73,6 +95,10 @@ class FlyAISubprocessTransport:
                 raise ContractMismatch("FlyAI root help fingerprint mismatch")
             self._root_probed = True
         if command_name not in self._command_probes:
+            self._emit_progress(
+                event="probe", provider="flyai", scope="command",
+                capability=command_name, status="started",
+            )
             command_help, command_stderr = self._run(
                 self.command + (command_name, "--help"), environment, deadline,
             )
@@ -100,11 +126,19 @@ class FlyAISubprocessTransport:
             "flags": list(self._command_probes[command_name]),
         }
         return ProviderEnvelope(
-            status_code=200,
+            status_code=429 if body.get("status") == 429 else 200,
             body=body,
             headers={},
             raw_ref="flyai-cli:" + command_name,
         )
+
+    def _emit_progress(self, **event: Any) -> None:
+        if not callable(self.progress):
+            return
+        try:
+            self.progress(dict(event))
+        except Exception:
+            return
 
     def _environment(self) -> Dict[str, str]:
         self.cache_dir.mkdir(parents=True, exist_ok=True)

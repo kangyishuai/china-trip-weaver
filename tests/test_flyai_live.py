@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import concurrent.futures
+import contextlib
+import io
 import os
 import json
 import sys
 import tempfile
+import threading
+import time
 import unittest
 import subprocess
 from pathlib import Path
@@ -19,8 +24,16 @@ from china_trip_weaver.contracts import ProviderRequest
 from china_trip_weaver.credentials import resolve_credentials
 from china_trip_weaver.flyai_inventory import FlyAIBackend
 from china_trip_weaver.planning import RailBackend, plan_trip
-from china_trip_weaver.cli import _parser
-from china_trip_weaver.providers.base import ContractMismatch, ProviderContext, ProviderTimeout, ReplayTransport
+from china_trip_weaver.cli import _parser, main as cli_main
+from china_trip_weaver.providers.base import (
+    ContractMismatch,
+    ProviderContext,
+    ProviderTimeout,
+    ReplayTransport,
+    _retry_delay_seconds,
+)
+from china_trip_weaver.providers.amap import AMapAdapter
+from china_trip_weaver.providers.amap_http import AMapCallBudget, AMapHTTPTransport
 from china_trip_weaver.providers.flyai import FlyAIAdapter
 from china_trip_weaver.providers.flyai_cli import FlyAISubprocessTransport
 
@@ -253,6 +266,106 @@ class FlyAISubprocessTests(unittest.TestCase):
             self.assertEqual(0, command.returncode, command.stderr)
             self.assertEqual(str((Path(temporary) / "flyai-home" / "home").resolve()), command.stdout)
 
+    def test_g8_concurrent_rate_limits_serialize_retry_once_and_dedupe(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            resolved = resolve_credentials({}, Path(temporary) / "missing")
+            transport = G8FlyAITransport(temporary, resolved)
+            backend = FlyAIBackend("live", resolved, transport, deadline_seconds=4)
+
+            def query(index):
+                return backend.query_lodging(
+                    "合成城市%d" % index,
+                    "2026-09-10",
+                    "2026-09-11",
+                    CLOCK,
+                )
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+                results = list(executor.map(query, range(8)))
+
+        self.assertTrue(all(result.error_class is None for result in results))
+        self.assertEqual(1, transport.max_active_runs)
+        self.assertEqual(2, transport.probe_calls)
+        self.assertEqual(12, transport.calls)
+        self.assertEqual([2, 2, 2, 2, 1, 1, 1, 1], sorted(transport.attempts.values(), reverse=True))
+        retried = [result for result in results if "rate_limit_retry" in result.warnings]
+        self.assertEqual(4, len(retried))
+        self.assertTrue(all("rate_limit_retries=1" in result.health["reason"] for result in retried))
+        lodging_ids = [item["lodging_id"] for result in results for item in result.normalized_items]
+        self.assertEqual(8, len(lodging_ids))
+        self.assertEqual(len(lodging_ids), len(set(lodging_ids)))
+
+    def test_g8_rate_limit_retry_stops_after_one_retry(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            resolved = resolve_credentials({}, Path(temporary) / "missing")
+            transport = G8FlyAITransport(temporary, resolved, persistent_city="持续限流城")
+            result = FlyAIBackend(
+                "live", resolved, transport, deadline_seconds=4,
+            ).query_lodging("持续限流城", "2026-09-10", "2026-09-11", CLOCK)
+
+        self.assertEqual("rate_limited", result.error_class)
+        self.assertEqual(2, transport.attempts["持续限流城"])
+        self.assertIn("rate_limit_retry", result.warnings)
+        self.assertIn("rate_limit_retries=1", result.health["reason"])
+
+    def test_progress_ndjson_has_five_allowlisted_event_types_and_scans_clean(self):
+        secret = "gh" + "p_" + "0" * 30
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            folder = Path(temporary)
+            resolved = resolve_credentials({"FLYAI_API_KEY": secret}, folder / "missing")
+            transport = G8FlyAITransport(temporary, resolved)
+            backend = FlyAIBackend("live", resolved, transport, deadline_seconds=4)
+            stdout = io.StringIO()
+            events = io.StringIO()
+            with mock.patch.object(FlyAIBackend, "from_spec", return_value=backend):
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(events):
+                    status = cli_main([
+                        "lodging", "--city", "合成城市0",
+                        "--check-in", "2026-09-10", "--check-out", "2026-09-11",
+                        "--progress", "ndjson",
+                    ])
+            self.assertEqual(0, status, stdout.getvalue() + events.getvalue())
+            lines = events.getvalue().splitlines()
+            parsed = [json.loads(line) for line in lines]
+            self.assertTrue(all(isinstance(event, dict) for event in parsed))
+            self.assertEqual(
+                {"probe", "query", "degrade", "retry", "completion"},
+                {event["event"] for event in parsed},
+            )
+            self.assertNotIn(secret, events.getvalue())
+            self.assertNotIn("itemList", events.getvalue())
+            self.assertNotIn("合成酒店", events.getvalue())
+            event_path = folder / "progress.ndjson"
+            event_path.write_text(events.getvalue(), encoding="utf-8")
+            scan = subprocess.run(
+                [sys.executable, str(ROOT / "scripts" / "scan_secrets.py"), str(event_path)],
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(0, scan.returncode, scan.stdout + scan.stderr)
+            self.assertIn("0 finding(s)", scan.stdout)
+
+    def test_progress_is_silent_by_default_and_root_position_is_supported(self):
+        parsed = _parser().parse_args([
+            "--progress", "ndjson", "lodging", "--city", "合成城市9",
+            "--check-in", "2026-09-10", "--check-out", "2026-09-11",
+        ])
+        self.assertEqual("ndjson", parsed.progress)
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            resolved = resolve_credentials({}, Path(temporary) / "missing")
+            transport = G8FlyAITransport(temporary, resolved)
+            backend = FlyAIBackend("live", resolved, transport, deadline_seconds=4)
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with mock.patch.object(FlyAIBackend, "from_spec", return_value=backend):
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    status = cli_main([
+                        "lodging", "--city", "合成城市9",
+                        "--check-in", "2026-09-10", "--check-out", "2026-09-11",
+                    ])
+        self.assertEqual(0, status, stdout.getvalue() + stderr.getvalue())
+        self.assertEqual("", stderr.getvalue())
+
     def test_g2_live_plan_merges_inventory_and_preserves_locked_lodging_unknowns(self):
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
             resolved = resolve_credentials({}, Path(temporary) / "missing")
@@ -362,6 +475,148 @@ class FlyAIIsAnOptionalSourceTests(unittest.TestCase):
         result, _ = self.plan_without_flyai_results()
         for lodging in result.trip["lodgings"]:
             self.assertNotEqual("live", lodging["price"]["price_type"])
+
+
+class AMapRateLimitRetryTests(unittest.TestCase):
+    def test_retry_after_is_honored_with_a_fixed_safe_cap(self):
+        self.assertEqual(0.0, _retry_delay_seconds({"Retry-After": "0"}))
+        self.assertEqual(2.0, _retry_delay_seconds({"retry-after": "120"}))
+        self.assertEqual(0.25, _retry_delay_seconds({}))
+        self.assertEqual(0.25, _retry_delay_seconds({"Retry-After": "nan"}))
+
+    def test_retry_after_reuses_existing_qps_gate_and_stays_visible(self):
+        moments = iter((0.0, 0.0, 0.5))
+        qps_waits = []
+        budget = AMapCallBudget(
+            max_calls=2,
+            qps=2,
+            monotonic=lambda: next(moments),
+            sleep=qps_waits.append,
+        )
+        responses = iter((
+            SyntheticHTTPResponse(429, {}, {"Retry-After": "0"}),
+            SyntheticHTTPResponse(200, {
+                "status": "1",
+                "info": "OK",
+                "infocode": "10000",
+                "count": "1",
+                "pois": [{
+                    "id": "SYNTHETIC-AMAP-RETRY",
+                    "name": "合成重试景点",
+                    "type": "风景名胜;公园广场;公园",
+                    "typecode": "110101",
+                    "address": "合成大道1号",
+                    "location": "121.000000,31.000000",
+                    "cityname": "上海市",
+                    "adcode": "310000",
+                }],
+            }, {}),
+        ))
+        resolved = resolve_credentials(
+            {"AMAP_WEBSERVICE_KEY": "ctw-canary-amap-retry-not-real"},
+            ROOT / ".tmp" / "amap-retry-no-file",
+        )
+        transport = AMapHTTPTransport(
+            resolved,
+            budget=budget,
+            opener=lambda request_value, timeout: next(responses),
+        )
+        provider_request = ProviderRequest(
+            request_id="amap-retry",
+            capability="poi",
+            parameters={"city": "上海", "keywords": "合成重试景点", "page_size": 1, "page_num": 1},
+            deadline_ms=1000,
+            as_of="2026-09-10",
+            cache_policy="bypass",
+            trace={"stage": "test"},
+        )
+        result = AMapAdapter().query(
+            provider_request, ProviderContext(CLOCK, resolved, transport),
+        )
+        self.assertIsNone(result.error_class)
+        self.assertEqual(2, budget.calls)
+        self.assertEqual([0.5], qps_waits)
+        self.assertIn("rate_limit_retry", result.warnings)
+        self.assertIn("rate_limit_retries=1", result.health["reason"])
+
+
+class SyntheticHTTPResponse:
+    def __init__(self, status, body, headers):
+        self.status = status
+        self._body = json.dumps(body).encode("utf-8")
+        self.headers = headers
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
+
+    def geturl(self):
+        return "https://restapi.amap.com/v5/place/text"
+
+    def getcode(self):
+        return self.status
+
+    def read(self, size=-1):
+        return self._body[:size] if size >= 0 else self._body
+
+
+class G8FlyAITransport(FlyAISubprocessTransport):
+    """Synthetic CLI fixture with deterministic per-request rate limits."""
+
+    def __init__(self, folder, credentials, persistent_city=None):
+        super().__init__(
+            credentials,
+            cache_dir=Path(folder) / "npm-cache",
+            temp_root=Path(folder) / "flyai-home",
+            command=("synthetic-flyai",),
+            cwd=ROOT,
+        )
+        self.persistent_city = persistent_city
+        self.attempts = {}
+        self.max_active_runs = 0
+        self._active_runs = 0
+        self._fixture_lock = threading.Lock()
+
+    def _run(self, argv, environment, deadline):
+        del environment, deadline
+        with self._fixture_lock:
+            self.argv_history.append(argv)
+            self._active_runs += 1
+            self.max_active_runs = max(self.max_active_runs, self._active_runs)
+        try:
+            time.sleep(0.003)
+            if argv[-1] == "--help":
+                if len(argv) == 2:
+                    return (
+                        "Usage: flyai [options] [command]\n"
+                        "search-hotel|search-hotels\nsearch-flight",
+                        "",
+                    )
+                return "--dest-name --check-in-date --check-out-date", ""
+            city = argv[argv.index("--dest-name") + 1]
+            with self._fixture_lock:
+                attempt = self.attempts.get(city, 0) + 1
+                self.attempts[city] = attempt
+            transient = city in {"合成城市0", "合成城市1", "合成城市2", "合成城市3"}
+            if (transient and attempt == 1) or (city == self.persistent_city and attempt <= 2):
+                return json.dumps({"status": 429, "message": "rate limited", "data": {}}), ""
+            item_number = city[-1] if city[-1:].isdigit() else "persistent"
+            return json.dumps({
+                "status": 0,
+                "message": "success",
+                "data": {"itemList": [{
+                    "shId": "synthetic-" + item_number,
+                    "name": city + "合成酒店",
+                    "detailUrl": "https://example.invalid/hotel/" + item_number,
+                    "area": city,
+                    "price": "¥100",
+                }]},
+            }), ""
+        finally:
+            with self._fixture_lock:
+                self._active_runs -= 1
 
 
 if __name__ == "__main__":
