@@ -1,0 +1,193 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://china-trip-weaver.local/schema/journey-1.0.0.json",
+  "title": "ChinaTripWeaver Journey",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "journey_id",
+    "revision",
+    "start_date",
+    "end_date",
+    "budget_ledger",
+    "trips",
+    "segment_connections",
+    "generated_at"
+  ],
+  "oneOf": [
+    {
+      "required": ["origin", "travelers"],
+      "properties": {
+        "traveler_groups": {"type": "null"},
+        "meeting_anchor": {"type": "null"}
+      }
+    },
+    {
+      "required": ["traveler_groups", "meeting_anchor"],
+      "properties": {
+        "origin": {"type": "null"},
+        "travelers": {"type": "null"}
+      }
+    }
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "journey_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"},
+    "revision": {"$ref": "trip.schema.json#/$defs/revision"},
+    "start_date": {"type": "string", "format": "date"},
+    "end_date": {"type": "string", "format": "date"},
+    "origin": {
+      "oneOf": [
+        {"$ref": "trip.schema.json#/$defs/placeRef"},
+        {"type": "null"}
+      ]
+    },
+    "travelers": {"type": "integer", "minimum": 1, "maximum": 20},
+    "traveler_groups": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": {"$ref": "trip.schema.json#/$defs/travelerGroup"}
+    },
+    "meeting_anchor": {"$ref": "trip.schema.json#/$defs/meetingAnchor"},
+    "budget_ledger": {"$ref": "#/$defs/journeyBudgetLedger"},
+    "trips": {
+      "description": "Complete standalone Trip documents; never a reduced projection.",
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "trip.schema.json"}
+    },
+    "segment_connections": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/segmentConnection"}
+    },
+    "generated_at": {"type": "string", "format": "date-time"}
+  },
+  "$defs": {
+    "journeyBudgetItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ref_id",
+        "category",
+        "price_type",
+        "amount_min_cny",
+        "amount_max_cny",
+        "basis",
+        "included_in_total",
+        "reason"
+      ],
+      "properties": {
+        "ref_id": {"type": "string", "minLength": 1},
+        "category": {"type": "string", "enum": ["trip", "cross_segment_transport"]},
+        "price_type": {
+          "type": ["string", "null"],
+          "enum": ["live", "reference", "estimate", "verify-on-click", "unknown", null]
+        },
+        "amount_min_cny": {"type": ["number", "null"], "minimum": 0},
+        "amount_max_cny": {"type": ["number", "null"], "minimum": 0},
+        "basis": {"type": "string", "minLength": 1},
+        "included_in_total": {"type": "boolean"},
+        "reason": {"type": ["string", "null"], "minLength": 1}
+      }
+    },
+    "journeyBudgetLedger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "currency",
+        "budget_cny",
+        "known_cost_cny",
+        "remaining_known_budget_cny",
+        "total_range_cny",
+        "status",
+        "items"
+      ],
+      "properties": {
+        "currency": {"const": "CNY"},
+        "budget_cny": {"type": ["number", "null"], "minimum": 0},
+        "known_cost_cny": {"type": "number", "minimum": 0},
+        "remaining_known_budget_cny": {"type": ["number", "null"]},
+        "total_range_cny": {"$ref": "trip.schema.json#/$defs/costRange"},
+        "status": {
+          "type": "string",
+          "enum": ["within_budget", "over_budget", "incomplete", "unbudgeted"]
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/journeyBudgetItem"}
+        }
+      }
+    },
+    "lodgingContinuity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "overnight_date",
+        "from_lodging_id",
+        "to_lodging_id",
+        "reason"
+      ],
+      "properties": {
+        "status": {"type": "string", "enum": ["continued", "changed", "departing"]},
+        "overnight_date": {"type": "string", "format": "date"},
+        "from_lodging_id": {"type": "string", "minLength": 1},
+        "to_lodging_id": {"type": ["string", "null"], "minLength": 1},
+        "reason": {"type": "string", "minLength": 1}
+      }
+    },
+    "crossSegmentTransport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "leg_id",
+        "included_in_trip_id",
+        "price_type",
+        "amount_min_cny",
+        "amount_max_cny",
+        "reason"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["included_in_next_trip", "separate", "not_required"]
+        },
+        "leg_id": {"type": ["string", "null"], "minLength": 1},
+        "included_in_trip_id": {"type": ["string", "null"], "minLength": 1},
+        "price_type": {
+          "type": ["string", "null"],
+          "enum": ["live", "reference", "estimate", "verify-on-click", "unknown", null]
+        },
+        "amount_min_cny": {"type": ["number", "null"], "minimum": 0},
+        "amount_max_cny": {"type": ["number", "null"], "minimum": 0},
+        "reason": {"type": ["string", "null"], "minLength": 1}
+      }
+    },
+    "segmentConnection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "connection_id",
+        "from_trip_id",
+        "to_trip_id",
+        "from_end_date",
+        "to_start_date",
+        "lodging_continuity",
+        "cross_segment_transport"
+      ],
+      "properties": {
+        "connection_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"},
+        "from_trip_id": {"type": "string", "minLength": 1},
+        "to_trip_id": {"type": "string", "minLength": 1},
+        "from_end_date": {"type": "string", "format": "date"},
+        "to_start_date": {"type": "string", "format": "date"},
+        "lodging_continuity": {"$ref": "#/$defs/lodgingContinuity"},
+        "cross_segment_transport": {"$ref": "#/$defs/crossSegmentTransport"}
+      }
+    }
+  }
+}

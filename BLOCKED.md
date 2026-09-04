@@ -155,3 +155,12 @@ should mean pending work. They live where they are enforced:
 
 - The earlier Book 6 `conflict=window` integration blocker is closed by Book 6 commit `9097463`. On the same combined code tree, Book 7 reran full discovery and obtained `Ran 346 tests in 31.327s`, `OK`, skipped 0; the secret scan remained 0 findings.
 - No product or code blocker remains for Book 7. The baseline `Retry-After` observation mismatch and the disclosed read-only `|| true` process lapse above remain historical delivery facts, not pending implementation work.
+
+## Journey 模型、拆分与连续性（2026-09-05）
+
+- 本轮新增阻塞：无。
+- 已解决的验收冲突：首次全量测试发现禁止修改的
+  `tests/test_skills.py` 逐字冻结主 Skill 的 frontmatter description；修改该描述会使
+  `test_exact_nine_skill_names_and_descriptions` 失败。已恢复原 description，把 Journey
+  路由、完整子 Trip、连续性与 CLI 指令保留在同一 `SKILL.md` 正文；精准测试与
+  bundled quick validator 均恢复通过，未修改或放宽既有测试。

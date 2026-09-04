@@ -213,6 +213,61 @@ def multicity_demo() -> Mapping[str, Any]:
     return {"request": request_value, "candidates": candidates_value}
 
 
+def journey_sixteen_day_case() -> Mapping[str, Any]:
+    """Return a synthetic long request used without adding generated fixture files."""
+
+    request_value = {
+        "origin": {"ref_id": "city-beijing", "name": "北京", "city": "北京"},
+        "destinations": [
+            {"ref_id": "city-shanghai", "name": "上海", "city": "上海"},
+            {"ref_id": "city-hangzhou", "name": "杭州", "city": "杭州"},
+            {"ref_id": "city-suzhou", "name": "苏州", "city": "苏州"},
+        ],
+        "start_date": "2026-10-01",
+        "end_date": "2026-10-16",
+        "travelers": 2,
+        "rooms": 1,
+        "budget_cny": 20000,
+        "interests": ["architecture", "garden"],
+        "pace": "balanced",
+        "constraints": ["不执行任何交易动作"],
+        "assumptions": ["synthetic 16-day Journey acceptance input"],
+        "locale": "zh-CN",
+        "pasted_notes": None,
+    }
+    candidates_value = multicity_candidates("j16", [
+        ("shanghai", "上海合成住宿", "上海", "上海合成片区", "2026-10-01", "2026-10-06"),
+        ("hangzhou", "杭州合成住宿", "杭州", "杭州合成片区", "2026-10-06", "2026-10-11"),
+        ("suzhou", "苏州合成住宿", "苏州", "苏州合成片区", "2026-10-11", "2026-10-16"),
+    ], [
+        ("shanghai", "上海合成建筑漫步", "上海", "architecture", "2026-10-02T09:00:00+08:00", "2026-10-02T12:00:00+08:00", 90, "https://example.com/synthetic-journey/shanghai"),
+        ("hangzhou", "杭州合成湖滨漫步", "杭州", "scenic", "2026-10-07T09:00:00+08:00", "2026-10-07T12:00:00+08:00", 90, "https://example.com/synthetic-journey/hangzhou"),
+        ("suzhou", "苏州合成园林漫步", "苏州", "garden", "2026-10-12T09:00:00+08:00", "2026-10-12T12:00:00+08:00", 90, "https://example.com/synthetic-journey/suzhou"),
+    ])
+    nightly_prices = (300, 280, 260)
+    lodging_ids = {item["lodging_id"] for item in candidates_value["lodgings"]}
+    for lodging_item, amount in zip(candidates_value["lodgings"], nightly_prices):
+        lodging_item["price"]["amount"] = amount
+        lodging_item["price"]["price_type"] = "reference"
+        lodging_item["price"]["includes_taxes"] = True
+        claim_id = lodging_item["price"]["claim_id"]
+        price_claim = next(item for item in candidates_value["claims"] if item["claim_id"] == claim_id)
+        price_claim["value"] = amount
+        price_claim["status"] = "partial"
+        price_claim["confidence"] = 0.8
+    candidates_value["unknowns"] = [
+        item for item in candidates_value["unknowns"]
+        if not (
+            item["field_path"].startswith("/lodgings/")
+            and item.get("claim_id") in {
+                claim["claim_id"] for claim in candidates_value["claims"]
+                if claim["subject_ref"] in lodging_ids
+            }
+        )
+    ]
+    return {"request": request_value, "candidates": candidates_value}
+
+
 def grouped_departures_demo() -> Mapping[str, Any]:
     request_value = {
         "traveler_groups": [

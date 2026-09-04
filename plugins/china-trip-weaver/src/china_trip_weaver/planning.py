@@ -362,6 +362,27 @@ def plan_trip(
 
 
 def _normalize_request(value: Mapping[str, Any]) -> Dict[str, Any]:
+    normalized = _normalize_request_common(value)
+    start = date.fromisoformat(normalized["start_date"])
+    end = date.fromisoformat(normalized["end_date"])
+    day_count = (end - start).days + 1
+    if day_count < 1 or day_count > 7:
+        raise ValueError("request must cover between one and seven inclusive days")
+    return normalized
+
+
+def _normalize_journey_request(value: Mapping[str, Any]) -> Dict[str, Any]:
+    """Normalize a Journey request without weakening the Trip day limit."""
+
+    normalized = _normalize_request_common(value)
+    start = date.fromisoformat(normalized["start_date"])
+    end = date.fromisoformat(normalized["end_date"])
+    if end < start:
+        raise ValueError("Journey request end_date precedes start_date")
+    return normalized
+
+
+def _normalize_request_common(value: Mapping[str, Any]) -> Dict[str, Any]:
     normalized = json.loads(canonical_json(value))
     legacy_representation = "origin" in normalized or "travelers" in normalized
     grouped_representation = "traveler_groups" in normalized or "meeting_anchor" in normalized
@@ -393,11 +414,6 @@ def _normalize_request(value: Mapping[str, Any]) -> Dict[str, Any]:
             combined_profile = _combined_group_mobility(normalized["traveler_groups"])
             if combined_profile is not None:
                 normalized["mobility_profile"] = combined_profile
-    start = date.fromisoformat(normalized["start_date"])
-    end = date.fromisoformat(normalized["end_date"])
-    day_count = (end - start).days + 1
-    if day_count < 1 or day_count > 7:
-        raise ValueError("request must cover between one and seven inclusive days")
     if len(normalized["destinations"]) > 1 and _shared_origin(normalized) is None:
         raise ValueError("multi-city planning requires an origin")
     return normalized

@@ -138,6 +138,32 @@ def _parser() -> argparse.ArgumentParser:
     plan.add_argument("--mobility-deadline", type=float, default=12.0)
     plan.add_argument("--flyai-deadline", type=float, default=25.0)
     plan.add_argument("--variflight-deadline", type=float, default=15.0)
+
+    journey = commands.add_parser("journey", help="plan or validate a multi-Trip Journey")
+    journey_commands = journey.add_subparsers(dest="journey_command", required=True)
+    journey_plan = journey_commands.add_parser(
+        "plan", help="split a long request into complete one-to-seven-day Trips",
+    )
+    _add_progress_argument(journey_plan)
+    journey_plan.add_argument("--request", type=Path, required=True)
+    journey_plan.add_argument("--candidates", type=Path, required=True)
+    journey_plan.add_argument("--rail", default="live")
+    journey_plan.add_argument("--mobility", choices=("live", "off"), default="off")
+    journey_plan.add_argument("--lodging", choices=("live", "off"), default="off")
+    journey_plan.add_argument("--aviation", choices=("auto", "off"), default="auto")
+    journey_plan.add_argument("--output-json", type=Path, default=Path("journey.json"))
+    journey_plan.add_argument("--offline-fixture", action="store_true")
+    journey_plan.add_argument("--fixed-clock", default=None)
+    journey_plan.add_argument("--rail-deadline", type=float, default=90.0)
+    journey_plan.add_argument("--mobility-deadline", type=float, default=12.0)
+    journey_plan.add_argument("--flyai-deadline", type=float, default=25.0)
+    journey_plan.add_argument("--variflight-deadline", type=float, default=15.0)
+    journey_validate = journey_commands.add_parser(
+        "validate", help="validate a Journey and every embedded Trip",
+    )
+    journey_validate.add_argument("journey", type=Path)
+    journey_validate.add_argument("--schema", type=Path, default=None)
+
     replan = commands.add_parser("replan", help="apply a versioned local replan event and render the result")
     replan.add_argument("--trip", type=Path, required=True)
     replan.add_argument("--event", type=Path, required=True)
@@ -313,6 +339,99 @@ def main(argv: Optional[Sequence[str]] = None, *, credential_path: Optional[Path
             progress.emit({"event": "completion", "command": "doctor", "status": "ok"})
         print(canonical_json(payload))
         return 1 if conflicts["status"] == "conflict" else 0
+    if args.command == "journey":
+        from .journey import plan_journey, validate_journey_file
+
+        if args.journey_command == "validate":
+            report = validate_journey_file(args.journey, schema_path=args.schema)
+            if report.ok:
+                value = read_json(args.journey)
+                print("JOURNEY VALID %s trips=%d" % (args.journey, len(value["trips"])))
+                return 0
+            for issue in report.errors:
+                print(issue.render(), file=sys.stderr)
+            print("JOURNEY INVALID %s (%d error%s)" % (
+                args.journey,
+                len(report.errors),
+                "" if len(report.errors) == 1 else "s",
+            ), file=sys.stderr)
+            return 1
+
+        from .clock import FixedClock, SystemClock
+        from .flyai_inventory import AMapLodgingBackend, FlyAIBackend
+        from .mobility import MobilityBackend
+        from .planning import RailBackend
+        from .variflight_enrichment import VariFlightBackend
+
+        try:
+            request_value = read_json(args.request)
+            candidates_value = read_json(args.candidates)
+            if args.fixed_clock and not args.offline_fixture:
+                raise ValueError("--fixed-clock is allowed only with --offline-fixture")
+            if args.offline_fixture and args.rail == "live":
+                raise ValueError("--offline-fixture requires --rail off or fixture:<file>")
+            if args.offline_fixture and args.mobility != "off":
+                raise ValueError("--offline-fixture requires --mobility off")
+            if args.offline_fixture and args.lodging != "off":
+                raise ValueError("--offline-fixture requires --lodging off")
+            clock = FixedClock.from_iso(args.fixed_clock) if args.fixed_clock else SystemClock()
+            repo_root = Path(__file__).resolve().parents[4]
+            rail_backend = RailBackend.from_spec(
+                args.rail, repo_root, deadline_seconds=args.rail_deadline,
+            )
+            mobility_backend = MobilityBackend.from_spec(
+                args.mobility, repo_root, deadline_seconds=args.mobility_deadline,
+            )
+            flyai_backend = FlyAIBackend.from_spec(
+                args.lodging, repo_root, deadline_seconds=args.flyai_deadline,
+            )
+            amap_lodging_backend = AMapLodgingBackend.from_spec(
+                "auto" if args.lodging == "live" else "off",
+                repo_root,
+                deadline_seconds=args.mobility_deadline,
+            )
+            aviation_mode = "off" if args.offline_fixture else args.aviation
+            variflight_backend = VariFlightBackend.from_spec(
+                aviation_mode, repo_root, deadline_seconds=args.variflight_deadline,
+            )
+            for backend in (
+                rail_backend, mobility_backend, flyai_backend,
+                amap_lodging_backend, variflight_backend,
+            ):
+                _attach_progress(backend, progress)
+            result = plan_journey(
+                request_value,
+                candidates_value,
+                clock,
+                rail_backend,
+                mobility_backend,
+                flyai_backend,
+                variflight_backend,
+                amap_lodging_backend,
+            )
+            args.output_json.parent.mkdir(parents=True, exist_ok=True)
+            write_canonical_json(args.output_json, result.journey)
+            trip_days = [len(item["days"]) for item in result.journey["trips"]]
+            print(
+                "JOURNEY_PLAN_COMPLETE json=%s trips=%d days=%d max_trip_days=%d calls=%s journey_sha256=%s errors=0"
+                % (
+                    args.output_json,
+                    len(trip_days),
+                    sum(trip_days),
+                    max(trip_days),
+                    ",".join(result.business_calls),
+                    result.journey_sha256,
+                )
+            )
+            progress.emit({
+                "event": "completion", "command": "journey-plan", "status": "ok",
+                "items": len(trip_days),
+            })
+            return 0
+        except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+            _progress_failed(progress, "journey-plan")
+            print("JOURNEY_PLAN_FAILED %s" % exc, file=sys.stderr)
+            return 1
     if args.command == "plan":
         from .clock import FixedClock, SystemClock
         from .flyai_inventory import AMapLodgingBackend, FlyAIBackend

@@ -1167,3 +1167,57 @@ OK：china-trip-weaver@china-trip-weaver-local 0.3.0 已安装且缓存与源码
 - `git diff --name-only -- docs/research docs/design/schema plugins/china-trip-weaver/schema ...禁碰路径...` exit 0 且输出为空；`rg -n '0\.3\.0'` 对版本清单恰好输出 10 行。
 - `git status --short --ignored plugins/china-trip-weaver/.npm-cache` exit 0 且输出为空，确认已移入废纸篓的生成缓存未在源码处复生。
 - 边界快照后的 repo secret scan 仍为 `secret scan: 0 finding(s) across 361 file(s)`。
+
+## Journey 模型、拆分与连续性开工理解（2026-09-05，≤10 行）
+1. 目标：用一个 Journey 唯一事实源内嵌多个原样完整 Trip，覆盖 16 天等长行程的模型、拆分与跨段连续性。
+2. 顺序：任务 0 基线 → Journey Schema/模型 → `ctw journey plan` 自动拆分 → 日期/住宿/预算连续性 → 全量门禁与提交。
+3. 拆分优先跨城日，其次硬切；每段仍须独立通过既有 `_normalize_request` 的 1–7 天边界、Trip validator 与 replan。
+4. 连续性必须拒绝日期缺口/重叠，显式记录跨段住宿延续，总预算按各段 ledger 加跨段交通汇总。
+5. 只写任务书白名单；不碰 render/demo/version/Trip Schema/providers/scheduler/既有测试，不安装 Codex。
+6. 最大风险：现有 request/candidates/Trip 数据形状如何无损分段，以及跨城日归属与跨段住宿/预算 ledger 的口径对齐。
+7. 任务 0 实测通过：HEAD 与 origin/main=`b73c838`；`Ran 363 tests ... OK`、skipped 0；secret scan 0/361；`replan_trip(` 确认为单 Trip API。
+8. 当前验收轮次：1/14；尚未修改产品代码。
+
+## Journey 任务 1：模型（完成）
+
+- 新增插件内唯一 `schema/journey.schema.json` 与 `journey.py`：Journey 含独立 id/revision、全程日期、互斥的共享 `origin + travelers` 或 `traveler_groups + meeting_anchor`、0.3.0 同口径总预算 ledger、完整 `trips[]` 与跨段衔接记录；版本保持 0.3.0。
+- Journey Schema 按 candidates 惯例引用唯一 `trip.schema.json`；运行时只读合并 Trip `$defs` 后交给现成 `SchemaSubsetValidator`，并逐个调用 `validate_trip` 做语义校验，没有复制或修改 Trip Schema。
+- 正向验收：从 Journey 取出的完整子 Trip 直接 `validate_trip` 为 ok，并原样传给 `replan_trip` 生成 revision 2 后仍有效；`/usr/bin/python3 -m unittest tests.test_journey -v` → `Ran 2 tests in 0.017s`、`OK`、skipped 0。
+- 反向红态：临时把正向测试中的子 Trip 换为仅 `schema_version + trip_id` 的裁剪版，同一精准测试 exit 1：`AssertionError: False is not true`，`Ran 1 test ... FAILED (failures=1)`。
+- 还原绿态：撤销临时裁剪后重跑完整 `tests.test_journey`，2/2 OK；永久负向测试另断言裁剪版返回 `S_REQUIRED`，没有 skip/mock/放宽断言。
+- 当前验收轮次：2/14；Task 1 的临时变更已全部还原。
+
+## Journey 任务 2：自动拆分（完成）
+
+- `planning.py` 仅抽取原规范化公共部分；`_normalize_request` 的 `day_count < 1 or day_count > 7` 与原错误文本保持不变。Journey 长请求走独立公共规范化，每个子请求随后显式再过原 `_normalize_request`，没有放宽 Trip 产品边界。
+- 拆分先用原有有序 route 分布定位跨城日，再只对跨城间隔按七天硬切；合成 16 天北京→上海→杭州→苏州得到 `2026-10-01..05`、`06..10`、`11..16` 三段（5/5/6），同城 16 天得到 7/7/2。
+- 每段按城市保留完整候选实体/claims，并重写 unknown JSON Pointer；三段分别直接进入现有 `plan_trip`，全部 `validate_trip` 为 ok、days ≤7。
+- 首轮同城拆分曾因按日期过滤后违反既有 candidates 的 `pois/claims minItems` 而 1 个测试 ERROR；改为按城市保留候选、由调度器忽略段外窗口，未放宽候选合同。随后 5/5 tests OK。
+- 反向红态：临时把硬切步长改为 8 天，精准测试 exit 1；原始错误为 `ValueError: request must cover between one and seven inclusive days`，`Ran 1 test ... FAILED (errors=1)`，证明原 Trip 门实际阻断 8 天段。
+- 还原绿态：恢复七天步长后 `/usr/bin/python3 -m unittest tests.test_journey -v` → `Ran 5 tests in 0.119s`、`OK`、skipped 0。
+- `plugins/china-trip-weaver/scripts/ctw journey plan --help` exit 0，已暴露 request/candidates/provider/offline/fixed-clock/output-json 参数；实际产物留在 G7 验收。
+- 当前验收轮次：3/14；Task 2 的临时 8 天变更已还原。
+
+## Journey 任务 3：跨段连续性（完成）
+
+- G7 合成 16 天 Journey 为 5/5/6 三个完整 Trip；相邻日期逐日相接，前两段最后一天的 stay 被显式延长覆盖边界夜，15 个全程过夜日恰好各覆盖一次。两条 `lodging_continuity` 均为可追溯的 `changed`，两条跨城腿均为 `included_in_next_trip`。
+- Journey validator 对日期 gap/overlap 分别返回 `J_DATE_GAP`/`J_DATE_OVERLAP`；同时验证连接相邻 id/日期、from/to lodging、边界夜覆盖、同店/换店状态、transport owner/ref/cost 与总 ledger。预算篡改返回 `J_BUDGET_MISMATCH`。
+- 总 ledger 保留 0.3.0 的 currency/budget/known/remaining/range/status/items 口径：Trip ledger 全部相加；已归某子 Trip 的跨段交通显示实际口径但追加额为 0，独立跨段交通则另加。合成离线铁路价格不可比时仍输出 `{minimum:null,maximum:null}` 区间，known lodging cost 为 CNY 4200。
+- 正向精准门：`/usr/bin/python3 -m unittest tests.test_journey -v` → `Ran 11 tests in 0.591s`、`OK`、skipped 0；包含 CLI plan+validate、gap、overlap、budget tamper、separate transport addition 与三子 Trip replan。
+- 缺口反向红态：临时把第二段 `start_date` 从 10-06 推后到 10-07，G7 exit 1，原始错误列表含 `J_DATE_GAP ... uncovered calendar gap`、`J_CONNECTION_REF`、`J_LODGING_GAP`、`J_TRIP_V_DAY_COUNT`、`J_TRIP_V_DAY_DATES`；`Ran 1 test ... FAILED (failures=1)`。
+- 还原绿态：撤销临时日期后同一完整精准门 11/11 OK。
+- 实际 CLI：`ctw journey plan ... --rail off --offline-fixture` exit 0 → `JOURNEY_PLAN_COMPLETE ... trips=3 days=16 max_trip_days=6 ... journey_sha256=5bdf15b... errors=0`；紧接 `ctw journey validate` exit 0 → `JOURNEY VALID ... trips=3`。
+- 三个子 Trip 的 `ctw validate` 均 exit 0；逐段 `ctw replan` 均输出 `REPLAN_COMPLETE ... revision=2 ... errors=0`，三个 replan 产物再次 `ctw validate` 均 exit 0。
+- 主 Skill 已把 >7 天路由到 Journey、保留单 Trip 1–7 天硬边界，并明确不做 Journey 页面/checklist；bundled quick validator exit 0：`Skill is valid!`。
+- 当前验收轮次：4/14；Task 3 临时缺口已还原，三项开发任务均完成。
+
+## Journey 最终验收与边界状态
+
+- 新增 grouped 长 Journey 回归：两组旅客只在首段会合，后两段聚合为 3 人的完整 legacy Trip；同城 16 天为 7/7/2，跨段均 `continued + not_required`，Journey 顶层仍保存原 `traveler_groups`。精准门现为 `Ran 13 tests in 0.741s ... OK`、skipped 0。
+- 首次全量为 `Ran 375 tests in 39.049s ... FAILED (failures=1)`；唯一失败是禁止修改的 `test_skills.py` 对 frontmatter description 的逐字冻结。恢复该描述、仅把 Journey 指令留在 Skill 正文后，精准冻结测试与 bundled quick validator 均 OK，未改既有测试。
+- 恢复后全量为 `Ran 375 tests in 26.528s ... OK`；固化 grouped 回归后的代码态全量为 `Ran 376 tests in 24.545s ... OK`，skipped 0，满足 ≥370。
+- `/usr/bin/python3 scripts/scan_secrets.py` → `secret scan: 0 finding(s) across 364 file(s)`；`git diff --check` exit 0；Journey Schema 经 `/usr/bin/python3 -m json.tool` exit 0。
+- 原 Trip 上限仍精确位于 `planning.py:369-370`：`day_count < 1 or day_count > 7` 与 `between one and seven inclusive days`；0.4.0 命中 0，plugin version 未改。
+- 禁碰路径（render、demo、plugin.json、Trip/candidates Schema、docs、providers、mobility、scheduler、Trip validator、FlyAI、既有 tests、secret scanner）组合 `git diff` 与 `git diff --name-only` 均无输出。
+- `BLOCKED.md` 已追加本轮“新增阻塞：无”，并保留 Skill description 冻结冲突的已解决证据；没有总览页、booking checklist、demo 重跑、Codex 安装或版本发布动作。
+- 当前验收轮次：7/14；接下来只做暂存态最终门、白名单提交与提交后只读核验。
