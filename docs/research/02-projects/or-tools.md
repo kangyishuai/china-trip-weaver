@@ -34,7 +34,7 @@ PyPI/pip summary 原文：
 
 输出不只是 route order，还能读每点 `assignment.Min/Max(Time.CumulVar)` 的 solution window、objective/travel time、waiting slack。官方说明 solution window 位于 constraint window 内，min<max 表示可以等待。
 
-本研究的 6 点输入在 [`../evidence/or-tools-vrptw.py`](../evidence/or-tools-vrptw.py)：Hotel depot、Palace/Museum/Lunch/Garden/Viewpoint；6×6 travel matrix；09:00–18:00 分段 windows；service 45–75 分钟；一辆车。输出和 assertions 验证每点只访问一次且 arrival 在 window 内。
+本研究的 6 点输入在 `evidence/or-tools-vrptw.py`（调研期中间产物，未收入本仓库）：Hotel depot、Palace/Museum/Lunch/Garden/Viewpoint；6×6 travel matrix；09:00–18:00 分段 windows；service 45–75 分钟；一辆车。输出和 assertions 验证每点只访问一次且 arrival 在 window 内。
 
 ## 3. 脚本与依赖
 

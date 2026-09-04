@@ -8,7 +8,7 @@ task.
 
 ## Preconditions
 
-1. Open this private repository in Codex Desktop and ensure
+1. Open a clone of this repository in Codex Desktop and ensure
    `china-travel-assistant` is disabled so `plan-china-trip` is unambiguous.
 2. Install or refresh `china-trip-weaver@china-trip-weaver-local`, then create a
    new task.

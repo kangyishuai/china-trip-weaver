@@ -154,7 +154,7 @@ The runtime uses no third-party Python package. `render` refuses an invalid Trip
 
 The suite has zero skips. It covers the frozen Trip schema, candidate validation, credential/process/home isolation, exact-value and captured-data scans, evidence/cache/coordinates, 79 unmistakably synthetic provider fixtures with AMap/FlyAI/VariFlight contract shapes, 20 scheduling goldens, 8 no-solution cases, 4 replan goldens, renderer adversarial cases and offline browser viewports, Skill/package metadata, and deterministic plus live-path integration scenarios.
 
-Design authority lives in [`docs/design/`](docs/design/00-README.md). Implementation-only additions are [ADR-0009](docs/design/adr/0009-rename-rail-air-skills.md), [ADR-0010](docs/design/adr/0010-candidate-file-planning-and-live-rail.md), and [ADR-0011](docs/design/adr/0011-live-amap-flyai-variflight-boundaries.md). See [`docs/manual-acceptance.md`](docs/manual-acceptance.md) for Codex Desktop acceptance.
+Design authority lives in [`docs/design/`](docs/design/00-README.md). Implementation-only additions are [ADR-0009](docs/design/adr/0009-rename-rail-air-skills.md), [ADR-0010](docs/design/adr/0010-candidate-file-planning-and-live-rail.md), and [ADR-0011](docs/design/adr/0011-live-amap-flyai-variflight-boundaries.md); [ADR-0012](docs/design/adr/0012-open-source-under-mit.md) records the MIT licensing decision. See [`docs/manual-acceptance.md`](docs/manual-acceptance.md) for Codex Desktop acceptance.
 
 ## Contributing and security
 

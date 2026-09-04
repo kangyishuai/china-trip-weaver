@@ -197,7 +197,7 @@ research/.venv/bin/python research/evidence/or-tools-vrptw.py
 - 未跑 AnySearch anonymous query：额度耗尽可能返回自动注册凭据，不符合本阶段“不申请/不暴露 Key”。
 - 未做真实酒店 checkout、航班/余票购买、实名、下单、支付或退改。
 - 未安装任何全局工具；没有修改 reference clone、`~/.codex` 或 `~/.agents`。
-- 一个越界 npm debug log 与 config URL TLS 失败已如实置顶记录在 [`../BLOCKED.md`](../BLOCKED.md)，未自行删除/掩盖。
+- 一个越界 npm debug log 与 config URL TLS 失败已如实置顶记录在 [`BLOCKED.md`](../../BLOCKED.md)，未自行删除/掩盖。
 
 ## 研究完整性自检
 

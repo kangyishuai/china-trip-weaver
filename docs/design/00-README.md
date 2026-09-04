@@ -1,6 +1,6 @@
 # ChinaTripWeaver 阶段二设计索引
 
-本目录把已验收的 `research/` 结论冻结为阶段三实现合同。本阶段只有架构/数据/测试设计，不含产品代码；唯一可执行文件是用于验证示例的 [`schema/check_schema.py`](schema/check_schema.py)。决策冲突以 ADR 为准，未裁决项见 [`../BLOCKED.md`](../BLOCKED.md)。
+本目录把已验收的 `research/` 结论冻结为阶段三实现合同。本阶段只有架构/数据/测试设计，不含产品代码；唯一可执行文件是用于验证示例的 [`schema/check_schema.py`](schema/check_schema.py)。决策冲突以 ADR 为准，未裁决项见 [`BLOCKED.md`](../../BLOCKED.md)。
 
 ## 1. 阅读顺序与文件
 

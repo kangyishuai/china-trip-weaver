@@ -100,7 +100,7 @@ china-clay.html: 841KB, days=8, assets=16
 PASS china-clay.html              841KB
 ```
 
-exit `0`；输出大小 Kyoto 13K、China Clay 841K。完整原始输出：[`../evidence/trip-planner-skill-render-qc.txt`](../evidence/trip-planner-skill-render-qc.txt)，生成物在 [`../evidence/trip-planner-skill/`](../evidence/trip-planner-skill/)。这证明 keyless renderer/QC 可运行，不证明 planning、web fact-check、flight scan 或所有主题。
+exit `0`；输出大小 Kyoto 13K、China Clay 841K。完整原始输出：[`../evidence/trip-planner-skill-render-qc.txt`](../evidence/trip-planner-skill-render-qc.txt)，生成物在 `evidence/trip-planner-skill/`（调研期中间产物，未收入本仓库）。这证明 keyless renderer/QC 可运行，不证明 planning、web fact-check、flight scan 或所有主题。
 
 ## 6. 优点、缺点与职责边界
 

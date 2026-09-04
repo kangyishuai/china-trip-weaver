@@ -6,7 +6,7 @@
 
 ## 前提条件
 
-1. 在 Codex 桌面版中打开这个私有仓库，并确保 `china-travel-assistant` 已被禁用，这样 `plan-china-trip` 这个名字不会产生歧义。
+1. 在 Codex 桌面版中打开本仓库的克隆目录，并确保 `china-travel-assistant` 已被禁用，这样 `plan-china-trip` 这个名字不会产生歧义。
 2. 安装或刷新 `china-trip-weaver@china-trip-weaver-local`，然后新建一个任务。
 3. 在仓库终端运行 `plugins/china-trip-weaver/scripts/ctw doctor`。AMap、FlyAI、VariFlight 应只显示 `configured`，不得出现任何值或长度。若某个服务商显示 missing，只接受该服务商文档中规定的无 Key／关闭行为。
 4. 确认本地凭据文件是权限恰为 `600` 的普通文件。验收过程中不要打开或显示其中的值。
