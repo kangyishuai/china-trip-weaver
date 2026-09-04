@@ -1,6 +1,13 @@
 # Unresolved items
 
-One open item, parked deliberately. Standing constraints are not listed here, because a list of unresolved items
+## Book 2: live 12306 station candidates have no distance signal
+
+- Status: blocked on 2026-09-04 for physical-distance ordering only; the remaining station fallback and error-classification work continues.
+- Evidence: pinned `12306-mcp@0.3.10` implements `get-stations-code-in-city` as a list containing only `station_code` and `station_name`. The current rail `ProviderRequest` likewise carries names/refs/date but no station coordinates or candidate-to-endpoint distances.
+- Constraint: `planning.py`, `mobility.py`, and AMap providers are explicitly owned by other books and may not be changed here. Querying every candidate for tickets would produce duration, not physical distance, and could still silently choose the wrong station.
+- Safe delivery: return every candidate without selecting one; sort ascending when a synthetic/forward-compatible candidate supplies `distance_meters`, with unknown distances last and deterministic ties. Live candidates without a distance remain deterministic but are not claimed to be physically ranked.
+
+One pre-existing open item is parked deliberately below. Standing constraints are not listed here, because a list of unresolved items
 should mean pending work. They live where they are enforced:
 
 - Provider terms, attribution, caching, and the licences commercial use would

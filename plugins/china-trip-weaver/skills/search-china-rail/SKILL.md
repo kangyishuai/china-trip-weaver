@@ -8,10 +8,12 @@ description: Normalize read-only China Railway station, schedule, seat, fare, di
 Use the pinned `12306-mcp@0.3.10` through the `china-rail` server.
 
 1. Probe the exact eight-tool fingerprint before the first business call.
-2. Resolve stations, query direct services, then use bounded interline search only when needed; query route stops only for a selected service.
+2. `--from` and `--to` each accept either an exact Chinese station name (for example `昆明南`) or a Chinese city name (for example `昆明`). Resolve each value in this order: exact station name, city representative station, then every station in the city.
 3. Parse MCP text as JSON and fail closed on tool/schema/pipe-column drift.
 4. Normalize dated services, times, seat/fare facts, typed prices, source URL, query time, claims, and health. An empty result is not a provider failure.
 5. Return read-only candidates and the official 12306 deep link. Never invoke login or transaction behavior.
+
+If all three station-resolution layers are empty, return `no_results`. If the final city lookup returns multiple stations, return every candidate in distance order when distance metadata is available, classify the result as `ambiguous`, and require the caller to choose an exact station and retry; never guess one station for the user. A documented lookup error at one layer is a fallback signal, not `contract_mismatch`.
 
 The command emits a JSON object with `transport_legs`, `claims`, `health`, `warnings`, and `error_class`:
 

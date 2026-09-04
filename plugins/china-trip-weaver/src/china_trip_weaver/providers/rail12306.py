@@ -15,6 +15,7 @@ from .base import (
     BaseAdapter,
     ContractMismatch,
     Normalization,
+    ProviderContext,
     ProviderFailure,
     sanitize_text,
     stable_id,
@@ -43,6 +44,30 @@ class Rail12306Adapter(BaseAdapter):
     provider_version = "0.3.10"
     capabilities = ("rail", "station")
 
+    def query(self, request: ProviderRequest, context: ProviderContext) -> AdapterResult:
+        result = super().query(request, context)
+        if "station_resolution_ambiguous" not in result.warnings:
+            return result
+        return AdapterResult.build(
+            provider=result.provider,
+            provider_version=result.provider_version,
+            capability=result.capability,
+            mode=result.mode,
+            queried_at=result.queried_at,
+            normalized_items=result.normalized_items,
+            claims=result.claims,
+            health=self._health(
+                "ready",
+                "ambiguous: multiple station candidates require caller selection",
+                result.mode,
+                context.clock,
+            ),
+            warnings=result.warnings,
+            raw_ref=result.raw_ref,
+            response_hash=result.response_hash,
+            error_class="ambiguous",
+        )
+
     def normalize(self, body: Any, request: ProviderRequest, clock: Clock) -> Normalization:
         transcript = _transcript(body)
         calls = transcript["calls"]
@@ -50,6 +75,14 @@ class Rail12306Adapter(BaseAdapter):
             call = _single_call(calls, ("get-stations-code-in-city", "get-station-code-of-citys"))
             payload = _call_payload(call, request, clock)
             return Normalization(tuple(_stations(payload, request)), ())
+
+        resolution_status, station_candidates = _station_resolution(transcript, request)
+        if resolution_status in ("no_results", "ambiguous"):
+            if any(call.get("name") in ("get-tickets", "get-interline-tickets") for call in calls):
+                raise ContractMismatch("12306 queried tickets before station ambiguity was resolved")
+            if resolution_status == "no_results":
+                return Normalization((), (), ("station_resolution_no_results",))
+            return Normalization(station_candidates, (), ("station_resolution_ambiguous", "ambiguous"))
 
         call = _single_call(calls, ("get-tickets", "get-interline-tickets"))
         payload = _call_payload(call, request, clock)
@@ -211,11 +244,93 @@ def _single_call(calls: Sequence[Mapping[str, Any]], names: Sequence[str]) -> Ma
     return call
 
 
+def _station_resolution(
+    transcript: Mapping[str, Any],
+    request: ProviderRequest,
+) -> Tuple[Optional[str], Tuple[Mapping[str, Any], ...]]:
+    resolution = transcript.get("station_resolution")
+    if resolution is None:
+        return None, ()
+    if not isinstance(resolution, dict) or set(resolution) != {"status", "endpoints"}:
+        raise ContractMismatch("12306 station resolution has the wrong shape")
+    status = resolution.get("status")
+    if status not in ("resolved", "no_results", "ambiguous"):
+        raise ContractMismatch("12306 station resolution status is invalid")
+    endpoints = resolution.get("endpoints")
+    if not isinstance(endpoints, dict) or set(endpoints) != {"from", "to"}:
+        raise ContractMismatch("12306 station resolution endpoints have the wrong shape")
+
+    normalized: List[Mapping[str, Any]] = []
+    counts: List[int] = []
+    for endpoint, parameter_name in (("from", "from_name"), ("to", "to_name")):
+        value = endpoints.get(endpoint)
+        if not isinstance(value, dict) or set(value) != {"query", "candidates"}:
+            raise ContractMismatch("12306 station resolution endpoint has the wrong shape")
+        query = value.get("query")
+        if query != request.parameters.get(parameter_name):
+            raise ContractMismatch("12306 station resolution query does not match the request")
+        candidates = value.get("candidates")
+        if not isinstance(candidates, list):
+            raise ContractMismatch("12306 station resolution candidates are not an array")
+        endpoint_items: List[Mapping[str, Any]] = []
+        seen_codes = set()
+        for candidate in candidates:
+            if not isinstance(candidate, dict) or not {"station_code", "station_name"}.issubset(candidate):
+                raise ContractMismatch("12306 station resolution candidate has the wrong shape")
+            if not set(candidate).issubset({"station_code", "station_name", "distance_meters"}):
+                raise ContractMismatch("12306 station resolution candidate has unexpected fields")
+            code = candidate.get("station_code")
+            name = candidate.get("station_name")
+            if not isinstance(code, str) or not re.fullmatch(r"[A-Z]{3}", code):
+                raise ContractMismatch("12306 station resolution code is invalid")
+            if code in seen_codes:
+                raise ContractMismatch("12306 station resolution contains duplicate station codes")
+            seen_codes.add(code)
+            if not isinstance(name, str) or not name.strip():
+                raise ContractMismatch("12306 station resolution name is invalid")
+            distance = candidate.get("distance_meters")
+            if distance is not None and (
+                isinstance(distance, bool)
+                or not isinstance(distance, (int, float))
+                or distance < 0
+            ):
+                raise ContractMismatch("12306 station resolution distance is invalid")
+            item: Dict[str, Any] = {
+                "ref_id": "station-" + code.lower(),
+                "name": sanitize_text(name, 80),
+                "city": sanitize_text(query, 80),
+                "station_code": code,
+                "resolution_for": endpoint,
+            }
+            if distance is not None:
+                item["distance_meters"] = distance
+            endpoint_items.append(item)
+        endpoint_items.sort(key=lambda item: (
+            0 if "distance_meters" in item else 1,
+            float(item.get("distance_meters", 0)),
+            item["name"],
+            item["station_code"],
+        ))
+        normalized.extend(endpoint_items)
+        counts.append(len(endpoint_items))
+
+    derived_status = (
+        "no_results" if any(count == 0 for count in counts)
+        else "ambiguous" if any(count > 1 for count in counts)
+        else "resolved"
+    )
+    if status != derived_status:
+        raise ContractMismatch("12306 station resolution status contradicts its candidates")
+    return status, tuple(normalized)
+
+
 def _call_payload(call: Mapping[str, Any], request: ProviderRequest, clock: Clock) -> Any:
     result = call.get("result")
     if not isinstance(result, dict):
         raise ContractMismatch("12306 MCP tool result is not an object")
     if result.get("isError") is True:
+        if request.capability == "station":
+            raise ProviderFailure("no_results", "station lookup returned no matching stations")
         requested = _request_date(request)
         today = clock.now().date()
         last_sale_date = today + timedelta(days=PRESALE_DAYS - 1)
@@ -227,10 +342,21 @@ def _call_payload(call: Mapping[str, Any], request: ProviderRequest, clock: Cloc
         raise ContractMismatch("12306 MCP content has the wrong shape")
     if content[0].get("type") != "text" or not isinstance(content[0].get("text"), str):
         raise ContractMismatch("12306 MCP content is not text JSON")
+    text = content[0]["text"].strip()
     try:
-        return json.loads(content[0]["text"])
+        payload = json.loads(text)
     except json.JSONDecodeError as exc:
+        if request.capability == "station" and text.rstrip(". ") == "Error: City not found":
+            raise ProviderFailure("no_results", "station lookup returned no matching stations") from exc
         raise ContractMismatch("12306 MCP text is not JSON") from exc
+    if (
+        request.capability == "station"
+        and isinstance(payload, dict)
+        and set(payload) == {"error"}
+        and isinstance(payload.get("error"), str)
+    ):
+        raise ProviderFailure("no_results", "station lookup returned no matching stations")
+    return payload
 
 
 def _request_date(request: ProviderRequest) -> date:

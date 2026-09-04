@@ -354,12 +354,12 @@ class RailMCPStdioTransport:
                 elif request.capability == "rail":
                     from_name = _required_text(request.parameters, "from_name")
                     to_name = _required_text(request.parameters, "to_name")
-                    station_arguments = {"citys": "%s|%s" % (from_name, to_name)}
-                    station_result = client.call_tool("get-station-code-of-citys", station_arguments)
-                    body["calls"].append({"name": "get-station-code-of-citys", "arguments": station_arguments, "result": station_result})
-                    station_map = _tool_json(station_result)
-                    from_code = _station_code(station_map, from_name)
-                    to_code = _station_code(station_map, to_name)
+                    resolution = _resolve_rail_stations(client, body, from_name, to_name)
+                    body["station_resolution"] = resolution
+                    if resolution["status"] != "resolved":
+                        return ProviderEnvelope(status_code=200, body=body, headers={})
+                    from_code = resolution["endpoints"]["from"]["candidates"][0]["station_code"]
+                    to_code = resolution["endpoints"]["to"]["candidates"][0]["station_code"]
                     ticket_arguments: Dict[str, Any] = {
                         "date": _required_text(request.parameters, "date"),
                         "fromStation": from_code,
@@ -404,25 +404,173 @@ def _required_text(parameters: Mapping[str, Any], name: str) -> str:
     return value.strip()
 
 
-def _tool_json(result: Mapping[str, Any]) -> Any:
+def _station_tool_json(result: Mapping[str, Any]) -> Any:
+    if not isinstance(result, dict):
+        raise ContractMismatch("MCP station tool result is not an object")
+    is_error = result.get("isError", False)
+    if not isinstance(is_error, bool):
+        raise ContractMismatch("MCP station tool isError flag has the wrong shape")
     content = result.get("content")
     if not isinstance(content, list) or len(content) != 1 or not isinstance(content[0], dict):
         raise ContractMismatch("MCP tool content has the wrong shape")
     if content[0].get("type") != "text" or not isinstance(content[0].get("text"), str):
         raise ContractMismatch("MCP tool content is not text JSON")
+    text = content[0]["text"].strip()
+    if is_error or _is_station_not_found_text(text):
+        return None
     try:
-        return json.loads(content[0]["text"])
+        payload = json.loads(text)
     except json.JSONDecodeError as exc:
         raise ContractMismatch("MCP tool text is not JSON") from exc
+    if _is_station_error(payload):
+        return None
+    return payload
 
 
-def _station_code(station_map: Any, city: str) -> str:
-    if not isinstance(station_map, dict):
-        raise ContractMismatch("12306 representative station response is not an object")
-    station = station_map.get(city)
-    if not isinstance(station, dict):
-        raise ContractMismatch("12306 did not resolve the requested city")
-    code = station.get("station_code")
+def _is_station_not_found_text(value: str) -> bool:
+    return value.rstrip(". ") == "Error: City not found"
+
+
+def _is_station_error(value: Any) -> bool:
+    return (
+        isinstance(value, dict)
+        and set(value) == {"error"}
+        and isinstance(value.get("error"), str)
+        and bool(value["error"].strip())
+    )
+
+
+def _station_candidate(value: Any) -> Mapping[str, Any]:
+    if not isinstance(value, dict):
+        raise ContractMismatch("12306 station candidate is not an object")
+    code = value.get("station_code")
+    name = value.get("station_name")
     if not isinstance(code, str) or not re.fullmatch(r"[A-Z]{3}", code):
-        raise ContractMismatch("12306 representative station code is invalid")
-    return code
+        raise ContractMismatch("12306 station code is invalid")
+    if not isinstance(name, str) or not name.strip():
+        raise ContractMismatch("12306 station name is invalid")
+    candidate: Dict[str, Any] = {"station_code": code, "station_name": name.strip()}
+    distance = value.get("distance_meters")
+    if isinstance(distance, (int, float)) and not isinstance(distance, bool) and distance >= 0:
+        candidate["distance_meters"] = distance
+    return candidate
+
+
+def _candidate_sort_key(candidate: Mapping[str, Any]) -> Tuple[Any, ...]:
+    distance = candidate.get("distance_meters")
+    has_distance = isinstance(distance, (int, float)) and not isinstance(distance, bool)
+    return (
+        0 if has_distance else 1,
+        float(distance) if has_distance else 0.0,
+        str(candidate["station_name"]),
+        str(candidate["station_code"]),
+    )
+
+
+def _deduplicated_candidates(values: Sequence[Mapping[str, Any]]) -> List[Mapping[str, Any]]:
+    by_code: Dict[str, Mapping[str, Any]] = {}
+    for value in values:
+        candidate = _station_candidate(value)
+        code = str(candidate["station_code"])
+        previous = by_code.get(code)
+        if previous is not None and previous != candidate:
+            raise ContractMismatch("12306 returned conflicting station candidates")
+        by_code[code] = candidate
+    return sorted(by_code.values(), key=_candidate_sort_key)
+
+
+def _mapped_station_candidates(
+    payload: Any,
+    names: Sequence[str],
+    *,
+    strip_station_suffix: bool,
+) -> Mapping[str, Sequence[Mapping[str, Any]]]:
+    if payload is None or payload == {}:
+        return {name: () for name in names}
+    if not isinstance(payload, dict):
+        raise ContractMismatch("12306 station-name response is not an object")
+    resolved: Dict[str, Sequence[Mapping[str, Any]]] = {}
+    for name in names:
+        lookup_name = name[:-1] if strip_station_suffix and name.endswith("站") else name
+        value = payload.get(lookup_name)
+        if value is None or _is_station_error(value):
+            resolved[name] = ()
+        else:
+            resolved[name] = (_station_candidate(value),)
+    return resolved
+
+
+def _city_station_candidates(payload: Any) -> Sequence[Mapping[str, Any]]:
+    if payload is None or payload == []:
+        return ()
+    if not isinstance(payload, list):
+        raise ContractMismatch("12306 stations-in-city response is not an array")
+    return tuple(_deduplicated_candidates(payload))
+
+
+def _call_station_tool(
+    client: MCPStdioClient,
+    body: Dict[str, Any],
+    name: str,
+    arguments: Mapping[str, Any],
+) -> Any:
+    result = client.call_tool(name, arguments)
+    body["calls"].append({"name": name, "arguments": dict(arguments), "result": result})
+    return _station_tool_json(result)
+
+
+def _unique_names(values: Sequence[str]) -> List[str]:
+    return list(dict.fromkeys(values))
+
+
+def _resolve_rail_stations(
+    client: MCPStdioClient,
+    body: Dict[str, Any],
+    from_name: str,
+    to_name: str,
+) -> Mapping[str, Any]:
+    endpoint_names = {"from": from_name, "to": to_name}
+    endpoint_candidates: Dict[str, Sequence[Mapping[str, Any]]] = {"from": (), "to": ()}
+
+    names = _unique_names((from_name, to_name))
+    exact_arguments = {"stationNames": "|".join(names)}
+    exact_payload = _call_station_tool(client, body, "get-station-code-by-names", exact_arguments)
+    exact = _mapped_station_candidates(exact_payload, names, strip_station_suffix=True)
+    for endpoint, name in endpoint_names.items():
+        endpoint_candidates[endpoint] = exact[name]
+
+    unresolved = [endpoint for endpoint in ("from", "to") if not endpoint_candidates[endpoint]]
+    if unresolved:
+        city_names = _unique_names(tuple(endpoint_names[endpoint] for endpoint in unresolved))
+        city_arguments = {"citys": "|".join(city_names)}
+        city_payload = _call_station_tool(client, body, "get-station-code-of-citys", city_arguments)
+        representatives = _mapped_station_candidates(city_payload, city_names, strip_station_suffix=False)
+        for endpoint in unresolved:
+            endpoint_candidates[endpoint] = representatives[endpoint_names[endpoint]]
+
+    unresolved = [endpoint for endpoint in ("from", "to") if not endpoint_candidates[endpoint]]
+    city_results: Dict[str, Sequence[Mapping[str, Any]]] = {}
+    for endpoint in unresolved:
+        city = endpoint_names[endpoint]
+        if city not in city_results:
+            payload = _call_station_tool(client, body, "get-stations-code-in-city", {"city": city})
+            city_results[city] = _city_station_candidates(payload)
+        endpoint_candidates[endpoint] = city_results[city]
+
+    counts = [len(endpoint_candidates[endpoint]) for endpoint in ("from", "to")]
+    if any(count == 0 for count in counts):
+        status = "no_results"
+    elif any(count > 1 for count in counts):
+        status = "ambiguous"
+    else:
+        status = "resolved"
+    return {
+        "status": status,
+        "endpoints": {
+            endpoint: {
+                "query": endpoint_names[endpoint],
+                "candidates": list(endpoint_candidates[endpoint]),
+            }
+            for endpoint in ("from", "to")
+        },
+    }
