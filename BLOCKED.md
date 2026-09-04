@@ -15,7 +15,7 @@
 - Constraint: `planning.py`, `mobility.py`, and AMap providers are explicitly owned by other books and may not be changed here. Querying every candidate for tickets would produce duration, not physical distance, and could still silently choose the wrong station.
 - Safe delivery: return every candidate without selecting one; sort ascending when a synthetic/forward-compatible candidate supplies `distance_meters`, with unknown distances last and deterministic ties. Live candidates without a distance remain deterministic but are not claimed to be physically ranked.
 
-One pre-existing open item is parked deliberately below. Standing constraints are not listed here, because a list of unresolved items
+No product-level item is open. Standing constraints are not listed here, because a list of unresolved items
 should mean pending work. They live where they are enforced:
 
 - Provider terms, attribution, caching, and the licences commercial use would
@@ -25,9 +25,11 @@ should mean pending work. They live where they are enforced:
 - Architecture decisions, including why this plugin is not listed on a public
   marketplace: `docs/design/adr/`.
 
-## Lodging and flight inventory have a single upstream source
+## Lodging and flight inventory have a single upstream source (closed)
 
-- Status: parked on 2026-09-04. Known, accepted, not scheduled.
+- Status: closed on 2026-09-04, superseded by the tested independent fallbacks
+  recorded under Book 4 above. Kept here for provenance; the facts below
+  describe the situation before those fallbacks existed.
 - Fact: `@fly-ai/flyai-cli` is the only source for both lodging and flight
   inventory. It is an unofficial third-party wrapper published by an individual
   maintainer, it last shipped on 2026-04-21, and its command surface already
@@ -82,17 +84,19 @@ should mean pending work. They live where they are enforced:
   pages, add their real HTTPS URLs to the manifest, and rerun plugin ingestion
   validation. Until then, local/repository distribution is the supported scope.
 
-## Book 5 — required manifest field conflicts with a forbidden exact-fixture test
+## Book 5 — required manifest field conflicted with a forbidden exact-fixture test (resolved)
 
-- Full discovery after adding the required `interface.websiteURL` runs 324
-  tests but fails only
-  `tests.test_packaging.PackagingTests.test_plugin_manifest_is_exact_and_version_matches_package`.
-  That test hard-codes the former eight-key `interface` object and rejects any
-  extra key.
-- `tests/test_packaging.py` is not in Book 5's write whitelist, while removing
-  `websiteURL` would directly violate task 4. No assertion was relaxed and the
-  forbidden test was not edited. Resolution requires a later authorized wave
-  to add the real GitHub `websiteURL` to `EXPECTED_MANIFEST`.
+- Status: resolved on 2026-09-04. The task brief required `interface.websiteURL`
+  while placing `tests/test_packaging.py` off limits, and that test pins the
+  former eight-key `interface` object exactly. The conflict was in the brief,
+  not in the implementation.
+- Book 5 responded correctly: it relaxed no assertion, edited no forbidden test,
+  withdrew no required field, reproduced the deterministic failure twice, and
+  recorded the conflict instead of working around it.
+- Resolution: `EXPECTED_MANIFEST` now carries the real GitHub `websiteURL`, so
+  the assertion stays an exact equality rather than a loosened one. Verified by
+  reverse test — pointing the manifest at a different URL fails that test, and
+  restoring it passes. Full discovery is `Ran 324 tests ... OK`, skipped 0.
 
 ## Book 4 — single lodging/flight upstream closed
 

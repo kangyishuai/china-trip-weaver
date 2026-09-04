@@ -43,6 +43,7 @@ EXPECTED_MANIFEST = {
             "Render this validated Trip as a mobile HTML file.",
         ],
         "brandColor": "#C94F36",
+        "websiteURL": "https://github.com/kangyishuai/china-trip-weaver",
     },
 }
 
