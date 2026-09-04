@@ -108,6 +108,46 @@ class CandidateContractTests(unittest.TestCase):
         self.assertIn("example=/lodgings/0/price/amount", issue.message)
         self.assertIn("zero-based integer, not an entity id", issue.message)
 
+    def test_unknown_array_index_must_target_its_claim_subject(self):
+        candidates = load(PLUGIN / "references" / "candidates.example.json")
+        claims = {item["claim_id"]: item for item in candidates["claims"]}
+        first_poi_id = candidates["pois"][0]["poi_id"]
+        unknown_index, unknown = next(
+            (index, item) for index, item in enumerate(candidates["unknowns"])
+            if claims[item["claim_id"]]["subject_ref"] == first_poi_id
+        )
+        unknown["field_path"] = "/pois/1/coordinates"
+
+        report = validate_candidates(candidates)
+
+        issue = next(item for item in report.errors if item.code == "C_UNKNOWN_SUBJECT")
+        self.assertEqual("/unknowns/%d/field_path" % unknown_index, issue.path)
+        self.assertIn("targets /pois/1", issue.message)
+        self.assertIn("expected_index=0", issue.message)
+        self.assertIn("expected_prefix=/pois/0", issue.message)
+
+    def test_cli_rejects_unknown_index_mismatch_with_expected_index(self):
+        candidates = load(PLUGIN / "references" / "candidates.example.json")
+        claims = {item["claim_id"]: item for item in candidates["claims"]}
+        first_poi_id = candidates["pois"][0]["poi_id"]
+        unknown = next(
+            item for item in candidates["unknowns"]
+            if claims[item["claim_id"]]["subject_ref"] == first_poi_id
+        )
+        unknown["field_path"] = "/pois/1/coordinates"
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            path = Path(temporary) / "misindexed-candidates.json"
+            path.write_text(json.dumps(candidates, ensure_ascii=False), encoding="utf-8")
+            result = subprocess.run(
+                [str(CTW), "validate-candidates", str(path)],
+                text=True,
+                capture_output=True,
+            )
+        self.assertEqual(1, result.returncode, result.stdout + result.stderr)
+        self.assertIn("CANDIDATES INVALID", result.stderr)
+        self.assertIn("C_UNKNOWN_SUBJECT", result.stderr)
+        self.assertIn("expected_index=0", result.stderr)
+
     def test_cli_generator_output_validates_without_manual_edits(self):
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
             path = Path(temporary) / "generated-candidates.json"

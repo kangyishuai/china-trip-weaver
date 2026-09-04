@@ -21,6 +21,7 @@ from .planning import (
     _budget_ledger,
     _normalize_journey_request,
     _normalize_request,
+    _no_stay_conflict,
     _route_specs,
     plan_trip,
 )
@@ -113,25 +114,40 @@ def split_journey_inputs(
             + "; ".join(item.render() for item in candidate_report.errors)
         )
     shared_routes = _shared_journey_routes(normalized_request)
-    starts = _segment_start_dates(normalized_request, shared_routes)
+    lodging_city_by_date = _lodging_city_by_date(
+        normalized_request,
+        normalized_candidates["lodgings"],
+    )
+    starts = _segment_start_dates(
+        normalized_request,
+        shared_routes,
+        lodging_city_by_date,
+    )
     overall_end = date.fromisoformat(normalized_request["end_date"])
     segments: List[JourneySegmentInput] = []
     current_place = _initial_shared_place(normalized_request)
     consumed_routes = 0
     for index, start in enumerate(starts):
         end = starts[index + 1] - timedelta(days=1) if index + 1 < len(starts) else overall_end
-        while consumed_routes < len(shared_routes) and date.fromisoformat(shared_routes[consumed_routes].travel_date) < start:
-            current_place = shared_routes[consumed_routes].to_place
-            consumed_routes += 1
-        segment_routes: List[RouteSpec] = []
-        route_cursor = consumed_routes
-        while route_cursor < len(shared_routes):
-            route_date = date.fromisoformat(shared_routes[route_cursor].travel_date)
-            if route_date > end:
-                break
-            segment_routes.append(shared_routes[route_cursor])
-            route_cursor += 1
-        destinations = _segment_destinations(current_place, segment_routes)
+        if lodging_city_by_date:
+            destination = _request_place_for_city(
+                normalized_request,
+                lodging_city_by_date[start.isoformat()],
+            )
+            destinations = [destination]
+        else:
+            while consumed_routes < len(shared_routes) and date.fromisoformat(shared_routes[consumed_routes].travel_date) < start:
+                current_place = shared_routes[consumed_routes].to_place
+                consumed_routes += 1
+            segment_routes: List[RouteSpec] = []
+            route_cursor = consumed_routes
+            while route_cursor < len(shared_routes):
+                route_date = date.fromisoformat(shared_routes[route_cursor].travel_date)
+                if route_date > end:
+                    break
+                segment_routes.append(shared_routes[route_cursor])
+                route_cursor += 1
+            destinations = _segment_destinations(current_place, segment_routes)
         segment_request = _segment_request(
             normalized_request,
             current_place,
@@ -146,9 +162,12 @@ def split_journey_inputs(
             normalized_segment,
         )
         segments.append(JourneySegmentInput(normalized_segment, segment_candidates))
-        for route in segment_routes:
-            current_place = route.to_place
-        consumed_routes = route_cursor
+        if lodging_city_by_date:
+            current_place = destination
+        else:
+            for route in segment_routes:
+                current_place = route.to_place
+            consumed_routes = route_cursor
     return tuple(segments)
 
 
@@ -221,14 +240,26 @@ def _shared_journey_routes(request: Mapping[str, Any]) -> Tuple[RouteSpec, ...]:
 def _segment_start_dates(
     request: Mapping[str, Any],
     routes: Sequence[RouteSpec],
+    lodging_city_by_date: Mapping[str, str],
 ) -> Tuple[date, ...]:
     overall_start = date.fromisoformat(request["start_date"])
     overall_end = date.fromisoformat(request["end_date"])
-    preferred = sorted({
-        date.fromisoformat(route.travel_date)
-        for route in routes
-        if overall_start < date.fromisoformat(route.travel_date) <= overall_end
-    })
+    if lodging_city_by_date:
+        preferred: List[date] = []
+        previous_city = lodging_city_by_date[overall_start.isoformat()]
+        cursor = overall_start + timedelta(days=1)
+        while cursor <= overall_end:
+            city = lodging_city_by_date[cursor.isoformat()]
+            if city != previous_city:
+                preferred.append(cursor)
+                previous_city = city
+            cursor += timedelta(days=1)
+    else:
+        preferred = sorted({
+            date.fromisoformat(route.travel_date)
+            for route in routes
+            if overall_start < date.fromisoformat(route.travel_date) <= overall_end
+        })
     boundaries = [overall_start] + preferred
     starts: List[date] = []
     for index, interval_start in enumerate(boundaries):
@@ -242,6 +273,71 @@ def _segment_start_dates(
             starts.append(cursor)
             cursor += timedelta(days=7)
     return tuple(starts)
+
+
+def _lodging_city_by_date(
+    request: Mapping[str, Any],
+    lodgings: Sequence[Mapping[str, Any]],
+) -> Mapping[str, str]:
+    """Project an explicit lodging chain into the city for every Journey day."""
+
+    overall_start = date.fromisoformat(request["start_date"])
+    overall_end = date.fromisoformat(request["end_date"])
+    destination_cities = {item["city"] for item in request["destinations"]}
+    relevant = [item for item in lodgings if item["city"] in destination_cities]
+    covered: Dict[str, str] = {}
+    cursor = overall_start
+    while cursor < overall_end:
+        night = cursor.isoformat()
+        covering = [
+            item for item in relevant
+            if item["check_in"] <= night < item["check_out"]
+        ]
+        cities = sorted({str(item["city"]) for item in covering})
+        if len(cities) > 1:
+            raise ValueError("Journey lodging chain has conflicting cities: " + canonical_json({
+                "code": "LODGING_CITY_CONFLICT",
+                "date": night,
+                "cities": cities,
+                "lodging_ids": sorted(str(item["lodging_id"]) for item in covering),
+            }))
+        if cities:
+            covered[night] = cities[0]
+        cursor += timedelta(days=1)
+    if not covered:
+        return {}
+
+    first_city = covered[min(covered)]
+    current_city = first_city
+    result: Dict[str, str] = {}
+    cursor = overall_start
+    while cursor <= overall_end:
+        travel_date = cursor.isoformat()
+        if travel_date in covered:
+            current_city = covered[travel_date]
+        result[travel_date] = current_city
+        cursor += timedelta(days=1)
+    missing_nights = sorted(
+        travel_date for travel_date in result
+        if travel_date < overall_end.isoformat() and travel_date not in covered
+    )
+    if missing_nights:
+        night = missing_nights[0]
+        raise ValueError(
+            "Journey lodging chain has no feasible stay: "
+            + canonical_json(_no_stay_conflict(night, result[night], relevant))
+        )
+    return result
+
+
+def _request_place_for_city(
+    request: Mapping[str, Any],
+    city: str,
+) -> Mapping[str, str]:
+    for place in request["destinations"]:
+        if place["city"] == city:
+            return copy.deepcopy(dict(place))
+    raise ValueError("Journey lodging city is not a request destination: %s" % city)
 
 
 def _initial_shared_place(request: Mapping[str, Any]) -> Mapping[str, str]:
@@ -368,6 +464,13 @@ def _bridge_segment_lodgings(
     trips: Sequence[Dict[str, Any]],
     segments: Sequence[JourneySegmentInput],
 ) -> Tuple[Mapping[str, Any], ...]:
+    for index in range(len(trips) - 1):
+        _ensure_boundary_lodging(
+            trips[index],
+            segments[index],
+            trips[index + 1]["request"]["start_date"],
+        )
+
     links: List[Mapping[str, Any]] = []
     for index in range(len(trips) - 1):
         left = trips[index]
@@ -389,12 +492,14 @@ def _bridge_segment_lodgings(
             ):
                 eligible.append((lodging["check_out"], lodging_index))
         if not eligible:
-            raise ValueError("Journey continuity failed: " + canonical_json({
-                "code": "J_LODGING_GAP",
-                "overnight_date": overnight,
-                "from_trip_id": left["trip_id"],
-                "to_trip_id": right["trip_id"],
-            }))
+            raise ValueError(
+                "Journey continuity failed: "
+                + canonical_json(_no_stay_conflict(
+                    overnight,
+                    final_city,
+                    segments[index].candidates["lodgings"],
+                ))
+            )
         _, lodging_index = max(eligible)
         outgoing = left["lodgings"][lodging_index]
         selected_nights = list(outgoing["selected_nights"])
@@ -455,6 +560,62 @@ def _bridge_segment_lodgings(
             "reason": reason,
         })
     return tuple(links)
+
+
+def _ensure_boundary_lodging(
+    trip: Dict[str, Any],
+    segment: JourneySegmentInput,
+    next_start: str,
+) -> None:
+    """Materialize a boundary-night stay when a one-day child selected none."""
+
+    overnight = trip["request"]["end_date"]
+    final_city = trip["days"][-1]["city"]
+    source_list = list(segment.candidates["lodgings"])
+    source_by_id = {item["lodging_id"]: item for item in source_list}
+    if any(
+        lodging["city"] == final_city
+        and lodging.get("candidate_ref") in source_by_id
+        and source_by_id[lodging["candidate_ref"]]["check_in"] <= overnight
+        < source_by_id[lodging["candidate_ref"]]["check_out"]
+        for lodging in trip["lodgings"]
+    ):
+        return
+
+    eligible = [
+        (not bool(item.get("locked")), index, item)
+        for index, item in enumerate(source_list)
+        if item["city"] == final_city and item["check_in"] <= overnight < item["check_out"]
+    ]
+    if not eligible:
+        raise ValueError(
+            "Journey continuity failed: "
+            + canonical_json(_no_stay_conflict(overnight, final_city, source_list))
+        )
+    _, source_index, source = min(eligible)
+    stay_index = len(trip["lodgings"])
+    stay = copy.deepcopy(dict(source))
+    stay["check_in"] = overnight
+    stay["check_out"] = next_start
+    stay["candidate_ref"] = source["lodging_id"]
+    stay["selection_status"] = "selected"
+    stay["selected_nights"] = [overnight]
+    trip["lodgings"].append(stay)
+
+    existing_claim_ids = {item["claim_id"] for item in trip["claims"]}
+    trip["claims"].extend(
+        copy.deepcopy(item) for item in segment.candidates["claims"]
+        if item["subject_ref"] == source["lodging_id"]
+        and item["claim_id"] not in existing_claim_ids
+    )
+    for unknown in segment.candidates["unknowns"]:
+        rewritten = _rewrite_candidate_unknown(
+            unknown,
+            {},
+            {source_index: stay_index},
+        )
+        if rewritten is not None:
+            trip["unknowns"].append(rewritten)
 
 
 def _segment_connections(

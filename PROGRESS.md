@@ -1,12 +1,191 @@
 # PROGRESS
 
+## 住宿链锚定修复开工理解（2026-09-05，≤10 行）
+1. 目标：Journey 必须把候选住宿的 city/check_in/check_out 当作用户已表达的逐夜事实，段边界和每日城市都与它对齐。
+2. 顺序：任务 0 双失败复现 → 先修段边界/城市推进 → 再补无解最近住宿与 unknown 下标校验 → 固化 16 天 6 城 3 人回归。
+3. 住宿链与均分交通日冲突时服从住宿链；链真有缺口时继续结构化无解，绝不放宽或静默跳过逐夜住宿门。
+4. unknown 的数组下标必须解析到其 claim.subject_ref 对应实体，错误需同时指出当前路径与期望下标。
+5. 只写本轮白名单；版本保持 0.4.0，不碰 schema/render/demo/CLI/providers/scheduler/docs，不安装 Codex。
+6. 回归中的城市、住宿、景点、链接与价格全部合成；具名门禁只是下限，不把门禁放行当成可提交真实数据的许可。
+7. 最大风险：住宿换城日既决定分段，也必须让子 Trip 的 route leg、day.city、stay 选择和跨段桥接保持一致。
+8. 当前验收轮次：1/14；任务 0 完成，尚未修改产品代码。
+
+## 住宿链锚定修复任务 0：基线与双失败复现（完成）
+
+- 正确 Git 根为本目录。产品代码仍精确基于 `a1bf1ad`；本地 HEAD=`a95ecf4`、`origin/main=a1bf1ad`，唯一额外提交只改 `PROGRESS.md`，详情同步在 `BLOCKED.md` 的非阻塞说明。
+- 基线 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）原始摘要：
+
+```text
+..................................................................................................................................................................................................................................................................................................................................................................................................
+----------------------------------------------------------------------
+Ran 386 tests in 26.982s
+
+OK
+```
+
+- skipped 0；`/usr/bin/python3 scripts/scan_secrets.py`（exit 0）原始输出：
+
+```text
+secret scan: 0 finding(s) across 370 file(s)
+```
+
+- 临时系统目录中生成全合成 16 天、6 城、3 人候选；住宿链连续覆盖 15 晚，故意让住宿 0 的 price unknown 指向 `/lodgings/1/...`。原始输出：
+
+```text
+CANDIDATES VALID /tmp/ctw-task0-repro.ZJcLQI/candidates.json
+JOURNEY_PLAN_FAILED segment candidates validation failed: C_UNKNOWN_CLAIM /unknowns/0/claim_id unknown references a missing claim
+validate_exit=0 journey_exit=1 repro_dir=/tmp/ctw-task0-repro.ZJcLQI
+```
+
+- 仅把该路径校正回 `/lodgings/0/price/amount` 后，第二堵墙精确复现为住宿链已覆盖、均分交通却提前进城：
+
+```text
+CANDIDATES VALID /tmp/ctw-task0-repro.ZJcLQI/candidates.json
+JOURNEY_PLAN_FAILED plan has no feasible stay: {"city":"合成丙城","code":"NO_STAY_FOR_NIGHT","date":"2026-09-25"}
+validate_exit=0 journey_exit=1
+```
+
+## 住宿链锚定修复任务 1：段边界与每日城市（完成）
+
+- `split_journey_inputs` 先把请求目的地内的候选住宿投影为逐日城市；住宿城市变化日优先成为段起点，同城区间才按 7 天硬切。每个子 Trip 只收到当段住宿城市，内部 route leg、`day.city` 与逐夜 stay 因而一起服从住宿链。
+- 按真实试跑日期形状收紧后的 16 天 6 城合成场景拆为 `09-25`、`09-26..28`、`09-29`、`09-30..10-02`、`10-03..05`、`10-06..07`、`10-08`、`10-09..10`；15 个夜晚逐一断言覆盖候选的唯一 city=`day.city`，所选 `candidate_ref` 属于覆盖该夜的候选且 `selected_nights` 包含该夜。
+- 三个只有一天的城市段本身不会让 Trip planner 选 stay；既有 `_bridge_segment_lodgings` 现会从该段候选物化边界夜住宿、claims 与 unknowns，再走原预算和 Trip validator，避免完整住宿链被误报 `J_LODGING_GAP`。
+- 首次精准门 `/usr/bin/python3 -m unittest tests.test_journey -v` → `Ran 25 tests in 1.589s`、`OK`、skipped 0。
+- 必做反向验证：临时令 `_segment_start_dates` 忽略住宿映射、只看均分交通腿，同一边界测试（exit 1）原始关键输出：
+
+```text
+test_six_city_segment_boundaries_follow_the_lodging_chain (tests.test_journey.JourneySplitTests) ... FAIL
+First differing element 0:
+('2026-09-25', '2026-09-25', '合成甲城')
+('2026-09-25', '2026-09-26', '合成甲城')
+First list contains 1 additional elements.
+First extra element 7:
+('2026-10-09', '2026-10-10', '合成戊城')
+----------------------------------------------------------------------
+Ran 1 test in 0.017s
+
+FAILED (failures=1)
+```
+
+- 恢复住宿链分支后完整精准门原始摘要：
+
+```text
+----------------------------------------------------------------------
+Ran 28 tests in 1.982s
+
+OK
+```
+
+- skipped 0；最终日期结构上的临时 route-only 代码已完整还原。当前验收轮次：5/14。
+
+## 住宿链锚定修复任务 2：可操作无解与 unknown 下标校验（完成）
+
+- `validate_candidates` 在 JSON Pointer 可解析且 claim 存在后，比较路径的 `/pois|lodgings/<index>` 与 claim.subject_ref 的实体位置；错位报 `C_UNKNOWN_SUBJECT`，同时给 `expected_index` 与可复制的 `expected_prefix`。
+- `_select_stays` 的 `NO_STAY_FOR_NIGHT` 保持硬失败，并新增 `nearest_lodging`：候选下标/id/名称/城市/check_in/check_out、日期距离及是否同城；Journey 在住宿链本身缺夜时复用同一结构，未静默接受空夜。
+- 下标错位 CLI（exit 1）原始输出：
+
+```text
+C_UNKNOWN_SUBJECT /unknowns/0/field_path unknown field_path targets /lodgings/1 but claim claim-j16-six-city-synthetic-a-lodging-price subject_ref lodging-j16-six-city-synthetic-a-central is /lodgings/0; expected_index=0; expected_prefix=/lodgings/0
+CANDIDATES INVALID /tmp/ctw-task2-repro.LuThDl/misindexed.json (1 error)
+misindexed_exit=1
+```
+
+- 住宿链仅缺 2026-09-25 一晚时 Journey CLI（exit 1）原始输出：
+
+```text
+JOURNEY_PLAN_FAILED Journey lodging chain has no feasible stay: {"city":"合成乙城","code":"NO_STAY_FOR_NIGHT","date":"2026-09-25","nearest_lodging":{"candidate_index":1,"check_in":"2026-09-22","check_out":"2026-09-25","city":"合成乙城","distance_nights":1,"lodging_id":"lodging-j16-six-city-synthetic-b-central","name":"合成乙城合成住宿","same_city":true}}
+gap_exit=1
+```
+
+- 首次精准门 `/usr/bin/python3 -m unittest tests.test_candidates tests.test_journey -v` → `Ran 38 tests in 2.405s`、`OK`、skipped 0。
+- 必做反向验证：临时关闭 subject/index 检查，精准 CLI 回归（exit 1）原始关键输出：
+
+```text
+AssertionError: 1 != 0 : CANDIDATES VALID /Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/.tmp/tmp5d1f4ljy/misindexed-candidates.json
+----------------------------------------------------------------------
+Ran 1 test in 0.062s
+
+FAILED (failures=1)
+```
+
+- 恢复检查后两组完整精准门 → `Ran 38 tests in 2.111s`、`OK`、skipped 0；临时代码已完整还原。当前验收轮次：3/14。
+
+## 住宿链锚定修复任务 3：16 天 6 城 3 人回归（完成）
+
+- 新增 `tests/fixtures/journey/synthetic-six-city-16d.json`，内含完整 request+candidates；`scripts/build_plan_fixtures.py::write_journey_lodging_chain_fixture` 可确定性重建该文件，但本轮只单独生成新夹具，没有运行会改写 demo 的 builder main。
+- 日期与住宿链精确沿用真实场景形状：2026-09-25..10-10、8 个城市段、6 个不同合成城市、9 条住宿候选（含返城与 10-05 同城重叠）、3 位旅客/2 间房；九个住宿/六个景点名称全部含“合成”，价格 amount 全为 null，实体与 claim 链接全部是 `https://example.invalid/`。
+- 永久回归逐字段比较生成器与 checked-in fixture，并真实执行 `ctw journey plan` → `ctw journey validate`；同时保留逐夜 city/check_in/check_out/candidate_ref/selected_nights 断言。
+- `/usr/bin/python3 -m unittest tests.test_journey -v` 原始摘要：
+
+```text
+----------------------------------------------------------------------
+Ran 28 tests in 2.015s
+
+OK
+```
+
+- skipped 0；`/usr/bin/python3 scripts/scan_secrets.py` → `secret scan: 0 finding(s) across 371 file(s)`。
+- 合成数据门 `/usr/bin/python3 -m unittest tests.test_no_captured_provider_data -v` → `Ran 1 test in 0.027s`、`OK`、skipped 0。当前验收轮次：4/14。
+
+## 住宿链锚定修复最终代码态验收
+
+- checked-in 合成夹具的公开命令链（均 exit 0）原始输出：
+
+```text
+CANDIDATES VALID /tmp/ctw-final-acceptance.ks73J6/candidates.json
+JOURNEY_PLAN_COMPLETE json=/tmp/ctw-final-acceptance.ks73J6/journey.json trips=8 days=16 max_trip_days=3 calls= journey_sha256=a5a2cda7cd723e9464002fecd96fb3af8d14767f897ed2da1aa3eb48c68e9f69 errors=0
+JOURNEY VALID /tmp/ctw-final-acceptance.ks73J6/journey.json trips=8
+2026-09-25 candidate_city=合成甲城 day_city=合成甲城 selected_window=2026-09-25..2026-09-26 candidate_options=1 aligned=true
+2026-09-26 candidate_city=合成乙城 day_city=合成乙城 selected_window=2026-09-26..2026-09-29 candidate_options=1 aligned=true
+2026-09-27 candidate_city=合成乙城 day_city=合成乙城 selected_window=2026-09-26..2026-09-29 candidate_options=1 aligned=true
+2026-09-28 candidate_city=合成乙城 day_city=合成乙城 selected_window=2026-09-26..2026-09-29 candidate_options=1 aligned=true
+2026-09-29 candidate_city=合成甲城 day_city=合成甲城 selected_window=2026-09-29..2026-09-30 candidate_options=1 aligned=true
+2026-09-30 candidate_city=合成丙城 day_city=合成丙城 selected_window=2026-09-30..2026-10-03 candidate_options=1 aligned=true
+2026-10-01 candidate_city=合成丙城 day_city=合成丙城 selected_window=2026-09-30..2026-10-03 candidate_options=1 aligned=true
+2026-10-02 candidate_city=合成丙城 day_city=合成丙城 selected_window=2026-09-30..2026-10-03 candidate_options=1 aligned=true
+2026-10-03 candidate_city=合成丁城 day_city=合成丁城 selected_window=2026-10-03..2026-10-06 candidate_options=1 aligned=true
+2026-10-04 candidate_city=合成丁城 day_city=合成丁城 selected_window=2026-10-03..2026-10-06 candidate_options=1 aligned=true
+2026-10-05 candidate_city=合成丁城 day_city=合成丁城 selected_window=2026-10-03..2026-10-06 candidate_options=2 aligned=true
+2026-10-06 candidate_city=合成戊城 day_city=合成戊城 selected_window=2026-10-06..2026-10-08 candidate_options=1 aligned=true
+2026-10-07 candidate_city=合成戊城 day_city=合成戊城 selected_window=2026-10-06..2026-10-08 candidate_options=1 aligned=true
+2026-10-08 candidate_city=合成己城 day_city=合成己城 selected_window=2026-10-08..2026-10-09 candidate_options=1 aligned=true
+2026-10-09 candidate_city=合成戊城 day_city=合成戊城 selected_window=2026-10-09..2026-10-10 candidate_options=1 aligned=true
+NIGHT_ALIGNMENT_OK nights=15 distinct_cities=6 lodging_candidates=9 trips=8 days=16
+```
+
+- 最终夹具负向 CLI（两个命令均预期 exit 1，核验脚本 exit 0）原始输出：
+
+```text
+C_UNKNOWN_SUBJECT /unknowns/0/field_path unknown field_path targets /lodgings/1 but claim claim-j16-six-city-synthetic-a-first-lodging-price subject_ref lodging-j16-six-city-synthetic-a-first-central is /lodgings/0; expected_index=0; expected_prefix=/lodgings/0
+CANDIDATES INVALID /tmp/ctw-final-negative.SIiWF6/misindexed.json (1 error)
+JOURNEY_PLAN_FAILED Journey lodging chain has no feasible stay: {"city":"合成乙城","code":"NO_STAY_FOR_NIGHT","date":"2026-09-28","nearest_lodging":{"candidate_index":1,"check_in":"2026-09-26","check_out":"2026-09-28","city":"合成乙城","distance_nights":1,"lodging_id":"lodging-j16-six-city-synthetic-b-central","name":"合成乙城合成住宿2","same_city":true}}
+misindexed_exit=1 gap_exit=1
+```
+
+- 暂存前与暂存态全量均为 393；最终暂存态 `/usr/bin/python3 -m unittest discover -s tests` 原始摘要：
+
+```text
+.........................................................................................................................................................................................................................................................................................................................................................................................................
+----------------------------------------------------------------------
+Ran 393 tests in 25.869s
+
+OK
+```
+
+- skipped 0；最终精准门 `tests.test_candidates tests.test_journey -v` → `Ran 40 tests in 2.484s`、`OK`；secret scan → `0 finding(s) across 371 file(s)`。
+- 新夹具进入 Git index 后，`tests.test_no_captured_provider_data -v` → `Ran 1 test in 0.029s`、`OK`，证明 tracked-files 门实际覆盖它。
+- 暂存态仅 9 个白名单路径；`git diff --cached --check` exit 0；schema/render/demo/cli/plugin manifest/__init__/providers/mobility/scheduler/Trip validator/docs/secret scanner/既有合成门组合 diff exit 0 且无输出。
+- `ALLOWLIST_OK files=9`；暂存 stat 为 `9 files changed, 1528 insertions(+), 37 deletions(-)`（其中新合成 JSON 773 行）。
+- 版本面组合 diff 无输出；只读值仍为 `plugin.json version=0.4.0`、`__version__=0.4.0`。本轮未安装 Codex、未运行 demo 生成器、未发布或推送。
+- 当前验收轮次：7/14；没有同一验收三连败，代码完成条件均已绿；9 个白名单文件的交付提交已创建并把本状态记录纳入同一提交，剩余仅提交后只读核验。
+
 ## 当前状态速览（2026-09-05）
 
 接手先读这一节，下面 68 个章节是按轮次留存的实测证据，不必通读。
 
 - 版本 **0.4.0**，已装进本机 Codex（`plugin list: installed, enabled 0.4.0`，缓存与源码一致）。
-- 全量 `/usr/bin/python3 -m unittest discover -s tests` = **386 项 OK、skipped 0**；
-  `scripts/scan_secrets.py` = `0 finding(s) across 370 file(s)`。
+- 全量 `/usr/bin/python3 -m unittest discover -s tests` = **393 项 OK、skipped 0**；
+  `scripts/scan_secrets.py` = `0 finding(s) across 371 file(s)`。
 - demo 五组：`demo/` 根、`guangzhou-shenzhen/`、`multicity-5d/`、`grouped-departures/`、
   `journey-16d/`，各自 validate 与 HTML 校验全过。
 - 2026-09-04/05 完成真实行程 dogfood 审计的全部 12 条 finding，测试从 290 涨到 386。
@@ -15,10 +194,8 @@
   降配、0.3.0 发布、Journey 模型、0.4.0 Journey 总览与发布。
 - 仍开着的两条在 `BLOCKED.md` 顶部 Open 区：12306 车站候选无距离信号；公开分发的
   privacy/terms URL 有意留空。
-- 已知待办（验收时用真实 16 天福建行程实测发现，尚未修）：Journey 拆段只按交通腿日期
-  定边界，不读候选住宿链的 `check_in`/`check_out`，用户写好的住宿链会被无视并报
-  `NO_STAY_FOR_NIGHT`；`validate-candidates` 不校验 unknown 的 `field_path` 数组下标
-  与其 claim 实体是否一致，下标错位会被放行到拆段才炸。
+- 真实 16 天行程实测发现的两项待办已在本轮修复：Journey 段边界/每日城市服从候选住宿链；
+  `validate-candidates` 会在入口拒绝 unknown 数组下标与 claim.subject_ref 实体错位。
 
 ## 书 3 开工理解（2026-09-04，≤10 行）
 1. 目标：补齐 planner 已承诺的 2–7 天有序多城市能力，不收回产品、Skill 或 Schema 合同。

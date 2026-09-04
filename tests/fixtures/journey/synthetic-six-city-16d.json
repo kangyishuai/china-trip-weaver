@@ -1,0 +1,773 @@
+{
+  "candidates": {
+    "candidates_version": "1.0.0",
+    "claims": [
+      {
+        "as_of": null,
+        "claim_id": "claim-j16-six-city-synthetic-a-first-lodging-price",
+        "confidence": 0,
+        "field_path": "/price",
+        "json_path": null,
+        "mode": "static",
+        "provider": "synthetic-fixture",
+        "queried_at": "2026-09-03T12:00:00+08:00",
+        "raw_ref": null,
+        "response_hash": null,
+        "source_url": "https://example.invalid/synthetic/lodging/0",
+        "status": "unknown",
+        "subject_ref": "lodging-j16-six-city-synthetic-a-first-central",
+        "value": null
+      },
+      {
+        "as_of": null,
+        "claim_id": "claim-j16-six-city-synthetic-b-lodging-price",
+        "confidence": 0,
+        "field_path": "/price",
+        "json_path": null,
+        "mode": "static",
+        "provider": "synthetic-fixture",
+        "queried_at": "2026-09-03T12:00:00+08:00",
+        "raw_ref": null,
+        "response_hash": null,
+        "source_url": "https://example.invalid/synthetic/lodging/1",
+        "status": "unknown",
+        "subject_ref": "lodging-j16-six-city-synthetic-b-central",
+        "value": null
+      },
+      {
+        "as_of": null,
+        "claim_id": "claim-j16-six-city-synthetic-a-return-lodging-price",
+        "confidence": 0,
+        "field_path": "/price",
+        "json_path": null,
+        "mode": "static",
+        "provider": "synthetic-fixture",
+        "queried_at": "2026-09-03T12:00:00+08:00",
+        "raw_ref": null,
+        "response_hash": null,
+        "source_url": "https://example.invalid/synthetic/lodging/2",
+        "status": "unknown",
+        "subject_ref": "lodging-j16-six-city-synthetic-a-return-central",
+        "value": null
+      },
+      {
+        "as_of": null,
+        "claim_id": "claim-j16-six-city-synthetic-c-lodging-price",
+        "confidence": 0,
+        "field_path": "/price",
+        "json_path": null,
+        "mode": "static",
+        "provider": "synthetic-fixture",
+        "queried_at": "2026-09-03T12:00:00+08:00",
+        "raw_ref": null,
+        "response_hash": null,
+        "source_url": "https://example.invalid/synthetic/lodging/3",
+        "status": "unknown",
+        "subject_ref": "lodging-j16-six-city-synthetic-c-central",
+        "value": null
+      },
+      {
+        "as_of": null,
+        "claim_id": "claim-j16-six-city-synthetic-d-long-lodging-price",
+        "confidence": 0,
+        "field_path": "/price",
+        "json_path": null,
+        "mode": "static",
+        "provider": "synthetic-fixture",
+        "queried_at": "2026-09-03T12:00:00+08:00",
+        "raw_ref": null,
+        "response_hash": null,
+        "source_url": "https://example.invalid/synthetic/lodging/4",
+        "status": "unknown",
+        "subject_ref": "lodging-j16-six-city-synthetic-d-long-central",
+        "value": null
+      },
+      {
+        "as_of": null,
+        "claim_id": "claim-j16-six-city-synthetic-d-overlap-lodging-price",
+        "confidence": 0,
+        "field_path": "/price",
+        "json_path": null,
+        "mode": "static",
+        "provider": "synthetic-fixture",
+        "queried_at": "2026-09-03T12:00:00+08:00",
+        "raw_ref": null,
+        "response_hash": null,
+        "source_url": "https://example.invalid/synthetic/lodging/5",
+        "status": "unknown",
+        "subject_ref": "lodging-j16-six-city-synthetic-d-overlap-central",
+        "value": null
+      },
+      {
+        "as_of": null,
+        "claim_id": "claim-j16-six-city-synthetic-e-first-lodging-price",
+        "confidence": 0,
+        "field_path": "/price",
+        "json_path": null,
+        "mode": "static",
+        "provider": "synthetic-fixture",
+        "queried_at": "2026-09-03T12:00:00+08:00",
+        "raw_ref": null,
+        "response_hash": null,
+        "source_url": "https://example.invalid/synthetic/lodging/6",
+        "status": "unknown",
+        "subject_ref": "lodging-j16-six-city-synthetic-e-first-central",
+        "value": null
+      },
+      {
+        "as_of": null,
+        "claim_id": "claim-j16-six-city-synthetic-f-lodging-price",
+        "confidence": 0,
+        "field_path": "/price",
+        "json_path": null,
+        "mode": "static",
+        "provider": "synthetic-fixture",
+        "queried_at": "2026-09-03T12:00:00+08:00",
+        "raw_ref": null,
+        "response_hash": null,
+        "source_url": "https://example.invalid/synthetic/lodging/7",
+        "status": "unknown",
+        "subject_ref": "lodging-j16-six-city-synthetic-f-central",
+        "value": null
+      },
+      {
+        "as_of": null,
+        "claim_id": "claim-j16-six-city-synthetic-e-return-lodging-price",
+        "confidence": 0,
+        "field_path": "/price",
+        "json_path": null,
+        "mode": "static",
+        "provider": "synthetic-fixture",
+        "queried_at": "2026-09-03T12:00:00+08:00",
+        "raw_ref": null,
+        "response_hash": null,
+        "source_url": "https://example.invalid/synthetic/lodging/8",
+        "status": "unknown",
+        "subject_ref": "lodging-j16-six-city-synthetic-e-return-central",
+        "value": null
+      },
+      {
+        "as_of": null,
+        "claim_id": "claim-j16-six-city-synthetic-a-hours",
+        "confidence": 0.55,
+        "field_path": "/opening_windows/0",
+        "json_path": null,
+        "mode": "static",
+        "provider": "synthetic-fixture",
+        "queried_at": "2026-09-03T12:00:00+08:00",
+        "raw_ref": null,
+        "response_hash": null,
+        "source_url": "https://example.invalid/synthetic/poi/0",
+        "status": "hypothesis",
+        "subject_ref": "poi-j16-six-city-synthetic-a",
+        "value": "date-specific candidate window"
+      },
+      {
+        "as_of": null,
+        "claim_id": "claim-j16-six-city-synthetic-b-hours",
+        "confidence": 0.55,
+        "field_path": "/opening_windows/0",
+        "json_path": null,
+        "mode": "static",
+        "provider": "synthetic-fixture",
+        "queried_at": "2026-09-03T12:00:00+08:00",
+        "raw_ref": null,
+        "response_hash": null,
+        "source_url": "https://example.invalid/synthetic/poi/1",
+        "status": "hypothesis",
+        "subject_ref": "poi-j16-six-city-synthetic-b",
+        "value": "date-specific candidate window"
+      },
+      {
+        "as_of": null,
+        "claim_id": "claim-j16-six-city-synthetic-c-hours",
+        "confidence": 0.55,
+        "field_path": "/opening_windows/0",
+        "json_path": null,
+        "mode": "static",
+        "provider": "synthetic-fixture",
+        "queried_at": "2026-09-03T12:00:00+08:00",
+        "raw_ref": null,
+        "response_hash": null,
+        "source_url": "https://example.invalid/synthetic/poi/2",
+        "status": "hypothesis",
+        "subject_ref": "poi-j16-six-city-synthetic-c",
+        "value": "date-specific candidate window"
+      },
+      {
+        "as_of": null,
+        "claim_id": "claim-j16-six-city-synthetic-d-hours",
+        "confidence": 0.55,
+        "field_path": "/opening_windows/0",
+        "json_path": null,
+        "mode": "static",
+        "provider": "synthetic-fixture",
+        "queried_at": "2026-09-03T12:00:00+08:00",
+        "raw_ref": null,
+        "response_hash": null,
+        "source_url": "https://example.invalid/synthetic/poi/3",
+        "status": "hypothesis",
+        "subject_ref": "poi-j16-six-city-synthetic-d",
+        "value": "date-specific candidate window"
+      },
+      {
+        "as_of": null,
+        "claim_id": "claim-j16-six-city-synthetic-e-hours",
+        "confidence": 0.55,
+        "field_path": "/opening_windows/0",
+        "json_path": null,
+        "mode": "static",
+        "provider": "synthetic-fixture",
+        "queried_at": "2026-09-03T12:00:00+08:00",
+        "raw_ref": null,
+        "response_hash": null,
+        "source_url": "https://example.invalid/synthetic/poi/4",
+        "status": "hypothesis",
+        "subject_ref": "poi-j16-six-city-synthetic-e",
+        "value": "date-specific candidate window"
+      },
+      {
+        "as_of": null,
+        "claim_id": "claim-j16-six-city-synthetic-f-hours",
+        "confidence": 0.55,
+        "field_path": "/opening_windows/0",
+        "json_path": null,
+        "mode": "static",
+        "provider": "synthetic-fixture",
+        "queried_at": "2026-09-03T12:00:00+08:00",
+        "raw_ref": null,
+        "response_hash": null,
+        "source_url": "https://example.invalid/synthetic/poi/5",
+        "status": "hypothesis",
+        "subject_ref": "poi-j16-six-city-synthetic-f",
+        "value": "date-specific candidate window"
+      }
+    ],
+    "lodgings": [
+      {
+        "area": "合成甲城合成片区",
+        "check_in": "2026-09-25",
+        "check_out": "2026-09-26",
+        "city": "合成甲城",
+        "claim_ids": [
+          "claim-j16-six-city-synthetic-a-first-lodging-price"
+        ],
+        "coordinates": null,
+        "deep_links": [
+          "https://example.invalid/synthetic/lodging/0"
+        ],
+        "locked": false,
+        "lodging_id": "lodging-j16-six-city-synthetic-a-first-central",
+        "name": "合成甲城合成住宿1",
+        "price": {
+          "amount": null,
+          "claim_id": "claim-j16-six-city-synthetic-a-first-lodging-price",
+          "currency": "CNY",
+          "includes_taxes": null,
+          "price_type": "verify-on-click",
+          "queried_at": "2026-09-03T12:00:00+08:00",
+          "unit": "per_night"
+        }
+      },
+      {
+        "area": "合成乙城合成片区",
+        "check_in": "2026-09-26",
+        "check_out": "2026-09-29",
+        "city": "合成乙城",
+        "claim_ids": [
+          "claim-j16-six-city-synthetic-b-lodging-price"
+        ],
+        "coordinates": null,
+        "deep_links": [
+          "https://example.invalid/synthetic/lodging/1"
+        ],
+        "locked": false,
+        "lodging_id": "lodging-j16-six-city-synthetic-b-central",
+        "name": "合成乙城合成住宿2",
+        "price": {
+          "amount": null,
+          "claim_id": "claim-j16-six-city-synthetic-b-lodging-price",
+          "currency": "CNY",
+          "includes_taxes": null,
+          "price_type": "verify-on-click",
+          "queried_at": "2026-09-03T12:00:00+08:00",
+          "unit": "per_night"
+        }
+      },
+      {
+        "area": "合成甲城合成片区",
+        "check_in": "2026-09-29",
+        "check_out": "2026-09-30",
+        "city": "合成甲城",
+        "claim_ids": [
+          "claim-j16-six-city-synthetic-a-return-lodging-price"
+        ],
+        "coordinates": null,
+        "deep_links": [
+          "https://example.invalid/synthetic/lodging/2"
+        ],
+        "locked": false,
+        "lodging_id": "lodging-j16-six-city-synthetic-a-return-central",
+        "name": "合成甲城合成住宿3",
+        "price": {
+          "amount": null,
+          "claim_id": "claim-j16-six-city-synthetic-a-return-lodging-price",
+          "currency": "CNY",
+          "includes_taxes": null,
+          "price_type": "verify-on-click",
+          "queried_at": "2026-09-03T12:00:00+08:00",
+          "unit": "per_night"
+        }
+      },
+      {
+        "area": "合成丙城合成片区",
+        "check_in": "2026-09-30",
+        "check_out": "2026-10-03",
+        "city": "合成丙城",
+        "claim_ids": [
+          "claim-j16-six-city-synthetic-c-lodging-price"
+        ],
+        "coordinates": null,
+        "deep_links": [
+          "https://example.invalid/synthetic/lodging/3"
+        ],
+        "locked": false,
+        "lodging_id": "lodging-j16-six-city-synthetic-c-central",
+        "name": "合成丙城合成住宿4",
+        "price": {
+          "amount": null,
+          "claim_id": "claim-j16-six-city-synthetic-c-lodging-price",
+          "currency": "CNY",
+          "includes_taxes": null,
+          "price_type": "verify-on-click",
+          "queried_at": "2026-09-03T12:00:00+08:00",
+          "unit": "per_night"
+        }
+      },
+      {
+        "area": "合成丁城合成片区",
+        "check_in": "2026-10-03",
+        "check_out": "2026-10-06",
+        "city": "合成丁城",
+        "claim_ids": [
+          "claim-j16-six-city-synthetic-d-long-lodging-price"
+        ],
+        "coordinates": null,
+        "deep_links": [
+          "https://example.invalid/synthetic/lodging/4"
+        ],
+        "locked": false,
+        "lodging_id": "lodging-j16-six-city-synthetic-d-long-central",
+        "name": "合成丁城合成住宿5",
+        "price": {
+          "amount": null,
+          "claim_id": "claim-j16-six-city-synthetic-d-long-lodging-price",
+          "currency": "CNY",
+          "includes_taxes": null,
+          "price_type": "verify-on-click",
+          "queried_at": "2026-09-03T12:00:00+08:00",
+          "unit": "per_night"
+        }
+      },
+      {
+        "area": "合成丁城合成片区",
+        "check_in": "2026-10-05",
+        "check_out": "2026-10-06",
+        "city": "合成丁城",
+        "claim_ids": [
+          "claim-j16-six-city-synthetic-d-overlap-lodging-price"
+        ],
+        "coordinates": null,
+        "deep_links": [
+          "https://example.invalid/synthetic/lodging/5"
+        ],
+        "locked": false,
+        "lodging_id": "lodging-j16-six-city-synthetic-d-overlap-central",
+        "name": "合成丁城合成住宿6",
+        "price": {
+          "amount": null,
+          "claim_id": "claim-j16-six-city-synthetic-d-overlap-lodging-price",
+          "currency": "CNY",
+          "includes_taxes": null,
+          "price_type": "verify-on-click",
+          "queried_at": "2026-09-03T12:00:00+08:00",
+          "unit": "per_night"
+        }
+      },
+      {
+        "area": "合成戊城合成片区",
+        "check_in": "2026-10-06",
+        "check_out": "2026-10-08",
+        "city": "合成戊城",
+        "claim_ids": [
+          "claim-j16-six-city-synthetic-e-first-lodging-price"
+        ],
+        "coordinates": null,
+        "deep_links": [
+          "https://example.invalid/synthetic/lodging/6"
+        ],
+        "locked": false,
+        "lodging_id": "lodging-j16-six-city-synthetic-e-first-central",
+        "name": "合成戊城合成住宿7",
+        "price": {
+          "amount": null,
+          "claim_id": "claim-j16-six-city-synthetic-e-first-lodging-price",
+          "currency": "CNY",
+          "includes_taxes": null,
+          "price_type": "verify-on-click",
+          "queried_at": "2026-09-03T12:00:00+08:00",
+          "unit": "per_night"
+        }
+      },
+      {
+        "area": "合成己城合成片区",
+        "check_in": "2026-10-08",
+        "check_out": "2026-10-09",
+        "city": "合成己城",
+        "claim_ids": [
+          "claim-j16-six-city-synthetic-f-lodging-price"
+        ],
+        "coordinates": null,
+        "deep_links": [
+          "https://example.invalid/synthetic/lodging/7"
+        ],
+        "locked": false,
+        "lodging_id": "lodging-j16-six-city-synthetic-f-central",
+        "name": "合成己城合成住宿8",
+        "price": {
+          "amount": null,
+          "claim_id": "claim-j16-six-city-synthetic-f-lodging-price",
+          "currency": "CNY",
+          "includes_taxes": null,
+          "price_type": "verify-on-click",
+          "queried_at": "2026-09-03T12:00:00+08:00",
+          "unit": "per_night"
+        }
+      },
+      {
+        "area": "合成戊城合成片区",
+        "check_in": "2026-10-09",
+        "check_out": "2026-10-10",
+        "city": "合成戊城",
+        "claim_ids": [
+          "claim-j16-six-city-synthetic-e-return-lodging-price"
+        ],
+        "coordinates": null,
+        "deep_links": [
+          "https://example.invalid/synthetic/lodging/8"
+        ],
+        "locked": false,
+        "lodging_id": "lodging-j16-six-city-synthetic-e-return-central",
+        "name": "合成戊城合成住宿9",
+        "price": {
+          "amount": null,
+          "claim_id": "claim-j16-six-city-synthetic-e-return-lodging-price",
+          "currency": "CNY",
+          "includes_taxes": null,
+          "price_type": "verify-on-click",
+          "queried_at": "2026-09-03T12:00:00+08:00",
+          "unit": "per_night"
+        }
+      }
+    ],
+    "pois": [
+      {
+        "category": "synthetic-sight",
+        "city": "合成甲城",
+        "claim_ids": [
+          "claim-j16-six-city-synthetic-a-hours"
+        ],
+        "coordinates": null,
+        "deep_links": [
+          "https://example.invalid/synthetic/poi/0"
+        ],
+        "name": "合成甲城合成漫步",
+        "opening_windows": [
+          {
+            "claim_id": "claim-j16-six-city-synthetic-a-hours",
+            "end_at": "2026-09-29T12:00:00+08:00",
+            "start_at": "2026-09-29T09:00:00+08:00",
+            "status": "tentative"
+          }
+        ],
+        "poi_id": "poi-j16-six-city-synthetic-a",
+        "price": null,
+        "recommended_duration_minutes": 90
+      },
+      {
+        "category": "synthetic-sight",
+        "city": "合成乙城",
+        "claim_ids": [
+          "claim-j16-six-city-synthetic-b-hours"
+        ],
+        "coordinates": null,
+        "deep_links": [
+          "https://example.invalid/synthetic/poi/1"
+        ],
+        "name": "合成乙城合成漫步",
+        "opening_windows": [
+          {
+            "claim_id": "claim-j16-six-city-synthetic-b-hours",
+            "end_at": "2026-09-27T12:00:00+08:00",
+            "start_at": "2026-09-27T09:00:00+08:00",
+            "status": "tentative"
+          }
+        ],
+        "poi_id": "poi-j16-six-city-synthetic-b",
+        "price": null,
+        "recommended_duration_minutes": 90
+      },
+      {
+        "category": "synthetic-sight",
+        "city": "合成丙城",
+        "claim_ids": [
+          "claim-j16-six-city-synthetic-c-hours"
+        ],
+        "coordinates": null,
+        "deep_links": [
+          "https://example.invalid/synthetic/poi/2"
+        ],
+        "name": "合成丙城合成漫步",
+        "opening_windows": [
+          {
+            "claim_id": "claim-j16-six-city-synthetic-c-hours",
+            "end_at": "2026-10-01T12:00:00+08:00",
+            "start_at": "2026-10-01T09:00:00+08:00",
+            "status": "tentative"
+          }
+        ],
+        "poi_id": "poi-j16-six-city-synthetic-c",
+        "price": null,
+        "recommended_duration_minutes": 90
+      },
+      {
+        "category": "synthetic-sight",
+        "city": "合成丁城",
+        "claim_ids": [
+          "claim-j16-six-city-synthetic-d-hours"
+        ],
+        "coordinates": null,
+        "deep_links": [
+          "https://example.invalid/synthetic/poi/3"
+        ],
+        "name": "合成丁城合成漫步",
+        "opening_windows": [
+          {
+            "claim_id": "claim-j16-six-city-synthetic-d-hours",
+            "end_at": "2026-10-04T12:00:00+08:00",
+            "start_at": "2026-10-04T09:00:00+08:00",
+            "status": "tentative"
+          }
+        ],
+        "poi_id": "poi-j16-six-city-synthetic-d",
+        "price": null,
+        "recommended_duration_minutes": 90
+      },
+      {
+        "category": "synthetic-sight",
+        "city": "合成戊城",
+        "claim_ids": [
+          "claim-j16-six-city-synthetic-e-hours"
+        ],
+        "coordinates": null,
+        "deep_links": [
+          "https://example.invalid/synthetic/poi/4"
+        ],
+        "name": "合成戊城合成漫步",
+        "opening_windows": [
+          {
+            "claim_id": "claim-j16-six-city-synthetic-e-hours",
+            "end_at": "2026-10-07T12:00:00+08:00",
+            "start_at": "2026-10-07T09:00:00+08:00",
+            "status": "tentative"
+          }
+        ],
+        "poi_id": "poi-j16-six-city-synthetic-e",
+        "price": null,
+        "recommended_duration_minutes": 90
+      },
+      {
+        "category": "synthetic-sight",
+        "city": "合成己城",
+        "claim_ids": [
+          "claim-j16-six-city-synthetic-f-hours"
+        ],
+        "coordinates": null,
+        "deep_links": [
+          "https://example.invalid/synthetic/poi/5"
+        ],
+        "name": "合成己城合成漫步",
+        "opening_windows": [
+          {
+            "claim_id": "claim-j16-six-city-synthetic-f-hours",
+            "end_at": "2026-10-08T12:00:00+08:00",
+            "start_at": "2026-10-08T09:00:00+08:00",
+            "status": "tentative"
+          }
+        ],
+        "poi_id": "poi-j16-six-city-synthetic-f",
+        "price": null,
+        "recommended_duration_minutes": 90
+      }
+    ],
+    "unknowns": [
+      {
+        "claim_id": "claim-j16-six-city-synthetic-a-first-lodging-price",
+        "field_path": "/lodgings/0/price/amount",
+        "provider": "synthetic-fixture",
+        "reason": "synthetic value intentionally left for verification"
+      },
+      {
+        "claim_id": "claim-j16-six-city-synthetic-b-lodging-price",
+        "field_path": "/lodgings/1/price/amount",
+        "provider": "synthetic-fixture",
+        "reason": "synthetic value intentionally left for verification"
+      },
+      {
+        "claim_id": "claim-j16-six-city-synthetic-a-return-lodging-price",
+        "field_path": "/lodgings/2/price/amount",
+        "provider": "synthetic-fixture",
+        "reason": "synthetic value intentionally left for verification"
+      },
+      {
+        "claim_id": "claim-j16-six-city-synthetic-c-lodging-price",
+        "field_path": "/lodgings/3/price/amount",
+        "provider": "synthetic-fixture",
+        "reason": "synthetic value intentionally left for verification"
+      },
+      {
+        "claim_id": "claim-j16-six-city-synthetic-d-long-lodging-price",
+        "field_path": "/lodgings/4/price/amount",
+        "provider": "synthetic-fixture",
+        "reason": "synthetic value intentionally left for verification"
+      },
+      {
+        "claim_id": "claim-j16-six-city-synthetic-d-overlap-lodging-price",
+        "field_path": "/lodgings/5/price/amount",
+        "provider": "synthetic-fixture",
+        "reason": "synthetic value intentionally left for verification"
+      },
+      {
+        "claim_id": "claim-j16-six-city-synthetic-e-first-lodging-price",
+        "field_path": "/lodgings/6/price/amount",
+        "provider": "synthetic-fixture",
+        "reason": "synthetic value intentionally left for verification"
+      },
+      {
+        "claim_id": "claim-j16-six-city-synthetic-f-lodging-price",
+        "field_path": "/lodgings/7/price/amount",
+        "provider": "synthetic-fixture",
+        "reason": "synthetic value intentionally left for verification"
+      },
+      {
+        "claim_id": "claim-j16-six-city-synthetic-e-return-lodging-price",
+        "field_path": "/lodgings/8/price/amount",
+        "provider": "synthetic-fixture",
+        "reason": "synthetic value intentionally left for verification"
+      },
+      {
+        "claim_id": "claim-j16-six-city-synthetic-a-hours",
+        "field_path": "/pois/0/coordinates",
+        "provider": "synthetic-fixture",
+        "reason": "synthetic value intentionally left for verification"
+      },
+      {
+        "claim_id": "claim-j16-six-city-synthetic-b-hours",
+        "field_path": "/pois/1/coordinates",
+        "provider": "synthetic-fixture",
+        "reason": "synthetic value intentionally left for verification"
+      },
+      {
+        "claim_id": "claim-j16-six-city-synthetic-c-hours",
+        "field_path": "/pois/2/coordinates",
+        "provider": "synthetic-fixture",
+        "reason": "synthetic value intentionally left for verification"
+      },
+      {
+        "claim_id": "claim-j16-six-city-synthetic-d-hours",
+        "field_path": "/pois/3/coordinates",
+        "provider": "synthetic-fixture",
+        "reason": "synthetic value intentionally left for verification"
+      },
+      {
+        "claim_id": "claim-j16-six-city-synthetic-e-hours",
+        "field_path": "/pois/4/coordinates",
+        "provider": "synthetic-fixture",
+        "reason": "synthetic value intentionally left for verification"
+      },
+      {
+        "claim_id": "claim-j16-six-city-synthetic-f-hours",
+        "field_path": "/pois/5/coordinates",
+        "provider": "synthetic-fixture",
+        "reason": "synthetic value intentionally left for verification"
+      }
+    ]
+  },
+  "request": {
+    "assumptions": [
+      "all entity identities are synthetic; dates mirror the regression shape"
+    ],
+    "budget_cny": 24000,
+    "constraints": [
+      "不执行任何交易动作"
+    ],
+    "destinations": [
+      {
+        "city": "合成甲城",
+        "name": "合成甲城",
+        "ref_id": "city-synthetic-a"
+      },
+      {
+        "city": "合成乙城",
+        "name": "合成乙城",
+        "ref_id": "city-synthetic-b"
+      },
+      {
+        "city": "合成甲城",
+        "name": "合成甲城",
+        "ref_id": "city-synthetic-a"
+      },
+      {
+        "city": "合成丙城",
+        "name": "合成丙城",
+        "ref_id": "city-synthetic-c"
+      },
+      {
+        "city": "合成丁城",
+        "name": "合成丁城",
+        "ref_id": "city-synthetic-d"
+      },
+      {
+        "city": "合成戊城",
+        "name": "合成戊城",
+        "ref_id": "city-synthetic-e"
+      },
+      {
+        "city": "合成己城",
+        "name": "合成己城",
+        "ref_id": "city-synthetic-f"
+      },
+      {
+        "city": "合成戊城",
+        "name": "合成戊城",
+        "ref_id": "city-synthetic-e"
+      }
+    ],
+    "end_date": "2026-10-10",
+    "interests": [
+      "synthetic architecture",
+      "synthetic coast"
+    ],
+    "locale": "zh-CN",
+    "origin": {
+      "city": "合成甲城",
+      "name": "合成甲城",
+      "ref_id": "city-synthetic-a"
+    },
+    "pace": "balanced",
+    "pasted_notes": null,
+    "rooms": 2,
+    "start_date": "2026-09-25",
+    "travelers": 3
+  }
+}

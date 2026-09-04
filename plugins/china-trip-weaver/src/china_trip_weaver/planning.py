@@ -711,7 +711,7 @@ def _select_stays(
                 coverage += 1
             eligible.append((not bool(candidate.get("locked")), -coverage, candidate_index, coverage))
         if not eligible:
-            conflict = {"code": "NO_STAY_FOR_NIGHT", "date": night, "city": city}
+            conflict = _no_stay_conflict(night, city, candidate_list)
             raise ValueError("plan has no feasible stay: " + canonical_json(conflict))
         _, _, candidate_index, coverage = min(eligible)
         selected_nights = [item[0] for item in required_nights[position:position + coverage]]
@@ -782,6 +782,52 @@ def _select_stays(
     ]
     selected_claims.extend(cloned_claims)
     return stays, selected_claims, selections
+
+
+def _no_stay_conflict(
+    night: str,
+    city: str,
+    candidates: Sequence[Mapping[str, Any]],
+) -> Mapping[str, Any]:
+    target = date.fromisoformat(night)
+    ranked = []
+    for candidate_index, candidate in enumerate(candidates):
+        check_in = date.fromisoformat(candidate["check_in"])
+        check_out = date.fromisoformat(candidate["check_out"])
+        if target < check_in:
+            distance = (check_in - target).days
+        elif target >= check_out:
+            distance = (target - check_out).days + 1
+        else:
+            distance = 0
+        ranked.append((
+            distance,
+            0 if candidate["city"] == city else 1,
+            candidate["check_in"],
+            candidate["check_out"],
+            str(candidate["lodging_id"]),
+            candidate_index,
+            candidate,
+        ))
+    nearest = None
+    if ranked:
+        distance, _, _, _, _, candidate_index, candidate = min(ranked)
+        nearest = {
+            "candidate_index": candidate_index,
+            "lodging_id": candidate["lodging_id"],
+            "name": candidate["name"],
+            "city": candidate["city"],
+            "check_in": candidate["check_in"],
+            "check_out": candidate["check_out"],
+            "distance_nights": distance,
+            "same_city": candidate["city"] == city,
+        }
+    return {
+        "code": "NO_STAY_FOR_NIGHT",
+        "date": night,
+        "city": city,
+        "nearest_lodging": nearest,
+    }
 
 
 def _selected_candidate_unknowns(

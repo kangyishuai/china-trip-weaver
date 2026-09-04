@@ -32,13 +32,17 @@ from china_trip_weaver.render import render_journey, validate_journey_html
 from china_trip_weaver.render.validate_html import AuditParser
 from china_trip_weaver.replan import replan_trip
 from china_trip_weaver.validate_trip import validate_trip
-from scripts.build_plan_fixtures import journey_sixteen_day_case
+from scripts.build_plan_fixtures import (
+    journey_six_city_lodging_chain_case,
+    journey_sixteen_day_case,
+)
 
 
 FIXED_NOW = "2026-09-05T09:00:00+08:00"
 VALID_TRIP = ROOT / "tests" / "fixtures" / "trips" / "schema" / "valid" / "weekend-live.json"
 GROUPED_TRIP = ROOT / "demo" / "grouped-departures" / "trip.json"
 JOURNEY_DEMO = ROOT / "demo" / "journey-16d"
+LODGING_CHAIN_FIXTURE = ROOT / "tests" / "fixtures" / "journey" / "synthetic-six-city-16d.json"
 CTW = PLUGIN / "scripts" / "ctw"
 
 
@@ -131,9 +135,11 @@ class JourneySplitTests(unittest.TestCase):
 
     def test_single_city_long_request_uses_seven_seven_two_hard_splits(self):
         request = copy.deepcopy(self.request)
+        candidates = copy.deepcopy(self.candidates)
         request["origin"] = copy.deepcopy(request["destinations"][0])
         request["destinations"] = [copy.deepcopy(request["destinations"][0])]
-        segments = split_journey_inputs(request, self.candidates)
+        candidates["lodgings"][0]["check_out"] = request["end_date"]
+        segments = split_journey_inputs(request, candidates)
         self.assertEqual(
             [
                 ("2026-10-01", "2026-10-07"),
@@ -156,6 +162,137 @@ class JourneySplitTests(unittest.TestCase):
                 report = validate_trip(result.trip)
                 self.assertTrue(report.ok, [item.render() for item in report.errors])
                 self.assertLessEqual(len(result.trip["days"]), 7)
+
+    def test_six_city_segment_boundaries_follow_the_lodging_chain(self):
+        case = journey_six_city_lodging_chain_case()
+        segments = split_journey_inputs(case["request"], case["candidates"])
+        self.assertEqual(
+            [
+                ("2026-09-25", "2026-09-25", "合成甲城"),
+                ("2026-09-26", "2026-09-28", "合成乙城"),
+                ("2026-09-29", "2026-09-29", "合成甲城"),
+                ("2026-09-30", "2026-10-02", "合成丙城"),
+                ("2026-10-03", "2026-10-05", "合成丁城"),
+                ("2026-10-06", "2026-10-07", "合成戊城"),
+                ("2026-10-08", "2026-10-08", "合成己城"),
+                ("2026-10-09", "2026-10-10", "合成戊城"),
+            ],
+            [
+                (
+                    item.request["start_date"],
+                    item.request["end_date"],
+                    item.request["destinations"][0]["city"],
+                )
+                for item in segments
+            ],
+        )
+
+    def test_six_city_fixture_is_reproducible_and_strictly_synthetic(self):
+        fixture = load(LODGING_CHAIN_FIXTURE)
+        self.assertEqual(journey_six_city_lodging_chain_case(), fixture)
+        self.assertEqual(3, fixture["request"]["travelers"])
+        self.assertEqual(8, len(fixture["request"]["destinations"]))
+        self.assertEqual(6, len({item["city"] for item in fixture["request"]["destinations"]}))
+        self.assertEqual(9, len(fixture["candidates"]["lodgings"]))
+        self.assertEqual(6, len(fixture["candidates"]["pois"]))
+        entities = fixture["candidates"]["lodgings"] + fixture["candidates"]["pois"]
+        self.assertTrue(all("合成" in item["name"] and "合成" in item["city"] for item in entities))
+        urls = [url for item in entities for url in item["deep_links"]]
+        urls.extend(item["source_url"] for item in fixture["candidates"]["claims"])
+        self.assertTrue(all(url.startswith("https://example.invalid/") for url in urls))
+        self.assertTrue(all(item["price"]["amount"] is None for item in fixture["candidates"]["lodgings"]))
+
+    def test_six_city_journey_nights_match_candidate_lodging_city_and_dates(self):
+        case = journey_six_city_lodging_chain_case()
+        result = plan_journey(
+            case["request"],
+            case["candidates"],
+            FixedClock.from_iso(FIXED_NOW),
+            RailBackend.from_spec("off", ROOT),
+        )
+        report = validate_journey(result.journey)
+        self.assertTrue(report.ok, [item.render() for item in report.errors])
+
+        days = {
+            day_item["date"]: (trip, day_item)
+            for trip in result.journey["trips"]
+            for day_item in trip["days"]
+        }
+        for offset in range(15):
+            night = (date.fromisoformat(case["request"]["start_date"]) + timedelta(days=offset)).isoformat()
+            candidates = [
+                item for item in case["candidates"]["lodgings"]
+                if item["check_in"] <= night < item["check_out"]
+            ]
+            self.assertGreaterEqual(len(candidates), 1, night)
+            self.assertEqual(1, len({item["city"] for item in candidates}), night)
+            trip, day_item = days[night]
+            self.assertEqual(candidates[0]["city"], day_item["city"], night)
+            selected = next(
+                item for item in trip["lodgings"]
+                if item["lodging_id"] == day_item["stay_id"]
+            )
+            self.assertIn(selected["candidate_ref"], {item["lodging_id"] for item in candidates}, night)
+            self.assertIn(night, selected["selected_nights"])
+
+    def test_lodging_chain_gap_reports_date_city_and_nearest_candidate(self):
+        case = journey_six_city_lodging_chain_case()
+        case["candidates"]["lodgings"][1]["check_out"] = "2026-09-28"
+        with self.assertRaises(ValueError) as raised:
+            plan_journey(
+                case["request"],
+                case["candidates"],
+                FixedClock.from_iso(FIXED_NOW),
+                RailBackend.from_spec("off", ROOT),
+            )
+        message = str(raised.exception)
+        payload = json.loads(message[message.index("{"):])
+        self.assertEqual("NO_STAY_FOR_NIGHT", payload["code"])
+        self.assertEqual("2026-09-28", payload["date"])
+        self.assertEqual("合成乙城", payload["city"])
+        self.assertEqual(1, payload["nearest_lodging"]["candidate_index"])
+        self.assertEqual("合成乙城合成住宿2", payload["nearest_lodging"]["name"])
+        self.assertEqual("2026-09-28", payload["nearest_lodging"]["check_out"])
+        self.assertEqual(1, payload["nearest_lodging"]["distance_nights"])
+        self.assertTrue(payload["nearest_lodging"]["same_city"])
+
+    def test_six_city_fixture_runs_through_journey_plan_and_validate_cli(self):
+        fixture = load(LODGING_CHAIN_FIXTURE)
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            output = Path(temporary)
+            request_path = output / "request.json"
+            candidates_path = output / "candidates.json"
+            journey_path = output / "journey.json"
+            request_path.write_text(
+                json.dumps(fixture["request"], ensure_ascii=False),
+                encoding="utf-8",
+            )
+            candidates_path.write_text(
+                json.dumps(fixture["candidates"], ensure_ascii=False),
+                encoding="utf-8",
+            )
+            planned = subprocess.run(
+                [
+                    str(CTW), "journey", "plan",
+                    "--request", str(request_path),
+                    "--candidates", str(candidates_path),
+                    "--rail", "off",
+                    "--offline-fixture",
+                    "--fixed-clock", FIXED_NOW,
+                    "--output-json", str(journey_path),
+                ],
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(0, planned.returncode, planned.stdout + planned.stderr)
+            self.assertIn("trips=8 days=16 max_trip_days=3", planned.stdout)
+            validated = subprocess.run(
+                [str(CTW), "journey", "validate", str(journey_path)],
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(0, validated.returncode, validated.stdout + validated.stderr)
+            self.assertIn("JOURNEY VALID", validated.stdout)
 
 
 class JourneyContinuityTests(unittest.TestCase):

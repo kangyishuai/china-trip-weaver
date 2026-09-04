@@ -3,6 +3,14 @@
 Two items are open. Everything else on this page is closed and kept only for provenance;
 the per-round evidence lives in `PROGRESS.md`.
 
+## Current task baseline note (not a blocker)
+
+The task snapshot names `a1bf1ad` as both HEAD and `origin/main`. At kickoff,
+`origin/main` was still `a1bf1ad`, while local HEAD was `a95ecf4`, one clean commit ahead.
+That commit changes only this task's allowlisted `PROGRESS.md`; `git diff a1bf1ad..HEAD`
+is empty for product source, tests, and scripts. It is preserved as user-owned history and
+does not block the code baseline or the required 386-test and zero-secret gates.
+
 ## Open
 
 ### 12306 station candidates carry no distance signal

@@ -130,10 +130,32 @@ def validate_candidates(value: Mapping[str, Any], schema_path: Optional[Path] = 
         claim_id = unknown["claim_id"]
         if claim_id is not None and claim_id not in claim_ids:
             add("C_UNKNOWN_CLAIM", path + "/claim_id", "unknown references a missing claim")
+        pointer_ok = True
         try:
             _resolve_pointer(value, unknown["field_path"])
         except CandidatePointerError as exc:
+            pointer_ok = False
             add("C_UNKNOWN_PATH", path + "/field_path", str(exc))
+        if pointer_ok and claim_id is not None and claim_id in claim_ids:
+            subject_ref = claim_ids[claim_id]["subject_ref"]
+            expected_path = entity_ids.get(subject_ref)
+            actual_path = _candidate_pointer_entity_path(unknown["field_path"])
+            if expected_path is not None and actual_path != expected_path:
+                expected_index = expected_path.rsplit("/", 1)[1]
+                add(
+                    "C_UNKNOWN_SUBJECT",
+                    path + "/field_path",
+                    "unknown field_path targets %s but claim %s subject_ref %s is %s; "
+                    "expected_index=%s; expected_prefix=%s"
+                    % (
+                        actual_path or "a non-candidate path",
+                        claim_id,
+                        subject_ref,
+                        expected_path,
+                        expected_index,
+                        expected_path,
+                    ),
+                )
 
     return ValidationReport(tuple(sorted(set(issues))))
 
@@ -514,3 +536,14 @@ def _resolve_pointer(document: Any, pointer: str) -> Any:
             )
         traversed.append(raw)
     return value
+
+
+def _candidate_pointer_entity_path(pointer: str) -> Optional[str]:
+    parts = pointer[1:].split("/") if pointer.startswith("/") else []
+    if len(parts) < 2:
+        return None
+    group = parts[0].replace("~1", "/").replace("~0", "~")
+    index = parts[1].replace("~1", "/").replace("~0", "~")
+    if group not in ("pois", "lodgings") or not index.isdigit():
+        return None
+    return "/%s/%d" % (group, int(index))

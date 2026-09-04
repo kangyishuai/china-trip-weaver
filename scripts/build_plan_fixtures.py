@@ -12,6 +12,9 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "tests" / "fixtures" / "e2e"
+JOURNEY_LODGING_CHAIN_FIXTURE = (
+    ROOT / "tests" / "fixtures" / "journey" / "synthetic-six-city-16d.json"
+)
 QUERIED_AT = "2026-09-03T12:00:00+08:00"
 RAIL_CAPTURED_AT = "2026-09-04T00:00:00+08:00"
 RAIL_TOOLS = [
@@ -266,6 +269,120 @@ def journey_sixteen_day_case() -> Mapping[str, Any]:
         )
     ]
     return {"request": request_value, "candidates": candidates_value}
+
+
+def journey_six_city_lodging_chain_case() -> Mapping[str, Any]:
+    """Return the all-synthetic 16-day lodging-chain regression input."""
+
+    places = {
+        "a": "合成甲城",
+        "b": "合成乙城",
+        "c": "合成丙城",
+        "d": "合成丁城",
+        "e": "合成戊城",
+        "f": "合成己城",
+    }
+    destination_sequence = ("a", "b", "a", "c", "d", "e", "f", "e")
+    stays = (
+        ("a-first", "a", "2026-09-25", "2026-09-26"),
+        ("b", "b", "2026-09-26", "2026-09-29"),
+        ("a-return", "a", "2026-09-29", "2026-09-30"),
+        ("c", "c", "2026-09-30", "2026-10-03"),
+        ("d-long", "d", "2026-10-03", "2026-10-06"),
+        ("d-overlap", "d", "2026-10-05", "2026-10-06"),
+        ("e-first", "e", "2026-10-06", "2026-10-08"),
+        ("f", "f", "2026-10-08", "2026-10-09"),
+        ("e-return", "e", "2026-10-09", "2026-10-10"),
+    )
+    visits = (
+        ("a", "2026-09-29"),
+        ("b", "2026-09-27"),
+        ("c", "2026-10-01"),
+        ("d", "2026-10-04"),
+        ("e", "2026-10-07"),
+        ("f", "2026-10-08"),
+    )
+    request_value = {
+        "origin": {
+            "ref_id": "city-synthetic-a",
+            "name": places["a"],
+            "city": places["a"],
+        },
+        "destinations": [
+            {
+                "ref_id": "city-synthetic-" + slug,
+                "name": places[slug],
+                "city": places[slug],
+            }
+            for slug in destination_sequence
+        ],
+        "start_date": "2026-09-25",
+        "end_date": "2026-10-10",
+        "travelers": 3,
+        "rooms": 2,
+        "budget_cny": 24000,
+        "interests": ["synthetic architecture", "synthetic coast"],
+        "pace": "balanced",
+        "constraints": ["不执行任何交易动作"],
+        "assumptions": ["all entity identities are synthetic; dates mirror the regression shape"],
+        "locale": "zh-CN",
+        "pasted_notes": None,
+    }
+    candidates_value = multicity_candidates(
+        "j16-six-city-synthetic",
+        [
+            (
+                slug,
+                places[city_ref] + "合成住宿" + str(index + 1),
+                places[city_ref],
+                places[city_ref] + "合成片区",
+                check_in,
+                check_out,
+            )
+            for index, (slug, city_ref, check_in, check_out) in enumerate(stays)
+        ],
+        [
+            (
+                city_ref,
+                places[city_ref] + "合成漫步",
+                places[city_ref],
+                "synthetic-sight",
+                visit_date + "T09:00:00+08:00",
+                visit_date + "T12:00:00+08:00",
+                90,
+                "https://example.invalid/synthetic/poi/" + slug,
+            )
+            for slug, (city_ref, visit_date) in zip(places, visits)
+        ],
+    )
+    entity_urls = {
+        item["lodging_id"]: "https://example.invalid/synthetic/lodging/%d" % index
+        for index, item in enumerate(candidates_value["lodgings"])
+    }
+    entity_urls.update({
+        item["poi_id"]: "https://example.invalid/synthetic/poi/%d" % index
+        for index, item in enumerate(candidates_value["pois"])
+    })
+    for entity in list(candidates_value["lodgings"]) + list(candidates_value["pois"]):
+        identifier = entity.get("lodging_id") or entity["poi_id"]
+        entity["deep_links"] = [entity_urls[identifier]]
+    for claim_item in candidates_value["claims"]:
+        claim_item["source_url"] = entity_urls[claim_item["subject_ref"]]
+        claim_item["provider"] = "synthetic-fixture"
+    for unknown_item in candidates_value["unknowns"]:
+        unknown_item["provider"] = "synthetic-fixture"
+        unknown_item["reason"] = "synthetic value intentionally left for verification"
+    return {"request": request_value, "candidates": candidates_value}
+
+
+def write_journey_lodging_chain_fixture() -> Path:
+    value = journey_six_city_lodging_chain_case()
+    JOURNEY_LODGING_CHAIN_FIXTURE.parent.mkdir(parents=True, exist_ok=True)
+    JOURNEY_LODGING_CHAIN_FIXTURE.write_text(
+        json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return JOURNEY_LODGING_CHAIN_FIXTURE
 
 
 def grouped_departures_demo() -> Mapping[str, Any]:
@@ -540,7 +657,8 @@ def main() -> int:
         "files": sorted(files, key=lambda item: item["path"]),
     }
     write(OUTPUT / "manifest.json", manifest)
-    print("wrote %d plan cases, 3 invalid candidates, and single/multi-city/grouped demo inputs; packaged reference verified" % len(cases))
+    write_journey_lodging_chain_fixture()
+    print("wrote %d plan cases, 3 invalid candidates, one Journey lodging-chain fixture, and single/multi-city/grouped demo inputs; packaged reference verified" % len(cases))
     return 0
 
 
