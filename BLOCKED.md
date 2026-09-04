@@ -230,3 +230,7 @@ should mean pending work. They live where they are enforced:
 ## 0.4.0 Journey 总览与本机发布（2026-09-05）
 
 - 本轮新增阻塞：无。
+
+## 书 13 Journey 拆分粒度（2026-09-05）
+
+- 本轮新增阻塞：无。

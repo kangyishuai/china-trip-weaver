@@ -1559,3 +1559,29 @@ OK：china-trip-weaver@china-trip-weaver-local 0.3.0 已安装且缓存与源码
 - 最终再次无 `CODEX_HOME` 刷新真实安装并 `--check`：两次均 exit 0；独立 plugin list 为 `installed, enabled 0.4.0`，缓存与当前插件源码一致。
 - 修改/新增清单只含任务书白名单；`docs/`、Trip/candidates Schema、`planning.py`、scheduler、mobility、Trip validator diff 为空，mcp_stdio diff 仅 clientInfo 版本串，`git diff --check` 通过。
 - `BLOCKED.md` 保留全部历史事实并追加本轮状态“新增阻塞：无”。当前验收轮次：8/14；下一步仅暂存态复核与提交。
+
+## 书 13 Journey 拆分粒度开工理解（2026-09-05，8 行）
+1. 目标：住宿城市变化只作候选切点；先守逐夜住宿链与 7 天硬上限，再让 Journey 段数最少。
+2. 顺序：任务 0 基线与 8 段复现 → 最少段数 → 可选 1–7 天期望段长 → 两次反向红绿 → 全量门禁与提交。
+3. 缺省应把 16 天夹具压到约束允许的最少段数；必须切时先选不晚于硬上限的最近住宿城市变化，否则按第 7 天硬切。
+4. 指定期望段长时按偏好寻找切点，但偏好不得突破 7 天或改变候选住宿的逐夜城市、日期与引用。
+5. 若实际段长偏离期望值，Journey assumptions 必须写明实际分段与约束优先原因。
+6. 最大风险：现有分段候选过滤会不会让跨城市子 Trip 丢住宿/目的地，进而破坏书 12 的逐夜住宿链成果。
+7. 任务 0 原始门：`Ran 393 tests in 25.823s`、`OK`、skipped 0；`secret scan: 0 finding(s) across 371 file(s)`。
+8. 改前原始 CLI：`JOURNEY_PLAN_COMPLETE ... trips=8 days=16 max_trip_days=3 ... errors=0`；随后 `JOURNEY VALID ... trips=8`。当前轮次 1/12。
+
+## 书 13 任务 1：段数最少化（完成）
+
+- 住宿城市变化已从硬边界降为候选切点；缺省先固定 `ceil(days/7)` 的最少段数，再选仍能保持该段数的最晚住宿变化，找不到才在第 7 天硬切。16 天六城夹具因此从 8 段 `[1,3,1,3,3,2,1,2]` 降为最少 3 段 `[5,6,5]`。
+- 每个逻辑 Trip 内部仍按逐夜住宿城市做原子规划，再合并为一个完整多目的地 Trip；合并后重新建立唯一引用、claims/unknown pointers、provider health 与预算，最终逐个 `validate_trip`，没有改 `planning.py` 或放宽住宿链。
+- 正向精准门：`/usr/bin/python3 -m unittest tests.test_journey -v` → `Ran 32 tests in 2.567s`、`OK`、skipped 0；逐夜城市/候选住宿、每段 ≤7 天及 Journey validate 均在同一套永久回归内。
+- 反向红态：临时把缺省策略改回 `_strict_segment_start_dates` 后，精准测试 exit 1，原始核心输出为 `AssertionError: 3 != 8`、`Ran 1 test in 0.018s`、`FAILED (failures=1)`。
+- 还原绿态：恢复最少段数策略后完整 `tests.test_journey` 32/32 OK；临时回退已完整撤销。当前轮次 2/12。
+
+## 书 13 任务 2：可选期望段长（完成）
+
+- Journey API 新增末尾可选关键字 `expected_segment_days`，只接受整数 1–7；未改 Trip Schema 或 CLI。缺省仍最少段数，给值后先确定 `ceil(total/expected)` 个逻辑段，再优先把必要切点放在住宿城市变化处并在同优先级下贴近期望长度。
+- 同一 16 天夹具：缺省 3 段 `[5,6,5]`；`expected_segment_days=5` 为 4 段 `[4,4,5,3]`，两者逐夜住宿城市均与候选链一致、每段均 ≤7、Journey validate 均通过。
+- Journey Schema 新增可选 `segmentation` 事实块；fresh 产物记录 requested/max/actual/strategy/assumptions，且同一说明进入每个子 Trip assumptions。validator 会以 `J_SEGMENT_LENGTHS` 拒绝篡改的实际段长，旧 0.4.0 demo 未被重写且仍兼容。
+- 反向红态：临时令期望参数生成两个 8 天逻辑段，精准测试 exit 1；原始错误为 `ValueError: request must cover between one and seven inclusive days`（`planning.py:370`），`Ran 1 test in 0.013s`、`FAILED (errors=1)`。
+- 还原绿态：撤销临时 8 天注入后 `/usr/bin/python3 -m unittest tests.test_journey -v` → `Ran 32 tests in 2.556s`、`OK`、skipped 0。当前轮次 3/12。
