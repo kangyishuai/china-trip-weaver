@@ -1,5 +1,12 @@
 # Unresolved items
 
+## Book 8: standalone Trip validation cannot yet consume the exclusive grouped request shape (2026-09-04)
+
+- Status: blocked by this book's explicit write whitelist. A grouped plan itself completes, its actual request contains only `traveler_groups + meeting_anchor`, its schema validation and planner-side semantic projection pass, and its generated HTML passes fact validation. However, calling the existing public `validate_trip(result.trip)` on that same in-memory Trip produces the raw output `KeyError: 'origin'`.
+- Cause: `plugins/china-trip-weaver/src/china_trip_weaver/validate_trip.py` directly indexes `trip["request"]["origin"]` and only adds that one origin plus destinations to the endpoint reference set. It does not read `traveler_groups[].origin`. The renderer and FlyAI consumer also still read aggregate legacy fields, but `planning.py` can safely confine compatibility projections to those call boundaries.
+- Constraint: `validate_trip.py`, `cli.py`, and `render/` are outside Book 8's allowed paths. Persisting derived `origin + travelers` beside `traveler_groups` would make the public validator get farther, but would violate the explicit rule that the two request representations must never coexist and would still leave the second group origin unknown to semantic endpoint validation.
+- Safe delivery in scope: `planning.py` validates the actual grouped Trip against the public schema, then runs all existing release-critical semantic checks against a temporary projection that adds the group-origin refs only for validation. G6 asserts the actual Trip and HTML facts. A later book must authorize updating `validate_trip.py` (and preferably renderer request presentation) so `ctw validate` can natively validate a serialized grouped Trip without any projection.
+
 ## Book 3: ordered multi-city planning
 
 - Status: 无新增阻塞（no new blocker）。The implementation, compatibility, reverse-validation, demo, and schema gates all have an in-scope path to completion.

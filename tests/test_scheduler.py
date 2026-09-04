@@ -111,6 +111,139 @@ class SchedulerCorpusTests(unittest.TestCase):
             },
         )
 
+    def test_slow_fallback_reduces_pois_then_compresses_point_durations(self):
+        day = "2026-12-20"
+        problem = {
+            "day_id": "slow-compress",
+            "date": day,
+            "pace": "slow",
+            "start_at": "%sT09:00:00+08:00" % day,
+            "end_at": "%sT20:00:00+08:00" % day,
+            "travel_mode": "transit",
+            "buffer_minutes": 0,
+            "max_optional": 8,
+            "max_pois": 3,
+            "max_travel_minutes": None,
+            "candidates": [
+                {
+                    "ref_id": "meal-a", "title": "会合后餐点 A", "kind": "meal",
+                    "duration_minutes": 60,
+                    "windows": [{"start_at": "%sT09:00:00+08:00" % day, "end_at": "%sT10:00:00+08:00" % day}],
+                    "utility": 0, "required": True, "locked": False,
+                    "fixed_start": None, "cost_cny": 0, "locationless": True,
+                    "closed": False, "blocked_reason": None,
+                },
+                {
+                    "ref_id": "meal-b", "title": "会合后餐点 B", "kind": "meal",
+                    "duration_minutes": 60,
+                    "windows": [{"start_at": "%sT09:45:00+08:00" % day, "end_at": "%sT10:45:00+08:00" % day}],
+                    "utility": 0, "required": True, "locked": False,
+                    "fixed_start": None, "cost_cny": 0, "locationless": True,
+                    "closed": False, "blocked_reason": None,
+                },
+            ],
+            "matrix": [],
+        }
+        result = LightScheduler().schedule_plan([problem])
+        self.assertEqual("SCHEDULED", result["status"])
+        self.assertEqual(
+            [
+                "SLOW_FALLBACK_REDUCE_DAILY_POIS max_pois=2",
+                "SLOW_FALLBACK_COMPRESS_POI_DURATION factor=0.70 kinds=poi,meal",
+            ],
+            result["applied_relaxations"],
+        )
+        self.assertEqual(
+            [42, 42],
+            [
+                int((datetime.fromisoformat(slot["end_at"]) - datetime.fromisoformat(slot["start_at"])).total_seconds() // 60)
+                for slot in result["days"][0]["slots"]
+            ],
+        )
+
+    def test_slow_fallback_uses_balanced_end_time_only_as_the_third_step(self):
+        day = "2026-12-21"
+        problem = {
+            "day_id": "slow-balanced-end",
+            "date": day,
+            "pace": "slow",
+            "start_at": "%sT09:00:00+08:00" % day,
+            "end_at": "%sT20:00:00+08:00" % day,
+            "travel_mode": "transit",
+            "buffer_minutes": 0,
+            "max_optional": 8,
+            "max_pois": 3,
+            "max_travel_minutes": None,
+            "candidates": [{
+                "ref_id": "late-checkin", "title": "晚到入住", "kind": "checkin",
+                "duration_minutes": 30,
+                "windows": [{"start_at": "%sT20:30:00+08:00" % day, "end_at": "%sT21:30:00+08:00" % day}],
+                "utility": 100, "required": True, "locked": False,
+                "fixed_start": None, "cost_cny": 0, "locationless": True,
+                "closed": False, "blocked_reason": None,
+            }],
+            "matrix": [],
+        }
+        result = LightScheduler().schedule_plan([problem])
+        self.assertEqual("SCHEDULED", result["status"])
+        self.assertEqual(
+            [
+                "SLOW_FALLBACK_REDUCE_DAILY_POIS max_pois=2",
+                "SLOW_FALLBACK_COMPRESS_POI_DURATION factor=0.70 kinds=poi,meal",
+                "SLOW_FALLBACK_BALANCED_END_TIME end_time=21:30",
+            ],
+            result["applied_relaxations"],
+        )
+        self.assertEqual("2026-12-21T20:30:00+08:00", result["days"][0]["slots"][0]["start_at"])
+
+    def test_slow_fallback_returns_structured_no_solution_after_all_three_steps(self):
+        day = "2026-12-22"
+        problem = {
+            "day_id": "slow-impossible",
+            "date": day,
+            "pace": "slow",
+            "start_at": "%sT09:00:00+08:00" % day,
+            "end_at": "%sT20:00:00+08:00" % day,
+            "travel_mode": "transit",
+            "buffer_minutes": 0,
+            "max_optional": 8,
+            "max_pois": 3,
+            "max_travel_minutes": None,
+            "candidates": [
+                {
+                    "ref_id": "fixed-a", "title": "冲突交通 A", "kind": "transport",
+                    "duration_minutes": 90, "windows": [], "utility": 100,
+                    "required": True, "locked": True,
+                    "fixed_start": "%sT09:00:00+08:00" % day,
+                    "cost_cny": 0, "locationless": True,
+                    "closed": False, "blocked_reason": None,
+                },
+                {
+                    "ref_id": "fixed-b", "title": "冲突交通 B", "kind": "transport",
+                    "duration_minutes": 90, "windows": [], "utility": 100,
+                    "required": True, "locked": True,
+                    "fixed_start": "%sT09:30:00+08:00" % day,
+                    "cost_cny": 0, "locationless": True,
+                    "closed": False, "blocked_reason": None,
+                },
+            ],
+            "matrix": [],
+        }
+        result = LightScheduler().schedule_plan([problem])
+        self.assertEqual("NO_SOLUTION", result["status"])
+        self.assertEqual("window", result["conflict"]["code"])
+        self.assertEqual(3, len(result["attempted_relaxations"]))
+
+    def test_slow_fallback_preserves_a_non_window_hard_conflict_after_all_steps(self):
+        problem = budget_day("slow-closed", "2026-12-23", 0, required=True)
+        problem["pace"] = "slow"
+        problem["max_pois"] = 3
+        problem["candidates"][0]["closed"] = True
+        result = LightScheduler().schedule_plan([problem])
+        self.assertEqual("NO_SOLUTION", result["status"])
+        self.assertEqual("closed", result["conflict"]["code"])
+        self.assertEqual(3, len(result["attempted_relaxations"]))
+
     def test_trip_budget_reserves_later_required_cost_before_optional_fill(self):
         days = [
             budget_day("day-1", "2026-10-16", 70, required=False),

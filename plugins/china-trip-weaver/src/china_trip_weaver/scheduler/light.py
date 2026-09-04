@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import copy
+import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
@@ -252,26 +254,35 @@ class LightScheduler:
         self,
         problems: Sequence[Mapping[str, Any]],
         budget_cny: Optional[float] = None,
+        reserved_cost_cny: float = 0.0,
+        reserved_unknown_refs: Sequence[str] = (),
+        _allow_slow_fallback: bool = True,
     ) -> Mapping[str, Any]:
         if budget_cny is None:
             results = [self.schedule_day(problem) for problem in problems]
             if any(result.status == "NO_SOLUTION" for result in results):
                 first = next(result for result in results if result.status == "NO_SOLUTION")
-                return {"status": "NO_SOLUTION", "days": [item.as_dict() for item in results], "conflict": first.conflict}
+                failed = {"status": "NO_SOLUTION", "days": [item.as_dict() for item in results], "conflict": first.conflict}
+                return self._slow_fallback(
+                    problems, budget_cny, reserved_cost_cny, reserved_unknown_refs, failed,
+                ) if _allow_slow_fallback else failed
             return {"status": "SCHEDULED", "days": [item.as_dict() for item in results]}
 
         trip_budget = float(budget_cny)
+        reserved_cost = float(reserved_cost_cny)
         if trip_budget < 0:
             raise ValueError("trip budget must be non-negative")
+        if reserved_cost < 0:
+            raise ValueError("reserved trip cost must be non-negative")
         required_by_day = [_known_required_cost(problem) for problem in problems]
-        required_total = sum(required_by_day)
+        required_total = sum(required_by_day) + reserved_cost
         if required_total > trip_budget:
             failed = _no_solution(
                 "budget",
                 "required plan cost %.2f exceeds trip budget %.2f" % (required_total, trip_budget),
                 ("raise-budget-or-replace-required-cost",),
             )
-            return {
+            failure = {
                 "status": "NO_SOLUTION",
                 "days": [failed.as_dict()],
                 "conflict": failed.conflict,
@@ -279,10 +290,13 @@ class LightScheduler:
                     "budget_cny": _plain_number(trip_budget),
                     "known_cost_cny": _plain_number(required_total),
                     "remaining_known_cny": _plain_number(trip_budget - required_total),
-                    "unknown_cost_refs": list(_unknown_cost_refs(problems)),
+                    "unknown_cost_refs": sorted(set(_unknown_cost_refs(problems)) | set(reserved_unknown_refs)),
                     "status": "over_budget",
                 },
             }
+            return self._slow_fallback(
+                problems, budget_cny, reserved_cost_cny, reserved_unknown_refs, failure,
+            ) if _allow_slow_fallback else failure
 
         results: List[ScheduleResult] = []
         remaining_optional = trip_budget - required_total
@@ -304,13 +318,16 @@ class LightScheduler:
             remaining_optional -= optional_cost
         if any(result.status == "NO_SOLUTION" for result in results):
             first = next(result for result in results if result.status == "NO_SOLUTION")
-            return {"status": "NO_SOLUTION", "days": [item.as_dict() for item in results], "conflict": first.conflict}
-        known_cost = sum(float(result.objective_vector["cost_cny"]) for result in results)
+            failed = {"status": "NO_SOLUTION", "days": [item.as_dict() for item in results], "conflict": first.conflict}
+            return self._slow_fallback(
+                problems, budget_cny, reserved_cost_cny, reserved_unknown_refs, failed,
+            ) if _allow_slow_fallback else failed
+        known_cost = reserved_cost + sum(float(result.objective_vector["cost_cny"]) for result in results)
         unknown_refs = tuple(sorted({
             ref
             for result in results
             for ref in result.objective_vector.get("unknown_cost_refs", ())
-        }))
+        } | set(reserved_unknown_refs)))
         return {
             "status": "SCHEDULED",
             "days": [item.as_dict() for item in results],
@@ -322,6 +339,75 @@ class LightScheduler:
                 "status": "incomplete" if unknown_refs else "within_budget",
             },
         }
+
+    def _slow_fallback(
+        self,
+        problems: Sequence[Mapping[str, Any]],
+        budget_cny: Optional[float],
+        reserved_cost_cny: float,
+        reserved_unknown_refs: Sequence[str],
+        original_failure: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        if (
+            not problems
+            or any(problem.get("pace") != "slow" for problem in problems)
+        ):
+            return original_failure
+
+        relaxed = copy.deepcopy(list(problems))
+        relaxations: List[str] = []
+
+        for problem in relaxed:
+            current = int(problem.get("max_pois", PACE_PROFILES["slow"].max_pois))
+            problem["max_pois"] = max(0, current - 1)
+        relaxations.append("SLOW_FALLBACK_REDUCE_DAILY_POIS max_pois=2")
+        result = self.schedule_plan(
+            relaxed,
+            budget_cny,
+            reserved_cost_cny,
+            reserved_unknown_refs,
+            _allow_slow_fallback=False,
+        )
+        if result["status"] == "SCHEDULED":
+            return _with_relaxations(result, relaxations)
+
+        for problem in relaxed:
+            for candidate in problem["candidates"]:
+                if candidate.get("kind") in ("poi", "meal"):
+                    candidate["duration_minutes"] = max(
+                        1, int(math.ceil(int(candidate["duration_minutes"]) * 0.70)),
+                    )
+        relaxations.append("SLOW_FALLBACK_COMPRESS_POI_DURATION factor=0.70 kinds=poi,meal")
+        result = self.schedule_plan(
+            relaxed,
+            budget_cny,
+            reserved_cost_cny,
+            reserved_unknown_refs,
+            _allow_slow_fallback=False,
+        )
+        if result["status"] == "SCHEDULED":
+            return _with_relaxations(result, relaxations)
+
+        for problem in relaxed:
+            balanced_end = _dt(
+                "%sT%s:00+08:00" % (problem["date"], PACE_PROFILES["balanced"].end_time)
+            )
+            current_end = _dt(str(problem["end_at"]))
+            if balanced_end > current_end:
+                problem["end_at"] = balanced_end.isoformat(timespec="seconds")
+        relaxations.append("SLOW_FALLBACK_BALANCED_END_TIME end_time=21:30")
+        result = self.schedule_plan(
+            relaxed,
+            budget_cny,
+            reserved_cost_cny,
+            reserved_unknown_refs,
+            _allow_slow_fallback=False,
+        )
+        if result["status"] == "SCHEDULED":
+            return _with_relaxations(result, relaxations)
+        failed = dict(result)
+        failed["attempted_relaxations"] = list(relaxations)
+        return failed
 
     def _order_key(
         self,
@@ -517,6 +603,15 @@ def _unknown_cost_refs(problems: Sequence[Mapping[str, Any]]) -> Tuple[str, ...]
 def _plain_number(value: float) -> float:
     numeric = float(value)
     return int(numeric) if numeric.is_integer() else round(numeric, 2)
+
+
+def _with_relaxations(
+    result: Mapping[str, Any],
+    relaxations: Sequence[str],
+) -> Mapping[str, Any]:
+    selected = dict(result)
+    selected["applied_relaxations"] = list(relaxations)
+    return selected
 
 
 def _no_solution(code: str, message: str, relaxations: Sequence[str]) -> ScheduleResult:

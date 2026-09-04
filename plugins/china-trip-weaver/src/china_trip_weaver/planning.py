@@ -24,6 +24,8 @@ from .providers.base import ProviderContext, ReplayTransport, stable_id
 from .providers.mcp_stdio import RailMCPStdioTransport
 from .providers.rail12306 import Rail12306Adapter
 from .render import render_trip, validate_html
+from .render.html import _render as render_grouped_trip
+from .render.template import embedded_json
 from .scheduler.light import LightScheduler, PaceProfile, pace_profile
 from .validate_trip import SchemaSubsetValidator, load_schema, validate_trip
 from .variflight_enrichment import VariFlightBackend
@@ -45,6 +47,7 @@ class RouteSpec:
     to_place: Mapping[str, str]
     travel_date: str
     return_leg: bool = False
+    group_refs: Tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -164,9 +167,11 @@ def plan_trip(
     transport_legs, rail_claims, rail_unknowns, rail_health, business_calls = _resolve_rail(
         routes, clock, rail_backend
     )
+    _validate_meeting_anchor(normalized_request, transport_legs)
     claims.extend(rail_claims)
     active_flyai = flyai_backend or FlyAIBackend.from_spec("off", rail_backend.repo_root)
-    inventory = active_flyai.resolve(normalized_request, routes, clock)
+    provider_request = _legacy_request_projection(normalized_request)
+    inventory = active_flyai.resolve(provider_request, routes, clock)
     amap_lodging = None
     if not inventory.lodgings and active_flyai.mode == "live":
         active_amap_lodging = amap_lodging_backend or AMapLodgingBackend.from_spec(
@@ -184,7 +189,7 @@ def plan_trip(
     )
     active_variflight = variflight_backend or VariFlightBackend.from_spec("off", rail_backend.repo_root)
     enrichment = active_variflight.enrich(inventory.flights, routes, clock)
-    transport_legs.extend(copy.deepcopy(list(enrichment.flights)))
+    transport_legs.extend(_assign_transport_group_refs(enrichment.flights, routes))
     claims.extend(copy.deepcopy(list(inventory.claims)))
     if amap_lodging is not None:
         claims.extend(copy.deepcopy(list(amap_lodging.claims)))
@@ -224,7 +229,7 @@ def plan_trip(
     )
     pois, routine_claims, routine_unknowns = _with_required_meals(
         normalized_request,
-        transport_legs,
+        _shared_schedule_legs(normalized_request, transport_legs),
         lodgings,
         pois,
         clock,
@@ -246,16 +251,25 @@ def plan_trip(
         1,
         {"amap": "web-service-v5-v3-route", "matrix": "ctw-route-matrix/1"},
     )
+    reserved_cost, reserved_unknown_refs = _reserved_meeting_cost(
+        normalized_request, transport_legs,
+    )
     scheduled = LightScheduler().schedule_plan(
         problems,
         budget_cny=normalized_request["budget_cny"],
+        reserved_cost_cny=reserved_cost,
+        reserved_unknown_refs=reserved_unknown_refs,
     )
     if scheduled["status"] != "SCHEDULED":
         conflict = scheduled.get("conflict") or {}
         raise ValueError("plan has no feasible schedule: " + canonical_json({
             "conflict": conflict,
             "budget_ledger": scheduled.get("budget_ledger"),
+            "attempted_relaxations": scheduled.get("attempted_relaxations", []),
         }))
+    for assumption in scheduled.get("applied_relaxations", ()):
+        if assumption not in normalized_request["assumptions"]:
+            normalized_request["assumptions"].append(assumption)
     run.advance(
         "SCHEDULED",
         {"slot_counts": [len(day["slots"]) for day in scheduled["days"]]},
@@ -287,6 +301,9 @@ def plan_trip(
     ):
         raise ValueError("scheduler and Trip budget ledgers disagree")
     unknowns.extend(budget_unknowns)
+    transport_pricing = _transport_pricing(
+        normalized_request, days, transport_legs,
+    )
     trip = {
         "schema_version": "1.0.0",
         "trip_id": trip_id,
@@ -319,12 +336,14 @@ def plan_trip(
         "patches": [],
         "generated_at": now,
     }
-    report = validate_trip(trip)
+    if transport_pricing is not None:
+        trip["transport_pricing"] = transport_pricing
+    report = _validate_planned_trip(trip)
     if not report.ok:
         raise ValueError("Trip validation failed: " + "; ".join(item.render() for item in report.errors))
     run.advance("VALIDATED", {"errors": 0, "schema_version": "1.0.0"}, trip_id, 1)
 
-    html = render_trip(trip)
+    html = _render_planned_trip(trip)
     html_report = validate_html(html, trip)
     if not html_report.ok:
         raise ValueError("HTML validation failed: " + "; ".join(item.render() for item in html_report.errors))
@@ -347,17 +366,93 @@ def plan_trip(
 
 def _normalize_request(value: Mapping[str, Any]) -> Dict[str, Any]:
     normalized = json.loads(canonical_json(value))
+    legacy_representation = "origin" in normalized or "travelers" in normalized
+    grouped_representation = "traveler_groups" in normalized or "meeting_anchor" in normalized
+    if legacy_representation and grouped_representation:
+        raise ValueError("request representation conflict: " + canonical_json({
+            "code": "TRAVELER_REPRESENTATION_CONFLICT",
+            "message": "origin + travelers and traveler_groups + meeting_anchor are mutually exclusive",
+        }))
+    if isinstance(normalized.get("meeting_anchor"), dict):
+        normalized["meeting_anchor"].setdefault("buffer_minutes", 60)
     issues = SchemaSubsetValidator(load_schema()).validate_fragment("#/$defs/request", normalized)
     if issues:
         raise ValueError("request validation failed: " + "; ".join(item.render() for item in issues))
+    if "traveler_groups" in normalized:
+        group_ids = [str(item["group_id"]) for item in normalized["traveler_groups"]]
+        if len(group_ids) != len(set(group_ids)):
+            raise ValueError("request traveler group conflict: " + canonical_json({
+                "code": "DUPLICATE_TRAVELER_GROUP",
+                "group_refs": group_ids,
+            }))
+        traveler_total = sum(int(item["travelers"]) for item in normalized["traveler_groups"])
+        if traveler_total > 20:
+            raise ValueError("request traveler group conflict: " + canonical_json({
+                "code": "TRAVELER_LIMIT_EXCEEDED",
+                "travelers": traveler_total,
+                "maximum": 20,
+            }))
+        if "mobility_profile" not in normalized:
+            combined_profile = _combined_group_mobility(normalized["traveler_groups"])
+            if combined_profile is not None:
+                normalized["mobility_profile"] = combined_profile
     start = date.fromisoformat(normalized["start_date"])
     end = date.fromisoformat(normalized["end_date"])
     day_count = (end - start).days + 1
     if day_count < 1 or day_count > 7:
         raise ValueError("request must cover between one and seven inclusive days")
-    if len(normalized["destinations"]) > 1 and normalized["origin"] is None:
+    if len(normalized["destinations"]) > 1 and _shared_origin(normalized) is None:
         raise ValueError("multi-city planning requires an origin")
     return normalized
+
+
+def _shared_origin(request: Mapping[str, Any]) -> Optional[Mapping[str, Any]]:
+    if request.get("traveler_groups"):
+        return request["meeting_anchor"]["location"]
+    return request["origin"]
+
+
+def _request_traveler_count(request: Mapping[str, Any]) -> int:
+    groups = request.get("traveler_groups")
+    if groups:
+        return sum(int(item["travelers"]) for item in groups)
+    return int(request["travelers"])
+
+
+def _legacy_request_projection(request: Mapping[str, Any]) -> Mapping[str, Any]:
+    if not request.get("traveler_groups"):
+        return request
+    projected = copy.deepcopy(dict(request))
+    projected["origin"] = copy.deepcopy(request["meeting_anchor"]["location"])
+    projected["travelers"] = _request_traveler_count(request)
+    projected.pop("traveler_groups", None)
+    projected.pop("meeting_anchor", None)
+    return projected
+
+
+def _combined_group_mobility(
+    groups: Sequence[Mapping[str, Any]],
+) -> Optional[Mapping[str, Any]]:
+    profiles = [item["mobility_profile"] for item in groups if item.get("mobility_profile")]
+    if not profiles:
+        return None
+    result: Dict[str, Any] = {
+        "senior": any(bool(item.get("senior")) for item in profiles),
+    }
+    ages = [int(item["age"]) for item in profiles if item.get("age") is not None]
+    if ages:
+        result["age"] = max(ages)
+    fitness_rank = {"limited": 0, "average": 1, "good": 2}
+    fitness_values = [
+        str(item.get("fitness_level") or item.get("fitness"))
+        for item in profiles
+        if item.get("fitness_level") or item.get("fitness")
+    ]
+    if fitness_values:
+        result["fitness_level"] = min(fitness_values, key=lambda item: fitness_rank[item])
+    if any(bool(item.get("uses_wheelchair")) for item in profiles):
+        result["uses_wheelchair"] = True
+    return result
 
 
 def _normalize_candidates(value: Mapping[str, Any], request: Mapping[str, Any]) -> Dict[str, Any]:
@@ -374,6 +469,36 @@ def _normalize_candidates(value: Mapping[str, Any], request: Mapping[str, Any]) 
 
 
 def _route_specs(request: Mapping[str, Any]) -> Tuple[RouteSpec, ...]:
+    if request.get("traveler_groups"):
+        anchor = request["meeting_anchor"]["location"]
+        group_ids = tuple(str(item["group_id"]) for item in request["traveler_groups"])
+        routes = [
+            RouteSpec(
+                item["origin"],
+                anchor,
+                request["start_date"],
+                False,
+                (str(item["group_id"]),),
+            )
+            for item in request["traveler_groups"]
+            if item["origin"]["ref_id"] != anchor["ref_id"]
+        ]
+        destinations = list(request["destinations"])
+        shared_transitions: List[Tuple[Mapping[str, str], Mapping[str, str]]] = []
+        previous = anchor
+        for destination in destinations:
+            if previous["ref_id"] != destination["ref_id"] and previous["city"] != destination["city"]:
+                shared_transitions.append((previous, destination))
+            previous = destination
+        shared_dates = _distributed_route_dates(
+            request["start_date"], request["end_date"], len(shared_transitions), False,
+        )
+        routes.extend(
+            RouteSpec(from_place, to_place, travel_date, False, group_ids)
+            for (from_place, to_place), travel_date in zip(shared_transitions, shared_dates)
+        )
+        return tuple(routes)
+
     origin = request["origin"]
     destinations = list(request["destinations"])
     destination = destinations[0]
@@ -465,10 +590,11 @@ def _day_city_by_date(
         return {travel_date: destinations[0]["city"] for travel_date in dates}
 
     places = list(destinations)
-    if request["origin"] is not None:
-        places.append(request["origin"])
+    origin = _shared_origin(request)
+    if origin is not None:
+        places.append(origin)
     cities = {place["ref_id"]: place["city"] for place in places}
-    current_city = request["origin"]["city"] if request["origin"] is not None else destinations[0]["city"]
+    current_city = origin["city"] if origin is not None else destinations[0]["city"]
     arrivals: Dict[str, List[Mapping[str, Any]]] = {travel_date: [] for travel_date in dates}
     for leg in legs:
         depart_at = leg.get("depart_at")
@@ -723,7 +849,7 @@ def _resolve_rail(
                     selected = None
                     errors.append("selected rail leg has incomplete claims")
         if selected is not None:
-            legs.append(copy.deepcopy(selected))
+            legs.append(_leg_for_route(selected, route))
             claims.extend(copy.deepcopy(list(selected_claims)))
             live_count += 1
             continue
@@ -733,7 +859,7 @@ def _resolve_rail(
             errors.append("rail disabled")
         fallback, fallback_claims = _deep_link_leg(route, clock)
         leg_index = len(legs)
-        legs.append(fallback)
+        legs.append(_leg_for_route(fallback, route))
         claims.extend(fallback_claims)
         unknowns.extend((
             {
@@ -768,6 +894,176 @@ def _resolve_rail(
             "dated deep-link fallback used: " + ", ".join(sorted(set(errors))),
         )
     return legs, claims, unknowns, health, tuple(calls)
+
+
+def _leg_for_route(
+    leg: Mapping[str, Any],
+    route: RouteSpec,
+) -> Mapping[str, Any]:
+    selected = copy.deepcopy(dict(leg))
+    if route.group_refs:
+        selected["group_refs"] = list(route.group_refs)
+    return selected
+
+
+def _assign_transport_group_refs(
+    legs: Sequence[Mapping[str, Any]],
+    routes: Sequence[RouteSpec],
+) -> List[Mapping[str, Any]]:
+    if not any(route.group_refs for route in routes):
+        return copy.deepcopy(list(legs))
+    result: List[Mapping[str, Any]] = []
+    for leg in legs:
+        selected = copy.deepcopy(dict(leg))
+        depart_at = selected.get("depart_at")
+        travel_date = depart_at[:10] if isinstance(depart_at, str) else None
+        matches = [
+            route for route in routes
+            if route.from_place["ref_id"] == selected.get("from_ref")
+            and route.to_place["ref_id"] == selected.get("to_ref")
+            and (travel_date is None or route.travel_date == travel_date)
+        ]
+        group_refs = tuple(dict.fromkeys(
+            group_ref for route in matches for group_ref in route.group_refs
+        ))
+        if not group_refs:
+            raise ValueError("transport ownership conflict: " + canonical_json({
+                "code": "TRANSPORT_GROUP_REQUIRED",
+                "leg_id": selected.get("leg_id"),
+            }))
+        selected["group_refs"] = list(group_refs)
+        result.append(selected)
+    return result
+
+
+def _traveler_groups_by_id(
+    request: Mapping[str, Any],
+) -> Mapping[str, Mapping[str, Any]]:
+    return {
+        str(item["group_id"]): item
+        for item in request.get("traveler_groups", ())
+    }
+
+
+def _is_meeting_arrival_leg(
+    request: Mapping[str, Any],
+    leg: Mapping[str, Any],
+) -> bool:
+    anchor = request.get("meeting_anchor")
+    if not isinstance(anchor, Mapping) or leg.get("travel_mode") == "flight":
+        return False
+    group_refs = leg.get("group_refs")
+    if not isinstance(group_refs, list) or len(group_refs) != 1:
+        return False
+    group = _traveler_groups_by_id(request).get(str(group_refs[0]))
+    return bool(
+        group is not None
+        and leg.get("from_ref") == group["origin"]["ref_id"]
+        and leg.get("to_ref") == anchor["location"]["ref_id"]
+    )
+
+
+def _validate_meeting_anchor(
+    request: Mapping[str, Any],
+    legs: Sequence[Mapping[str, Any]],
+) -> None:
+    anchor = request.get("meeting_anchor")
+    if not isinstance(anchor, Mapping):
+        return
+    meet_by = datetime.fromisoformat(str(anchor["meet_by"]).replace("Z", "+00:00"))
+    required_buffer = int(anchor["buffer_minutes"])
+    anchor_ref = anchor["location"]["ref_id"]
+    for group in request["traveler_groups"]:
+        if group["origin"]["ref_id"] == anchor_ref:
+            continue
+        matches = [
+            leg for leg in legs
+            if _is_meeting_arrival_leg(request, leg)
+            and leg["group_refs"] == [group["group_id"]]
+        ]
+        if len(matches) != 1:
+            raise ValueError("meeting anchor conflict: " + canonical_json({
+                "code": "MEETING_LEG_MISSING" if not matches else "MEETING_LEG_AMBIGUOUS",
+                "group_ref": group["group_id"],
+                "meeting_anchor_ref": anchor_ref,
+            }))
+        arrival_value = matches[0].get("arrive_at")
+        if not isinstance(arrival_value, str):
+            raise ValueError("meeting anchor conflict: " + canonical_json({
+                "code": "MEETING_ARRIVAL_UNKNOWN",
+                "group_ref": group["group_id"],
+                "meeting_anchor_ref": anchor_ref,
+            }))
+        arrival = datetime.fromisoformat(arrival_value.replace("Z", "+00:00"))
+        actual_buffer = int((meet_by - arrival).total_seconds() // 60)
+        if actual_buffer < required_buffer:
+            raise ValueError("meeting anchor conflict: " + canonical_json({
+                "code": "MEETING_BUFFER_INSUFFICIENT",
+                "group_ref": group["group_id"],
+                "arrival_at": arrival_value,
+                "meet_by": anchor["meet_by"],
+                "required_buffer_minutes": required_buffer,
+                "actual_buffer_minutes": actual_buffer,
+            }))
+
+
+def _shared_schedule_legs(
+    request: Mapping[str, Any],
+    legs: Sequence[Mapping[str, Any]],
+) -> List[Mapping[str, Any]]:
+    return [
+        leg for leg in legs
+        if not _is_meeting_arrival_leg(request, leg)
+    ]
+
+
+def _reserved_meeting_cost(
+    request: Mapping[str, Any],
+    legs: Sequence[Mapping[str, Any]],
+) -> Tuple[float, Tuple[str, ...]]:
+    known = 0.0
+    unknown_refs: List[str] = []
+    for leg in legs:
+        if not _is_meeting_arrival_leg(request, leg):
+            continue
+        cost = _cost_range("transport", leg, request)
+        if cost.maximum_cny is None:
+            unknown_refs.append(str(leg["leg_id"]))
+        else:
+            known += float(cost.maximum_cny)
+    return known, tuple(sorted(unknown_refs))
+
+
+def _validate_planned_trip(trip: Mapping[str, Any]):
+    if not trip["request"].get("traveler_groups"):
+        return validate_trip(trip)
+    schema_report = validate_trip(trip, semantic=False)
+    if not schema_report.ok:
+        return schema_report
+    projection = copy.deepcopy(dict(trip))
+    groups = list(trip["request"]["traveler_groups"])
+    projected_request = copy.deepcopy(dict(_legacy_request_projection(trip["request"])))
+    known_refs = {item["ref_id"] for item in projected_request["destinations"]}
+    for group in groups:
+        origin = group["origin"]
+        if origin["ref_id"] not in known_refs and origin["ref_id"] != projected_request["origin"]["ref_id"]:
+            projected_request["destinations"].append(copy.deepcopy(origin))
+            known_refs.add(origin["ref_id"])
+    projection["request"] = projected_request
+    return validate_trip(projection)
+
+
+def _render_planned_trip(trip: Mapping[str, Any]) -> str:
+    if not trip["request"].get("traveler_groups"):
+        return render_trip(trip)
+    projection = copy.deepcopy(dict(trip))
+    projection["request"] = copy.deepcopy(dict(_legacy_request_projection(trip["request"])))
+    html = render_grouped_trip(projection)
+    projected_script = '<script id="trip-data" type="application/json">%s</script>' % embedded_json(projection)
+    actual_script = '<script id="trip-data" type="application/json">%s</script>' % embedded_json(trip)
+    if html.count(projected_script) != 1:
+        raise ValueError("grouped Trip renderer projection did not contain one canonical payload")
+    return html.replace(projected_script, actual_script, 1)
 
 
 def _deep_link_leg(route: RouteSpec, clock: Clock) -> Tuple[Mapping[str, Any], Sequence[Mapping[str, Any]]]:
@@ -998,6 +1294,17 @@ def _with_required_meals(
         anchor_coordinates = copy.deepcopy(anchors[0]["coordinates"]) if anchors else None
         for spec in _meal_specs(request):
             meal_type = str(spec["meal_type"])
+            meeting_anchor = request.get("meeting_anchor")
+            if isinstance(meeting_anchor, Mapping):
+                meet_by = datetime.fromisoformat(str(meeting_anchor["meet_by"]).replace("Z", "+00:00"))
+                if (
+                    meet_by.date().isoformat() == day
+                    and _clock_at(day, str(spec["end_time"])) <= meet_by
+                ):
+                    assumption = "MEETING_PRE_JOIN_MEAL meal_type=%s" % meal_type
+                    if assumption not in request["assumptions"]:
+                        request["assumptions"].append(assumption)
+                    continue
             poi_id = stable_id("poi-routine-meal", day, meal_type)
             windows = _routine_availability(day, spec, profile, legs)
             claim = make_claim(
@@ -1054,6 +1361,11 @@ def _cost_range(
     item: Mapping[str, Any],
     request: Mapping[str, Any],
 ) -> CostRange:
+    travelers = (
+        _transport_traveler_count(item, request)
+        if category == "transport"
+        else _request_traveler_count(request)
+    )
     price = item.get("price")
     if not isinstance(price, Mapping):
         return CostRange(None, None, "price unavailable", "no comparable price was supplied", None, None)
@@ -1081,7 +1393,6 @@ def _cost_range(
 
     numeric_amount = float(amount)
     unit = str(price.get("unit"))
-    travelers = int(request["travelers"])
     minimum: Optional[float]
     maximum: Optional[float]
     basis: str
@@ -1143,6 +1454,90 @@ def _money(value: float) -> float:
     return int(rounded) if rounded.is_integer() else rounded
 
 
+def _transport_traveler_count(
+    leg: Mapping[str, Any],
+    request: Mapping[str, Any],
+) -> int:
+    groups = _traveler_groups_by_id(request)
+    if not groups:
+        return _request_traveler_count(request)
+    refs = leg.get("group_refs")
+    if not isinstance(refs, list) or not refs:
+        raise ValueError("transport ownership conflict: " + canonical_json({
+            "code": "TRANSPORT_GROUP_REQUIRED",
+            "leg_id": leg.get("leg_id"),
+        }))
+    unknown = [str(group_ref) for group_ref in refs if str(group_ref) not in groups]
+    if unknown:
+        raise ValueError("transport ownership conflict: " + canonical_json({
+            "code": "TRANSPORT_GROUP_UNKNOWN",
+            "leg_id": leg.get("leg_id"),
+            "group_refs": unknown,
+        }))
+    if len(refs) != len(set(str(item) for item in refs)):
+        raise ValueError("transport ownership conflict: " + canonical_json({
+            "code": "TRANSPORT_GROUP_DUPLICATE",
+            "leg_id": leg.get("leg_id"),
+            "group_refs": refs,
+        }))
+    return sum(int(groups[str(group_ref)]["travelers"]) for group_ref in refs)
+
+
+def _sum_cost_ranges(costs: Sequence[CostRange]) -> Mapping[str, Optional[float]]:
+    minimum = (
+        _money(sum(float(item.minimum_cny) for item in costs))
+        if all(item.minimum_cny is not None for item in costs)
+        else None
+    )
+    maximum = (
+        _money(sum(float(item.maximum_cny) for item in costs))
+        if all(item.maximum_cny is not None for item in costs)
+        else None
+    )
+    return {"minimum": minimum, "maximum": maximum}
+
+
+def _transport_pricing(
+    request: Mapping[str, Any],
+    days: Sequence[Mapping[str, Any]],
+    legs: Sequence[Mapping[str, Any]],
+) -> Optional[Mapping[str, Any]]:
+    groups = _traveler_groups_by_id(request)
+    if not groups:
+        return None
+    scheduled_refs = {
+        slot["ref_id"]
+        for day_item in days
+        for slot in day_item["slots"]
+        if slot["kind"] == "transport" and slot["ref_id"] is not None
+    }
+    selected_legs = [
+        leg for leg in legs
+        if leg["leg_id"] in scheduled_refs or _is_meeting_arrival_leg(request, leg)
+    ]
+    costs_by_group: Dict[str, List[CostRange]] = {group_ref: [] for group_ref in groups}
+    for leg in selected_legs:
+        _transport_traveler_count(leg, request)
+        for group_ref in leg["group_refs"]:
+            allocated = copy.deepcopy(dict(leg))
+            allocated["group_refs"] = [group_ref]
+            costs_by_group[str(group_ref)].append(_cost_range("transport", allocated, request))
+    group_totals = [
+        {
+            "group_ref": group_ref,
+            "travelers": int(group["travelers"]),
+            "total_cny": _sum_cost_ranges(costs_by_group[group_ref]),
+        }
+        for group_ref, group in groups.items()
+    ]
+    party_costs = [cost for costs in costs_by_group.values() for cost in costs]
+    return {
+        "currency": "CNY",
+        "group_totals": group_totals,
+        "party_total_cny": _sum_cost_ranges(party_costs),
+    }
+
+
 def _budget_ledger(
     request: Mapping[str, Any],
     days: Sequence[Mapping[str, Any]],
@@ -1158,7 +1553,11 @@ def _budget_ledger(
         if slot["ref_id"] is not None
     }
     selected = []
-    selected.extend(("transport", item["leg_id"], item) for item in legs if item["leg_id"] in scheduled_refs)
+    selected.extend(
+        ("transport", item["leg_id"], item)
+        for item in legs
+        if item["leg_id"] in scheduled_refs or _is_meeting_arrival_leg(request, item)
+    )
     selected.extend(("lodging", item["lodging_id"], item) for item in lodgings if item["lodging_id"] in scheduled_refs)
     selected.extend(("poi", item["poi_id"], item) for item in pois if item["poi_id"] in scheduled_refs)
     claim_by_id = {claim["claim_id"]: claim for claim in claims}
@@ -1280,7 +1679,7 @@ def _schedule_problems(
     city_by_date = _day_city_by_date(request, legs)
 
     for leg in legs:
-        if leg["travel_mode"] == "flight":
+        if leg["travel_mode"] == "flight" or _is_meeting_arrival_leg(request, leg):
             continue
         assert leg["depart_at"] is not None and leg["arrive_at"] is not None
         day = leg["depart_at"][:10]
@@ -1466,6 +1865,11 @@ def _schedule_problems(
         cell_count += len(matrix)
         pace_start = datetime.fromisoformat("%sT%s:00+08:00" % (day, profile.start_time))
         pace_end = datetime.fromisoformat("%sT%s:00+08:00" % (day, profile.end_time))
+        meeting_anchor = request.get("meeting_anchor")
+        if isinstance(meeting_anchor, Mapping):
+            meet_by = datetime.fromisoformat(str(meeting_anchor["meet_by"]).replace("Z", "+00:00"))
+            if meet_by.date().isoformat() == day:
+                pace_start = max(pace_start, meet_by)
         fixed_ranges = [
             (
                 datetime.fromisoformat(str(item["fixed_start"]).replace("Z", "+00:00")),
@@ -1698,13 +2102,21 @@ def _health(provider: str, version: str, mode: str, status: str, checked_at: str
 
 def _place_name(request: Mapping[str, Any], ref_id: str) -> str:
     places = list(request["destinations"])
-    if request["origin"]:
-        places.append(request["origin"])
+    origin = _shared_origin(request)
+    if origin:
+        places.append(origin)
+    places.extend(item["origin"] for item in request.get("traveler_groups", ()))
+    if request.get("meeting_anchor"):
+        places.append(request["meeting_anchor"]["location"])
     return next((item["name"] for item in places if item["ref_id"] == ref_id), ref_id)
 
 
 def _place_city(request: Mapping[str, Any], ref_id: str) -> str:
     places = list(request["destinations"])
-    if request["origin"]:
-        places.append(request["origin"])
+    origin = _shared_origin(request)
+    if origin:
+        places.append(origin)
+    places.extend(item["origin"] for item in request.get("traveler_groups", ()))
+    if request.get("meeting_anchor"):
+        places.append(request["meeting_anchor"]["location"])
     return next((item["city"] for item in places if item["ref_id"] == ref_id), ref_id)

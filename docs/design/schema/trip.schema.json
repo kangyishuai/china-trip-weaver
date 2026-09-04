@@ -28,6 +28,7 @@
     "mock_notice": {"type": ["string", "null"], "minLength": 1},
     "request": {"$ref": "#/$defs/request"},
     "budget_ledger": {"$ref": "#/$defs/budgetLedger"},
+    "transport_pricing": {"$ref": "#/$defs/transportPricing"},
     "days": {
       "type": "array",
       "minItems": 1,
@@ -97,6 +98,22 @@
         "properties": {
           "lodgings": {
             "items": {"$ref": "#/$defs/stay"}
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": ["request"],
+        "properties": {
+          "request": {"required": ["traveler_groups"]}
+        }
+      },
+      "then": {
+        "required": ["transport_pricing"],
+        "properties": {
+          "transport_legs": {
+            "items": {"required": ["group_refs"]}
           }
         }
       }
@@ -265,6 +282,30 @@
         "items": {"type": "array", "items": {"$ref": "#/$defs/budgetItem"}}
       }
     },
+    "transportGroupTotal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["group_ref", "travelers", "total_cny"],
+      "properties": {
+        "group_ref": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"},
+        "travelers": {"type": "integer", "minimum": 1, "maximum": 20},
+        "total_cny": {"$ref": "#/$defs/costRange"}
+      }
+    },
+    "transportPricing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["currency", "group_totals", "party_total_cny"],
+      "properties": {
+        "currency": {"const": "CNY"},
+        "group_totals": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/transportGroupTotal"}
+        },
+        "party_total_cny": {"$ref": "#/$defs/costRange"}
+      }
+    },
     "placeRef": {
       "type": "object",
       "additionalProperties": false,
@@ -310,15 +351,39 @@
         "uses_wheelchair": {"type": "boolean"}
       }
     },
+    "travelerGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["group_id", "travelers", "origin"],
+      "properties": {
+        "group_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"},
+        "travelers": {"type": "integer", "minimum": 1, "maximum": 20},
+        "origin": {"$ref": "#/$defs/placeRef"},
+        "mobility_profile": {"$ref": "#/$defs/mobilityProfile"}
+      }
+    },
+    "meetingAnchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["location", "meet_by"],
+      "properties": {
+        "location": {"$ref": "#/$defs/placeRef"},
+        "meet_by": {"type": "string", "format": "date-time"},
+        "buffer_minutes": {
+          "description": "Required time between every group arrival and meet_by; defaults to 60 when omitted.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1440
+        }
+      }
+    },
     "request": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "origin",
         "destinations",
         "start_date",
         "end_date",
-        "travelers",
         "budget_cny",
         "interests",
         "pace",
@@ -326,6 +391,16 @@
         "assumptions",
         "locale",
         "pasted_notes"
+      ],
+      "oneOf": [
+        {
+          "required": ["origin", "travelers"],
+          "properties": {
+            "traveler_groups": {"type": "null"},
+            "meeting_anchor": {"type": "null"}
+          }
+        },
+        {"required": ["traveler_groups", "meeting_anchor"]}
       ],
       "properties": {
         "origin": {
@@ -339,6 +414,13 @@
         "start_date": {"type": "string", "format": "date"},
         "end_date": {"type": "string", "format": "date"},
         "travelers": {"type": "integer", "minimum": 1, "maximum": 20},
+        "traveler_groups": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": {"$ref": "#/$defs/travelerGroup"}
+        },
+        "meeting_anchor": {"$ref": "#/$defs/meetingAnchor"},
         "party": {
           "type": "object",
           "additionalProperties": false,
@@ -466,6 +548,12 @@
         "data_mode": {"$ref": "#/$defs/dataMode"},
         "from_ref": {"type": "string", "minLength": 1},
         "to_ref": {"type": "string", "minLength": 1},
+        "group_refs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"},
+          "uniqueItems": true
+        },
         "depart_at": {"type": ["string", "null"], "format": "date-time"},
         "arrive_at": {"type": ["string", "null"], "format": "date-time"},
         "duration_minutes": {"type": ["integer", "null"], "minimum": 0},

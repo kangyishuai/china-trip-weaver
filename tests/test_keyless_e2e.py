@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import os
@@ -7,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 
 
@@ -119,6 +121,34 @@ def synthetic_pace_input(pace, poi_count=7, request_overrides=None):
     }
 
 
+def synthetic_grouped_meeting_input(meet_by="2026-09-10T13:00:00+08:00"):
+    request, candidates = synthetic_pace_input("balanced", poi_count=2)
+    request.update({"start_date": "2026-09-10", "end_date": "2026-09-10"})
+    request.pop("origin")
+    request.pop("travelers")
+    request["traveler_groups"] = [
+        {
+            "group_id": "family-beijing",
+            "travelers": 2,
+            "origin": {"ref_id": "city-beijing", "name": "北京", "city": "北京"},
+        },
+        {
+            "group_id": "family-guangzhou",
+            "travelers": 1,
+            "origin": {"ref_id": "city-guangzhou", "name": "广州", "city": "广州"},
+        },
+    ]
+    request["meeting_anchor"] = {
+        "location": {
+            "ref_id": "airport-shanghai",
+            "name": "上海虹桥国际机场",
+            "city": "上海",
+        },
+        "meet_by": meet_by,
+    }
+    return request, candidates
+
+
 def run_flyai_total_failure_plan():
     class TotalFailureTransport:
         def __init__(self):
@@ -185,6 +215,88 @@ class KeylessE2ETests(unittest.TestCase):
         backend = RailBackend.from_spec("fixture:" + str(folder / "rail.json"), ROOT)
         return plan_trip(load(folder / "request.json"), load(folder / "candidates.json"), clock, backend)
 
+    def run_grouped_meeting(self, meet_by="2026-09-10T13:00:00+08:00"):
+        request, candidates = synthetic_grouped_meeting_input(meet_by)
+        backend = RailBackend.from_spec(
+            "fixture:" + str(ROOT / "tests" / "fixtures" / "providers" / "rail12306" / "success.json"),
+            ROOT,
+        )
+        return plan_trip(request, candidates, FixedClock.from_iso(FIXED_NOW), backend)
+
+    def test_g6_grouped_origins_meet_with_owned_legs_and_group_party_prices(self):
+        result = self.run_grouped_meeting()
+        request = result.trip["request"]
+        self.assertEqual(60, request["meeting_anchor"]["buffer_minutes"])
+        self.assertNotIn("origin", request)
+        self.assertNotIn("travelers", request)
+        self.assertEqual(
+            {"family-beijing": 2, "family-guangzhou": 1},
+            {item["group_id"]: item["travelers"] for item in request["traveler_groups"]},
+        )
+        self.assertEqual(3, sum(item["travelers"] for item in request["traveler_groups"]))
+        legs = result.trip["transport_legs"]
+        self.assertEqual(2, len(legs))
+        self.assertEqual(
+            {
+                "family-beijing": ("city-beijing", "airport-shanghai", 300),
+                "family-guangzhou": ("city-guangzhou", "airport-shanghai", 300),
+            },
+            {
+                leg["group_refs"][0]: (leg["from_ref"], leg["to_ref"], leg["price"]["amount"])
+                for leg in legs
+            },
+        )
+        meet_by = datetime.fromisoformat(request["meeting_anchor"]["meet_by"])
+        self.assertTrue(all(
+            (meet_by - datetime.fromisoformat(leg["arrive_at"])).total_seconds() >= 60 * 60
+            for leg in legs
+        ))
+        pricing = result.trip["transport_pricing"]
+        self.assertEqual(
+            {"family-beijing": (600, 600), "family-guangzhou": (300, 300)},
+            {
+                item["group_ref"]: (item["total_cny"]["minimum"], item["total_cny"]["maximum"])
+                for item in pricing["group_totals"]
+            },
+        )
+        self.assertEqual({"minimum": 900, "maximum": 900}, pricing["party_total_cny"])
+        transport_budget = [
+            item for item in result.trip["budget_ledger"]["items"]
+            if item["category"] == "transport"
+        ]
+        self.assertEqual([300, 600], sorted(item["amount_max_cny"] for item in transport_budget))
+        self.assertTrue(validate_trip(result.trip, semantic=False).ok)
+        self.assertTrue(validate_html(result.html, result.trip).ok)
+
+    def test_g6_insufficient_meeting_buffer_is_a_structured_conflict(self):
+        with self.assertRaisesRegex(ValueError, "MEETING_BUFFER_INSUFFICIENT") as raised:
+            self.run_grouped_meeting("2026-09-10T12:59:00+08:00")
+        self.assertIn('"required_buffer_minutes":60', str(raised.exception))
+        self.assertIn('"actual_buffer_minutes":59', str(raised.exception))
+
+    def test_grouped_and_legacy_traveler_representations_are_rejected_together(self):
+        request, candidates = synthetic_grouped_meeting_input()
+        request["origin"] = {"ref_id": "city-beijing", "name": "北京", "city": "北京"}
+        request["travelers"] = 3
+        backend = RailBackend.from_spec("off", ROOT)
+        with self.assertRaisesRegex(ValueError, "TRAVELER_REPRESENTATION_CONFLICT"):
+            plan_trip(request, candidates, FixedClock.from_iso(FIXED_NOW), backend)
+
+    def test_grouped_transport_without_group_refs_never_defaults_to_the_party(self):
+        result = self.run_grouped_meeting()
+        leg = copy.deepcopy(result.trip["transport_legs"][0])
+        leg.pop("group_refs")
+        with self.assertRaisesRegex(ValueError, "TRANSPORT_GROUP_REQUIRED"):
+            _cost_range("transport", leg, result.trip["request"])
+
+    def test_legacy_single_origin_request_shape_remains_unchanged(self):
+        folder = E2E / "beijing-shanghai-3d"
+        original_request = load(folder / "request.json")
+        result = self.run_direct()
+        self.assertEqual(original_request, result.trip["request"])
+        self.assertTrue(all("group_refs" not in leg for leg in result.trip["transport_legs"]))
+        self.assertNotIn("transport_pricing", result.trip)
+
     def test_complete_p0_p6_is_schema_html_and_truth_valid(self):
         result = self.run_direct()
         self.assertEqual(
@@ -222,6 +334,31 @@ class KeylessE2ETests(unittest.TestCase):
             outputs[pace] = [(item["ref_id"], item["start_at"], item["end_at"]) for item in slots]
             self.assertTrue(validate_trip(result.trip).ok)
         self.assertEqual(3, len({canonical_json(value) for value in outputs.values()}))
+
+    def test_task0_tight_slow_plan_uses_visible_ordered_degradation(self):
+        folder = E2E / "beijing-shanghai-3d"
+        request = load(folder / "request.json")
+        request["pace"] = "slow"
+        result = plan_trip(
+            request,
+            load(folder / "candidates.json"),
+            FixedClock.from_iso(FIXED_NOW),
+            RailBackend.from_spec("fixture:" + str(folder / "rail.json"), ROOT),
+        )
+        self.assertEqual(
+            [
+                "无地图 Key 时使用保守静态路线估算",
+                "SLOW_FALLBACK_REDUCE_DAILY_POIS max_pois=2",
+                "SLOW_FALLBACK_COMPRESS_POI_DURATION factor=0.70 kinds=poi,meal",
+            ],
+            result.trip["request"]["assumptions"],
+        )
+        self.assertTrue(all(
+            sum(slot["kind"] == "poi" for slot in day["slots"]) <= 2
+            for day in result.trip["days"]
+        ))
+        self.assertTrue(validate_trip(result.trip).ok)
+        self.assertTrue(validate_html(result.html, result.trip).ok)
 
     def test_trip_budget_is_not_copied_into_daily_scheduler_problems(self):
         request, candidates = synthetic_pace_input("balanced", poi_count=2)

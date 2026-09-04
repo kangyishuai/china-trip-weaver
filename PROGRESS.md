@@ -764,3 +764,129 @@ OK
 - 版本保持 `0.2.0`；未运行 demo、未 pip/npm install、未安装进 Codex、未修改 CI。所有指定红→绿证据、doctor 两模式与 progress 原始事件均在书 7 上述小节。
 - 流程偏差如实保留在 `BLOCKED.md`：一次只读无命中 grep 曾误用禁用的 `|| true`；它未掩盖验收失败，但按任务书的绝对措辞仍是已披露的不合格点。
 - 书 7 最终验收轮次：7/14；无连续三败，代码功能与全部自动验收均完成。
+
+## 书 8 开工理解（2026-09-04，≤10 行）
+1. 目标：在 0.2.0 内让异地 traveler groups 可分别出发并按 meeting anchor 会合，同时让紧凑 slow 行程按显式阶梯降配后可交付。
+2. 顺序：任务 0 基线/复现 → traveler_groups 与 meeting_anchor → transport group_refs/分组及全团价格 → slow 三步降配 → 全门禁/提交。
+3. 单 `origin + travelers` 是冻结兼容路径；与 `traveler_groups` 同时出现必须结构化失败，绝不猜测优先级。
+4. 每条分组交通腿必须明确 group_refs；归属缺失绝不默认全团，人数和价格口径必须能从 Trip 追溯。
+5. meeting buffer 默认 60 分钟；不足必须结构化冲突，不可静默通过。
+6. slow 仅在原排程无解时依次减当日 POI、压到推荐时长 70%、放宽到 balanced 结束时间，每次实际降配都追加 request.assumptions。
+7. 最大风险：分组去程与既有单 origin 往返路线共存时破坏旧 Trip bytes/预算语义，以及降配误吞非窗口类硬冲突。
+8. 只写任务书白名单，不动 CLI/providers/render/demo/manifest/版本，不安装依赖或插件；当前验收轮次 0/14。
+
+## 书 8 任务 0：基线与 slow 失败复现（完成）
+
+- Git 根为本目录；开工 `git status --short --branch` 输出 `## main...origin/main`，HEAD 与 `origin/main` 均为 `5eb2b7fdaad3db857192c4de29431106097caf90`。
+- `/usr/bin/python3 -m unittest discover -s tests`（exit 0）原始摘要：`Ran 346 tests in 29.244s`、`OK`，skipped 0。
+- `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）原始输出：`secret scan: 0 finding(s) across 357 file(s)`。
+- 内存加载 `tests/fixtures/e2e/beijing-shanghai-3d/{request,candidates,rail}.json`，仅把 request `pace` 改为 `slow` 后调用同一 `plan_trip`（exit 1）原始输出：
+
+```text
+PLAN_FAILED plan has no feasible schedule: {"budget_ledger":null,"conflict":{"code":"window","message":"required candidate routine-transfer-buffer-2ab34ef75296 has no feasible insertion"}}
+```
+
+- 现状与任务书逐项吻合，进入任务 1；当前验收轮次 0/14。
+
+## 书 8 任务 1：旅客分组与会合锚点（完成）
+
+- request 接受 `traveler_groups[]`（`group_id/travelers/origin/可选 mobility_profile`）与 `meeting_anchor`（`location/meet_by/buffer_minutes`）；buffer 缺省时规范化为 60。调用方若把该形状与单 `origin + travelers` 同时提交，立即返回含 `TRAVELER_REPRESENTATION_CONFLICT` 的结构化错误。
+- 两组合成 G6 使用北京 2 人、广州 1 人分别到 `airport-shanghai`；两条 rail leg 均为 08:00–12:00，`meet_by=13:00`，实际 buffer 恰为 60 分钟。会合前并行腿不挤进共享日程；13:00 前午餐明确留在分组阶段，request assumption 记录 `MEETING_PRE_JOIN_MEAL meal_type=lunch`。
+- 单 origin 兼容断言：输入 request 与 Trip request 全等，既有 legs 不新增 `group_refs`，Trip 不新增 `transport_pricing`；完整旧 E2E 均通过。
+- 指定反向验证：临时去掉 `actual_buffer < required_buffer` 判断（已还原），精准 G6（exit 1）原始输出：
+
+```text
+test_g6_insufficient_meeting_buffer_is_a_structured_conflict ... FAIL
+AssertionError: ValueError not raised
+----------------------------------------------------------------------
+Ran 1 test in 0.019s
+
+FAILED (failures=1)
+```
+
+- 还原后 `/usr/bin/python3 -m unittest tests.test_keyless_e2e -v`（exit 0）原始摘要：`Ran 28 tests in 3.865s`、`OK`，skipped 0。
+- 当前验收轮次 1/14；无非意图性失败。
+
+## 书 8 任务 2：交通腿归属与分组价格（完成）
+
+- grouped request 的每条 rail/flight leg 都必须显式关联 `group_refs`；meeting arrival 为单组 refs，共同行程为全部参与组 refs。找不到、未知或重复归属均返回 `TRANSPORT_GROUP_*` 结构化冲突，不回退到全团。
+- G6 两条腿原始价格均为 CNY 300/人；按 refs 与人数计算后 `family-beijing=600`、`family-guangzhou=300`，Trip `transport_pricing.party_total_cny={minimum:900,maximum:900}`；budget transport items 同为 600/300，meeting legs 作为已承诺成本预留但不强塞进单线共享日程。
+- 指定反向验证：临时把缺失 refs 改为 `refs = list(groups)` 默认全团（已还原），精准用例（exit 1）原始输出：
+
+```text
+test_grouped_transport_without_group_refs_never_defaults_to_the_party ... FAIL
+AssertionError: ValueError not raised
+----------------------------------------------------------------------
+Ran 1 test in 0.018s
+
+FAILED (failures=1)
+```
+
+- 还原后 `/usr/bin/python3 -m unittest tests.test_keyless_e2e -v`（exit 0）原始摘要：`Ran 28 tests in 3.840s`、`OK`，skipped 0。
+- 当前验收轮次 2/14；两次指定反向红均已还原。
+
+## 书 8 任务 3：slow 降配阶梯（完成）
+
+- `LightScheduler.schedule_plan` 在 `pace=slow` 原排程无解时累计尝试：每日 POI cap 3→2；POI 与作为 POI 实体建模的 meal 时长取推荐值 70%（向上取整）；day end 放宽到 balanced 21:30。命中即停止；三步不能改变的硬冲突保留原 code，并列出全部 attempted relaxations。
+- 任务 0 的北京→上海 3 日输入在第 2 步排出，Trip request assumptions 精确追加 `SLOW_FALLBACK_REDUCE_DAILY_POIS max_pois=2` 与 `SLOW_FALLBACK_COMPRESS_POI_DURATION factor=0.70 kinds=poi,meal`；每天实际景点数均 ≤2。
+- 独立 scheduler 用例证明第 3 步只有前两步仍失败才执行；固定时段重叠的极端输入三步后仍为 `NO_SOLUTION/window` 并带 3 个 `attempted_relaxations`；closed 硬冲突三步后仍保留 `closed`。
+- 指定反向验证：临时停止把 scheduler relaxations 追加到 request assumptions（已还原），精准用例（exit 1）原始关键输出：
+
+```text
+test_task0_tight_slow_plan_uses_visible_ordered_degradation ... FAIL
+AssertionError: Lists differ: ['无地图 Key 时使用保守静态路线估算', 'SLOW_FALLBACK_REDUCE_DAILY_POIS ...', 'SLOW_FALLBACK_COMPRESS_POI_DURATION ...'] != ['无地图 Key 时使用保守静态路线估算']
+First list contains 2 additional elements.
+----------------------------------------------------------------------
+Ran 1 test in 0.032s
+
+FAILED (failures=1)
+```
+
+- 还原后 `/usr/bin/python3 -m unittest tests.test_scheduler tests.test_keyless_e2e -v`（exit 0）原始摘要：`Ran 79 tests in 4.679s`、`OK`，skipped 0。
+- 当前验收轮次 3/14；三项功能与三次指定反向红→绿均完成。
+
+## 书 8 合同收紧与集成门禁
+
+- 发现并修正中间实现的兼容投影泄漏：最终 grouped Trip request 只含 `traveler_groups + meeting_anchor`，明确不含 `origin/travelers`；旧 consumer 需要的总人数/共同起点投影只在 planner 内部调用边界临时生成。G6 与旧形状精准两测 `Ran 2 ... OK`。
+- Schema root 对 grouped request 条件要求 `transport_pricing`，并要求每条 transport leg 有 `group_refs`；raw grouped request 经 `SchemaSubsetValidator(...request)` 实测 `group_request_schema_issues=0`。两份 Schema 逐字一致。
+- 文档仅更新 README 中英文的旅客/节奏段与主 Skill 对应边界：二选一输入、默认 60 分钟、分组/全团价格、slow 三步顺序与留痕；未改安装、版本、demo 或 provider 章节。
+- `/usr/bin/python3 -m unittest tests.test_scheduler tests.test_keyless_e2e -v`（严格互斥形状收紧后，exit 0）→ `Ran 79 tests in 4.549s`、`OK`，skipped 0。
+- 首次全量 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）原始摘要：`Ran 356 tests in 30.591s`、`OK`，skipped 0（基线 346，新增 10，满足 ≥352）。
+- 不能在白名单内原生修正的事实已置顶写入 `BLOCKED.md`：公开 `validate_trip` 仍直接索引 legacy origin，单独验证 grouped Trip 原始输出为 `KeyError: 'origin'`；planner 内已对真实形状做 schema 检查并用临时 endpoint 投影跑完整既有语义检查，未把投影写入 Trip。
+- 当前验收轮次 5/14；无非意图性测试失败。
+
+## 书 8 最终交付门禁（提交前）
+
+- 按拍板字面收紧：slow 的三步会在任意原始无解后依次尝试；对 `closed/route/budget` 等无法改变的硬冲突，三步后保留原 conflict code 并附 `attempted_relaxations`，不吞错。最终联合 `/usr/bin/python3 -m unittest tests.test_scheduler tests.test_keyless_e2e -v` → `Ran 79 tests in 4.089s`、`OK`，skipped 0。
+- 任务 0 同一内存改 pace 命令的改后原始输出（exit 0）：
+
+```text
+PLAN_COMPLETE trip_sha256=b98070dd9052c95cb0962f88641b9aa0aadfbe32b1e256bf4b8bc7499866e778
+assumptions=["无地图 Key 时使用保守静态路线估算","SLOW_FALLBACK_REDUCE_DAILY_POIS max_pois=2","SLOW_FALLBACK_COMPRESS_POI_DURATION factor=0.70 kinds=poi,meal"]
+daily_poi_counts=[1,1,1]
+```
+
+- G6 最终原始摘要（exit 0）：
+
+```text
+G6_COMPLETE
+request_keys=assumptions,budget_cny,constraints,destinations,end_date,interests,locale,meeting_anchor,pace,pasted_notes,start_date,traveler_groups
+meeting_buffer_minutes=60
+legs=[{"from_ref":"city-beijing","to_ref":"airport-shanghai","group_refs":["family-beijing"],"travelers":2,"unit_price_cny":300},{"from_ref":"city-guangzhou","to_ref":"airport-shanghai","group_refs":["family-guangzhou"],"travelers":1,"unit_price_cny":300}]
+transport_pricing={"currency":"CNY","group_totals":[{"group_ref":"family-beijing","travelers":2,"total_cny":{"minimum":600,"maximum":600}},{"group_ref":"family-guangzhou","travelers":1,"total_cny":{"minimum":300,"maximum":300}}],"party_total_cny":{"minimum":900,"maximum":900}}
+```
+
+- 最终全量 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）原始输出：
+
+```text
+....................................................................................................................................................................................................................................................................................................................................................................
+----------------------------------------------------------------------
+Ran 356 tests in 24.682s
+
+OK
+```
+
+- skipped 0；基线 346→最终 356。`/usr/bin/python3 scripts/scan_secrets.py`（exit 0）→ `secret scan: 0 finding(s) across 357 file(s)`。
+- `git diff --check` exit 0；`git diff --name-only` 恰为 11 个白名单文件；针对 `cli.py/providers/mobility.py/render/demo/plugin.json/test_packaging.py/scan_secrets.py/docs/research` 的 diff 命令 exit 0 且输出为空。
+- 两份 Schema `cmp -s` exit 0，SHA-256 同为 `fa8c9075fa044fd51d71fc5ddc7b3c2cd5dbbbbd85b677d5135661aa58d345ff`；manifest 只读核验版本仍为 `0.2.0`。
+- 当前验收轮次 8/14；没有非意图性验收失败，三次指定反向变更均已还原。公开 validator 的白名单阻塞保留在 `BLOCKED.md`，其余书 8 条件已完成。
