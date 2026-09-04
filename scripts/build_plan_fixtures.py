@@ -148,6 +148,71 @@ def candidates(case: str, lodging_spec: Tuple[str, str, str, str, str], poi_spec
     }
 
 
+def multicity_candidates(
+    case: str,
+    lodging_specs: Sequence[Tuple[str, str, str, str, str, str]],
+    poi_specs: Sequence[Tuple[str, str, str, str, str, int, str]],
+) -> Mapping[str, Any]:
+    lodgings: List[Mapping[str, Any]] = []
+    claims: List[Mapping[str, Any]] = []
+    unknowns: List[Mapping[str, Any]] = []
+    for index, (slug, name, city, area, check_in, check_out) in enumerate(lodging_specs):
+        entity, evidence, unknown = lodging(case + "-" + slug, name, city, area, check_in, check_out)
+        lodgings.append(entity)
+        claims.append(evidence)
+        unknown = dict(unknown)
+        unknown["field_path"] = "/lodgings/%d/price/amount" % index
+        unknowns.append(unknown)
+    pois: List[Mapping[str, Any]] = []
+    for index, spec in enumerate(poi_specs):
+        entity, evidence, unknown = poi(case, *spec)
+        pois.append(entity)
+        claims.append(evidence)
+        unknown = dict(unknown)
+        unknown["field_path"] = unknown["field_path"].format(index=index)
+        unknowns.append(unknown)
+    return {
+        "candidates_version": "1.0.0",
+        "pois": pois,
+        "lodgings": lodgings,
+        "claims": claims,
+        "unknowns": unknowns,
+    }
+
+
+def multicity_demo() -> Mapping[str, Any]:
+    request_value = {
+        "origin": {"ref_id": "city-beijing", "name": "北京", "city": "北京"},
+        "destinations": [
+            {"ref_id": "city-shanghai", "name": "上海", "city": "上海"},
+            {"ref_id": "city-hangzhou", "name": "杭州", "city": "杭州"},
+            {"ref_id": "city-suzhou", "name": "苏州", "city": "苏州"},
+        ],
+        "start_date": "2026-10-16",
+        "end_date": "2026-10-20",
+        "travelers": 2,
+        "budget_cny": 8000,
+        "interests": ["建筑", "园林", "美食"],
+        "pace": "balanced",
+        "constraints": ["不执行任何交易动作"],
+        "assumptions": ["无地图 Key 时使用保守静态路线估算"],
+        "locale": "zh-CN",
+        "pasted_notes": None,
+    }
+    candidates_value = multicity_candidates("g1", [
+        ("shanghai", "上海示例住宿", "上海", "上海示例片区", "2026-10-16", "2026-10-17"),
+        ("hangzhou", "杭州示例住宿", "杭州", "杭州示例片区", "2026-10-17", "2026-10-19"),
+        ("suzhou", "苏州示例住宿", "苏州", "苏州示例片区", "2026-10-19", "2026-10-20"),
+    ], [
+        ("shanghai", "上海示例建筑漫步", "上海", "architecture", "2026-10-16T16:00:00+08:00", "2026-10-16T18:00:00+08:00", 90, "https://example.com/shanghai"),
+        ("hangzhou-arrival", "杭州示例湖滨漫步", "杭州", "scenic", "2026-10-17T16:00:00+08:00", "2026-10-17T18:00:00+08:00", 90, "https://example.com/hangzhou"),
+        ("hangzhou", "杭州示例文化场馆", "杭州", "museum", "2026-10-18T09:00:00+08:00", "2026-10-18T12:00:00+08:00", 90, "https://example.com/hangzhou"),
+        ("suzhou-arrival", "苏州示例园林", "苏州", "garden", "2026-10-19T16:00:00+08:00", "2026-10-19T18:00:00+08:00", 90, "https://example.com/suzhou"),
+        ("suzhou", "苏州示例街区", "苏州", "architecture", "2026-10-20T09:00:00+08:00", "2026-10-20T12:00:00+08:00", 90, "https://example.com/suzhou"),
+    ])
+    return {"request": request_value, "candidates": candidates_value}
+
+
 def rail_transcript(from_city: str, to_city: str, travel_date: str) -> Mapping[str, Any]:
     station_map = {from_city: STATIONS[from_city], to_city: STATIONS[to_city]}
     error_result = {
@@ -291,6 +356,14 @@ def main() -> int:
         json.dumps(cases[0]["request"], ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+    multicity = multicity_demo()
+    multicity_root = ROOT / "demo" / "multicity-5d"
+    multicity_root.mkdir(parents=True, exist_ok=True)
+    for name in ("request", "candidates"):
+        (multicity_root / (name + ".json")).write_text(
+            json.dumps(multicity[name], ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
 
     invalid_root = OUTPUT / "candidates-invalid"
     base = copy.deepcopy(cases[0]["candidates"])
@@ -313,7 +386,7 @@ def main() -> int:
         "files": sorted(files, key=lambda item: item["path"]),
     }
     write(OUTPUT / "manifest.json", manifest)
-    print("wrote %d plan cases, 3 invalid candidates, and demo inputs; packaged reference verified" % len(cases))
+    print("wrote %d plan cases, 3 invalid candidates, and single/multi-city demo inputs; packaged reference verified" % len(cases))
     return 0
 
 

@@ -38,8 +38,14 @@
       "items": {"$ref": "#/$defs/transportLeg"}
     },
     "lodgings": {
+      "description": "Selected stays emitted by current planners; the legacy lodging shape remains accepted for existing Trip documents.",
       "type": "array",
-      "items": {"$ref": "#/$defs/lodging"}
+      "items": {
+        "oneOf": [
+          {"$ref": "#/$defs/stay"},
+          {"$ref": "#/$defs/lodging"}
+        ]
+      }
     },
     "pois": {
       "type": "array",
@@ -73,6 +79,25 @@
       "then": {
         "required": ["mock_notice"],
         "properties": {"mock_notice": {"type": "string", "minLength": 1}}
+      }
+    },
+    {
+      "if": {
+        "required": ["days"],
+        "properties": {
+          "days": {
+            "items": {
+              "required": ["stay_id"]
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "lodgings": {
+            "items": {"$ref": "#/$defs/stay"}
+          }
+        }
       }
     }
   ],
@@ -266,6 +291,11 @@
         "day_id": {"type": "string", "minLength": 1},
         "date": {"type": "string", "format": "date"},
         "city": {"type": "string", "minLength": 1},
+        "stay_id": {
+          "description": "Selected stay covering this overnight date, or null on the final non-overnight day. Optional only for legacy Trip documents.",
+          "type": ["string", "null"],
+          "minLength": 1
+        },
         "timezone": {"const": "Asia/Shanghai"},
         "slots": {"type": "array", "items": {"$ref": "#/$defs/slot"}}
       }
@@ -314,6 +344,7 @@
       }
     },
     "lodging": {
+      "description": "Researched lodging candidate shape retained for candidates.schema.json and legacy Trip compatibility.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -331,6 +362,52 @@
       ],
       "properties": {
         "lodging_id": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "city": {"type": "string", "minLength": 1},
+        "area": {"type": "string", "minLength": 1},
+        "check_in": {"type": "string", "format": "date"},
+        "check_out": {"type": "string", "format": "date"},
+        "coordinates": {
+          "oneOf": [{"$ref": "#/$defs/coordinates"}, {"type": "null"}]
+        },
+        "price": {
+          "oneOf": [{"$ref": "#/$defs/price"}, {"type": "null"}]
+        },
+        "deep_links": {"type": "array", "items": {"$ref": "#/$defs/url"}},
+        "claim_ids": {"$ref": "#/$defs/idList"},
+        "locked": {"type": "boolean"}
+      }
+    },
+    "stay": {
+      "description": "A lodging candidate explicitly selected for one or more exact overnight dates.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lodging_id",
+        "candidate_ref",
+        "selection_status",
+        "selected_nights",
+        "name",
+        "city",
+        "area",
+        "check_in",
+        "check_out",
+        "coordinates",
+        "price",
+        "deep_links",
+        "claim_ids",
+        "locked"
+      ],
+      "properties": {
+        "lodging_id": {"type": "string", "minLength": 1},
+        "candidate_ref": {"type": "string", "minLength": 1},
+        "selection_status": {"const": "selected"},
+        "selected_nights": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "format": "date"}
+        },
         "name": {"type": "string", "minLength": 1},
         "city": {"type": "string", "minLength": 1},
         "area": {"type": "string", "minLength": 1},

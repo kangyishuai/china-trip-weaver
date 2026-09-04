@@ -122,13 +122,58 @@ OK
 - 三份 Trip Schema 新 SHA-256（原均为 `f560fc1a...`）：
 
 ```text
-b85157984c8c2af2ecf0e15b752dfc9c8cbd6c7fdfea4732d6990a57dbb4e367  ../design/schema/trip.schema.json
-b85157984c8c2af2ecf0e15b752dfc9c8cbd6c7fdfea4732d6990a57dbb4e367  docs/design/schema/trip.schema.json
-b85157984c8c2af2ecf0e15b752dfc9c8cbd6c7fdfea4732d6990a57dbb4e367  plugins/china-trip-weaver/schema/trip.schema.json
+13220c0a75a0f0fb9bd7ea9ac28633bcb74d6066b78306669933eef23227de52  ../design/schema/trip.schema.json
+13220c0a75a0f0fb9bd7ea9ac28633bcb74d6066b78306669933eef23227de52  docs/design/schema/trip.schema.json
+13220c0a75a0f0fb9bd7ea9ac28633bcb74d6066b78306669933eef23227de52  plugins/china-trip-weaver/schema/trip.schema.json
 ```
 
 - candidates Schema SHA-256：`5dd6862717a02654bfc5f74c3db7c76f9d71176570bfc3d1331a7382af238371`。
 - 当前验收轮次：2/14。
+
+## 任务 3：文档与 demo 对齐（完成）
+
+- README 中英文新增范围段；主 Skill 与产品范围统一为：既有一日/单城市兼容，2–7 天多城市按 `origin→D1→D2→…`，默认不补返程，逐夜 selected stay；超过 7 天、多人异地出发再会合仍不支持。
+- `/usr/bin/python3 -m unittest tests.test_skills -v`（exit 0）原始摘要：
+
+```text
+test_all_skills_pass_bundled_validator ... ok
+test_exact_nine_skill_names_and_descriptions ... ok
+----------------------------------------------------------------------
+Ran 7 tests in 0.215s
+
+OK
+```
+
+- 两组既有 demo 与 G1 重跑（均 exit 0）原始输出：
+
+```text
+PLAN_COMPLETE json=demo/trip.json html=demo/trip.html mode=static stages=INTAKE,RESEARCHED,CANDIDATES_READY,MATRIX_DEGRADED,SCHEDULED,VALIDATED,RENDERED calls=rail12306.fixture:2026-10-16:北京:上海,rail12306.fixture:2026-10-18:上海:北京 trip_sha256=cbee2f8e2f66b8f504fba2e86569cd72d9f563d5cfbc19f327544effc580dd26 html_sha256=3efbad80cbf6732667e7f7294313b16f3d8886e01e23bd340f5069a600251e79 errors=0
+PLAN_COMPLETE json=demo/guangzhou-shenzhen/trip.json html=demo/guangzhou-shenzhen/trip.html mode=static stages=INTAKE,RESEARCHED,CANDIDATES_READY,MATRIX_DEGRADED,SCHEDULED,VALIDATED,RENDERED calls=rail12306.fixture:2026-09-10:广州:深圳,rail12306.fixture:2026-09-10:深圳:广州 trip_sha256=9e9c03abb4995e728855f9f74f385f67e71751ef8c436e1365377f4aa19182f4 html_sha256=1ff25d197912470b4abf48e496dac62272666914a2f9177275e19d14b23a3156 errors=0
+PLAN_COMPLETE json=demo/multicity-5d/trip.json html=demo/multicity-5d/trip.html mode=static stages=INTAKE,RESEARCHED,CANDIDATES_READY,MATRIX_DEGRADED,SCHEDULED,VALIDATED,RENDERED calls= trip_sha256=b12bb288a8751bee3c4d1dd2849b8f783d45d5910bdcac5781de8315e786f95a html_sha256=ccc32422fe07ef66af26fda0d0428716b3ab31534346bef22db79a0cbe2fd6d5 errors=0
+```
+
+- Trip/HTML 验证（六条命令均 exit 0）原始输出：
+
+```text
+VALID demo/trip.json
+HTML VALID demo/trip.html errors=0
+VALID demo/guangzhou-shenzhen/trip.json
+HTML VALID demo/guangzhou-shenzhen/trip.html errors=0
+VALID demo/multicity-5d/trip.json
+HTML VALID demo/multicity-5d/trip.html errors=0
+```
+
+- 既有 demo 重跑前后语义摘要完全一致：北京→上海仍为 3 days/7 slots/2 rail legs/1 lodging/4 POIs；广州→深圳仍为 1 day/3 slots/2 rail legs/0 lodging/3 POIs。
+- G1 为 5 days，城市序列 `上海,杭州,杭州,苏州,苏州`，三条顺序 rail legs，无苏州→北京；4 个过夜日期由 3 个同城 selected stays 恰好覆盖。
+- 当前验收轮次：3/14。
+
+## 书 3 实现审阅（完成）
+
+- 收紧策略采用向后兼容判别：旧 Trip 没有 `day.stay_id` 时继续接受 legacy lodging；新 planner 为每个 day 明确写该字段，一旦采用新形状，Schema 强制 Trip `lodgings` 全部为 selected stay，候选混入会失败。
+- 第一次直接按“多目的地”收紧时，现有合法 `multicity-static.json` 被误伤；合同验收 `Ran 39 ... FAILED (failures=3)`。改为按新字段存在性判别后，同一 39 项 `OK`，未改旧 fixture 或放宽其断言。
+- 同日多腿保持原 route 顺序（不再用派生 ID 打破平局）；有可用开放窗口但与所在城市日期不一致的 POI 不再被当无窗口候选塞入别天；到达时间解析兼容 `Z`。这是覆盖正确性优先于最小 diff 的取舍。
+- 最终三份 Trip Schema SHA-256 均为 `13220c0a75a0f0fb9bd7ea9ac28633bcb74d6066b78306669933eef23227de52`。
+- 当前验收轮次：4/14（首次合同门失败后第二次通过；未触发三连止损）。
 
 ## 书 2 开工理解与任务 0（2026-09-04，≤10 行）
 
@@ -185,6 +230,7 @@ b85157984c8c2af2ecf0e15b752dfc9c8cbd6c7fdfea4732d6990a57dbb4e367  plugins/china-
 ## 书 1 任务 2：语义离群（完成）
 
 - mobility 在坐标用于矩阵前检查三类异常：同城至少 3 点时最近邻仍 `>50km`、不同实体同一 GCJ02 坐标、同一日期窗口的相邻 POI 直线 `>50km`；均记录 `semantic_outlier`，相关 location claims 不再保留 `verified`。
+- 实现口径（猜的）：同城“离群”至少需 3 个样本，并以最近邻仍超过 50km 判定；仅有两点无法识别哪一个是离群点，若两点有同日窗口则由同日相邻规则覆盖。选择该口径是为了减少合法远郊点的误伤。
 - 三份独立合成场景正向：`/usr/bin/python3 -m unittest tests.test_providers -v` → `Ran 93 tests in 0.052s`、`OK`、skipped 0。
 - 反向红：临时将距离阈值改为 `float("inf")`，同日相邻精准测试 → `AssertionError: 'semantic_outlier' not found in ()`，`Ran 1 test ... FAILED (failures=1)`。
 - 还原绿：恢复 `50_000.0` 后上述 93 项全绿；临时改动已还原。
@@ -195,3 +241,42 @@ b85157984c8c2af2ecf0e15b752dfc9c8cbd6c7fdfea4732d6990a57dbb4e367  plugins/china-
 - 全量：`/usr/bin/python3 -m unittest discover -s tests` → `Ran 310 tests in 21.374s`，`OK`，skipped 0（基线 290，满足 ≥296）。
 - 秘密扫描：`/usr/bin/python3 scripts/scan_secrets.py` → `secret scan: 0 finding(s) across 352 file(s)`。
 - 书 2 当前验收轮次：8/10；没有连续验收失败，两个临时反向变更均已还原。
+
+## 书 3 最终门禁（完成）
+
+- G1 从插件根连续两次真实运行 `scripts/ctw plan`，两次原始输出相同：
+
+```text
+PLAN_COMPLETE json=../../demo/multicity-5d/trip.json html=../../demo/multicity-5d/trip.html mode=static stages=INTAKE,RESEARCHED,CANDIDATES_READY,MATRIX_DEGRADED,SCHEDULED,VALIDATED,RENDERED calls= trip_sha256=b12bb288a8751bee3c4d1dd2849b8f783d45d5910bdcac5781de8315e786f95a html_sha256=ccc32422fe07ef66af26fda0d0428716b3ab31534346bef22db79a0cbe2fd6d5 errors=0
+```
+
+- G1 最终验证原始输出：
+
+```text
+VALID ../../demo/multicity-5d/trip.json
+HTML VALID ../../demo/multicity-5d/trip.html errors=0
+```
+
+- G1 两次文件 SHA-256 均为 Trip `ec14fb1a589e111c1380517a4d6fbc1a9ecdd6d53b9f6dcf9cf54ee29d63a46b`、HTML `ccc32422fe07ef66af26fda0d0428716b3ab31534346bef22db79a0cbe2fd6d5`；canonical Trip hash 为上方 `b12bb288...`。
+- 最终 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）原始摘要：
+
+```text
+----------------------------------------------------------------------
+Ran 311 tests in 20.998s
+
+OK
+```
+
+- skipped 为 0（unittest 输出无 `skipped=`）；基线 290，最终 311，满足 ≥293。
+- 最终 `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）原始输出：
+
+```text
+secret scan: 0 finding(s) across 355 file(s)
+```
+
+- `scripts/ctw doctor`（exit 0）确认 `plugin_version=0.2.0`、`schema_version=1.0.0`、`skill_conflicts.status=clear`。
+- `scripts/build_plan_fixtures.py` 重跑前后 tracked diff 与五个输入/manifest 哈希逐字节相同；原始输出 `wrote 3 plan cases, 3 invalid candidates, and single/multi-city demo inputs; packaged reference verified`。
+- 两组旧 demo 与 G1 的六条最终 validate/validate-html 再次全部 exit 0；`git diff --check` exit 0。
+- 禁碰 `providers/`、`mobility.py`、`cli.py`、`render/`、`scheduler/` 的当前 diff 原始输出为空；当前 diff stat 仅含书 3 白名单和获明确授权同步的三份 Trip Schema 副本。
+- 三份 Trip Schema 最终 SHA-256 均为 `13220c0a75a0f0fb9bd7ea9ac28633bcb74d6066b78306669933eef23227de52`；`BLOCKED.md` 已写书 3“无新增阻塞”，未覆盖书 2 既有事实。
+- 书 3 当前验收轮次：5/14；完成条件已全部满足并精确提交；提交后工作区 clean，禁碰路径的提交 diff 为空。

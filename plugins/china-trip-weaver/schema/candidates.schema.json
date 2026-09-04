@@ -13,6 +13,7 @@
       "items": {"$ref": "trip.schema.json#/$defs/poi"}
     },
     "lodgings": {
+      "description": "Researched lodging candidates only; a planner must explicitly select exact overnight stays before writing a Trip.",
       "type": "array",
       "items": {"$ref": "trip.schema.json#/$defs/lodging"}
     },

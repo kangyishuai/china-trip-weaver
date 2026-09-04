@@ -174,6 +174,135 @@ class KeylessE2ETests(unittest.TestCase):
         self.assertEqual(request["start_date"], routes[0].travel_date)
         self.assertEqual(request["end_date"], routes[1].travel_date)
 
+    def test_g1_multicity_cli_builds_ordered_one_way_transport_legs(self):
+        folder = ROOT / "demo" / "multicity-5d"
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            output = Path(temporary)
+            json_path = output / "trip.json"
+            html_path = output / "trip.html"
+            command = subprocess.run(
+                [
+                    str(CTW), "plan",
+                    "--request", str(folder / "request.json"),
+                    "--candidates", str(folder / "candidates.json"),
+                    "--rail", "off", "--mobility", "off", "--lodging", "off",
+                    "--aviation", "off", "--offline-fixture", "--fixed-clock", FIXED_NOW,
+                    "--output-json", str(json_path), "--output-html", str(html_path),
+                ],
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(0, command.returncode, command.stdout + command.stderr)
+            self.assertIn("PLAN_COMPLETE", command.stdout)
+            trip = load(json_path)
+            self.assertEqual(
+                [
+                    ("city-beijing", "city-shanghai"),
+                    ("city-shanghai", "city-hangzhou"),
+                    ("city-hangzhou", "city-suzhou"),
+                ],
+                [(leg["from_ref"], leg["to_ref"]) for leg in trip["transport_legs"]],
+            )
+            self.assertNotIn(
+                ("city-suzhou", "city-beijing"),
+                [(leg["from_ref"], leg["to_ref"]) for leg in trip["transport_legs"]],
+            )
+            self.assertEqual(
+                ["上海", "杭州", "杭州", "苏州", "苏州"],
+                [day["city"] for day in trip["days"]],
+            )
+            self.assertEqual(
+                [
+                    ("上海", "2026-10-16", "2026-10-17"),
+                    ("杭州", "2026-10-17", "2026-10-19"),
+                    ("苏州", "2026-10-19", "2026-10-20"),
+                ],
+                [(stay["city"], stay["check_in"], stay["check_out"]) for stay in trip["lodgings"]],
+            )
+            for day in trip["days"][:-1]:
+                covering = [
+                    stay for stay in trip["lodgings"]
+                    if stay["check_in"] <= day["date"] < stay["check_out"]
+                ]
+                self.assertEqual(1, len(covering), day)
+                self.assertEqual(day["city"], covering[0]["city"])
+                self.assertEqual(covering[0]["lodging_id"], day["stay_id"])
+                self.assertIn(day["date"], covering[0]["selected_nights"])
+                self.assertEqual("selected", covering[0]["selection_status"])
+            self.assertIsNone(trip["days"][-1]["stay_id"])
+            self.assertTrue(validate_trip(trip).ok)
+            self.assertTrue(validate_html(html_path.read_text(encoding="utf-8"), trip).ok)
+            mixed = json.loads(json.dumps(trip, ensure_ascii=False))
+            mixed["lodgings"][0] = load(folder / "candidates.json")["lodgings"][0]
+            self.assertFalse(validate_trip(mixed).ok)
+
+    def test_multicity_missing_overnight_candidate_is_structured_no_solution(self):
+        folder = ROOT / "demo" / "multicity-5d"
+        candidates = load(folder / "candidates.json")
+        removed_ids = {
+            item["lodging_id"] for item in candidates["lodgings"] if item["city"] == "苏州"
+        }
+        candidates["lodgings"] = [
+            item for item in candidates["lodgings"] if item["lodging_id"] not in removed_ids
+        ]
+        candidates["claims"] = [
+            item for item in candidates["claims"] if item["subject_ref"] not in removed_ids
+        ]
+        candidates["unknowns"] = [
+            item for item in candidates["unknowns"] if not item["field_path"].startswith("/lodgings/2/")
+        ]
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            output = Path(temporary)
+            candidates_path = output / "candidates.json"
+            json_path = output / "trip.json"
+            html_path = output / "trip.html"
+            candidates_path.write_text(
+                json.dumps(candidates, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            command = subprocess.run(
+                [
+                    str(CTW), "plan",
+                    "--request", str(folder / "request.json"),
+                    "--candidates", str(candidates_path),
+                    "--rail", "off", "--mobility", "off", "--lodging", "off",
+                    "--aviation", "off", "--offline-fixture", "--fixed-clock", FIXED_NOW,
+                    "--output-json", str(json_path), "--output-html", str(html_path),
+                ],
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(1, command.returncode, command.stdout + command.stderr)
+            self.assertIn("NO_STAY_FOR_NIGHT", command.stderr)
+            self.assertFalse(json_path.exists())
+            self.assertFalse(html_path.exists())
+
+    def test_multicity_return_is_explicit_or_already_present_in_destinations(self):
+        request = load(ROOT / "demo" / "multicity-5d" / "request.json")
+        explicit = json.loads(json.dumps(request, ensure_ascii=False))
+        explicit["constraints"].append("往返")
+        explicit_routes = _route_specs(explicit)
+        self.assertEqual(4, len(explicit_routes))
+        self.assertEqual(
+            ("city-suzhou", "city-beijing", explicit["end_date"]),
+            (
+                explicit_routes[-1].from_place["ref_id"],
+                explicit_routes[-1].to_place["ref_id"],
+                explicit_routes[-1].travel_date,
+            ),
+        )
+
+        closed = json.loads(json.dumps(request, ensure_ascii=False))
+        closed["destinations"][-1] = closed["origin"]
+        closed_routes = _route_specs(closed)
+        self.assertEqual(3, len(closed_routes))
+        self.assertEqual("city-beijing", closed_routes[-1].to_place["ref_id"])
+        self.assertEqual(1, sum(route.to_place["ref_id"] == "city-beijing" for route in closed_routes))
+
+        negated = json.loads(json.dumps(request, ensure_ascii=False))
+        negated["constraints"].append("不需要往返")
+        self.assertEqual(3, len(_route_specs(negated)))
+
     def test_missing_poi_claim_is_rejected_before_planning(self):
         folder = E2E / "beijing-shanghai-3d"
         invalid = E2E / "candidates-invalid" / "missing-poi-claim.json"

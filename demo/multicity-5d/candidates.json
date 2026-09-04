@@ -1,0 +1,377 @@
+{
+  "candidates_version": "1.0.0",
+  "claims": [
+    {
+      "as_of": null,
+      "claim_id": "claim-g1-shanghai-lodging-price",
+      "confidence": 0,
+      "field_path": "/price",
+      "json_path": null,
+      "mode": "static",
+      "provider": "deep-link",
+      "queried_at": "2026-09-03T12:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "source_url": "https://www.fliggy.com/hotel/search",
+      "status": "unknown",
+      "subject_ref": "lodging-g1-shanghai-central",
+      "value": null
+    },
+    {
+      "as_of": null,
+      "claim_id": "claim-g1-hangzhou-lodging-price",
+      "confidence": 0,
+      "field_path": "/price",
+      "json_path": null,
+      "mode": "static",
+      "provider": "deep-link",
+      "queried_at": "2026-09-03T12:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "source_url": "https://www.fliggy.com/hotel/search",
+      "status": "unknown",
+      "subject_ref": "lodging-g1-hangzhou-central",
+      "value": null
+    },
+    {
+      "as_of": null,
+      "claim_id": "claim-g1-suzhou-lodging-price",
+      "confidence": 0,
+      "field_path": "/price",
+      "json_path": null,
+      "mode": "static",
+      "provider": "deep-link",
+      "queried_at": "2026-09-03T12:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "source_url": "https://www.fliggy.com/hotel/search",
+      "status": "unknown",
+      "subject_ref": "lodging-g1-suzhou-central",
+      "value": null
+    },
+    {
+      "as_of": null,
+      "claim_id": "claim-g1-shanghai-hours",
+      "confidence": 0.55,
+      "field_path": "/opening_windows/0",
+      "json_path": null,
+      "mode": "static",
+      "provider": "official-web",
+      "queried_at": "2026-09-03T12:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "source_url": "https://example.com/shanghai",
+      "status": "hypothesis",
+      "subject_ref": "poi-g1-shanghai",
+      "value": "date-specific candidate window"
+    },
+    {
+      "as_of": null,
+      "claim_id": "claim-g1-hangzhou-arrival-hours",
+      "confidence": 0.55,
+      "field_path": "/opening_windows/0",
+      "json_path": null,
+      "mode": "static",
+      "provider": "official-web",
+      "queried_at": "2026-09-03T12:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "source_url": "https://example.com/hangzhou",
+      "status": "hypothesis",
+      "subject_ref": "poi-g1-hangzhou-arrival",
+      "value": "date-specific candidate window"
+    },
+    {
+      "as_of": null,
+      "claim_id": "claim-g1-hangzhou-hours",
+      "confidence": 0.55,
+      "field_path": "/opening_windows/0",
+      "json_path": null,
+      "mode": "static",
+      "provider": "official-web",
+      "queried_at": "2026-09-03T12:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "source_url": "https://example.com/hangzhou",
+      "status": "hypothesis",
+      "subject_ref": "poi-g1-hangzhou",
+      "value": "date-specific candidate window"
+    },
+    {
+      "as_of": null,
+      "claim_id": "claim-g1-suzhou-arrival-hours",
+      "confidence": 0.55,
+      "field_path": "/opening_windows/0",
+      "json_path": null,
+      "mode": "static",
+      "provider": "official-web",
+      "queried_at": "2026-09-03T12:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "source_url": "https://example.com/suzhou",
+      "status": "hypothesis",
+      "subject_ref": "poi-g1-suzhou-arrival",
+      "value": "date-specific candidate window"
+    },
+    {
+      "as_of": null,
+      "claim_id": "claim-g1-suzhou-hours",
+      "confidence": 0.55,
+      "field_path": "/opening_windows/0",
+      "json_path": null,
+      "mode": "static",
+      "provider": "official-web",
+      "queried_at": "2026-09-03T12:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "source_url": "https://example.com/suzhou",
+      "status": "hypothesis",
+      "subject_ref": "poi-g1-suzhou",
+      "value": "date-specific candidate window"
+    }
+  ],
+  "lodgings": [
+    {
+      "area": "上海示例片区",
+      "check_in": "2026-10-16",
+      "check_out": "2026-10-17",
+      "city": "上海",
+      "claim_ids": [
+        "claim-g1-shanghai-lodging-price"
+      ],
+      "coordinates": null,
+      "deep_links": [
+        "https://www.fliggy.com/hotel/search"
+      ],
+      "locked": false,
+      "lodging_id": "lodging-g1-shanghai-central",
+      "name": "上海示例住宿",
+      "price": {
+        "amount": null,
+        "claim_id": "claim-g1-shanghai-lodging-price",
+        "currency": "CNY",
+        "includes_taxes": null,
+        "price_type": "verify-on-click",
+        "queried_at": "2026-09-03T12:00:00+08:00",
+        "unit": "per_night"
+      }
+    },
+    {
+      "area": "杭州示例片区",
+      "check_in": "2026-10-17",
+      "check_out": "2026-10-19",
+      "city": "杭州",
+      "claim_ids": [
+        "claim-g1-hangzhou-lodging-price"
+      ],
+      "coordinates": null,
+      "deep_links": [
+        "https://www.fliggy.com/hotel/search"
+      ],
+      "locked": false,
+      "lodging_id": "lodging-g1-hangzhou-central",
+      "name": "杭州示例住宿",
+      "price": {
+        "amount": null,
+        "claim_id": "claim-g1-hangzhou-lodging-price",
+        "currency": "CNY",
+        "includes_taxes": null,
+        "price_type": "verify-on-click",
+        "queried_at": "2026-09-03T12:00:00+08:00",
+        "unit": "per_night"
+      }
+    },
+    {
+      "area": "苏州示例片区",
+      "check_in": "2026-10-19",
+      "check_out": "2026-10-20",
+      "city": "苏州",
+      "claim_ids": [
+        "claim-g1-suzhou-lodging-price"
+      ],
+      "coordinates": null,
+      "deep_links": [
+        "https://www.fliggy.com/hotel/search"
+      ],
+      "locked": false,
+      "lodging_id": "lodging-g1-suzhou-central",
+      "name": "苏州示例住宿",
+      "price": {
+        "amount": null,
+        "claim_id": "claim-g1-suzhou-lodging-price",
+        "currency": "CNY",
+        "includes_taxes": null,
+        "price_type": "verify-on-click",
+        "queried_at": "2026-09-03T12:00:00+08:00",
+        "unit": "per_night"
+      }
+    }
+  ],
+  "pois": [
+    {
+      "category": "architecture",
+      "city": "上海",
+      "claim_ids": [
+        "claim-g1-shanghai-hours"
+      ],
+      "coordinates": null,
+      "deep_links": [
+        "https://example.com/shanghai"
+      ],
+      "name": "上海示例建筑漫步",
+      "opening_windows": [
+        {
+          "claim_id": "claim-g1-shanghai-hours",
+          "end_at": "2026-10-16T18:00:00+08:00",
+          "start_at": "2026-10-16T16:00:00+08:00",
+          "status": "tentative"
+        }
+      ],
+      "poi_id": "poi-g1-shanghai",
+      "price": null,
+      "recommended_duration_minutes": 90
+    },
+    {
+      "category": "scenic",
+      "city": "杭州",
+      "claim_ids": [
+        "claim-g1-hangzhou-arrival-hours"
+      ],
+      "coordinates": null,
+      "deep_links": [
+        "https://example.com/hangzhou"
+      ],
+      "name": "杭州示例湖滨漫步",
+      "opening_windows": [
+        {
+          "claim_id": "claim-g1-hangzhou-arrival-hours",
+          "end_at": "2026-10-17T18:00:00+08:00",
+          "start_at": "2026-10-17T16:00:00+08:00",
+          "status": "tentative"
+        }
+      ],
+      "poi_id": "poi-g1-hangzhou-arrival",
+      "price": null,
+      "recommended_duration_minutes": 90
+    },
+    {
+      "category": "museum",
+      "city": "杭州",
+      "claim_ids": [
+        "claim-g1-hangzhou-hours"
+      ],
+      "coordinates": null,
+      "deep_links": [
+        "https://example.com/hangzhou"
+      ],
+      "name": "杭州示例文化场馆",
+      "opening_windows": [
+        {
+          "claim_id": "claim-g1-hangzhou-hours",
+          "end_at": "2026-10-18T12:00:00+08:00",
+          "start_at": "2026-10-18T09:00:00+08:00",
+          "status": "tentative"
+        }
+      ],
+      "poi_id": "poi-g1-hangzhou",
+      "price": null,
+      "recommended_duration_minutes": 90
+    },
+    {
+      "category": "garden",
+      "city": "苏州",
+      "claim_ids": [
+        "claim-g1-suzhou-arrival-hours"
+      ],
+      "coordinates": null,
+      "deep_links": [
+        "https://example.com/suzhou"
+      ],
+      "name": "苏州示例园林",
+      "opening_windows": [
+        {
+          "claim_id": "claim-g1-suzhou-arrival-hours",
+          "end_at": "2026-10-19T18:00:00+08:00",
+          "start_at": "2026-10-19T16:00:00+08:00",
+          "status": "tentative"
+        }
+      ],
+      "poi_id": "poi-g1-suzhou-arrival",
+      "price": null,
+      "recommended_duration_minutes": 90
+    },
+    {
+      "category": "architecture",
+      "city": "苏州",
+      "claim_ids": [
+        "claim-g1-suzhou-hours"
+      ],
+      "coordinates": null,
+      "deep_links": [
+        "https://example.com/suzhou"
+      ],
+      "name": "苏州示例街区",
+      "opening_windows": [
+        {
+          "claim_id": "claim-g1-suzhou-hours",
+          "end_at": "2026-10-20T12:00:00+08:00",
+          "start_at": "2026-10-20T09:00:00+08:00",
+          "status": "tentative"
+        }
+      ],
+      "poi_id": "poi-g1-suzhou",
+      "price": null,
+      "recommended_duration_minutes": 90
+    }
+  ],
+  "unknowns": [
+    {
+      "claim_id": "claim-g1-shanghai-lodging-price",
+      "field_path": "/lodgings/0/price/amount",
+      "provider": "flyai",
+      "reason": "room total and cancellation terms must be verified on click"
+    },
+    {
+      "claim_id": "claim-g1-hangzhou-lodging-price",
+      "field_path": "/lodgings/1/price/amount",
+      "provider": "flyai",
+      "reason": "room total and cancellation terms must be verified on click"
+    },
+    {
+      "claim_id": "claim-g1-suzhou-lodging-price",
+      "field_path": "/lodgings/2/price/amount",
+      "provider": "flyai",
+      "reason": "room total and cancellation terms must be verified on click"
+    },
+    {
+      "claim_id": "claim-g1-shanghai-hours",
+      "field_path": "/pois/0/coordinates",
+      "provider": "amap",
+      "reason": "AMap is not configured; coordinates remain unverified"
+    },
+    {
+      "claim_id": "claim-g1-hangzhou-arrival-hours",
+      "field_path": "/pois/1/coordinates",
+      "provider": "amap",
+      "reason": "AMap is not configured; coordinates remain unverified"
+    },
+    {
+      "claim_id": "claim-g1-hangzhou-hours",
+      "field_path": "/pois/2/coordinates",
+      "provider": "amap",
+      "reason": "AMap is not configured; coordinates remain unverified"
+    },
+    {
+      "claim_id": "claim-g1-suzhou-arrival-hours",
+      "field_path": "/pois/3/coordinates",
+      "provider": "amap",
+      "reason": "AMap is not configured; coordinates remain unverified"
+    },
+    {
+      "claim_id": "claim-g1-suzhou-hours",
+      "field_path": "/pois/4/coordinates",
+      "provider": "amap",
+      "reason": "AMap is not configured; coordinates remain unverified"
+    }
+  ]
+}

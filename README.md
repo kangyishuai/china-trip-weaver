@@ -6,6 +6,12 @@ China Trip Weaver is a Codex plugin for evidence-backed, read-only trips within 
 
 It never logs in, submits identity, holds inventory, books, pays, cancels, or changes an order. Provider credentials stay in process-local environments and never appear in argv, logs, fixtures, Trip, HTML, or Git.
 
+## Scope
+
+The planner supports existing one-day and single-city trips plus ordered multi-city trips lasting 2–7 days. For multiple destinations it follows `origin → D1 → D2 → …`; the default is one-way, and a return is added only when the request explicitly says round trip or the final destination is the origin. Each travel day belongs to the city reached by that day's route leg, and every overnight date must resolve to exactly one explicitly selected stay in that city. Researched lodging candidates are not selected stays; if no candidate can cover a night, planning returns a structured no-solution result.
+
+Trips longer than seven days and groups whose travelers start in different cities and need a meeting plan are not supported yet.
+
 ## Requirements
 
 - Codex Desktop's bundled CLI or a compatible Codex CLI.

@@ -144,7 +144,7 @@ def plan_trip(
     now = isoformat_seconds(clock)
     claims = copy.deepcopy(normalized_candidates["claims"])
     pois = copy.deepcopy(normalized_candidates["pois"])
-    lodgings = copy.deepcopy(normalized_candidates["lodgings"])
+    lodging_candidates = copy.deepcopy(normalized_candidates["lodgings"])
     routes = _route_specs(normalized_request)
     transport_legs, rail_claims, rail_unknowns, rail_health, business_calls = _resolve_rail(
         routes, clock, rail_backend
@@ -154,9 +154,9 @@ def plan_trip(
     inventory = active_flyai.resolve(normalized_request, routes, clock)
     removed_lodging_ids = set()
     if inventory.lodgings:
-        removed_lodging_ids = {item["lodging_id"] for item in lodgings}
+        removed_lodging_ids = {item["lodging_id"] for item in lodging_candidates}
         claims = [claim for claim in claims if claim["subject_ref"] not in removed_lodging_ids]
-        lodgings = copy.deepcopy(list(inventory.lodgings))
+        lodging_candidates = copy.deepcopy(list(inventory.lodgings))
     active_variflight = variflight_backend or VariFlightBackend.from_spec("off", rail_backend.repo_root)
     enrichment = active_variflight.enrich(inventory.flights, routes, clock)
     transport_legs.extend(copy.deepcopy(list(enrichment.flights)))
@@ -166,7 +166,7 @@ def plan_trip(
         "CANDIDATES_READY",
         {
             "pois": len(pois),
-            "lodgings": len(lodgings),
+            "lodgings": len(lodging_candidates),
             "rail_routes": len(routes),
             "rail_legs": len([item for item in transport_legs if item["travel_mode"] == "rail"]),
             "flight_comparisons": len(inventory.flights),
@@ -178,11 +178,11 @@ def plan_trip(
 
     active_mobility = mobility_backend or MobilityBackend.from_spec("off", rail_backend.repo_root)
     mobility = active_mobility.resolve(normalized_candidates, clock, ("transit",))
-    pois, lodgings = apply_locations(pois, lodgings, mobility)
+    pois, lodging_candidates = apply_locations(pois, lodging_candidates, mobility)
     current_location_refs = {
         item["poi_id"] for item in pois
     } | {
-        item["lodging_id"] for item in lodgings
+        item["lodging_id"] for item in lodging_candidates
     }
     location_claim_ids = {
         claim_id
@@ -192,6 +192,9 @@ def plan_trip(
     claims.extend(copy.deepcopy([
         claim for claim in mobility.claims if claim["claim_id"] in location_claim_ids
     ]))
+    lodgings, claims, stay_selections = _select_stays(
+        normalized_request, transport_legs, lodging_candidates, claims,
+    )
     problems, matrix_cells, live_matrix_cells = _schedule_problems(
         normalized_request, transport_legs, lodgings, pois, mobility,
     )
@@ -225,10 +228,9 @@ def plan_trip(
         "pois": pois,
     }
     days = _trip_days(normalized_request, scheduled, entities)
-    unknowns = [
-        copy.deepcopy(item) for item in normalized_candidates["unknowns"]
-        if not removed_lodging_ids or not item["field_path"].startswith("/lodgings/")
-    ]
+    unknowns = _selected_candidate_unknowns(
+        normalized_candidates["unknowns"], stay_selections, bool(removed_lodging_ids),
+    )
     unknowns.extend(rail_unknowns)
     trip = {
         "schema_version": "1.0.0",
@@ -288,8 +290,8 @@ def _normalize_request(value: Mapping[str, Any]) -> Dict[str, Any]:
     day_count = (end - start).days + 1
     if day_count < 1 or day_count > 7:
         raise ValueError("request must cover between one and seven inclusive days")
-    if len(normalized["destinations"]) != 1:
-        raise ValueError("v1 generic planner currently requires exactly one destination")
+    if len(normalized["destinations"]) > 1 and normalized["origin"] is None:
+        raise ValueError("multi-city planning requires an origin")
     return normalized
 
 
@@ -308,16 +310,246 @@ def _normalize_candidates(value: Mapping[str, Any], request: Mapping[str, Any]) 
 
 def _route_specs(request: Mapping[str, Any]) -> Tuple[RouteSpec, ...]:
     origin = request["origin"]
-    destination = request["destinations"][0]
-    if origin is None or origin["ref_id"] == destination["ref_id"]:
+    destinations = list(request["destinations"])
+    destination = destinations[0]
+    if origin is None:
         return ()
-    routes = [RouteSpec(origin, destination, request["start_date"], False)]
     text = " ".join(request.get("constraints", ()) + request.get("assumptions", ())).lower()
+    pasted_notes = request.get("pasted_notes")
+    if isinstance(pasted_notes, str):
+        text = "%s %s" % (text, pasted_notes.lower())
     one_way = "单程" in text or "one-way" in text or "one way" in text
     explicit_round_trip = "往返" in text or "round-trip" in text or "round trip" in text or "day trip" in text
-    if not one_way and (request["end_date"] != request["start_date"] or explicit_round_trip):
-        routes.append(RouteSpec(destination, origin, request["end_date"], True))
+    negated_round_trip = any(phrase in text for phrase in (
+        "不往返", "不需要往返", "无需往返", "不要往返", "非往返",
+        "no round trip", "not a round trip", "not round trip", "do not return",
+    ))
+
+    # Preserve the established single-destination behavior: a multi-day trip
+    # returns on the final date unless the request explicitly says one-way.
+    if len(destinations) == 1:
+        if origin["ref_id"] == destination["ref_id"]:
+            return ()
+        routes = [RouteSpec(origin, destination, request["start_date"], False)]
+        if not one_way and (request["end_date"] != request["start_date"] or explicit_round_trip):
+            routes.append(RouteSpec(destination, origin, request["end_date"], True))
+        return tuple(routes)
+
+    places = [origin] + destinations
+    transitions = [
+        (from_place, to_place)
+        for from_place, to_place in zip(places, places[1:])
+        if from_place["ref_id"] != to_place["ref_id"]
+    ]
+    last_is_origin = destinations[-1]["ref_id"] == origin["ref_id"]
+    add_return = explicit_round_trip and not negated_round_trip and not one_way and not last_is_origin
+    travel_dates = _distributed_route_dates(
+        request["start_date"], request["end_date"], len(transitions), add_return,
+    )
+    routes = [
+        RouteSpec(
+            from_place,
+            to_place,
+            travel_date,
+            to_place["ref_id"] == origin["ref_id"],
+        )
+        for (from_place, to_place), travel_date in zip(transitions, travel_dates)
+    ]
+    if add_return:
+        routes.append(RouteSpec(destinations[-1], origin, request["end_date"], True))
     return tuple(routes)
+
+
+def _distributed_route_dates(
+    start_value: str,
+    end_value: str,
+    route_count: int,
+    reserve_final_day_for_return: bool,
+) -> Tuple[str, ...]:
+    if route_count == 0:
+        return ()
+    start = date.fromisoformat(start_value)
+    end = date.fromisoformat(end_value)
+    day_count = (end - start).days + 1
+    usable_days = day_count - (1 if reserve_final_day_for_return and day_count > 1 else 0)
+    usable_days = max(1, usable_days)
+    return tuple(
+        (start + timedelta(days=min(usable_days - 1, (index * usable_days) // route_count))).isoformat()
+        for index in range(route_count)
+    )
+
+
+def _trip_dates(request: Mapping[str, Any]) -> Tuple[str, ...]:
+    start = date.fromisoformat(request["start_date"])
+    end = date.fromisoformat(request["end_date"])
+    return tuple(
+        (start + timedelta(days=index)).isoformat()
+        for index in range((end - start).days + 1)
+    )
+
+
+def _day_city_by_date(
+    request: Mapping[str, Any],
+    legs: Sequence[Mapping[str, Any]],
+) -> Mapping[str, str]:
+    dates = _trip_dates(request)
+    destinations = list(request["destinations"])
+    # A compatibility exception keeps established single-destination Trip output
+    # stable even when its legacy implicit return leg occurs on the final day.
+    if len(destinations) == 1:
+        return {travel_date: destinations[0]["city"] for travel_date in dates}
+
+    places = list(destinations)
+    if request["origin"] is not None:
+        places.append(request["origin"])
+    cities = {place["ref_id"]: place["city"] for place in places}
+    current_city = request["origin"]["city"] if request["origin"] is not None else destinations[0]["city"]
+    arrivals: Dict[str, List[Mapping[str, Any]]] = {travel_date: [] for travel_date in dates}
+    for leg in legs:
+        depart_at = leg.get("depart_at")
+        if leg.get("travel_mode") == "flight" or not isinstance(depart_at, str):
+            continue
+        travel_date = depart_at[:10]
+        if travel_date in arrivals and leg.get("to_ref") in cities:
+            arrivals[travel_date].append(leg)
+
+    result: Dict[str, str] = {}
+    for travel_date in dates:
+        for leg in sorted(
+            arrivals[travel_date],
+            key=lambda item: (item["depart_at"], item.get("arrive_at") or ""),
+        ):
+            current_city = cities[leg["to_ref"]]
+        result[travel_date] = current_city
+    return result
+
+
+def _select_stays(
+    request: Mapping[str, Any],
+    legs: Sequence[Mapping[str, Any]],
+    candidates: Sequence[Mapping[str, Any]],
+    claims: Sequence[Mapping[str, Any]],
+) -> Tuple[List[Mapping[str, Any]], List[Mapping[str, Any]], List[Mapping[str, Any]]]:
+    dates = _trip_dates(request)
+    cities = _day_city_by_date(request, legs)
+    required_nights = [(travel_date, cities[travel_date]) for travel_date in dates[:-1]]
+    candidate_list = list(candidates)
+    segments: List[Mapping[str, Any]] = []
+    position = 0
+    while position < len(required_nights):
+        night, city = required_nights[position]
+        eligible = []
+        for candidate_index, candidate in enumerate(candidate_list):
+            if candidate["city"] != city or not (candidate["check_in"] <= night < candidate["check_out"]):
+                continue
+            coverage = 0
+            for later_night, later_city in required_nights[position:]:
+                if later_city != city or not (candidate["check_in"] <= later_night < candidate["check_out"]):
+                    break
+                coverage += 1
+            eligible.append((not bool(candidate.get("locked")), -coverage, candidate_index, coverage))
+        if not eligible:
+            conflict = {"code": "NO_STAY_FOR_NIGHT", "date": night, "city": city}
+            raise ValueError("plan has no feasible stay: " + canonical_json(conflict))
+        _, _, candidate_index, coverage = min(eligible)
+        selected_nights = [item[0] for item in required_nights[position:position + coverage]]
+        segments.append({
+            "candidate_index": candidate_index,
+            "selected_nights": selected_nights,
+            "check_in": selected_nights[0],
+            "check_out": (date.fromisoformat(selected_nights[-1]) + timedelta(days=1)).isoformat(),
+        })
+        position += coverage
+
+    occurrences: Dict[int, int] = {}
+    candidate_ids = {candidate["lodging_id"] for candidate in candidate_list}
+    identity_subjects = set()
+    selections: List[Mapping[str, Any]] = []
+    stays: List[Mapping[str, Any]] = []
+    claim_by_id = {claim["claim_id"]: claim for claim in claims}
+    cloned_claims: List[Mapping[str, Any]] = []
+
+    for stay_index, segment in enumerate(segments):
+        candidate_index = int(segment["candidate_index"])
+        candidate = candidate_list[candidate_index]
+        source_id = candidate["lodging_id"]
+        occurrence = occurrences.get(candidate_index, 0)
+        occurrences[candidate_index] = occurrence + 1
+        stay_id = source_id if occurrence == 0 else stable_id(
+            "stay-selection", source_id, segment["check_in"], segment["check_out"],
+        )
+        stay = copy.deepcopy(candidate)
+        stay["lodging_id"] = stay_id
+        stay["check_in"] = segment["check_in"]
+        stay["check_out"] = segment["check_out"]
+        stay["candidate_ref"] = source_id
+        stay["selection_status"] = "selected"
+        stay["selected_nights"] = list(segment["selected_nights"])
+        referenced_claim_ids = list(stay["claim_ids"])
+        price = stay.get("price")
+        if price and price.get("claim_id") is not None and price["claim_id"] not in referenced_claim_ids:
+            referenced_claim_ids.append(price["claim_id"])
+        claim_id_map: Dict[str, str] = {}
+        if stay_id == source_id:
+            identity_subjects.add(source_id)
+            claim_id_map.update((claim_id, claim_id) for claim_id in referenced_claim_ids)
+        else:
+            for claim_id in referenced_claim_ids:
+                source_claim = claim_by_id.get(claim_id)
+                if source_claim is None:
+                    raise ValueError("selected stay references a missing claim: %s" % claim_id)
+                cloned_id = stable_id("claim-stay-selection", claim_id, stay_id)
+                cloned = copy.deepcopy(source_claim)
+                cloned["claim_id"] = cloned_id
+                cloned["subject_ref"] = stay_id
+                cloned_claims.append(cloned)
+                claim_id_map[claim_id] = cloned_id
+            stay["claim_ids"] = [claim_id_map[claim_id] for claim_id in stay["claim_ids"]]
+            if price and price.get("claim_id") is not None:
+                price["claim_id"] = claim_id_map[price["claim_id"]]
+        stays.append(stay)
+        selections.append({
+            "source_index": candidate_index,
+            "stay_index": stay_index,
+            "claim_id_map": claim_id_map,
+        })
+
+    selected_claims = [
+        copy.deepcopy(claim) for claim in claims
+        if claim["subject_ref"] not in candidate_ids or claim["subject_ref"] in identity_subjects
+    ]
+    selected_claims.extend(cloned_claims)
+    return stays, selected_claims, selections
+
+
+def _selected_candidate_unknowns(
+    unknowns: Sequence[Mapping[str, Any]],
+    selections: Sequence[Mapping[str, Any]],
+    replaced_lodging_candidates: bool,
+) -> List[Mapping[str, Any]]:
+    result: List[Mapping[str, Any]] = []
+    by_source: Dict[int, List[Mapping[str, Any]]] = {}
+    for selection in selections:
+        by_source.setdefault(int(selection["source_index"]), []).append(selection)
+    for unknown in unknowns:
+        path = unknown["field_path"]
+        if not path.startswith("/lodgings/"):
+            result.append(copy.deepcopy(unknown))
+            continue
+        if replaced_lodging_candidates:
+            continue
+        parts = path.split("/", 3)
+        if len(parts) != 4 or not parts[2].isdigit():
+            continue
+        source_index = int(parts[2])
+        for selection in by_source.get(source_index, ()):
+            selected = copy.deepcopy(unknown)
+            selected["field_path"] = "/lodgings/%d/%s" % (selection["stay_index"], parts[3])
+            claim_id = selected.get("claim_id")
+            if claim_id is not None:
+                selected["claim_id"] = selection["claim_id_map"].get(claim_id, claim_id)
+            result.append(selected)
+    return result
 
 
 def _resolve_rail(
@@ -481,6 +713,7 @@ def _schedule_problems(
     end = date.fromisoformat(request["end_date"])
     dates = [(start + timedelta(days=index)).isoformat() for index in range((end - start).days + 1)]
     by_date: Dict[str, List[Mapping[str, Any]]] = {day: [] for day in dates}
+    city_by_date = _day_city_by_date(request, legs)
 
     for leg in legs:
         if leg["travel_mode"] == "flight":
@@ -504,17 +737,27 @@ def _schedule_problems(
             "blocked_reason": None,
         })
 
-    for lodging in lodgings[:1]:
+    for lodging in lodgings:
         day = lodging["check_in"]
         if day not in by_date:
             raise ValueError("lodging check-in is outside the request date range")
-        fixed = "%sT14:00:00+08:00" % day
+        default_checkin = datetime.fromisoformat("%sT14:00:00+08:00" % day)
+        inbound_arrivals = [
+            datetime.fromisoformat(leg["arrive_at"].replace("Z", "+00:00"))
+            for leg in legs
+            if leg.get("travel_mode") != "flight"
+            and isinstance(leg.get("arrive_at"), str)
+            and leg["arrive_at"][:10] == day
+            and _place_city(request, leg["to_ref"]) == lodging["city"]
+        ]
+        fixed_at = max([default_checkin] + [arrival + timedelta(minutes=30) for arrival in inbound_arrivals])
+        fixed = fixed_at.isoformat(timespec="seconds")
         by_date[day].append({
             "ref_id": lodging["lodging_id"],
             "title": "%s 入住" % lodging["name"],
             "kind": "checkin",
             "duration_minutes": 45,
-            "windows": [{"start_at": fixed, "end_at": "%sT16:00:00+08:00" % day}],
+            "windows": [{"start_at": fixed, "end_at": "%sT23:30:00+08:00" % day}],
             "utility": 900,
             "required": True,
             "locked": False,
@@ -527,15 +770,27 @@ def _schedule_problems(
     unslotted: List[Mapping[str, Any]] = []
     for poi in pois:
         usable = [window for window in poi["opening_windows"] if window["status"] in ("verified", "tentative")]
-        matching = [window for window in usable if window["start_at"][:10] in by_date]
+        matching = [
+            window for window in usable
+            if window["start_at"][:10] in by_date
+            and city_by_date[window["start_at"][:10]] == poi["city"]
+        ]
         if matching:
             day = sorted(matching, key=lambda item: item["start_at"])[0]["start_at"][:10]
+        elif usable:
+            continue
         else:
             unslotted.append(poi)
             continue
         by_date[day].append(_poi_candidate(poi, matching))
-    for index, poi in enumerate(unslotted):
-        day = dates[index % len(dates)]
+    city_offsets: Dict[str, int] = {}
+    for poi in unslotted:
+        matching_dates = [day for day in dates if city_by_date[day] == poi["city"]]
+        if not matching_dates:
+            continue
+        offset = city_offsets.get(poi["city"], 0)
+        day = matching_dates[offset % len(matching_dates)]
+        city_offsets[poi["city"]] = offset + 1
         by_date[day].append(_poi_candidate(poi, []))
 
     problems = []
@@ -637,7 +892,7 @@ def _trip_days(
     claim_ids: Dict[str, Sequence[str]] = {}
     for group, id_key in (("transport_legs", "leg_id"), ("lodgings", "lodging_id"), ("pois", "poi_id")):
         claim_ids.update((item[id_key], item["claim_ids"]) for item in entities[group])
-    destination_city = request["destinations"][0]["city"]
+    city_by_date = _day_city_by_date(request, entities["transport_legs"])
     days = []
     for index, result in enumerate(scheduled["days"]):
         slots = []
@@ -654,11 +909,18 @@ def _trip_days(
                 "claim_ids": list(claim_ids[slot["ref_id"]]),
             })
         travel_date = (date.fromisoformat(request["start_date"]) + timedelta(days=index)).isoformat()
+        covering_stays = [
+            lodging for lodging in entities["lodgings"]
+            if lodging["check_in"] <= travel_date < lodging["check_out"]
+        ] if index < len(scheduled["days"]) - 1 else []
+        if index < len(scheduled["days"]) - 1 and len(covering_stays) != 1:
+            raise ValueError("plan has no feasible stay coverage for %s" % travel_date)
         days.append({
             "day_id": "day-%d" % (index + 1),
             "date": travel_date,
-            "city": destination_city,
+            "city": city_by_date[travel_date],
             "timezone": "Asia/Shanghai",
+            "stay_id": covering_stays[0]["lodging_id"] if covering_stays else None,
             "slots": slots,
         })
     return days
@@ -698,3 +960,10 @@ def _place_name(request: Mapping[str, Any], ref_id: str) -> str:
     if request["origin"]:
         places.append(request["origin"])
     return next((item["name"] for item in places if item["ref_id"] == ref_id), ref_id)
+
+
+def _place_city(request: Mapping[str, Any], ref_id: str) -> str:
+    places = list(request["destinations"])
+    if request["origin"]:
+        places.append(request["origin"])
+    return next((item["city"] for item in places if item["ref_id"] == ref_id), ref_id)

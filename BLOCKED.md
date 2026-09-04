@@ -1,5 +1,13 @@
 # Unresolved items
 
+## Book 3: ordered multi-city planning
+
+- Status: 无新增阻塞（no new blocker）。The implementation, compatibility, reverse-validation, demo, and schema gates all have an in-scope path to completion.
+
+## Book 1: AMap place identity
+
+- Status: 无新增阻塞（no new blocker）。POI identity, administrative consistency, business conflict preservation, semantic outliers, reverse validation, and synthetic fixtures all have in-scope implementations and passing tests.
+
 ## Book 2: live 12306 station candidates have no distance signal
 
 - Status: blocked on 2026-09-04 for physical-distance ordering only; the remaining station fallback and error-classification work continues.
