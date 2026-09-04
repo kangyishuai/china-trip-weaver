@@ -32,6 +32,39 @@ def load(path: Path):
 
 
 class ContractTests(unittest.TestCase):
+
+    def test_request_shapes_are_mutually_exclusive_in_both_directions(self):
+        """A grouped request must reject a stray legacy origin, not just the reverse."""
+
+        validator = SchemaSubsetValidator(load_schema())
+        base = load(VALID / "weekend-live.json")["request"]
+
+        grouped = copy.deepcopy(base)
+        grouped.pop("origin", None)
+        grouped.pop("travelers", None)
+        grouped["traveler_groups"] = [
+            {
+                "group_id": "grp-a",
+                "travelers": 2,
+                "origin": {"city": "北京", "name": "北京", "ref_id": "city-beijing"},
+            }
+        ]
+        grouped["meeting_anchor"] = {
+            "location": {"city": "上海", "name": "上海", "ref_id": "city-shanghai"},
+            "meet_by": grouped["start_date"] + "T18:00:00+08:00",
+        }
+        self.assertEqual([], validator.validate_fragment("#/$defs/request", grouped))
+
+        with_stray_origin = copy.deepcopy(grouped)
+        with_stray_origin["origin"] = {"city": "北京", "name": "北京", "ref_id": "city-beijing"}
+        issues = validator.validate_fragment("#/$defs/request", with_stray_origin)
+        self.assertIn("S_ONE_OF", {item.code for item in issues}, [i.render() for i in issues])
+
+        legacy_with_groups = copy.deepcopy(base)
+        legacy_with_groups["traveler_groups"] = grouped["traveler_groups"]
+        issues = validator.validate_fragment("#/$defs/request", legacy_with_groups)
+        self.assertIn("S_ONE_OF", {item.code for item in issues}, [i.render() for i in issues])
+
     def test_versions_are_frozen(self):
         self.assertEqual("0.3.0", __version__)
         self.assertEqual("1.0.0", SCHEMA_VERSION)

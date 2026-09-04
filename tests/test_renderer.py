@@ -125,7 +125,7 @@ class RendererTests(unittest.TestCase):
 
         self.assertFalse(trip_report.ok)
         self.assertTrue(
-            {"S_ONE_OF", "S_REQUIRED"}.issubset({item.code for item in trip_report.errors}),
+            {"S_TYPE", "S_REQUIRED"}.issubset({item.code for item in trip_report.errors}),
             [item.render() for item in trip_report.errors],
         )
         with self.assertRaises(RendererError):

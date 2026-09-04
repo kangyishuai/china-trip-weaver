@@ -400,7 +400,13 @@
             "meeting_anchor": {"type": "null"}
           }
         },
-        {"required": ["traveler_groups", "meeting_anchor"]}
+        {
+          "required": ["traveler_groups", "meeting_anchor"],
+          "properties": {
+            "origin": {"type": "null"},
+            "travelers": {"type": "null"}
+          }
+        }
       ],
       "properties": {
         "origin": {

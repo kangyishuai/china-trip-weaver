@@ -9,7 +9,7 @@
 ## 0.3.0 release
 
 - Status: 无新增阻塞（no new blocker）。The grouped-consumer fix, four synthetic demos, exact ten-place version bump, full 361-test gate, repository secret scan, and real Codex 0.3.0 installation all have passing evidence in `PROGRESS.md`.
-- The first real installer check found a pre-existing, Git-ignored 398 MB plugin-local npm cache. It was moved recoverably to `/Users/kangyishuai/.Trash/china-trip-weaver-plugin-npm-cache-20260905-release`; the second install and final `--check` both passed. This is resolved residue, not pending product work.
+- The first real installer check found a pre-existing, Git-ignored 398 MB plugin-local npm cache. It was moved out of the plugin tree so the installer could copy it; the second install and final `--check` both passed. Acceptance correction on 2026-09-05: that cache is **no longer recoverable** — the Trash is empty and the directory is gone from disk (most likely the owner emptied it). No loss of substance: it held only npx-downloaded provider packages, which are Git-ignored and re-downloaded on the next provider call. No source, fixture, or credential was in it. This is resolved residue, not pending product work.
 
 ## Book 3: ordered multi-city planning
 
