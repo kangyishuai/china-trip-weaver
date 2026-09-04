@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import os
 import subprocess
@@ -12,6 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ROOT / "plugins" / "china-trip-weaver" / "skills"
 CODEX_HOME = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
 VALIDATOR = CODEX_HOME / "skills/.system/skill-creator/scripts/quick_validate.py"
+PLUGIN = ROOT / "plugins" / "china-trip-weaver"
+INSTALLER = ROOT / "scripts" / "install_local_plugin.sh"
 
 DESCRIPTIONS = {
     "plan-china-trip": "Plan, compare, or locally replan a read-only trip within mainland China for 1-7 days. Use when the user asks for a China itinerary, a city weekend, cross-city transport and lodging choices, an executable day schedule, a disruption-aware revision, or a sourced mobile trip page. Orchestrate the plugin's explicit-only research, provider, scheduling, replanning, and rendering Skills; never book, log in, submit identity, pay, cancel, or change an order.",
@@ -86,6 +89,45 @@ class SkillPackagingTests(unittest.TestCase):
         combined = "\n".join(path.read_text(encoding="utf-8") for path in SKILLS.rglob("*.*") if path.is_file())
         self.assertNotIn("[TODO:", combined)
         self.assertNotRegex(combined.lower(), r"paste (?:your )?(?:api )?key")
+
+    def test_destination_research_contract_uses_host_first_then_anysearch_fallback(self):
+        body = (SKILLS / "research-china-destination" / "SKILL.md").read_text(encoding="utf-8")
+        host = "Use the host's built-in network search first."
+        fallback = "fall back to AnySearch with an already configured key"
+        degraded = "use only material the user already pasted, mark destination research `degraded`"
+        self.assertIn(host, body)
+        self.assertIn(fallback, body)
+        self.assertIn(degraded, body)
+        self.assertLess(body.index(host), body.index(fallback))
+        self.assertLess(body.index(fallback), body.index(degraded))
+        for rung in ("host-web", "anysearch", "user-pasted-only"):
+            self.assertIn(rung, body)
+
+    def test_downstream_skills_preserve_or_do_not_substitute_search_rung(self):
+        expectations = {
+            "render-china-trip": "destination-search rung",
+            "replan-china-trip": "destination-search rung",
+            "resolve-china-mobility": "destination-search rung",
+            "schedule-china-trip": "destination-search rung",
+            "search-china-rail": "destination-search rung",
+        }
+        for name, phrase in expectations.items():
+            with self.subTest(name=name):
+                body = (SKILLS / name / "SKILL.md").read_text(encoding="utf-8")
+                self.assertIn(phrase, body)
+
+    def test_manifest_uses_repository_website_without_invented_legal_urls(self):
+        manifest = json.loads((PLUGIN / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
+        interface = manifest["interface"]
+        self.assertEqual("0.2.0", manifest["version"])
+        self.assertEqual("https://github.com/kangyishuai/china-trip-weaver", interface["websiteURL"])
+        self.assertNotIn("privacyPolicyURL", interface)
+        self.assertNotIn("termsOfServiceURL", interface)
+
+    def test_codex_skill_parser_smoke_runs_standalone(self):
+        result = subprocess.run([str(INSTALLER), "--skill-smoke"], text=True, capture_output=True)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn("SKILL parser smoke: OK (9 SKILL.md via codex debug prompt-input)", result.stdout)
 
     def test_all_skills_pass_bundled_validator(self):
         if not VALIDATOR.is_file():

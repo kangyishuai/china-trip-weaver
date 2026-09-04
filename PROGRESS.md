@@ -291,6 +291,14 @@ secret scan: 0 finding(s) across 355 file(s)
 - 版本核对：plugin manifest 与 package `__version__` 均为 `0.2.0`；`BLOCKED.md` 已记录书 1“无新增阻塞”。
 - 书 1 最终验收失败轮次：0/10；两个意图性反向红均已还原。
 
+## 书 5 开工记录
+
+- 目标：让 HTML 正文只说实体名称和本地化状态，同时保留 `data-*` 校验锚点；补齐候选指针修法、搜索阶梯合同与安装解析自检。
+- 顺序：先完成渲染器与 G10，再做 candidates 错误，再对齐 Skills，最后补 manifest/安装 smoke test 与全量门禁。
+- 基线：`/usr/bin/python3 -m unittest discover -s tests` → `Ran 311 tests in 20.909s`、`OK`、skipped 0；秘密扫描 → `0 finding(s) across 355 file(s)`。
+- 最大风险：可见 ref 与 `data-*` 锚点共用模板，去除显示文本时最容易误删校验依赖；分组地图也可能触发现有离线/视口/对抗断言。
+- 边界：不碰 `cli.py`、住宿/价格逻辑、providers/schema/demo 或未列白名单文件；版本保持 `0.2.0`，不安装/刷新 Codex 缓存。
+
 ## 书 4 开工理解（2026-09-04，≤10 行）
 1. 目标：住宿价格只有在日期、人数、房间、入住容量、税费与取消语境均可证实时才可标 live；否则 amount=null、verify-on-click。
 2. 顺序：硬约束入请求与价格降级 → live 与调研候选合并 → VariFlight/AMap 独立兜底 → 全量门禁与提交。
@@ -299,6 +307,50 @@ secret scan: 0 finding(s) across 355 file(s)
 5. 基线：311 tests、OK、skipped 0；secret scan 0 finding(s) across 355 file(s)；HEAD=1119c5a 且工作区 clean。
 6. 仅改任务白名单，禁碰 demo/render/candidates/mobility/amap providers/CI/版本/依赖；证据与状态只追加本书小节。
 7. 最大风险：旧请求兼容、每夜唯一 stay 不变量，以及在不修改 AMap provider 的前提下正确复用 POI 能力。
+
+## 书 5 任务 2：候选指针修法（完成）
+
+- `_resolve_pointer` 现返回含 `expected`、`found`、`example=/lodgings/0/price/amount` 与失败位置详情的结构化 `C_UNKNOWN_PATH`，并明确数组必须用从 0 开始的下标，不能写实体 ID。
+- 反向红（临时删除 example 后）：`Ran 1 test in 0.002s`，`FAILED (failures=1)`，原始断言为 `example=/lodgings/0/price/amount not found`；临时改动已还原。
+- 还原绿：`/usr/bin/python3 -m unittest tests.test_candidates -v` → `Ran 7 tests in 0.104s`、`OK`、skipped 0。
+
+## 书 5 任务 1：页面说人话（完成）
+
+- 交通端点由 ref 映射为实体名称，raw ref/status/kind/health/mode 只保留在 `data-*`；页面以本地化文案区分已选、备选、未知，并把 unknown/provider 风险移到行程细节之前。
+- evidence 改为默认关闭的 `<details>` 且按风险降序；位置视图按城市与该城日期分组，每组独立 CRS/SVG，不再跨城市连线。
+- G10 反向红（临时恢复可见 `from_ref`，exit 1）原始关键输出：
+
+```text
+test_g10_visible_copy_uses_names_localized_states_and_choice_markers ... FAIL
+AssertionError: Regex matched: 'poi-bund' matches '\\b(?:city|poi|lodging|leg)-[A-Za-z0-9._:-]+'
+Ran 1 test in 0.004s
+FAILED (failures=1)
+```
+
+- 还原后 `/usr/bin/python3 -m unittest tests.test_renderer -v`（exit 0）原始摘要：
+
+```text
+----------------------------------------------------------------------
+Ran 33 tests in 1.734s
+
+OK
+```
+
+- skipped 为 0；现有 HTML 校验、离线 Chrome 四视口、截图、打印与全部对抗 fixture 均通过，临时反向改动已还原。
+
+## 书 5 任务 3：搜索阶梯合同（完成）
+
+- `$research-china-destination` 明文固定三级顺序：宿主内置网络搜索优先；仅在缺失/不可用时用已配置 Key 且 probe 通过的 AnySearch；两者皆无则只用用户粘贴资料、health 标 `degraded`、其余事实保持 unknown。
+- provider health 以 `host-web` / `anysearch` / `user-pasted-only` 及 reason 如实记录实际 rung；铁路、移动、排程、重排与渲染 Skill 已对齐为“不替代/不改写该 rung”。
+- `/usr/bin/python3 -m unittest tests.test_skills -v`（exit 0）原始摘要：`Ran 9 tests in 0.232s`、`OK`、skipped 0；其中新增断言同时锁住宿主优先与 AnySearch 降级措辞及顺序。
+
+## 书 5 任务 4：manifest 与安装自检（完成）
+
+- manifest 仅在 `interface` 补真实 `websiteURL=https://github.com/kangyishuai/china-trip-weaver`；版本仍为 `0.2.0`，不存在真实政策页，因此未编造 privacy/terms URL，后续公开分发前置条件已追加到 `BLOCKED.md`。
+- 单独 smoke（exit 0）原始输出：`SKILL parser smoke: OK (9 SKILL.md via codex debug prompt-input)`；它把源码 SKILL.md 复制到隔离临时 home，并调用 Codex 自身 `debug prompt-input` 解析路径，不读取/刷新已安装缓存。
+- 反向红（临时把 render Skill 的 SKILL.md 改名）原始输出：`SKILL parser smoke 失败：读不到 .../render-china-trip/SKILL.md`，`exit=6`；恢复后同一 smoke 再次 `OK`。
+- plugin-creator validator 原始输出：`Plugin validation passed: .../plugins/china-trip-weaver`；`/usr/bin/python3 -m unittest tests.test_skills -v` → `Ran 11 tests in 0.510s`、`OK`、skipped 0。
+- `scripts/install_local_plugin.sh --check` 先报 smoke `OK`，随后按预期因旧 0.2.0 缓存与源码不一致非零退出；未运行安装模式，本机 Codex 缓存未改动。
 
 ## 书 4 任务 1：硬约束进请求与价格降级（完成）
 
@@ -407,3 +459,39 @@ OK
 - staged `git diff --stat` 仅含 17 个书 4 白名单路径；demo/render/candidates.py/mobility.py/providers/amap*.py/mcp_stdio.py/rail12306.py staged diff 原始输出为空；schema SHA-256 同为 `18087f60c8126aaa15bc21e9f0c4dd7da2af6680f7b4ca5f206d6878da2dfefd`；版本仍为 0.2.0。
 - 主工作树全量另受已记录的并行书 5 manifest/test 冲突影响：`Ran 324 tests ... FAILED (failures=1)`，唯一失败为 `test_plugin_manifest_is_exact_and_version_matches_package`；不属于书 4 staged snapshot，未越权修改。
 - 书 4 最终验收轮次：7/14；无连续三次失败，三处意图性反向红均已还原。
+
+## 书 5 可读性与浏览器复验
+
+- project probe：无前端框架/构建依赖；Python 确定性字符串 renderer，既有设计权威为 `assets/renderer.css` 与 renderer 合同。本轮属 refinement，保护 12 section、CSP、embedded Trip、离线与 `data-*` 锚点；未改禁碰 stylesheet。
+- 视觉复验后把英文 unknown/provider 技术 reason 留在 `data-*`，正文改为可执行的本地化核验说明；renderer 自有补充样式保证 evidence summary 44px、焦点沿用既有规则、城市组间距与打印时展开内容。
+- `/usr/bin/python3 scripts/qa_renderer_browser.py ... --viewports 375x812,1440x900`（exit 0）：两视口 `failures=[]`、horizontalOverflow=0、body 16px/24.8px、minLinkHeight=44、12/12 sections、resourceRequests=[]、consoleErrors=[]、SVG/time semantics=true。
+- 同条件截图人工检查：375px 首屏先显示 truth banner 与“备选与未知项”，无截断/遮挡；1440px 风险与需求形成清晰双栏，数据源状态随后全宽。范围内未发现 P0–P2。
+- ego-browser 原生交互复验：`detailsCount=4`、`allClosed=true`、`minSummaryHeight=44`、`riskBeforeRequest=true`、`horizontalOverflow=0`；summary 获焦后 `Enter` 打开，指针点击关闭；隔离 task space 已关闭（`done=true`）。
+
+## 书 5 最终门禁（受单一白名单冲突阻塞）
+
+- 定向总验收 `/usr/bin/python3 -m unittest tests.test_renderer tests.test_candidates tests.test_skills -v`（exit 0）原始摘要：
+
+```text
+----------------------------------------------------------------------
+Ran 51 tests in 2.890s
+
+OK
+```
+
+- 全量发现已达 324（≥315）、skipped 0，但唯一失败是禁改 `tests/test_packaging.py` 的旧 exact manifest：
+
+```text
+======================================================================
+FAIL: test_plugin_manifest_is_exact_and_version_matches_package (test_packaging.PackagingTests)
+AssertionError: ... EXPECTED_MANIFEST ... != ... interface.websiteURL ...
+----------------------------------------------------------------------
+Ran 324 tests in 21.568s
+
+FAILED (failures=1)
+```
+
+- `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）原始输出：`secret scan: 0 finding(s) across 357 file(s)`。
+- `git diff --check` 与白名单审计均 exit 0；当前 17 个 diff 路径全在书 5 白名单，`cli.py`、`planning.py`、schema/、providers/、mobility.py、flyai/variflight inventory、demo/ 与 `tests/test_packaging.py` 的当前 diff 原始输出为空。
+- 插件版本仍 `0.2.0`；本机安装缓存目录最新 mtime 仍为 `Sep 4 17:15:59 2026`，早于本轮，且安装脚本从未以 install 模式运行。
+- 全量门禁同一确定性冲突已复验 2 次；没有放宽断言、改禁碰测试或撤掉必需 manifest 字段。阻塞证据与唯一授权解法已写入 `BLOCKED.md`。

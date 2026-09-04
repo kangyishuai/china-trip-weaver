@@ -1,4 +1,4 @@
-"""Post-render DOM, security, fact, and accessibility gate (E001-E204)."""
+"""Post-render DOM, security, fact, accessibility, and readable-copy gate (E001-E205)."""
 
 from __future__ import annotations
 
@@ -74,6 +74,7 @@ class AuditParser(HTMLParser):
         self.scripts: List[Dict[str, Any]] = []
         self.styles: List[str] = []
         self.sections: Counter[str] = Counter()
+        self.section_order: List[str] = []
         self.headings: List[int] = []
         self.day_ids: Counter[str] = Counter()
         self.slot_nodes: List[Mapping[str, str]] = []
@@ -107,6 +108,7 @@ class AuditParser(HTMLParser):
             self.headings.append(int(tag[1]))
         if values.get("data-section"):
             self.sections[values["data-section"]] += 1
+            self.section_order.append(values["data-section"])
         if values.get("data-day-id"):
             self.day_ids[values["data-day-id"]] += 1
         if values.get("data-slot-id"):
@@ -196,12 +198,43 @@ def validate_html(html_text: str, trip: Mapping[str, Any]) -> HTMLValidationRepo
         add("E003", "provider health row counts differ from Trip")
     for node in parser.slot_nodes:
         slot = expected_slots.get(node["data-slot-id"])
-        if slot and (node.get("data-start-at") != slot["start_at"] or node.get("data-end-at") != slot["end_at"]):
-            add("E003", "slot timestamp differs from Trip: %s" % slot["slot_id"])
+        if slot and (
+            node.get("data-start-at") != slot["start_at"]
+            or node.get("data-end-at") != slot["end_at"]
+            or node.get("data-ref-id") != (slot["ref_id"] or "")
+            or node.get("data-slot-kind") != slot["kind"]
+            or node.get("data-slot-status") != slot["status"]
+        ):
+            add("E003", "slot facts differ from Trip: %s" % slot["slot_id"])
     service_nodes = {attrs.get("data-entity-id"): attrs for tag, attrs in parser.all_attrs if attrs.get("data-entity-kind") == "transport"}
     for leg in trip["transport_legs"]:
-        if service_nodes.get(leg["leg_id"], {}).get("data-service-number") != (leg["service_number"] or ""):
-            add("E003", "transport service number differs from Trip: %s" % leg["leg_id"])
+        node = service_nodes.get(leg["leg_id"], {})
+        if (
+            node.get("data-service-number") != (leg["service_number"] or "")
+            or node.get("data-travel-mode") != leg["travel_mode"]
+            or node.get("data-from-ref") != leg["from_ref"]
+            or node.get("data-to-ref") != leg["to_ref"]
+        ):
+            add("E003", "transport facts differ from Trip: %s" % leg["leg_id"])
+    health_nodes = {attrs.get("data-provider"): attrs for tag, attrs in parser.all_attrs if tag == "tr" and attrs.get("data-provider")}
+    for health in trip["provider_health"]:
+        node = health_nodes.get(health["provider"], {})
+        if (
+            node.get("data-provider-mode") != health["mode"]
+            or node.get("data-provider-status") != health["status"]
+            or node.get("data-provider-reason") != health["reason"]
+        ):
+            add("E003", "provider health facts differ from Trip: %s" % health["provider"])
+    claim_nodes = [(tag, attrs) for tag, attrs in parser.all_attrs if attrs.get("data-claim-id")]
+    expected_claim_map = {claim["claim_id"]: claim for claim in trip["claims"]}
+    for tag, node in claim_nodes:
+        claim = expected_claim_map.get(node["data-claim-id"])
+        if claim and (
+            node.get("data-subject-ref") != claim["subject_ref"]
+            or node.get("data-claim-status") != claim["status"]
+            or node.get("data-claim-mode") != claim["mode"]
+        ):
+            add("E003", "claim facts differ from Trip: %s" % claim["claim_id"])
     user_fact_text = " ".join(parser.visible_text + [
         value
         for _, attrs in parser.all_attrs
@@ -326,6 +359,42 @@ def validate_html(html_text: str, trip: Mapping[str, Any]) -> HTMLValidationRepo
     forbidden_actions = ("立即购买", "立即支付", "提交订单", "登录后购买", "取消订单", "申请改签")
     if any(phrase in visible for phrase in forbidden_actions) or parser.tags["form"] or parser.tags["button"]:
         add("E204", "transaction action was rendered")
+
+    all_internal_ids = {
+        trip["trip_id"],
+        *(day["day_id"] for day in trip["days"]),
+        *(slot["slot_id"] for day in trip["days"] for slot in day["slots"]),
+        *(item["leg_id"] for item in trip["transport_legs"]),
+        *(item["lodging_id"] for item in trip["lodgings"]),
+        *(item["poi_id"] for item in trip["pois"]),
+        *(item["claim_id"] for item in trip["claims"]),
+    }
+    internal_ids = {
+        identifier for identifier in all_internal_ids
+        if re.match(r"^(?:city|poi|lodging|leg|claim|slot|day|trip)-", identifier)
+    }
+    leaked_ids = sorted(identifier for identifier in internal_ids if identifier and identifier in visible)
+    raw_states = sorted(set(re.findall(r"(?<![A-Za-z0-9_-])(scheduled|tentative)(?![A-Za-z0-9_-])", visible, re.IGNORECASE)))
+    if leaked_ids or raw_states:
+        detail = leaked_ids[0] if leaked_ids else raw_states[0]
+        add("E205", "visible text exposes an internal id or raw state: %s" % detail)
+    if claim_nodes and any(tag != "details" or "open" in attrs for tag, attrs in claim_nodes):
+        add("E205", "evidence must be collapsed by default")
+    rendered_claim_risks = [
+        {"conflict": 8, "unavailable": 7, "unknown": 6, "stale": 5, "hypothesis": 4, "partial": 3, "mock": 2, "verified": 1}.get(attrs["data-claim-status"], 99)
+        for _, attrs in claim_nodes
+    ]
+    if rendered_claim_risks != sorted(rendered_claim_risks, reverse=True):
+        add("E205", "evidence is not ordered with risks first")
+    risk_section = "alternatives-and-unknowns"
+    for detail_section in ("request-summary", "transport-summary"):
+        if (
+            risk_section in parser.section_order
+            and detail_section in parser.section_order
+            and parser.section_order.index(risk_section) > parser.section_order.index(detail_section)
+        ):
+            add("E205", "alternatives and unknowns must precede itinerary detail")
+            break
 
     if not _css_contract(css):
         add("E001", "mobile/focus/print/reduced-motion CSS contract is incomplete")

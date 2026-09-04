@@ -89,6 +89,20 @@ class CandidateContractTests(unittest.TestCase):
         report = validate_candidates(load(reference))
         self.assertTrue(report.ok, [item.render() for item in report.errors])
 
+    def test_pointer_error_names_expected_found_and_copyable_array_index_fix(self):
+        candidates = load(PLUGIN / "references" / "candidates.example.json")
+        lodging_id = candidates["lodgings"][0]["lodging_id"]
+        bad_pointer = "/lodgings/%s/price/amount" % lodging_id
+        candidates["unknowns"][0]["field_path"] = bad_pointer
+
+        report = validate_candidates(candidates)
+
+        issue = next(item for item in report.errors if item.code == "C_UNKNOWN_PATH")
+        self.assertIn("expected=", issue.message)
+        self.assertIn("found=%r" % bad_pointer, issue.message)
+        self.assertIn("example=/lodgings/0/price/amount", issue.message)
+        self.assertIn("zero-based integer, not an entity id", issue.message)
+
 
 if __name__ == "__main__":
     unittest.main()

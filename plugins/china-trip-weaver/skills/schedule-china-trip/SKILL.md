@@ -10,6 +10,7 @@ Consume only normalized candidates and the frozen route-time matrix; do not call
 - Treat locks, transport/check-in times, opening windows, buffers, unreachable routes, and hard budgets as hard constraints.
 - Use the deterministic lightweight scheduler by default. OR-Tools remains disabled unless the explicit feature flag, dependency probe, complete matrix, and threshold all pass; never install it.
 - Return scheduled slots with selected order, times, matrix hops, exclusions, and objective vector, or `NO_SOLUTION` with a minimal conflict and optional relaxations.
+- Preserve claims and provider health, including the destination-search rung, without rewriting which search tool supplied the evidence.
 - Do not render a normal Trip for a no-solution result and do not drop a requirement to make the output look complete.
 
 The scheduler is executed inside the real plan command; there is no separate `ctw schedule` command:

@@ -13,6 +13,8 @@ Use the pinned `12306-mcp@0.3.10` through the `china-rail` server.
 4. Normalize dated services, times, seat/fare facts, typed prices, source URL, query time, claims, and health. An empty result is not a provider failure.
 5. Return read-only candidates and the official 12306 deep link. Never invoke login or transaction behavior.
 
+Do not substitute host search or AnySearch for railway schedules, seats, or fares. If the pinned railway path and documented degradation are unavailable, leave those facts unknown and report railway health independently of the destination-search rung.
+
 If all three station-resolution layers are empty, return `no_results`. If the final city lookup returns multiple stations, return every candidate in distance order when distance metadata is available, classify the result as `ambiguous`, and require the caller to choose an exact station and retry; never guess one station for the user. A documented lookup error at one layer is a fallback signal, not `contract_mismatch`.
 
 The command emits a JSON object with `transport_legs`, `claims`, `health`, `warnings`, and `error_class`:

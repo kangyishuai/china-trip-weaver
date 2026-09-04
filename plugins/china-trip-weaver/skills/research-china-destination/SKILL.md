@@ -7,6 +7,11 @@ description: Build date-bound destination and POI claims for a mainland-China ci
 
 Return structured candidates and claim-level evidence, not an itinerary or prose template.
 
+- Use this search ladder in order and stop at the first available rung:
+  1. Use the host's built-in network search first.
+  2. Only when host search is absent or unavailable, fall back to AnySearch with an already configured key and a passing contract probe; never create, request, print, or persist a key.
+  3. When neither search tool is available, use only material the user already pasted, mark destination research `degraded`, and leave unsupported facts unknown. Never silently skip evidence collection.
+- Return provider health separately to the parent Skill without adding it to `candidates.json`. Record the rung actually used in `provider` and `reason`: `host-web`, `anysearch`, or `user-pasted-only`; keep `mode`, `status`, and check time truthful.
 - Bind every query and result to the requested city and business dates. Prefer government, venue, operator, and other first-party pages.
 - Cover only dimensions relevant to the user's interests plus opening/closure, current events, seasonal conditions, transport cautions, food, and preparation. Do not insert fixed brands or “top ten” sections.
 - Every external fact needs source URL, provider, query time, status, confidence, and mode. Preserve conflicting facts as conflicts.
@@ -19,4 +24,4 @@ Write `candidates.json` with exactly `candidates_version`, `pois`, `lodgings`, `
 scripts/ctw validate-candidates candidates.json
 ```
 
-Use `../../schema/candidates.schema.json` as the contract and read `../../references/candidates.example.json` when an example is needed.
+Use `../../schema/candidates.schema.json` as the contract, read `../../references/provider-contracts.md` for the shared search ladder, and read `../../references/candidates.example.json` when an example is needed.

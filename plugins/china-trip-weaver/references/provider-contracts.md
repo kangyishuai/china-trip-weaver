@@ -19,6 +19,10 @@ R0 live → R2 keyless public → R3 dated official link / typed estimate → R4
 
 Every rung preserves provider health, mode, query/freshness time, claim status, and reason. Static estimates are not live routes; an unknown is not zero.
 
+## Destination research search ladder
+
+Destination evidence uses one explicit order: host built-in network search first; an already configured, contract-probed AnySearch key only when host search is absent or unavailable; otherwise user-pasted material only with `degraded` health and unsupported facts left unknown. The provider-health `provider` and `reason` record the rung actually used as `host-web`, `anysearch`, or `user-pasted-only`. Provider-specific railway, air, lodging, and mobility Skills never replace their own failed adapter with either generic search rung.
+
 R1 is disabled and no provider response is cached today. AMap's terms section
 3.5 forbid storing or caching its service data, and VariFlight's terms forbid
 caching for redistribution without a written contract. Every capability

@@ -14,6 +14,7 @@ Resolve only the candidate endpoints supplied by the parent Skill.
 - Emit `semantic_outlier` for isolated same-city points, distinct entities sharing a coordinate, or same-day adjacent POIs over 50 km apart. These warnings do not block planning, but implicated claims must not remain `verified`.
 - A live/cached cell needs route evidence and query time. A static cell needs an explicit method and conservative buffer. Missing or unreachable cells are not routes.
 - Fail closed on endpoint/pagination/response drift and return health plus degradation rung. Do not choose the daily order.
+- Do not substitute host search or AnySearch for an unavailable AMap capability. Keep mobility degradation separate from the destination-search rung recorded by `$research-china-destination`.
 
 Inspect a bounded live matrix directly or return its normalized cells to the parent. When AMap is unavailable, `ctw plan` builds only labeled static estimates:
 

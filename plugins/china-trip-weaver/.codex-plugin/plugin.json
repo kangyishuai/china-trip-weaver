@@ -28,6 +28,7 @@
       "local replanning",
       "mobile HTML"
     ],
+    "websiteURL": "https://github.com/kangyishuai/china-trip-weaver",
     "defaultPrompt": [
       "Plan a three-day China trip with sources and explicit unknowns.",
       "Replan only the affected part of this itinerary.",

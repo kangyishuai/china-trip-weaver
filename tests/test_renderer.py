@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import math
+import re
 import subprocess
 import sys
 import tempfile
@@ -19,6 +20,7 @@ sys.path.insert(0, str(SRC))
 from china_trip_weaver.contracts import canonical_json
 from china_trip_weaver.credentials import SUPPORTED_KEY_NAMES
 from china_trip_weaver.render import RendererError, render_trip, safe_output_name, validate_html
+from china_trip_weaver.render.validate_html import AuditParser
 from china_trip_weaver.validate_trip import validate_trip
 
 
@@ -95,6 +97,13 @@ def contrast(foreground: str, background: str) -> float:
     return (left + 0.05) / (right + 0.05)
 
 
+def visible_text(html_text: str) -> str:
+    parser = AuditParser()
+    parser.feed(html_text)
+    parser.close()
+    return " ".join(parser.visible_text)
+
+
 class RendererTests(unittest.TestCase):
     def test_valid_examples_render_deterministically_with_zero_errors(self):
         for path in sorted(VALID.glob("*.json")):
@@ -153,6 +162,70 @@ class RendererTests(unittest.TestCase):
             self.assertEqual(4, len(report["viewports"]))
             self.assertEqual(2, len(report["screenshots"]))
             self.assertTrue((output / "renderer-print.pdf").is_file())
+
+    def test_g10_visible_copy_uses_names_localized_states_and_choice_markers(self):
+        trip = load(VALID / "weekend-live.json")
+        rendered = render_trip(trip)
+        visible = visible_text(rendered)
+
+        self.assertNotRegex(visible, r"\b(?:city|poi|lodging|leg)-[A-Za-z0-9._:-]+")
+        self.assertNotRegex(visible, r"(?<![A-Za-z0-9_-])(?:tentative|scheduled)(?![A-Za-z0-9_-])")
+        self.assertIn("外滩 → 南京东路片区候选", visible)
+        for marker in ("已选", "备选", "未知"):
+            self.assertIn(marker, visible)
+        self.assertIn("请按行程日期在官方页面复核", visible)
+        self.assertIn("可提供住宿链接；房间总价尚未核验", visible)
+        self.assertNotIn("room-level all-in total requires dated checkout verification", visible)
+        self.assertNotIn("contract probe passed", visible)
+        self.assertIn('data-from-ref="poi-bund"', rendered)
+        self.assertIn('data-to-ref="lodging-nanjing-east"', rendered)
+        self.assertIn('data-slot-status="scheduled"', rendered)
+        self.assertTrue(validate_html(rendered, trip).ok)
+
+    def test_evidence_is_collapsed_and_risk_sections_and_claims_come_first(self):
+        trip = load(VALID / "weekend-live.json")
+        rendered = render_trip(trip)
+        parser = AuditParser()
+        parser.feed(rendered)
+        parser.close()
+
+        evidence = [(tag, attrs) for tag, attrs in parser.all_attrs if attrs.get("data-claim-id")]
+        self.assertEqual(len(trip["claims"]), len(evidence))
+        self.assertTrue(all(tag == "details" and "open" not in attrs for tag, attrs in evidence))
+        self.assertIn(".evidence-card > summary", rendered)
+        self.assertIn("min-height: 44px", rendered)
+        self.assertEqual("unknown", evidence[0][1]["data-claim-status"])
+        self.assertLess(parser.section_order.index("alternatives-and-unknowns"), parser.section_order.index("request-summary"))
+        self.assertLess(parser.section_order.index("alternatives-and-unknowns"), parser.section_order.index("transport-summary"))
+        self.assertLess(parser.section_order.index("provider-health"), parser.section_order.index("days"))
+
+    def test_multicity_locations_are_grouped_without_cross_city_route_line(self):
+        trip = load(VALID / "multicity-static.json")
+        poi = copy.deepcopy(trip["pois"][0])
+        poi["poi_id"] = "poi-suzhou-garden"
+        poi["name"] = "苏州园林候选"
+        poi["city"] = "苏州"
+        poi["coordinates"]["native"] = {"lng": 120.6200, "lat": 31.3200}
+        poi["coordinates"]["wgs84"] = {"lng": 120.6200, "lat": 31.3200}
+        poi["coordinates"]["gcj02"] = {"lng": 120.6244, "lat": 31.3180}
+        poi["claim_ids"] = ["claim-suzhou-hours"]
+        poi["opening_windows"][0]["claim_id"] = "claim-suzhou-hours"
+        poi["opening_windows"][0]["start_at"] = "2026-11-03T09:00:00+08:00"
+        poi["opening_windows"][0]["end_at"] = "2026-11-03T17:00:00+08:00"
+        claim = copy.deepcopy(trip["claims"][-1])
+        claim["claim_id"] = "claim-suzhou-hours"
+        claim["subject_ref"] = poi["poi_id"]
+        trip["pois"].append(poi)
+        trip["claims"].append(claim)
+
+        rendered = render_trip(trip)
+
+        self.assertEqual(2, rendered.count('class="location-group"'))
+        self.assertIn('data-location-group="南京"', rendered)
+        self.assertIn('data-location-group="苏州"', rendered)
+        self.assertEqual(2, rendered.count('class="location-svg"'))
+        self.assertNotIn('<polyline class="route-line"', rendered)
+        self.assertTrue(validate_html(rendered, trip).ok)
 
     def test_e104_rejects_assignment_for_every_supported_key_name(self):
         trip = load(VALID / "weekend-live.json")
@@ -227,5 +300,5 @@ class ProviderAttributionTests(unittest.TestCase):
             top_mode="static",
         )
         self.assertNotIn('data-attribution="1"', html)
-        self.assertNotIn("高德地图", html)
+        self.assertNotIn("地图与路线数据来源于高德地图", html)
         self.assertTrue(validate_html(html, trip).ok)

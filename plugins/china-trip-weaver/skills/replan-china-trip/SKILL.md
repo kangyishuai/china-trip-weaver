@@ -9,6 +9,7 @@ Require the current Trip, exact base revision, event, and user locks.
 
 - Reject a stale base revision; do not silently rebase it.
 - Propagate only the event's affected day, adjacent hops, and dependencies. Preserve unrelated day canonical bytes and unexpired claims.
+- Preserve the recorded destination-search rung in provider health. If affected claims need new destination research, return them for `$research-china-destination`; do not choose a search provider here.
 - Never change a locked/accepted/booked item unless the event makes it impossible and the user explicitly unlocks it.
 - Return revision +1, allowed JSON Patch operations, affected/preserved/changed refs, stability score, reasons, and all claims requiring revalidation.
 - If the affected scope cannot be made feasible, return structured no-solution instead of replanning the whole trip.

@@ -73,6 +73,27 @@ should mean pending work. They live where they are enforced:
   no-cache, no-redistribution rule, and the wrapper itself is now documented and
   tested as an optional, best-effort source.
 
+## Book 5 — public-distribution legal links remain open
+
+- `interface.websiteURL` now points to the real GitHub repository. No
+  `privacyPolicyURL` or `termsOfServiceURL` was invented: ADR-0013 keeps this
+  plugin off the public marketplace and the project has no real policy pages.
+- Before any future public distribution, publish reviewed privacy and terms
+  pages, add their real HTTPS URLs to the manifest, and rerun plugin ingestion
+  validation. Until then, local/repository distribution is the supported scope.
+
+## Book 5 — required manifest field conflicts with a forbidden exact-fixture test
+
+- Full discovery after adding the required `interface.websiteURL` runs 324
+  tests but fails only
+  `tests.test_packaging.PackagingTests.test_plugin_manifest_is_exact_and_version_matches_package`.
+  That test hard-codes the former eight-key `interface` object and rejects any
+  extra key.
+- `tests/test_packaging.py` is not in Book 5's write whitelist, while removing
+  `websiteURL` would directly violate task 4. No assertion was relaxed and the
+  forbidden test was not edited. Resolution requires a later authorized wave
+  to add the real GitHub `websiteURL` to `EXPECTED_MANIFEST`.
+
 ## Book 4 — single lodging/flight upstream closed
 
 - Status: closed on 2026-09-04. The earlier “Lodging and flight inventory have

@@ -18,6 +18,22 @@ from .validate_trip import (
 
 CANDIDATES_VERSION = "1.0.0"
 TRIP_REF_PREFIX = "trip.schema.json#/$defs/"
+POINTER_EXPECTED = "a resolvable JSON Pointer using zero-based array indexes"
+POINTER_EXAMPLE = "/lodgings/0/price/amount"
+
+
+class CandidatePointerError(ValueError):
+    """A user-correctable candidate JSON Pointer failure."""
+
+    def __init__(self, pointer: str, detail: str) -> None:
+        self.expected = POINTER_EXPECTED
+        self.found = pointer
+        self.example = POINTER_EXAMPLE
+        self.detail = detail
+        super().__init__(
+            "expected=%s; found=%r; example=%s; detail=%s"
+            % (self.expected, self.found, self.example, self.detail)
+        )
 
 
 def default_candidates_schema_path() -> Path:
@@ -111,8 +127,8 @@ def validate_candidates(value: Mapping[str, Any], schema_path: Optional[Path] = 
             add("C_UNKNOWN_CLAIM", path + "/claim_id", "unknown references a missing claim")
         try:
             _resolve_pointer(value, unknown["field_path"])
-        except (KeyError, IndexError, ValueError):
-            add("C_UNKNOWN_PATH", path + "/field_path", "unknown path does not resolve in candidates")
+        except CandidatePointerError as exc:
+            add("C_UNKNOWN_PATH", path + "/field_path", str(exc))
 
     return ValidationReport(tuple(sorted(set(issues))))
 
@@ -130,9 +146,39 @@ def validate_candidates_file(path: Path, schema_path: Optional[Path] = None) -> 
 
 def _resolve_pointer(document: Any, pointer: str) -> Any:
     if not pointer.startswith("/"):
-        raise KeyError(pointer)
+        raise CandidatePointerError(pointer, "pointer must start with '/'")
     value = document
+    traversed: List[str] = []
     for raw in pointer[1:].split("/"):
         part = raw.replace("~1", "/").replace("~0", "~")
-        value = value[int(part)] if isinstance(value, list) else value[part]
+        location = "/" + "/".join(traversed) if traversed else "/"
+        if isinstance(value, list):
+            if not part.isdigit():
+                raise CandidatePointerError(
+                    pointer,
+                    "array segment %r at %s must be a zero-based integer, not an entity id"
+                    % (part, location),
+                )
+            index = int(part)
+            if index >= len(value):
+                expected = "0..%d" % (len(value) - 1) if value else "no index (the array is empty)"
+                raise CandidatePointerError(
+                    pointer,
+                    "array index %s at %s is out of range; expected %s" % (part, location, expected),
+                )
+            value = value[index]
+        elif isinstance(value, Mapping):
+            if part not in value:
+                raise CandidatePointerError(
+                    pointer,
+                    "object key %r does not exist at %s" % (part, location),
+                )
+            value = value[part]
+        else:
+            raise CandidatePointerError(
+                pointer,
+                "cannot traverse segment %r at %s because the current value is %s"
+                % (part, location, type(value).__name__),
+            )
+        traversed.append(raw)
     return value
