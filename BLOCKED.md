@@ -1,8 +1,6 @@
 # Unresolved items
 
-None. Every item that stood here has been closed.
-
-Standing constraints are not listed here, because a list of unresolved items
+One open item, parked deliberately. Standing constraints are not listed here, because a list of unresolved items
 should mean pending work. They live where they are enforced:
 
 - Provider terms, attribution, caching, and the licences commercial use would
@@ -11,6 +9,33 @@ should mean pending work. They live where they are enforced:
   `plugins/china-trip-weaver/references/provider-contracts.md`.
 - Architecture decisions, including why this plugin is not listed on a public
   marketplace: `docs/design/adr/`.
+
+## Lodging and flight inventory have a single upstream source
+
+- Status: parked on 2026-09-04. Known, accepted, not scheduled.
+- Fact: `@fly-ai/flyai-cli` is the only source for both lodging and flight
+  inventory. It is an unofficial third-party wrapper published by an individual
+  maintainer, it last shipped on 2026-04-21, and its command surface already
+  drifted once between releases. If it is abandoned or changes shape, both
+  capabilities disappear together.
+- Contained, not solved: `--lodging` defaults to `off`, a probe mismatch fails
+  closed, and tests assert that a failing FlyAI still yields a schema-valid
+  Trip, reports its own health, invents no flight candidate, and leaves lodging
+  to the candidate file. The plugin degrades; it does not break.
+- Two candidate second sources are already wired into this repository, which
+  makes this smaller than it looks:
+  - Flights: the VariFlight adapter already calls `searchFlightsByDepArr`,
+    which returns dated schedules for a city pair. Today it only enriches
+    FlyAI legs with status and comfort. Promoting it to an independent source
+    would give schedules and flight identity without prices.
+  - Lodging: the AMap adapter already has a `poi` capability. An accommodation
+    category search would give candidate properties with verified coordinates,
+    again without prices or availability.
+- What either would not give: a price. Both fallbacks would have to publish
+  `verify-on-click` rather than a number, which the price contract already
+  supports.
+- Impact if left as is: a FlyAI outage costs lodging and flight inventory for
+  the duration. Nothing else regresses.
 
 ## What was closed, and when
 

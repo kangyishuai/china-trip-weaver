@@ -44,7 +44,9 @@ lodging and flight inventory. No long-term availability is promised.
   the provider licences themselves, and should record that in a new ADR.
 - Losing FlyAI costs two capabilities, not the product. Adding a second
   lodging or flight source would remove the last single point of failure in the
-  provider portfolio; that work is not scheduled.
+  provider portfolio. That work is parked rather than scheduled, and
+  `BLOCKED.md` records the two candidate sources already wired into this
+  repository.
 - `BLOCKED.md` now records no unresolved items. Standing constraints live in
   `THIRD_PARTY_NOTICES.md`, not in a list that implies pending work.
 
