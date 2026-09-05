@@ -255,3 +255,7 @@ should mean pending work. They live where they are enforced:
 ## Provider 运行时 unknown 原因覆盖（2026-09-05）
 
 - 本轮新增阻塞：无。
+
+## 书 17 Journey provider health 重复原因计数（2026-09-05）
+
+- 本轮新增阻塞：无。

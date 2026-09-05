@@ -1116,14 +1116,17 @@ def _merge_provider_health(
     mode_rank = {"live": 0, "cached": 1, "static": 2, "mock": 3}
     merged: List[Mapping[str, Any]] = []
     by_provider: Dict[str, int] = {}
+    reason_part_indexes: Dict[str, Dict[str, set]] = {}
     index_maps: List[Dict[int, int]] = [dict() for _ in parts]
     for part_index, part in enumerate(parts):
         for old_index, source in enumerate(part["provider_health"]):
             provider = str(source["provider"])
+            reason = str(source["reason"])
             new_index = by_provider.get(provider)
             if new_index is None:
                 new_index = len(merged)
                 by_provider[provider] = new_index
+                reason_part_indexes[provider] = {reason: {part_index}}
                 merged.append(copy.deepcopy(dict(source)))
             else:
                 current = merged[new_index]
@@ -1143,10 +1146,13 @@ def _merge_provider_health(
                 combined["capabilities"] = list(dict.fromkeys(
                     list(current["capabilities"]) + list(source["capabilities"])
                 ))
-                combined["reason"] = "; ".join(dict.fromkeys((
-                    str(current["reason"]),
-                    str(source["reason"]),
-                )))
+                provider_reason_parts = reason_part_indexes[provider]
+                provider_reason_parts.setdefault(reason, set()).add(part_index)
+                combined["reason"] = "; ".join(
+                    "%s ×%d" % (value, len(part_indexes))
+                    if len(part_indexes) > 1 else value
+                    for value, part_indexes in provider_reason_parts.items()
+                )
                 merged[new_index] = combined
             index_maps[part_index][old_index] = new_index
     return merged, index_maps

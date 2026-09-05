@@ -1798,3 +1798,53 @@ BUSINESS_CALL_ATTEMPTS ["amap.geocode:lodging-j16-shanghai-central", "amap.poi:p
 - 提交后 secret scan（exit 0）仍为 `0 finding(s) across 372 file(s)`；禁碰路径的 `HEAD^..HEAD` diff exit 0、无输出。
 - 实现提交后 `git status --short --branch` 为 `main...origin/main [ahead 1]` 且无文件项；本地 HEAD 为 `38ef004...`，`origin/main` 仍为开工的 `03fced1...`，确认未 push/未发布。
 - 本段记录随后作为仅 `PROGRESS.md` 的收尾提交交付；当前验收轮次 5/12，书 16 完成。
+
+## 书 17 Journey provider health 重复原因计数：开工理解（2026-09-05，7 行）
+1. 目标：同一逻辑段内多个 atomic Trip 报出完全相同 reason 时，只保留一份原文并在末尾追加按 atomic Trip 计的 ` ×N`。
+2. 只出现一次不加后缀；不同 reason 仍按首次出现顺序用 `; ` 拼接，reason 原文不得改字。
+3. 顺序：任务 0 基线与零调用复现 → 单函数计数实现与两类永久回归 → 精准门 → 反向红绿 → 全量/secret/diff/提交。
+4. 只改 `_merge_provider_health`、`tests/test_journey.py`、本文件与 `BLOCKED.md`；版本 0.4.0，不碰 demo，不安装 Codex。
+5. 测试必须精确覆盖重复计数和单次无后缀，不能保留多条重复 reason、放宽既有断言或改 health status/mode 规则。
+6. 最大风险：当前逐步合并后的 reason 已可能含 `; `，若只比较累计字符串会丢失逐 atomic 的真实频次或误给不同 reason 计数。
+7. 止损上限 8 轮；当前验收轮次 1/8。
+
+## 书 17 任务 0：基线与零调用复现（完成）
+
+- 开工 `HEAD` 与 `origin/main` 均为 `2ffe0e672358e9b48a659f5689e303737146ad2f`，工作树 clean。
+- 基线 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）原始摘要：`Ran 422 tests in 30.140s`、`OK`、skipped 0。
+- 基线 `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 372 file(s)`。
+- checked-in `tests/fixtures/journey/synthetic-six-city-16d.json` 拆出 request/candidates 后，CLI 以 rail/lodging/aviation off、mobility live、合成 canary 配置及 `--amap-total-max-calls 0` 运行；exit 0 原始输出：`JOURNEY_PLAN_COMPLETE ... trips=3 days=16 max_trip_days=6 ... errors=0`。
+- 改前三段合并后 AMap reason 都只有一条：`calls=0/0 qps<=2; live_cells=0; locations=0; errors=rate_limited; warnings=rate_limited`，status=`rate_limited`、mode=`static`。
+- 用只读 monkeypatch 在唯一 `_merge_provider_health(parts)` 调用点记录合并前输入，并把 urllib opener 替换为一旦调用即失败的 mock；原始结果 `CLI_EXIT 0`、`PHYSICAL_NETWORK_CALLS 0`。
+- 三段 `ATOMIC_TRIPS` 原始计数依次为 `3`、`2`、`3`；8 个 atomic 的 status/mode/reason 全部逐字相同，确认缺陷是整条 reason 去重吞掉重复规模，而不是段数推断。当前验收轮次 1/8。
+
+## 书 17 任务 1：重复 reason 计数实现与正向精准门
+
+- 唯一产品改动在 `journey.py::_merge_provider_health`：按 provider 保存 reason 原文的首次出现顺序与 atomic 次数；输出时 count>1 才给该原文末尾加 ` ×N`，count=1 原样保留，不同原文仍以 `; ` 拼接。
+- `tests/test_journey.py` 新增两条严格回归：checked-in 16 天夹具锁定零 delegate 调用及 `×3/×2/×3`；两个 atomic 各报不同 reason 时锁定原文 `; ` 拼接且无 `×1`。未改、删除或放宽既有断言。
+- 规定精准门 `/usr/bin/python3 -m unittest tests.test_journey -v`（exit 0）原始摘要：`Ran 41 tests in 4.745s`、`OK`、skipped 0；基线模块 39 + 2。
+- 改后与任务 0 同一 CLI（exit 0）原始输出：`JOURNEY_PLAN_COMPLETE ... trips=3 days=16 max_trip_days=6 ... errors=0`。
+- 改后三段 AMap reason 原文分别以 `warnings=rate_limited ×3`、`warnings=rate_limited ×2`、`warnings=rate_limited ×3` 结束；此前 `calls=0/0 qps<=2; live_cells=0; locations=0; errors=rate_limited; warnings=rate_limited` 全部逐字保持。当前验收轮次 2/8，待反向红→绿。
+
+## 书 17 任务 1：反向红→绿（完成）
+
+- 临时把目标函数的 count>1 格式化改为只输出 reason 原文，未改测试、mock、阈值或其他函数；精准命令 `/usr/bin/python3 -m unittest tests.test_journey.JourneyAMapRuntimeTests.test_zero_budget_health_reason_reports_atomic_trip_multiplicity -v` 按预期 exit 1。
+- 红态原始摘要：`Ran 1 test in 0.212s`、`FAILED (failures=1)`；唯一失败逐项显示期望 `warnings=rate_limited ×3/×2/×3`、实际均为无后缀 `warnings=rate_limited`。
+- 用 `apply_patch` 原样恢复 count>1 格式化后，同一命令 exit 0：`test_zero_budget_health_reason_reports_atomic_trip_multiplicity ... ok`、`Ran 1 test in 0.230s`、`OK`。
+- 临时变更已完整撤销，永久测试仍保持严格精确相等。当前验收轮次 3/8，任务 1 完成。
+
+## 书 17 atomic 计数语义收紧与最终反向验证
+
+- 最终函数账本按 reason 保存 distinct `part_index` 集合，而不是 provider health 条目出现次数；因此次数精确表示“多少个 atomic Trip 报了这条”。第二条测试在同一 atomic 内放两个同 provider/同 reason 条目，输出仍无 `×2`。
+- 收紧后两条新增回归首次一起运行（exit 0）：`Ran 2 tests in 0.229s`、`OK`。
+- 对最终形态再次临时去掉后缀，精确测试 exit 1：`Ran 1 test in 0.214s`、`FAILED (failures=1)`，差异仍精确为缺少 `×3/×2/×3`；随后原样恢复。
+- 恢复后两条新增回归一起 exit 0：`Ran 2 tests in 0.233s`、`OK`；临时代码已完整撤销。当前验收轮次 4/8。
+
+## 书 17 最终代码态门禁
+
+- 最终规定模块门 `/usr/bin/python3 -m unittest tests.test_journey -v`（exit 0）：`Ran 41 tests in 4.939s`、`OK`、skipped 0；所有既有 reason `assertIn`/`startswith` 断言保持全绿。
+- 最终全量 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）原始摘要：`Ran 424 tests in 30.528s`、`OK`、skipped 0；恰为基线 422 + 2 个严格回归，满足 ≥424。
+- 同轮 `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 372 file(s)`。
+- 最终同任务 0 CLI（exit 0）仍输出 `JOURNEY_PLAN_COMPLETE ... trips=3 days=16 max_trip_days=6 ... errors=0`；三段完整 AMap reason 分别以 `×3`、`×2`、`×3` 结束。
+- 最终单次语义采样原始输出：`MERGED_REASON calls=1/1 errors=rate_limited; calls=1/1 errors=timeout` 与 `COUNT_SUFFIX_PRESENT False`；原文和 `; ` 分隔未变。
+- `git diff --stat` 只含 `BLOCKED.md`、`PROGRESS.md`、目标 `journey.py` 与 `tests/test_journey.py`；`journey.py` 唯一 hunk 在 `_merge_provider_health`，`git diff --check` exit 0。当前验收轮次 5/8，待提交。

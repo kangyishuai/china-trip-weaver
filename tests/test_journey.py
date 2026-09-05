@@ -22,6 +22,7 @@ sys.path.insert(0, str(SRC))
 from china_trip_weaver.clock import FixedClock
 from china_trip_weaver.credentials import resolve_credentials
 from china_trip_weaver.journey import (
+    _merge_provider_health,
     assemble_journey,
     journey_booking_checklist,
     journey_budget_ledger,
@@ -482,6 +483,57 @@ class JourneyAMapRuntimeTests(unittest.TestCase):
         self.assertTrue(all("calls=1/1 " in item["reason"] for item in health), health)
         self.assertTrue(all("errors=rate_limited" in item["reason"] for item in health), health)
         self.assertTrue(validate_journey(result.journey).ok)
+
+    def test_zero_budget_health_reason_reports_atomic_trip_multiplicity(self):
+        case = load(LODGING_CHAIN_FIXTURE)
+        transport = RecordingJourneyAMapTransport()
+        result = plan_journey(
+            case["request"],
+            case["candidates"],
+            self.clock,
+            self.rail,
+            journey_mobility(transport),
+            amap_total_max_calls=0,
+        )
+        reason = (
+            "calls=0/0 qps<=2; live_cells=0; locations=0; "
+            "errors=rate_limited; warnings=rate_limited"
+        )
+        health = [
+            next(
+                item for item in trip["provider_health"]
+                if item["provider"] == "amap"
+            )
+            for trip in result.journey["trips"]
+        ]
+        self.assertEqual(0, transport.calls)
+        self.assertEqual(["rate_limited"] * 3, [item["status"] for item in health])
+        self.assertEqual(
+            [reason + " ×3", reason + " ×2", reason + " ×3"],
+            [item["reason"] for item in health],
+        )
+        self.assertTrue(validate_journey(result.journey).ok)
+
+    def test_distinct_atomic_reasons_keep_original_text_without_count_suffix(self):
+        common = {
+            "provider": "amap",
+            "version": "synthetic",
+            "status": "degraded",
+            "mode": "static",
+            "checked_at": FIXED_NOW,
+            "capabilities": ["route"],
+        }
+        first = "calls=1/1 errors=rate_limited"
+        second = "calls=1/1 errors=timeout"
+        merged, _ = _merge_provider_health([
+            {"provider_health": [
+                {**common, "reason": first},
+                {**common, "reason": first},
+            ]},
+            {"provider_health": [{**common, "reason": second}]},
+        ])
+        self.assertEqual(first + "; " + second, merged[0]["reason"])
+        self.assertNotIn("×1", merged[0]["reason"])
 
     def test_cli_exposes_and_forwards_the_journey_total_limit(self):
         help_result = subprocess.run(
