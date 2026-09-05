@@ -2596,3 +2596,11 @@ FAILED (failures=1)
 - `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 375 file(s)`；`git diff --check` exit 0。
 - 最终端点相对开工树的新增长版本数字搜索 exit 1、无输出；相对稳定 HEAD `9c6cdec` 的全部禁碰路径 diff exit 0、无输出。没有 amend 或重写书 22 提交，收尾提交只含本 fixture 去重与本进度记录。
 - 书 23 达到 12/12，停止新增工作；6 格结论、两项已修真 bug、1 项禁碰上层 bug 与 18 个上限外覆盖空格均已有可复现记录。
+
+## 书 23 最终提交读回（完成）
+
+- 实现提交 `4c59da2f429d792ac4d4c90991981079824f7420`；fixture 版本去重提交 `968ce1951fab9875aec33374ea36f564e6f2543d`。前者 8 个白名单文件、`408 insertions/1 deletion`，后者只含 `PROGRESS.md` 与专用 fixture。
+- 最终 HEAD 上 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）：`Ran 456 tests in 31.034s`、`OK`、skipped 0；secret scan（exit 0）：`0 finding(s) across 375 file(s)`。
+- 两份书 23 提交分别对全部禁碰路径执行 commit-range diff，均 exit 0、无输出；最终端点的版本数字新增搜索 exit 1、无输出。
+- `BLOCKED.md` 的 18 个上限外空格、VariFlight 上层真 bug、两条实际复现输出已由 `4c59da2` 随交付提交；没有写“无”。
+- 读回时 `git diff --stat` 无输出，工作树 clean；未 push、未改 CI、未跑 demo/实网、未安装 Codex，版本保持 0.5.0。
