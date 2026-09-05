@@ -218,7 +218,8 @@ class ReplanTests(unittest.TestCase):
         self.assertIn(
             "--event EVENT path to a JSON event file; required fields: type "
             "(closure, weather, delay, or user_delete) and subject_ref (the target slot's "
-            "slot_id); delay also requires delta_minutes; closure and weather also require "
+            "slot_id, or the ref_id it schedules); delay also requires delta_minutes; "
+            "closure and weather also require "
             'replacement_slot; example delay event: {"type": "delay", "subject_ref": '
             '"slot-2", "delta_minutes": 15}',
             normalized_help,
@@ -237,10 +238,38 @@ class ReplanTests(unittest.TestCase):
         event["ref_id"] = event.pop("subject_ref")
         command = run_invalid_cli_event(self, event)
         self.assertEqual(
-            "REPLAN_FAILED event_subject event subject_ref is required and must be the "
-            "target slot's slot_id, not a poi or lodging ref_id\n",
+            "REPLAN_FAILED event_subject event subject_ref is required; use the target "
+            "slot's slot_id or the ref_id it schedules\n",
             command.stderr,
         )
+
+    def test_slot_id_and_ref_id_are_interchangeable_subjects(self):
+        """The contract accepts either identifier; the help text must not claim otherwise."""
+
+        base = load(ROOT / "tests/fixtures/trips/schema/valid/weekend-live.json")
+        slot = next(
+            item for day in base["days"] for item in day["slots"]
+            if item.get("ref_id") and not item["locked"]
+        )
+        outcomes = []
+        for subject in (slot["slot_id"], slot["ref_id"]):
+            event = {
+                "type": "delay",
+                "subject_ref": subject,
+                "delta_minutes": 5,
+                "reason": "identifier equivalence probe",
+                "reverify_claim_ids": [],
+            }
+            try:
+                result = replan_trip(
+                    copy.deepcopy(base), event, base["revision"]["number"], [],
+                    FixedClock.from_iso("2026-10-15T12:00:00+08:00"),
+                )
+                outcomes.append(canonical_json(result.trip))
+            except ReplanError as error:
+                outcomes.append("ReplanError:%s" % error.code)
+        self.assertEqual(outcomes[0], outcomes[1], outcomes)
+        self.assertFalse(outcomes[0].startswith("ReplanError:subject_not_found"), outcomes)
 
     def test_cli_minutes_field_reports_delta_minutes_contract(self):
         event = load(FIXTURES / "delay.json")["event"]

@@ -36,7 +36,7 @@ def replan_trip(
     if not isinstance(subject_ref, str) or not subject_ref:
         raise ReplanError(
             "event_subject",
-            "event subject_ref is required and must be the target slot's slot_id, not a poi or lodging ref_id",
+            "event subject_ref is required; use the target slot's slot_id or the ref_id it schedules",
         )
 
     trip = copy.deepcopy(dict(base_trip))
