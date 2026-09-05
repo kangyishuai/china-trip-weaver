@@ -84,6 +84,33 @@ def run_replan_fixture(testcase: unittest.TestCase, path: Path):
     testcase.assertLessEqual(result.patch["stability"]["score"], 1)
 
 
+def run_invalid_cli_event(testcase: unittest.TestCase, event):
+    base_path = ROOT / "tests" / "fixtures" / "trips" / "schema" / "valid" / "weekend-live.json"
+    with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+        output = Path(temporary)
+        event_path = output / "event.json"
+        json_path = output / "trip.json"
+        html_path = output / "trip.html"
+        event_path.write_text(json.dumps(event), encoding="utf-8")
+        command = subprocess.run(
+            [
+                str(CTW), "replan",
+                "--trip", str(base_path),
+                "--event", str(event_path),
+                "--base-revision", "1",
+                "--output-json", str(json_path),
+                "--output-html", str(html_path),
+                "--fixed-clock", FIXED_NOW,
+            ],
+            text=True,
+            capture_output=True,
+        )
+        testcase.assertEqual(1, command.returncode, command.stdout + command.stderr)
+        testcase.assertFalse(json_path.exists())
+        testcase.assertFalse(html_path.exists())
+        return command
+
+
 class ReplanTests(unittest.TestCase):
     def test_revision_conflict_fails_without_rebase(self):
         base = load(ROOT / "tests/fixtures/trips/schema/valid/weekend-live.json")
@@ -181,6 +208,49 @@ class ReplanTests(unittest.TestCase):
             self.assertIn("revision_conflict", command.stderr)
             self.assertFalse(json_path.exists())
             self.assertFalse(html_path.exists())
+
+    def test_cli_kind_field_reports_type_contract(self):
+        help_command = subprocess.run(
+            [str(CTW), "replan", "--help"], text=True, capture_output=True,
+        )
+        self.assertEqual(0, help_command.returncode, help_command.stdout + help_command.stderr)
+        normalized_help = " ".join(help_command.stdout.split())
+        self.assertIn(
+            "--event EVENT path to a JSON event file; required fields: type "
+            "(closure, weather, delay, or user_delete) and subject_ref (the target slot's "
+            "slot_id); delay also requires delta_minutes; closure and weather also require "
+            'replacement_slot; example delay event: {"type": "delay", "subject_ref": '
+            '"slot-2", "delta_minutes": 15}',
+            normalized_help,
+        )
+        event = load(FIXTURES / "closure.json")["event"]
+        event["kind"] = event.pop("type")
+        command = run_invalid_cli_event(self, event)
+        self.assertEqual(
+            'REPLAN_FAILED event_type event type must use the field "type" with one of: '
+            "closure, weather, delay, user_delete\n",
+            command.stderr,
+        )
+
+    def test_cli_ref_id_field_reports_subject_slot_id_contract(self):
+        event = load(FIXTURES / "closure.json")["event"]
+        event["ref_id"] = event.pop("subject_ref")
+        command = run_invalid_cli_event(self, event)
+        self.assertEqual(
+            "REPLAN_FAILED event_subject event subject_ref is required and must be the "
+            "target slot's slot_id, not a poi or lodging ref_id\n",
+            command.stderr,
+        )
+
+    def test_cli_minutes_field_reports_delta_minutes_contract(self):
+        event = load(FIXTURES / "delay.json")["event"]
+        event["minutes"] = event.pop("delta_minutes")
+        command = run_invalid_cli_event(self, event)
+        self.assertEqual(
+            'REPLAN_FAILED delay_value delay requires a positive number in the "delta_minutes" '
+            'field, not "minutes"\n',
+            command.stderr,
+        )
 
 
 def _make_replan(path: Path):

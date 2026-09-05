@@ -28,10 +28,16 @@ def replan_trip(
         raise ReplanError("revision_conflict", "base revision does not match the current Trip")
     event_type = event.get("type")
     if event_type not in ("closure", "weather", "delay", "user_delete"):
-        raise ReplanError("event_type", "unsupported replan event")
+        raise ReplanError(
+            "event_type",
+            'event type must use the field "type" with one of: closure, weather, delay, user_delete',
+        )
     subject_ref = event.get("subject_ref")
     if not isinstance(subject_ref, str) or not subject_ref:
-        raise ReplanError("event_subject", "event subject_ref is required")
+        raise ReplanError(
+            "event_subject",
+            "event subject_ref is required and must be the target slot's slot_id, not a poi or lodging ref_id",
+        )
 
     trip = copy.deepcopy(dict(base_trip))
     day_index, slot_index = _find_slot(trip, subject_ref)
@@ -63,7 +69,10 @@ def replan_trip(
     elif event_type == "delay":
         delta = int(event.get("delta_minutes", 0))
         if delta <= 0:
-            raise ReplanError("delay_value", "delay must be a positive number of minutes")
+            raise ReplanError(
+                "delay_value",
+                'delay requires a positive number in the "delta_minutes" field, not "minutes"',
+            )
         _shift_slots(trip, day_index, slot_index, delta, locked_refs, operations, changed_refs)
         _shift_transport_leg(trip, target_slot.get("ref_id"), delta, operations, changed_refs)
 

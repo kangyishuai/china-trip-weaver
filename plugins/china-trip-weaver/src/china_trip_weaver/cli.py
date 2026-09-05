@@ -192,7 +192,17 @@ def _parser() -> argparse.ArgumentParser:
 
     replan = commands.add_parser("replan", help="apply a versioned local replan event and render the result")
     replan.add_argument("--trip", type=Path, required=True)
-    replan.add_argument("--event", type=Path, required=True)
+    replan.add_argument(
+        "--event",
+        type=Path,
+        required=True,
+        help=(
+            "path to a JSON event file; required fields: type (closure, weather, delay, or "
+            "user_delete) and subject_ref (the target slot's slot_id); delay also requires "
+            "delta_minutes; closure and weather also require replacement_slot; example delay "
+            'event: {"type": "delay", "subject_ref": "slot-2", "delta_minutes": 15}'
+        ),
+    )
     replan.add_argument("--base-revision", type=int, required=True)
     replan.add_argument("--output-json", type=Path, required=True)
     replan.add_argument("--output-html", type=Path, required=True)

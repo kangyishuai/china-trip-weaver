@@ -2070,3 +2070,64 @@ OK
 - 提交后全量 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）：`Ran 434 tests in 31.161s`、`OK`、skipped 0。
 - 提交后 `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 372 file(s)`。
 - 版本保持 0.4.0；未新增 Journey 命令、未自动顺延后段、未安装 Codex、未 push/发布。当前验收轮次 9/12，书 19 完成。
+
+## Replan 事件可用性开工理解（2026-09-05，≤10 行）
+1. 目标：只把 `--event` 文件契约与三类常见写错方式说清楚，不改变任何事件字段、类型或判定逻辑。
+2. 顺序：基线与旧错误复现 → 帮助/三条消息 → 三条严格 CLI 回归 → 反向红绿 → 精准门与全量门 → 范围审计并提交。
+3. `--event` 必须写明 `type` 四值、目标 slot 的 `slot_id`、delay 的 `delta_minutes`、closure/weather 的 `replacement_slot`。
+4. 三条失败仍须 fail closed，只增加合法值或正确字段名提示；四个既有夹具和 5 条既有测试原样保留。
+5. 任务 0：`/usr/bin/python3 -m unittest discover -s tests` → `Ran 434 tests in 30.491s`、`OK`、skipped 0。
+6. 任务 0：`/usr/bin/python3 scripts/scan_secrets.py` → `secret scan: 0 finding(s) across 372 file(s)`。
+7. 旧 `kind` 错字段复现 exit 1：`REPLAN_FAILED event_type unsupported replan event`。
+8. 最大风险：测试只看 code 而未钉住可操作文本，或为改善提示误改校验/契约；必须用精确消息断言与逻辑 diff 双重防守。
+
+## Replan 事件帮助与错误回归（实现完成）
+
+- `--event` 帮助现明确 JSON 路径、必需的 `type`/`subject_ref`、四种合法类型，以及 delay 的 `delta_minutes` 和 closure/weather 的 `replacement_slot`。
+- `event_type`、`event_subject`、`delay_value` 仅替换消息文本；事件取值、字段读取和全部判定分支未改。
+- `tests/test_replan.py` 新增三条 CLI 负向回归：分别把 `type` 写成 `kind`、把 `subject_ref` 写成 `ref_id`、把 `delta_minutes` 写成 `minutes`；每条均锁定 exit 1、完整可操作错误与无输出文件，第一条同时锁定帮助契约。
+- 首次 `/usr/bin/python3 -m unittest tests.test_replan -v`（exit 0）：`Ran 12 tests in 0.554s`、`OK`、skipped 0；四个既有夹具与 5 条既有测试原样通过。当前验收轮次 1/8。
+
+## Replan 错误文本反向验证（完成）
+
+- 临时把 `event_type` 消息精确还原为旧文案 `unsupported replan event`，新增 kind→type 回归按预期 exit 1：`Ran 1 test in 0.105s`、`FAILED (failures=1)`。
+- 红态原始差异为 `- REPLAN_FAILED event_type event type must use the field "type" with one of: closure, weather, delay, user_delete` / `+ REPLAN_FAILED event_type unsupported replan event`。
+- 用 `apply_patch` 恢复唯一临时消息后，完整 `/usr/bin/python3 -m unittest tests.test_replan -v`（exit 0）：`Ran 12 tests in 0.539s`、`OK`、skipped 0；临时旧文案未保留。当前验收轮次 2/8。
+
+## Replan 三种错误输入与帮助实跑（完成）
+
+- `plugins/china-trip-weaver/scripts/ctw replan --help`（exit 0）现显示：`type (closure, weather, delay, or user_delete)`、`subject_ref (the target slot's slot_id)`、`requires delta_minutes`、`closure and weather also require replacement_slot`。
+- 把 `type` 写成 `kind`（exit 1）：`REPLAN_FAILED event_type event type must use the field "type" with one of: closure, weather, delay, user_delete`。
+- 把 `subject_ref` 写成 `ref_id`（exit 1）：`REPLAN_FAILED event_subject event subject_ref is required and must be the target slot's slot_id, not a poi or lodging ref_id`。
+- 把 `delta_minutes` 写成 `minutes`（exit 1）：`REPLAN_FAILED delay_value delay requires a positive number in the "delta_minutes" field, not "minutes"`。
+- 三条命令都在 replan 失败后确认目标临时目录为空并成功 `rmdir`；没有残留输出。当前验收轮次 3/8。
+
+## Replan 全量核心门（完成）
+
+- `/usr/bin/python3 -m unittest discover -s tests`（exit 0）：`Ran 437 tests in 31.854s`、`OK`、skipped 0；由基线 434 恰增加三条严格回归，满足 ≥437。
+- `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 372 file(s)`。
+- 全量与精准门均未使用 skip/todo、mock 替换、断言放宽、阈值修改或 `|| true`。当前验收轮次 4/8。
+
+## Replan 可复制样例取舍（完成）
+
+- 采纳任务书的可选建议：把最小 delay 事件 `{"type": "delay", "subject_ref": "slot-2", "delta_minutes": 15}` 直接放在 `--event` 帮助末尾；不改 `--event` 必填性，也不增加 parser 分支。
+- replan Skill 已只读核对：它现有文字负责 wrapper/调用流程，未复制字段表；为避免双来源漂移保持不改，字段契约以 CLI 帮助和错误为唯一用户入口。
+- 首版无空格 JSON 被 argparse 拆成可读性差的 `"type" :"delay"`，新增帮助断言 exit 1；改为标准带空格 JSON 后同一测试 `Ran 1 test in 0.103s`、`OK`，帮助实跑显示为三行合法可复制 JSON。当前验收轮次 5/8。
+
+## Replan 最终精准门（完成）
+
+- 当前完整 `/usr/bin/python3 -m unittest tests.test_replan -v`（exit 0）：`Ran 12 tests in 0.543s`、`OK`、skipped 0；四个动态 fixture 用例、5 条原有显式用例和 3 条新增错误契约用例全部通过。
+- `BLOCKED.md` 已按交付规矩新增本轮 `无。`，没有隐藏阻塞。当前验收轮次 6/8。
+
+## Replan 提交前最终核心门（完成）
+
+- 当前交付态 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）：`Ran 437 tests in 31.871s`、`OK`、skipped 0。
+- 同轮 `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 372 file(s)`。当前验收轮次 7/8。
+
+## Replan 最终范围与契约审计（完成）
+
+- allowlist 审计输出 `ALLOWLIST_OK True files=5`；`git diff --stat` 只含 `BLOCKED.md`、`PROGRESS.md`、`cli.py`、`replan.py`、`tests/test_replan.py`，replan Skill 只读未改。
+- 只忽略三条获准消息常量后的 HEAD/工作树 AST 输出 `REPLAN_LOGIC_AST_EQUAL True`；消息变化集合恰为 `delay_value,event_subject,event_type`。
+- 契约抽取输出 `EVENT_FIELDS_EQUAL True delta_minutes,reason,replacement_slot,reverify_claim_ids,subject_ref,type` 与 `EVENT_TYPES_EQUAL True closure,weather,delay,user_delete`。
+- 禁改核验输出 `REPLAN_FIXTURE_DIFF_EMPTY`、`FORBIDDEN_IMPLEMENTATION_DIFF_EMPTY`、`VERSION_CARRIER_DIFF_EMPTY`；`git diff --check` exit 0、无输出。
+- 当前验收轮次 8/8；所有完成条件已满足，停止新增实现，只做精确暂存、提交与提交状态读回。

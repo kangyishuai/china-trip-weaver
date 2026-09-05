@@ -3,6 +3,10 @@
 Nothing is open. Everything on this page is closed and kept only for provenance;
 the per-round evidence lives in `PROGRESS.md`.
 
+## Replan event usability (2026-09-05)
+
+无。
+
 ## Current task baseline note (not a blocker)
 
 The task snapshot names `a1bf1ad` as both HEAD and `origin/main`. At kickoff,
