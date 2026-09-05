@@ -465,6 +465,120 @@ class AMapMobilityTests(unittest.TestCase):
         pois, _ = apply_locations(candidates["pois"], (), result)
         return pois[0], result, transport
 
+    def _resolve_synthetic_ambiguous_cluster(self, distance_meters=None):
+        ref_id = "poi-synthetic-coordinate-cluster"
+        city = "合成星港"
+        expected_name = "合成星庭入口"
+        first_location = "0.100000000,0.100000000"
+        second_location = None
+        if distance_meters is not None:
+            second_lng = 0.1 + float(distance_meters) / 111_195.0
+            second_location = "%.9f,0.100000000" % second_lng
+
+        first = {
+            "id": "SYNTHETIC-CLUSTER-A",
+            "name": "合成星庭东入口",
+            "pname": "合成省",
+            "cityname": city + "市",
+            "adname": "合成中心区",
+            "address": "合成路一号",
+            "adcode": "990300",
+            "type": "合成测试地点",
+            "business": {"opentime_today": "09:00-17:00"},
+            "location": first_location,
+        }
+        second = {
+            "id": "SYNTHETIC-CLUSTER-B",
+            "name": "合成星庭西入口",
+            "pname": "合成省",
+            "cityname": city + "市",
+            "adname": "合成中心区",
+            "address": "合成路二号",
+            "adcode": "990300",
+            "type": "合成测试地点",
+            "business": {"opentime_today": "09:00-17:00"},
+        }
+        if second_location is not None:
+            second["location"] = second_location
+        scenario = {"entities": [{
+            "ref_id": ref_id,
+            "name": expected_name,
+            "city": city,
+            "poi_results": [first, second],
+            "geocode": {
+                "formatted_address": "合成省合成星港市合成中心区合成路一号",
+                "province": "合成省",
+                "city": city + "市",
+                "district": "合成中心区",
+                "adcode": "990300",
+                "location": first_location,
+            },
+        }]}
+        candidates = amap_scenario_candidates(scenario)
+        transport = AMapScenarioTransport(scenario)
+        result = MobilityBackend("live", credentials(), transport).resolve(
+            candidates, self.clock, ("walking",),
+        )
+        pois, _ = apply_locations(candidates["pois"], (), result)
+        return ref_id, pois[0], result, transport
+
+    def _assert_nearby_name_warning(self, ref_id, result):
+        warnings = [
+            warning for warning in result.warnings
+            if warning.startswith(
+                "identity_conflict:%s:nearby_name_candidates:" % ref_id
+            )
+        ]
+        self.assertEqual(1, len(warnings), result.warnings)
+        self.assertIn('"suggested_names":', warnings[0])
+        self.assertFalse(any(
+            "ambiguous_name_margin" in warning for warning in result.warnings
+        ), result.warnings)
+
+    def test_ambiguous_poi_candidates_sixty_meters_apart_publish_coordinates(self):
+        ref_id, poi, result, transport = self._resolve_synthetic_ambiguous_cluster(60)
+
+        self.assertEqual(["poi", "geocode"], transport.capabilities)
+        self.assertEqual(1, len(result.locations))
+        self.assertEqual("合成星庭入口", poi["name"])
+        self.assertIsNotNone(poi["coordinates"])
+        self._assert_nearby_name_warning(ref_id, result)
+
+    def test_ambiguous_poi_candidates_two_hundred_fifty_meters_apart_publish_coordinates(self):
+        ref_id, poi, result, transport = self._resolve_synthetic_ambiguous_cluster(250)
+
+        self.assertEqual(["poi", "geocode"], transport.capabilities)
+        self.assertEqual(1, len(result.locations))
+        self.assertEqual("合成星庭入口", poi["name"])
+        self.assertIsNotNone(poi["coordinates"])
+        self._assert_nearby_name_warning(ref_id, result)
+
+    def test_ambiguous_poi_candidates_eight_hundred_meters_apart_remain_unknown(self):
+        ref_id, poi, result, transport = self._resolve_synthetic_ambiguous_cluster(800)
+
+        self.assertEqual(["poi"], transport.capabilities)
+        self.assertEqual((), result.locations)
+        self.assertIsNone(poi["coordinates"])
+        self.assertTrue(any(
+            warning.startswith(
+                "identity_conflict:%s:ambiguous_name_margin:" % ref_id
+            )
+            for warning in result.warnings
+        ), result.warnings)
+
+    def test_ambiguous_poi_candidate_missing_coordinates_remains_unknown(self):
+        ref_id, poi, result, transport = self._resolve_synthetic_ambiguous_cluster()
+
+        self.assertEqual(["poi"], transport.capabilities)
+        self.assertEqual((), result.locations)
+        self.assertIsNone(poi["coordinates"])
+        self.assertTrue(any(
+            warning.startswith(
+                "identity_conflict:%s:ambiguous_name_margin:" % ref_id
+            )
+            for warning in result.warnings
+        ), result.warnings)
+
     def _resolve_poi_admin_case(self, case_name, expected_city, provider_city, district):
         ref_id = "poi-admin-" + case_name
         name = "合成云岬观测点"

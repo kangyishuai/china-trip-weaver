@@ -31,6 +31,7 @@ MODE_ALIASES = {
 }
 FATAL_ERRORS = frozenset(("credential_missing", "forbidden", "rate_limited", "contract_mismatch"))
 POI_NAME_SIMILARITY_MARGIN = 0.15
+POI_COORDINATE_CLUSTER_MAX_METERS = 300.0
 SEMANTIC_OUTLIER_DISTANCE_METERS = 50_000.0
 
 
@@ -209,6 +210,21 @@ class MobilityBackend:
                 conflict_reasons = _poi_identity_conflicts(
                     entity, poi_result.normalized_items, poi_result.claims,
                 )
+                if (
+                    conflict_reasons == ("ambiguous_name_margin",)
+                    and _poi_candidates_share_coordinate_cluster(
+                        poi_result.normalized_items,
+                    )
+                ):
+                    conflict_reasons = ()
+                    warnings.append(
+                        "identity_conflict:%s:nearby_name_candidates:%s" % (
+                            entity["ref_id"],
+                            poi_identity_feedback(
+                                identity_candidates, identity_candidate_claims,
+                            ),
+                        )
+                    )
                 if conflict_reasons:
                     claims.extend(_claims_with_status(poi_result.claims, "conflict"))
                     errors.append("identity_conflict")
@@ -563,6 +579,35 @@ def _poi_identity_conflicts(
     if _poi_name_is_ambiguous(entity["name"], candidates):
         reasons.append("ambiguous_name_margin")
     return tuple(reasons)
+
+
+def _poi_candidates_share_coordinate_cluster(
+    candidates: Sequence[Mapping[str, Any]],
+) -> bool:
+    points: List[Tuple[float, float]] = []
+    for candidate in candidates:
+        coordinates = candidate.get("coordinates")
+        if not isinstance(coordinates, Mapping):
+            return False
+        gcj02 = coordinates.get("gcj02")
+        if not isinstance(gcj02, Mapping):
+            return False
+        try:
+            point = (float(gcj02["lng"]), float(gcj02["lat"]))
+        except (KeyError, TypeError, ValueError, OverflowError):
+            return False
+        if not (-180.0 <= point[0] <= 180.0 and -90.0 <= point[1] <= 90.0):
+            return False
+        points.append(point)
+    if len(points) < 2:
+        return False
+    for index, left in enumerate(points):
+        for right in points[index + 1:]:
+            if haversine_meters(
+                left[0], left[1], right[0], right[1],
+            ) > POI_COORDINATE_CLUSTER_MAX_METERS:
+                return False
+    return True
 
 
 def _poi_admin_matches(

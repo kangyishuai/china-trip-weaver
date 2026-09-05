@@ -15,6 +15,7 @@ from china_trip_weaver.clock import FixedClock
 from china_trip_weaver.contracts import ProviderRequest, canonical_json
 from china_trip_weaver.credentials import resolve_credentials
 from china_trip_weaver.evidence import EvidenceLedger, make_claim, validate_claim
+from china_trip_weaver.geo import Point, coordinate_record
 from china_trip_weaver.mobility import MobilityBackend
 from china_trip_weaver.providers import (
     AMapAdapter,
@@ -220,6 +221,47 @@ class ProviderCorpusTests(unittest.TestCase):
             "city": geocode_raw["city"],
             "district": geocode_raw["district"],
         }, geocode.normalized_items[0])
+
+    def test_amap_poi_coordinates_preserve_valid_location_and_tolerate_invalid_values(self):
+        fixture_path = FIXTURES / "amap" / "success.json"
+        fixture = load(fixture_path)
+        clock = FixedClock.from_iso(fixture["captured_at"])
+        expected = coordinate_record(
+            "GCJ02", Point(121.0, 31.0), clock, accuracy_m=50,
+        )
+        self.assertEqual(
+            expected,
+            run_fixture_value(fixture_path).normalized_items[0]["coordinates"],
+        )
+
+        missing = object()
+        for label, location in (
+            ("missing", missing),
+            ("non-string", []),
+            ("wrong-shape", "not-a-coordinate"),
+            ("non-numeric", "east,north"),
+            ("out-of-range", "181.0,31.0"),
+        ):
+            with self.subTest(location=label):
+                mutated = load(fixture_path)
+                raw = mutated["transport"]["body"]["pois"][0]
+                if location is missing:
+                    raw.pop("location")
+                else:
+                    raw["location"] = location
+                result = AMapAdapter().query(
+                    ProviderRequest(**mutated["request"]),
+                    ProviderContext(
+                        clock,
+                        resolve_credentials(
+                            PROVIDER_ENV["amap"],
+                            ROOT / ".tmp" / "provider-fixture-no-file",
+                        ),
+                        ReplayTransport(mutated["transport"]),
+                    ),
+                )
+                self.assertIsNone(result.error_class)
+                self.assertIsNone(result.normalized_items[0]["coordinates"])
 
     def test_flyai_synthetic_responses_distinguish_trial_masks_and_exact_prices(self):
         for case in ("success", "hotel", "version_help"):
@@ -466,7 +508,17 @@ class AMapIdentityAndSemanticTests(unittest.TestCase):
             "provider_poi_id", "matched_name", "formatted_address", "district",
             "adcode", "type", "business",
         }, set(identity["value"]))
-        self.assertIsNone(result.normalized_items[0]["coordinates"])
+        longitude, latitude = (
+            float(value) for value in entity["poi_results"][0]["location"].split(",")
+        )
+        self.assertEqual(
+            coordinate_record(
+                "GCJ02", Point(longitude, latitude),
+                FixedClock.from_iso("2026-09-04T00:00:00+08:00"),
+                accuracy_m=50,
+            ),
+            result.normalized_items[0]["coordinates"],
+        )
         business = next(claim for claim in result.claims if claim["field_path"] == "/business")
         official = make_claim(
             subject_ref=entity["ref_id"],

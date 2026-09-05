@@ -96,7 +96,7 @@ class AMapAdapter(BaseAdapter):
                 "name": name,
                 "city": city,
                 "category": poi_type or "poi",
-                "coordinates": None,
+                "coordinates": _poi_coordinates(raw.get("location"), clock),
                 "recommended_duration_minutes": None,
                 "opening_windows": [],
                 "price": None,
@@ -178,6 +178,16 @@ def _location(value: Any) -> Point:
         raise ContractMismatch("AMap location is not lng,lat")
     lng, lat = value.split(",")
     return Point(float(lng), float(lat))
+
+
+def _poi_coordinates(value: Any, clock: Clock) -> Optional[Mapping[str, Any]]:
+    try:
+        point = _location(value)
+    except (ContractMismatch, TypeError, ValueError, OverflowError):
+        return None
+    if not (-180.0 <= point.lng <= 180.0 and -90.0 <= point.lat <= 90.0):
+        return None
+    return coordinate_record("GCJ02", point, clock, accuracy_m=50)
 
 
 def _optional_text(raw: Mapping[str, Any], field: str, max_length: int) -> Optional[str]:

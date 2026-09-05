@@ -177,6 +177,64 @@ Ran 386 tests in 26.982s
 OK
 ```
 
+### 书 33 阈值反向验证（原始输出）
+
+临时把 `POI_COORDINATE_CLUSTER_MAX_METERS` 从 300.0 改为 5000.0 后，仅跑 800 米控制测试（exit 1）：
+
+```text
+test_ambiguous_poi_candidates_eight_hundred_meters_apart_remain_unknown (tests.test_amap_live.AMapMobilityTests) ... FAIL
+
+======================================================================
+FAIL: test_ambiguous_poi_candidates_eight_hundred_meters_apart_remain_unknown (tests.test_amap_live.AMapMobilityTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_amap_live.py", line 557, in test_ambiguous_poi_candidates_eight_hundred_meters_apart_remain_unknown
+    self.assertEqual(["poi"], transport.capabilities)
+AssertionError: Lists differ: ['poi'] != ['poi', 'geocode']
+
+Second list contains 1 additional elements.
+First extra element 1:
+'geocode'
+
+- ['poi']
++ ['poi', 'geocode']
+
+----------------------------------------------------------------------
+Ran 1 test in 0.003s
+
+FAILED (failures=1)
+```
+
+恢复 300.0 后，文件 SHA-256 与预期 feature diff SHA-256 分别回到 `29fd8b19f1783bdc5de35939192439685f568802f08934e22f7b7d05b273adbe`、`0202c456beed2ce67d3712db64aaa5e2ffd0d010d9b8859a904b93afd937f4c5`；同一控制测试 `Ran 1 test in 0.002s`、`OK`（exit 0）。
+
+临时把同一常量从 300.0 改为 0.0 后，仅跑 60 米控制测试（exit 1）：
+
+```text
+test_ambiguous_poi_candidates_sixty_meters_apart_publish_coordinates (tests.test_amap_live.AMapMobilityTests) ... FAIL
+
+======================================================================
+FAIL: test_ambiguous_poi_candidates_sixty_meters_apart_publish_coordinates (tests.test_amap_live.AMapMobilityTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_amap_live.py", line 541, in test_ambiguous_poi_candidates_sixty_meters_apart_publish_coordinates
+    self.assertEqual(["poi", "geocode"], transport.capabilities)
+AssertionError: Lists differ: ['poi', 'geocode'] != ['poi']
+
+First list contains 1 additional elements.
+First extra element 1:
+'geocode'
+
+- ['poi', 'geocode']
++ ['poi']
+
+----------------------------------------------------------------------
+Ran 1 test in 0.002s
+
+FAILED (failures=1)
+```
+
+再次恢复 300.0 后，上述文件与 feature diff SHA-256 仍分别为 `29fd8b19f1783bdc5de35939192439685f568802f08934e22f7b7d05b273adbe`、`0202c456beed2ce67d3712db64aaa5e2ffd0d010d9b8859a904b93afd937f4c5`；60 米控制测试 `Ran 1 test in 0.002s`、`OK`（exit 0）。两轮临时阈值 diff 均已消除，只剩预期 feature diff。
+
 - skipped 0；`/usr/bin/python3 scripts/scan_secrets.py`（exit 0）原始输出：
 
 ```text
@@ -7981,3 +8039,412 @@ china-trip-weaver@china-trip-weaver-local  installed, enabled  0.6.0    .../plug
 - 执行者处置正确：没有直接覆盖了事，而是先做归一化对比再保留，并写明「225 个叶子差异只含 30 个时钟字段、38 个随时钟重算的 claim ID 及其 120 处引用，`clock_and_claim_id_normalized_equal=True`」。领导侧独立复核了这个结论——逐行归类 diff，变化确实 100% 落在 `generated_at`/`created_at`/`queried_at`/`checked_at`/`claim_id` 及 `claim_ids` 数组元素上，无业务内容变化。
 - 领导侧另跑了一次 `build_renderer_fixtures.py`，`demo/` 随即回到 HEAD 版本——**生成器才是这份文件的权威来源，谁最后跑谁说了算**。手工重跑的产物留在仓库里只会制造来回翻覆，因此本轮不保留它，工作树只提交版本面、README 与进度。
 - 遗留（不阻塞发布）：`demo/journey-16d/` 的归属应当明确成「只由生成器写」，并让生成器与其余四组 demo 用同一个固定时钟；否则任何人手工跑一次第五组就会产生一次假 diff。留待后续任务处理。
+
+## 书 32 任务 0：最后 6 格覆盖债核查（2026-09-05）
+
+- 接手基线：正确 Git 根为本目录；`HEAD` 与 `origin/main` 均为 `c61b3ba15f91977e223333be67312a50c0837786`，工作树 clean。只读核查沿用书 23/30 的离线合成入口，没有访问实网。
+- 车站 × 12306 station × 网络失败：仍无对应测试。`RailStationFallbackTests._query` 现有失败回归覆盖 station 无结果、限流与契约漂移，网络退出仍未经过该上层入口固化。
+- 航班 × FlyAI × 无结果：仍无对应测试。`flyai/empty.json` 仍只在 adapter corpus；上层 `FlyAIBackend` 仅有住宿无结果回归。
+- 航班 × FlyAI × 限流：仍无对应测试。既有 backend 限流断言只查询住宿，未断言 flight warning、health reason 与空 comparison legs。
+- 航班 × FlyAI × 契约漂移：仍无对应测试。既有 wrong-shape 测试只调用 `FlyAIAdapter` 的 lodging 请求。
+- 航班 × FlyAI × 网络失败：仍无对应测试。现有完整失败链使用 timeout，network 只存在于 adapter 夹具/住宿 backend 回归。
+- 航班 × VariFlight search × 限流：仍无对应测试。现有 `VariFlightBackend.enrich` 回归覆盖 search 无结果与 comfort partial failure，search rate-limit 仍只在 provider corpus。
+- 结论：`BLOCKED.md` 标出的 6 行 `**仍 open**` 与当前测试体逐格一致；书 31 只改发布面，没有暗中关闭任何一格。下一步严格一格一条上层 backend 回归，并逐条记录单跑原始输出。
+
+## 书 33 开工回执（2026-09-05，≤10 行）
+1. 目标：只把 AMap POI 合法 `location` 写进现成 GCJ02 `coordinates`，名称判定与用户名称保持不变。
+2. 名称本来歧义时，仅当全部候选坐标齐全且两两距离均 ≤ 具名常量 300 米，才允许发布坐标。
+3. 放行后仍保留名称未定 warning；任一候选缺坐标或任一对超过阈值，仍报 `ambiguous_name_margin`。
+4. geocode 流程与调用次数保持不变；`poi_admin_mismatch`、Schema、版本号和 fix-names 判定均不碰。
+5. 新测试使用合成坐标并走真实 `MobilityBackend.resolve`，先红后绿，再做 5000 米与 0 米双向反证。
+6. 写入范围仅限 `providers/amap.py`、`mobility.py`、`tests/test_amap_live.py`、`tests/test_providers.py`、本文件。
+7. 开工 HEAD 与 `origin/main` 均为 `c61b3ba15f91977e223333be67312a50c0837786`，工作树干净。
+
+### 书 33 任务 0：三条只读事实（原始输出）
+
+`grep -n '"location"' tests/fixtures/providers/amap/success.json`（exit 0）：
+
+```text
+51:          "location": "121.000000,31.000000",
+```
+
+`grep -n '"coordinates": None' plugins/china-trip-weaver/src/china_trip_weaver/providers/amap.py`（exit 0）：
+
+```text
+99:                "coordinates": None,
+```
+
+`grep -n 'haversine_meters' plugins/china-trip-weaver/src/china_trip_weaver/mobility.py`（exit 0）：
+
+```text
+17:from .matrix import RouteCell, bounded_query_plan, haversine_meters
+800:                haversine_meters(point[0], point[1], other_point[0], other_point[1])
+819:        distance = haversine_meters(left_point[0], left_point[1], right_point[0], right_point[1])
+910:            distance = haversine_meters(
+```
+
+### 书 33 新增测试红态（实现前原始输出）
+
+`/usr/bin/python3 -m unittest -v tests.test_providers.ProviderCorpusTests.test_amap_poi_coordinates_preserve_valid_location_and_tolerate_invalid_values tests.test_providers.AMapIdentityAndSemanticTests.test_g4_business_and_official_claims_both_survive_as_conflict tests.test_amap_live.AMapMobilityTests.test_ambiguous_poi_candidates_sixty_meters_apart_publish_coordinates tests.test_amap_live.AMapMobilityTests.test_ambiguous_poi_candidates_two_hundred_fifty_meters_apart_publish_coordinates tests.test_amap_live.AMapMobilityTests.test_ambiguous_poi_candidates_eight_hundred_meters_apart_remain_unknown tests.test_amap_live.AMapMobilityTests.test_ambiguous_poi_candidate_missing_coordinates_remains_unknown`（exit 1）：
+
+```text
+test_amap_poi_coordinates_preserve_valid_location_and_tolerate_invalid_values (tests.test_providers.ProviderCorpusTests) ... FAIL
+test_g4_business_and_official_claims_both_survive_as_conflict (tests.test_providers.AMapIdentityAndSemanticTests) ... FAIL
+test_ambiguous_poi_candidates_sixty_meters_apart_publish_coordinates (tests.test_amap_live.AMapMobilityTests) ... FAIL
+test_ambiguous_poi_candidates_two_hundred_fifty_meters_apart_publish_coordinates (tests.test_amap_live.AMapMobilityTests) ... FAIL
+test_ambiguous_poi_candidates_eight_hundred_meters_apart_remain_unknown (tests.test_amap_live.AMapMobilityTests) ... ok
+test_ambiguous_poi_candidate_missing_coordinates_remains_unknown (tests.test_amap_live.AMapMobilityTests) ... ok
+
+======================================================================
+FAIL: test_amap_poi_coordinates_preserve_valid_location_and_tolerate_invalid_values (tests.test_providers.ProviderCorpusTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_providers.py", line 232, in test_amap_poi_coordinates_preserve_valid_location_and_tolerate_invalid_values
+    self.assertEqual(
+AssertionError: {'source_crs': 'GCJ02', 'native': {'lng':[293 chars] 50}} != None
+
+======================================================================
+FAIL: test_g4_business_and_official_claims_both_survive_as_conflict (tests.test_providers.AMapIdentityAndSemanticTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_providers.py", line 514, in test_g4_business_and_official_claims_both_survive_as_conflict
+    self.assertEqual(
+AssertionError: {'source_crs': 'GCJ02', 'native': {'lng':[297 chars] 50}} != None
+
+======================================================================
+FAIL: test_ambiguous_poi_candidates_sixty_meters_apart_publish_coordinates (tests.test_amap_live.AMapMobilityTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_amap_live.py", line 541, in test_ambiguous_poi_candidates_sixty_meters_apart_publish_coordinates
+    self.assertEqual(["poi", "geocode"], transport.capabilities)
+AssertionError: Lists differ: ['poi', 'geocode'] != ['poi']
+
+First list contains 1 additional elements.
+First extra element 1:
+'geocode'
+
+- ['poi', 'geocode']
++ ['poi']
+
+======================================================================
+FAIL: test_ambiguous_poi_candidates_two_hundred_fifty_meters_apart_publish_coordinates (tests.test_amap_live.AMapMobilityTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_amap_live.py", line 549, in test_ambiguous_poi_candidates_two_hundred_fifty_meters_apart_publish_coordinates
+    self.assertEqual(["poi", "geocode"], transport.capabilities)
+AssertionError: Lists differ: ['poi', 'geocode'] != ['poi']
+
+First list contains 1 additional elements.
+First extra element 1:
+'geocode'
+
+- ['poi', 'geocode']
++ ['poi']
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.008s
+
+FAILED (failures=4)
+```
+
+### 书 33 定向验收绿态（原始输出）
+
+同一条 6-test 命令（exit 0）：
+
+```text
+test_amap_poi_coordinates_preserve_valid_location_and_tolerate_invalid_values (tests.test_providers.ProviderCorpusTests) ... ok
+test_g4_business_and_official_claims_both_survive_as_conflict (tests.test_providers.AMapIdentityAndSemanticTests) ... ok
+test_ambiguous_poi_candidates_sixty_meters_apart_publish_coordinates (tests.test_amap_live.AMapMobilityTests) ... ok
+test_ambiguous_poi_candidates_two_hundred_fifty_meters_apart_publish_coordinates (tests.test_amap_live.AMapMobilityTests) ... ok
+test_ambiguous_poi_candidates_eight_hundred_meters_apart_remain_unknown (tests.test_amap_live.AMapMobilityTests) ... ok
+test_ambiguous_poi_candidate_missing_coordinates_remains_unknown (tests.test_amap_live.AMapMobilityTests) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.010s
+
+OK
+```
+
+## 书 32 任务 1：6 格上层失败回归（完成）
+
+- 新增恰好 6 条测试：车站 network 走 `RailStationFallbackTests._query` 和真实 `RailMCPStdioTransport`；FlyAI flight 的无结果、限流、契约漂移、network 均走 `FlyAIBackend.resolve`；VariFlight search 限流走 `VariFlightBackend.enrich`。
+- 12306 network 夹具在测试自己的临时目录中由既有合成 MCP server 派生，只在 `get-stations-code-in-city` 回答前退出；仓库 `tests/fixtures/` 没有改动。FlyAI/VariFlight 复用 checked-in 合成 failure transport，测试内 route 名称和 ref 均为合成值。
+- 每条逐字断言实体 warning、完整 health reason、空 flights/stations/claims 降级结果中的至少两项；新增断言全部使用 `assertEqual`，没有 `assertIn`、skip、恒真断言或实现改动。
+
+### 书 32 六格逐条单跑原始输出
+
+1. 车站 × 12306 station × 网络失败
+
+`/usr/bin/python3 -m unittest tests.test_rail_station_fallback.RailStationFallbackTests.test_station_network_exit_retries_then_degrades_exact_entity -v`（exit 0）：
+
+```text
+test_station_network_exit_retries_then_degrades_exact_entity (tests.test_rail_station_fallback.RailStationFallbackTests) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.110s
+
+OK
+```
+
+2. 航班 × FlyAI × 无结果
+
+`/usr/bin/python3 -m unittest tests.test_flyai_live.FlyAIBackendEntityFailureTests.test_flight_no_results_keeps_empty_comparisons_with_exact_warning_and_health -v`（exit 0）：
+
+```text
+test_flight_no_results_keeps_empty_comparisons_with_exact_warning_and_health (tests.test_flyai_live.FlyAIBackendEntityFailureTests) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK
+```
+
+3. 航班 × FlyAI × 限流
+
+`/usr/bin/python3 -m unittest tests.test_flyai_live.FlyAIBackendEntityFailureTests.test_flight_rate_limit_keeps_empty_comparisons_with_exact_warning_and_health -v`（exit 0）：
+
+```text
+test_flight_rate_limit_keeps_empty_comparisons_with_exact_warning_and_health (tests.test_flyai_live.FlyAIBackendEntityFailureTests) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK
+```
+
+4. 航班 × FlyAI × 契约漂移
+
+`/usr/bin/python3 -m unittest tests.test_flyai_live.FlyAIBackendEntityFailureTests.test_flight_contract_drift_keeps_empty_comparisons_with_exact_warning_and_health -v`（exit 0）：
+
+```text
+test_flight_contract_drift_keeps_empty_comparisons_with_exact_warning_and_health (tests.test_flyai_live.FlyAIBackendEntityFailureTests) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK
+```
+
+5. 航班 × FlyAI × 网络失败
+
+`/usr/bin/python3 -m unittest tests.test_flyai_live.FlyAIBackendEntityFailureTests.test_flight_network_failure_retries_and_keeps_empty_comparisons_with_exact_warning_and_health -v`（exit 0）：
+
+```text
+test_flight_network_failure_retries_and_keeps_empty_comparisons_with_exact_warning_and_health (tests.test_flyai_live.FlyAIBackendEntityFailureTests) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK
+```
+
+6. 航班 × VariFlight search × 限流
+
+`/usr/bin/python3 -m unittest tests.test_variflight_live.VariFlightLiveTests.test_search_rate_limit_keeps_empty_candidates_with_exact_warning_and_health -v`（exit 0）：
+
+```text
+test_search_rate_limit_keeps_empty_candidates_with_exact_warning_and_health (tests.test_variflight_live.VariFlightLiveTests) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK
+```
+
+- 三份目标模块组合门：`/usr/bin/python3 -m unittest tests.test_flyai_live tests.test_variflight_live tests.test_rail_station_fallback -v`（exit 0）→ `Ran 60 tests in 5.079s`、`OK`，无 skipped 汇总，故 skipped 0。
+
+### 书 32 三格反向验证原始红态
+
+- 反向验证前目标实现文件 SHA-256：`flyai_inventory.py=de79279c…416f`、`providers/mcp_stdio.py=3e4abe93…7286a`、`variflight_enrichment.py=3c2b325e…4cff`。
+
+1. FlyAI 无结果格：临时把实际执行的 flight warning 格式从 `flight@` 改为 `flight-broken@`。对应测试（exit 1）原始输出：
+
+```text
+test_flight_no_results_keeps_empty_comparisons_with_exact_warning_and_health (tests.test_flyai_live.FlyAIBackendEntityFailureTests) ... FAIL
+
+======================================================================
+FAIL: test_flight_no_results_keeps_empty_comparisons_with_exact_warning_and_health (tests.test_flyai_live.FlyAIBackendEntityFailureTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_flyai_live.py", line 538, in test_flight_no_results_keeps_empty_comparisons_with_exact_warning_and_health
+    self.assertEqual(
+AssertionError: Tuples differ: ('no_results:flight@city-synthetic-origin->city-synthetic-de[79 chars]10',) != ('no_results:flight-broken@city-synthetic-origin->city-synth[86 chars]10',)
+
+First differing element 0:
+'no_results:flight@city-synthetic-origin->city-synthetic-de[77 chars]9-10'
+'no_results:flight-broken@city-synthetic-origin->city-synth[84 chars]9-10'
+
+- ('no_results:flight@city-synthetic-origin->city-synthetic-destination:route=city-synthetic-origin->city-synthetic-destination;date=2026-09-10',)
++ ('no_results:flight-broken@city-synthetic-origin->city-synthetic-destination:route=city-synthetic-origin->city-synthetic-destination;date=2026-09-10',)
+?                    +++++++
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+FAILED (failures=1)
+```
+
+2. 12306 network 格：临时把 `MCPError` 的实际翻译行从 `ProviderNetworkError` 改为 `ProviderTimeout`。对应测试（exit 1）原始输出：
+
+```text
+test_station_network_exit_retries_then_degrades_exact_entity (tests.test_rail_station_fallback.RailStationFallbackTests) ... FAIL
+
+======================================================================
+FAIL: test_station_network_exit_retries_then_degrades_exact_entity (tests.test_rail_station_fallback.RailStationFallbackTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_rail_station_fallback.py", line 589, in test_station_network_exit_retries_then_degrades_exact_entity
+    self.assertEqual("network", result.error_class)
+AssertionError: 'network' != 'timeout'
+- network
++ timeout
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.102s
+
+FAILED (failures=1)
+```
+
+3. VariFlight search 限流格：临时让实际 search error 聚合行写入 `broken_search_failure`。对应测试（exit 1）原始输出：
+
+```text
+test_search_rate_limit_keeps_empty_candidates_with_exact_warning_and_health (tests.test_variflight_live.VariFlightLiveTests) ... FAIL
+
+======================================================================
+FAIL: test_search_rate_limit_keeps_empty_candidates_with_exact_warning_and_health (tests.test_variflight_live.VariFlightLiveTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_variflight_live.py", line 254, in test_search_rate_limit_keeps_empty_candidates_with_exact_warning_and_health
+    self.assertEqual(
+AssertionError: 'tool[38 chars]tatus_claims=0; comfort_claims=0; errors=rate_limited' != 'tool[38 chars]tatus_claims=0; comfort_claims=0; errors=broken_search_failure'
+- tools=9; business_calls=1; candidates=0; status_claims=0; comfort_claims=0; errors=rate_limited
+?                                                                                      ^ --------
++ tools=9; business_calls=1; candidates=0; status_claims=0; comfort_claims=0; errors=broken_search_failure
+?                                                                                    + +++++++ ^^^^^^^^^^
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+FAILED (failures=1)
+```
+
+- 三处分别恢复后，对应单测均 `Ran 1 ... OK`。恢复后 SHA-256 与反向验证前逐字相同，且 `git diff --exit-code` 对这三个实现文件 exit 0、无输出。
+
+## 书 32 任务 2：demo 第五组归属（完成）
+
+- `scripts/build_renderer_fixtures.py` 仅增加两行注释：`demo/journey-16d/` 由本生成器独占写入，其 `2026-09-05T09:00:00+08:00` 固定时钟有意不同于其余四组，不得单独手工重跑第五组；没有改任何行为。
+- 两份 README 的 demo 段落各增加同义说明；没有统一时钟、重生成后保留产物或安装 Codex。
+- `git diff --check`（exit 0）无输出。随后 `/usr/bin/python3 scripts/build_renderer_fixtures.py`（exit 0）原始输出：
+
+```text
+wrote 9 Trip and 11 HTML renderer fixtures; Journey demo trips=3 days=16 journey_sha256=7ada91c09a6ef253a23f930b454a2d13510d9a4326f906f6299337ec0ce7628e html_sha256=6caf8904759fc72392b6bcaa17493ddd5174bc296627b3214603eb912342df13
+```
+
+- 生成后 `git status --short -- demo tests/fixtures`（exit 0）无输出，证明 demo 和 renderer/provider 夹具均未改变。
+
+## 书 32 首轮全量门禁
+
+- 与并行书 33 当前代码合并的共享工作树运行 `/usr/bin/python3 -m unittest discover -s tests -v`（exit 0）：`Ran 503 tests in 34.785s`、`OK`，无 skipped 汇总，故 skipped 0；其中书 32 相对 492 基线恰新增 6 条。
+- `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 376 file(s)`；`git diff --check` exit 0。
+- `BLOCKED.md` 书 23 表的 18 格现全部指向具名上层回归，`git grep` 对 `**仍 open**` 零行；页首已改为 archive-only 口径，没有新增 `KNOWN DEFECT`。
+- `git diff --exit-code -- demo tests/fixtures flyai_inventory.py providers/mcp_stdio.py variflight_enrichment.py` 对实际完整路径 exit 0、无输出。全 `src/` 当前另有并行书 33 已声明归属的 `mobility.py` 与 `providers/amap.py` diff；书 32 未触碰、未回滚，待最终门禁时再只读复核共享状态。
+
+## 书 33 实现与首轮门禁（2026-09-05）
+
+- `providers/amap.py` 只把合法 POI `location` 规范化为 `coordinate_record("GCJ02", ..., accuracy_m=50)`；缺失、非字符串、形状错、非数字、非有限或越界值都保持 `coordinates=None`，没有新增坐标 claim 或改其它字段算法。
+- `mobility.py` 新增具名常量 `POI_COORDINATE_CLUSTER_MAX_METERS = 300.0`；只在 `MobilityBackend.resolve` 的名称冲突后判断全部候选 GCJ02 坐标是否齐全且两两不超过阈值。满足时保留一条 `identity_conflict:<ref>:nearby_name_candidates:<feedback>` 名称 warning，但不再发出 `ambiguous_name_margin`，并继续原 geocode 流程。
+- 60/250 米用例均明确断言调用序列为 `poi,geocode`、坐标 known、候选文件中的用户原名仍为 `合成星庭入口`；800 米与任一候选缺坐标均只调用 `poi`、坐标 unknown、仍有 `ambiguous_name_margin`。
+- 名称人工判定路径没有接入空间豁免；`tests.test_candidates + tests.test_providers + tests.test_amap_live`（exit 0）原始输出：
+
+```text
+...................................................................................................................................................................................
+----------------------------------------------------------------------
+Ran 179 tests in 2.692s
+
+OK
+```
+
+- 首轮共享工作树全量 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）原始输出：
+
+```text
+.......................................................................................................................................................................................................................................................................................................................................................................................................................................
+----------------------------------------------------------------------
+Ran 503 tests in 33.039s
+
+OK
+```
+
+- 输出无 skipped 汇总，故 skipped 0。`/usr/bin/python3 scripts/scan_secrets.py`（exit 0）原始输出：
+
+```text
+secret scan: 0 finding(s) across 376 file(s)
+```
+
+- `git diff --check` exit 0。逐函数与 HEAD 比较 `_poi_name_is_ambiguous`、`_name_similarity`、`_poi_admin_matches` 均无 diff；`POI_NAME_SIMILARITY_MARGIN` 原行相同；AMap `_geocodes` 方法无 diff；全部 `schema/` 路径无 diff。
+- 当前共享工作树还含并行书 32 已声明归属的 `BLOCKED.md`、README、`scripts/build_renderer_fixtures.py` 与三份其它测试；书 33 只写任务白名单中的两个源码、两份测试和本文件，没有触碰或回滚书 32。
+
+## 书 32 最终门禁与边界
+
+- 书 33 写完其最终记录后的共享交付态再次运行 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）原始摘要：`Ran 503 tests in 33.424s`、`OK`；输出无 skipped 汇总，故 skipped 0。书 32 自身 6 条使共同基线 492 达到 498，满足本书下限；共享树另含书 33 的 5 条。
+- 同一交付态 `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 376 file(s)`；`git diff --check` exit 0、无输出。
+- `/usr/bin/python3 scripts/build_renderer_fixtures.py` 已实跑且固定 hash 不变；随后 `git status --short -- demo tests/fixtures` 与 `git diff --exit-code -- demo tests/fixtures` 均 exit 0、无输出。
+- 书 32 反向验证触碰过的 `flyai_inventory.py`、`providers/mcp_stdio.py`、`variflight_enrichment.py` 均恢复开工 SHA-256，三路径 `git diff --exit-code` exit 0。全 `plugins/china-trip-weaver/src/` 的共享 diff 恰为并行书 33 声明归属的 `mobility.py` 与 `providers/amap.py`；除此以外无输出，书 32 没有留下任何实现 diff。
+- `git grep -n '\*\*仍 open\*\*' -- BLOCKED.md` exit 1、零行；18 格均有具名回归，`BLOCKED.md` 页首明确 archive-only。未改 CI、版本、Schema、demo 产物，未安装 Codex，也没有发现需要新增的 `KNOWN DEFECT`。
+
+## 书 33 最终状态
+
+- 完整进度记录落盘后的共享工作树全量 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）原始输出：
+
+```text
+.......................................................................................................................................................................................................................................................................................................................................................................................................................................
+----------------------------------------------------------------------
+Ran 503 tests in 33.343s
+
+OK
+```
+
+- 输出无 skipped 汇总，故 skipped 0；相对 492 基线，书 33 新增 5 条、并行书 32 新增 6 条。
+- `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）原始输出：`secret scan: 0 finding(s) across 376 file(s)`；`git diff --check` exit 0。
+- 最终冻结审计（exit 0）：`_poi_identity_conflicts`、`_poi_name_is_ambiguous`、`_name_similarity`、`_poi_admin_matches` 与 HEAD 逐函数相同；`POI_NAME_SIMILARITY_MARGIN` 不变；`POI_COORDINATE_CLUSTER_MAX_METERS = 300.0`；AMap `_geocodes` 方法与全部 `schema/` 路径无 diff。
+- 书 33 完成：合法 POI 坐标保留；60/250 米放行且原名与名称 warning 保留；800 米/缺坐标仍歧义；geocode 调用路径不跳过；两次阈值反证均红并完整恢复。
+
+## 书 32 / 33 领导验收（2026-09-05，Claude 亲自复跑）
+
+两份并行交付，验收时同在一个工作树未提交，由领导侧分开核对后分两次提交。合并后 `Ran 503 tests`、`OK`、skipped 0；`secret scan: 0 finding(s) across 376 file(s)`。
+
+### 书 32（最后 6 格 + demo 归属）：通过
+
+- 硬门属实：`git diff` 对 `plugins/china-trip-weaver/src/` 与 `demo/` 完全为空，一行实现都没改。
+- 六格全部补上，都走上层 backend：四条 flight 经共享 helper 调 `FlyAIBackend(...).resolve(...)`（分别喂 `empty`/`rate_limit`/`wrong_shape`/`stderr_error` 夹具）、一条 `VariFlightBackend.enrich`、一条 station `_query`。`BLOCKED.md` 那张 18 格表再无 `仍 open`。
+- 领导侧独立反向验证（自己另选破坏点，不看它验的三格）：
+  - 把 `flyai_inventory.py` 第 214 行的 health 聚合硬编码成 `ready` → 三条新 flight 测试（contract_drift / network_failure / rate_limit）全部变红。第四条 `no_results` 未红是对的：那个场景本来就该是 ready，硬编码不改变它。
+  - 把 `variflight_enrichment.py` 的 status 聚合硬编码成 `ready` → 新增的 `test_search_rate_limit_...` 变红。
+  - 两次恢复后 `git diff` 均为空。
+- demo 归属已定：`scripts/build_renderer_fixtures.py` 加了两行注释声明独占写入，双语 README 各补一句。领导侧跑了一次生成器，`demo/` 与 `tests/fixtures/` 零 diff——注释没碰产物。
+
+### 书 33（坐标聚集消歧）：通过
+
+- 地界与冻结项：`_poi_name_is_ambiguous`、`POI_NAME_SIMILARITY_MARGIN`、`_name_similarity`、`_poi_admin_matches`、`schema/` diff 全空；版本号未动。
+- 实现比要求更谨慎：放行条件写成 `conflict_reasons == ("ambiguous_name_margin",)`——只有当名字歧义是**唯一**冲突原因时才放行，同时有行政区冲突的一律不放行。阈值是具名常量 `POI_COORDINATE_CLUSTER_MAX_METERS = 300.0`，两两全比，任一候选缺坐标即判不成立。
+- adapter 只填 `coordinates` 一个字段，坏坐标（缺失/非字符串/格式错/非数值/超范围）一律回落 `None`；`tests/test_providers.py` 是新增一条覆盖这五种坏值的测试，唯一删掉的一行是 `assertIsNone(...coordinates)`——那行因行为改变而必然失效，且被更强的断言取代。
+
+### 关键指标：同一份福建实网数据，0.6.0 vs 书 33
+
+```text
+坐标 unknown：19 -> 15
+  ambiguous_name_margin              17 -> 12
+  geocode_ambiguous                   1 ->  1
+  poi_address_missing_admin_detail    1 ->  1
+  nearby_name_candidates              0 ->  1
+```
+
+- 不再判歧义的恰好是领导侧发书前实测的那五条 ≤300 米：`poi-kaiyuan`(62m)、`poi-confucian`(100m)、`poi-tianhou-deji`(109m)、`poi-jiuqu-raft`(208m)、`poi-hegui`(220m)。
+- **304 米探针守住了**：`poi-shapowei`（观景平台管理处 / 演武大桥观景平台，实测 304 米）仍是 unknown。阈值若被调大或比较写反，它会漏出来。
+- 五条放行、四条真正拿到坐标。第五条 `poi-confucian`（泉州府文庙）用最小复现查清了原因：名字歧义确实已放行，它卡在**另一道既有关卡** `incomplete_address:poi_address_missing_admin_detail`（候选地址缺行政层级细节）。这与书 33 无关，是既有校验。
+
+### 本轮发现（记账，不阻塞）
+
+- `poi-confucian` 那条 unknown 的 reason 显示的是 `nearby_name_candidates`，而真正拦住它的是 `poi_address_missing_admin_detail`。`nearby_name_candidates` 本意是「名字没定，但坐标可用」的参考信息，却被 unknown 的 reason 选取逻辑当成了首要原因，掩盖了真实原因。用户按这条 reason 去改名字是白费力气。属信息质量问题，值得单开一轮。
