@@ -2857,3 +2857,36 @@ _normalized_name_BYTE_EQUAL True SHA256 c461fcf9f25c4911fdaef57da4324e841ebfd743
 - 提交父子版本的 AST 源片段读回均为 true：`POI_NAME_SIMILARITY_MARGIN_COMMIT_DIFF_EMPTY`、`_name_similarity_COMMIT_DIFF_EMPTY`、`_normalized_name_COMMIT_DIFF_EMPTY`。
 - 实现提交后工作树 clean，本地 `main` 相对 `origin/main` ahead 1；本任务未 push、未跑实网/demo、未安装 Codex、未改 CI/依赖/权限，版本保持 0.5.1。
 - 当前验收轮次 7/12；书 25 完成条件全部满足，本段仅作断线恢复记录并单独提交，不再新增实现。
+
+## 书 25 领导验收（2026-09-05，Claude 亲自复跑）
+
+- 明卷：`Ran 463 tests`（456→463，+7）、`OK`、skipped 0；`secret scan: 0 finding(s) across 376 file(s)`。
+- 越界为零：`planning.py`、`providers/`、`cli.py`、`schema/`、`plugins/china-trip-weaver/schema/`、`.codex-plugin/` 的 diff 均 0 行；版本号未动，仍 0.5.1。
+- 阈值与算法冻结属实：`POI_NAME_SIMILARITY_MARGIN` 常量定义与 `_name_similarity` 实现的 diff 为空，改动只是把原内联比较抽成 `mobility._poi_name_is_ambiguous` 供两处共享。
+- 四类场景 + 两处一致性实测全对：去重后唯一 → 自动（`unique_suggestion`）；首选逐字等于原名 → 自动（`exact_original_confirmed`）；「九曲溪竹筏」对「九曲溪竹筏漂流/码头」前缀 → 仍 unknown；「天游峰」对「天游景区/天游峰景区」包含 → 仍 unknown；每一类 mobility 的歧义判定与 fix-names 的自动判定结论相同。
+- 反向验证（领导侧独立复跑，不看执行者记录）：把逐字相等放宽为 `startswith` → `FAILED (failures=13, errors=1)`；去掉候选名去重 → `FAILED (failures=2)`。恢复后 diff 为空。新测试确实在测。
+- 夹具 `tests/fixtures/poi-identity-decision/dead-corners.json` 纯合成，全部中文串形如「合成甲市/合成云游峰/虚构路一号」，`grep` 福建真实地名为空。
+
+### 关键防作弊指标：同一份福建实网数据的新旧对照
+
+- 重跑福建 16 天三段全实网（`--mobility live --lodging live --aviation auto`，31 POI + 9 住宿），三段 exit 0；坐标 unknown 共 23 条，其中 22 条带 `suggested_names`，产出只留在会话临时目录，未进仓库。
+- 用 `git worktree` 取出 `642f7ab` 旧代码，对**同一份 journey 产物**跑 fix-names 做对照：
+
+```text
+旧(642f7ab): AUTO=3 MANUAL=19
+新(HEAD)   : AUTO=4 MANUAL=18
+判定变化总数 = 1
+  龙王头海洋公园 | MANUAL -> AUTO | 回填 None -> '龙王头海洋公园'
+  | reason: suggestion_matches_original -> exact_original_confirmed
+  | 候选=['龙王头海洋公园', '龙王头海洋公园-瞭望台']
+```
+
+- 唯一变化的那条回填的就是用户原名本身，零假坐标风险；其余 24 条判定与回填名逐字不变。任务书写死的上限是「不该超过 8」，实测 4，未突破。
+- 上限估高的原因：这份真实数据里根本没有「候选完全同名重复」的场景，`unique_suggestion` 的三条都是旧代码已能处理的，新增的「去重后唯一」一条都没命中。实现比预期更保守，不是放宽。
+- fix-names 自动化天花板刷新为：22 条可操作 unknown 中 4 条自动、18 条人工，约 18%。
+
+### 本轮实网新发现（超出书 25 范围，待立项）
+
+- coast 段 11 条坐标 unknown 里有 6 条的 reason 是 `poi_admin_mismatch` 而非名字歧义，且全部形如：用户写「平潭」，高德返回 `福州市/平潭县`，`_city_matches` 判为冲突。平潭县本就隶属福州市，这是县/县级市与地级市的行政层级匹配缺陷，不是数据错误。
+- 该缺陷占本次全部坐标 unknown 的 6/23（约 26%），是单一最大来源，且名字歧义修好后也绕不开它——「龙王头海洋公园」fix-names 已判可自动确认，坐标却仍因 admin mismatch 停在 unknown。
+- 优先级判断：高于「组合表剩余空格」。下一份任务书应优先处理行政层级匹配。
