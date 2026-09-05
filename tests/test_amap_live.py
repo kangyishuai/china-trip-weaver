@@ -709,6 +709,118 @@ class AMapMobilityTests(unittest.TestCase):
                     "%s has coordinates but is still reported unknown" % path,
                 )
 
+    def test_lodging_geocode_admin_mismatch_degrades_without_crashing(self):
+        """A lodging never runs POI lookup, so the mismatch path must not read POI state."""
+
+        class MismatchTransport:
+            calls = 0
+
+            def execute(self, provider, provider_request):
+                del provider
+                MismatchTransport.calls += 1
+                if provider_request.capability != "geocode":
+                    raise AssertionError("lodging must not trigger %s" % provider_request.capability)
+                return ProviderEnvelope(
+                    200,
+                    {
+                        "status": "1",
+                        "api": "geocode-v3",
+                        "geocodes": [{
+                            "location": "119.300000,26.080000",
+                            "formatted_address": "示例省示例市示例住宿",
+                            "city": "另一座城",
+                        }],
+                    },
+                    {},
+                )
+
+        settled = {
+            "source_crs": "GCJ02",
+            "native": {"lng": 119.3, "lat": 26.08},
+            "gcj02": {"lng": 119.3, "lat": 26.08},
+            "wgs84": {"lng": 119.2945, "lat": 26.0819},
+            "conversion": {
+                "status": "converted",
+                "method": "gcj02-to-wgs84",
+                "version": "ctw-1",
+                "derived_fields": ["wgs84"],
+                "converted_at": "2026-10-01T08:40:00+08:00",
+                "accuracy_m": 10,
+            },
+        }
+        candidates = {
+            "candidates_version": "1.0.0",
+            "pois": [{
+                "poi_id": "poi-already-located",
+                "name": "已定位合成景点",
+                "city": "合成甲城",
+                "category": "sight",
+                "coordinates": settled,
+                "recommended_duration_minutes": 60,
+                "opening_windows": [],
+                "price": None,
+                "deep_links": ["https://example.invalid/poi"],
+                "claim_ids": ["claim-probe"],
+            }],
+            "lodgings": [{
+                "lodging_id": "lodging-mismatch-probe",
+                "name": "合成住宿候选",
+                "city": "合成甲城",
+                "area": "合成片区",
+                "check_in": "2026-10-16",
+                "check_out": "2026-10-17",
+                "coordinates": None,
+                "locked": False,
+                "price": None,
+                "deep_links": ["https://example.invalid/lodging"],
+                "claim_ids": ["claim-lodging-probe"],
+            }],
+            "claims": [{
+                "claim_id": "claim-probe",
+                "subject_ref": "poi-already-located",
+                "field_path": "/name",
+                "value": "已定位合成景点",
+                "source_url": "https://example.invalid/poi",
+                "provider": "host-web",
+                "status": "partial",
+                "confidence": 0.6,
+                "mode": "static",
+                "queried_at": "2026-10-15T00:00:00+08:00",
+                "as_of": None,
+                "json_path": None,
+                "raw_ref": None,
+                "response_hash": None,
+            }, {
+                "claim_id": "claim-lodging-probe",
+                "subject_ref": "lodging-mismatch-probe",
+                "field_path": "/name",
+                "value": "合成住宿候选",
+                "source_url": "https://example.invalid/lodging",
+                "provider": "host-web",
+                "status": "partial",
+                "confidence": 0.6,
+                "mode": "static",
+                "queried_at": "2026-10-15T00:00:00+08:00",
+                "as_of": None,
+                "json_path": None,
+                "raw_ref": None,
+                "response_hash": None,
+            }],
+            "unknowns": [],
+        }
+        backend = MobilityBackend("live", credentials(), MismatchTransport())
+
+        result = backend.resolve(candidates, self.clock, ("transit",))
+
+        self.assertIn("identity_conflict", result.health["reason"])
+        located = [item.ref_id for item in result.locations]
+        self.assertNotIn("lodging-mismatch-probe", located)
+        self.assertIn("poi-already-located", located)
+        self.assertTrue(
+            any("geocode_admin_mismatch" in item for item in result.warnings),
+            result.warnings,
+        )
+
     def test_live_lodging_replacement_drops_obsolete_mobility_claim_subject(self):
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
             folder = Path(temporary)

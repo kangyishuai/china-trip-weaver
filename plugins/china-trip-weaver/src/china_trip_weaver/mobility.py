@@ -162,6 +162,7 @@ class MobilityBackend:
                 )
                 continue
             identity_claims: List[Mapping[str, Any]] = []
+            selected: Optional[Mapping[str, Any]] = None
             provider_name: Optional[str] = None
             geocode_address = "%s%s" % (entity["city"], entity["name"])
             if not entity["lodging"]:
@@ -273,7 +274,7 @@ class MobilityBackend:
                         "identity_conflict:%s:geocode_admin_mismatch:%s" % (
                             entity["ref_id"],
                             poi_identity_feedback(
-                                (selected,),
+                                () if selected is None else (selected,),
                                 identity_claims,
                                 actual_administrative_area=provider_place.get("city"),
                             ),
