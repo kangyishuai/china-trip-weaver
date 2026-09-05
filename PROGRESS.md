@@ -2571,3 +2571,11 @@ FAILED (failures=1)
 - `git diff --cached --name-only` 恰为 8 条允许路径：`BLOCKED.md`、`PROGRESS.md`、research Skill、`candidates.py`、`cli.py`、两份 `tests/fixtures/candidate-name-fix/*.json`、`tests/test_candidates.py`。
 - cached stat 为 `8 files changed, 1231 insertions(+), 2 deletions(-)`；共享两份 Markdown 保留两书并行追加记录。`git diff --cached --check` exit 0。
 - 书 23 的 `mobility.py`、`providers/rail12306.py`、三份测试与新 `provider_matrix_mcp_server.py` 均保持 unstaged/untracked，没有进入书 22 暂存区。当前验收轮次 9/12。
+
+## 书 22 实现提交与合并 HEAD 核验（完成）
+
+- 书 22 实现提交 `218ea36`（`Add candidate name feedback application`）恰含 8 条白名单路径；`COMMIT_ALLOWLIST_OK True`、`COMMIT_CHANGED_FILES 8`，stat 为 `1237 insertions(+), 2 deletions(-)`，其中共享进度同时保留书 23 记录。
+- `218ea36^..218ea36` 对 mobility、planning、Schema、demo、render、scheduler、validator、manifest 与全部非文档版本载体的组合 diff exit 0，输出标记 `FORBIDDEN_AND_VERSION_DIFF_EMPTY`；身份判定与 unknown 生成均未进入提交。
+- 实现提交后合并工作树全量（exit 0）：`Ran 456 tests in 30.783s`、`OK`、skipped 0；secret scan（exit 0）：`0 finding(s) across 375 file(s)`。
+- 并行书 23 随后提交 `4c59da2`（`Cover provider entity result combinations`）；当前 `HEAD=4c59da2`，工作树 clean，本地相对 `origin/main` ahead 2。书 22 未暂存或提交其实现文件。
+- 未跑实网/demo、未安装 Codex、未改 CI/依赖/权限/版本；`BLOCKED.md` 已随 `218ea36` 写明书 22 本轮新增阻塞为“无”。当前验收轮次 10/12，书 22 实现与范围完成。
