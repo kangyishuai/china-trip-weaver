@@ -3916,3 +3916,82 @@ secret scan: 0 finding(s) across 376 file(s)
   - 附一条方法教训：第一次破坏我选错了行（改了 `or "no_results"` 的兜底值，而 provider 层已给出 error_class；以及改了 353 行那个 `resolve` 根本不走的分支），两次都误得绿。破坏点必须选在被测路径真正读取的那一行，否则"绿"证明不了任何事。
 - 账本诚实：`BLOCKED.md` 那张表 18 格逐格有结论，12 格写明覆盖它的具名测试，6 格明确标「仍 open」并写清是因为触及 12 格上限——没有把未做项写成「无」，也没有含糊带过。表里点名的 12 条测试我逐条核实真实存在，且全部是本轮新写。
 - 新增夹具与测试无任何真实行程地名。
+
+## 书 31：0.6.0 本机发布（2026-09-05）
+
+### 开工回执（≤10 行）
+1. 目标：把已验收的五轮修复/能力同步为 0.6.0，并刷新真实 Codex。
+2. 顺序：任务 0 硬基线 → 双语 README → 五组全离线 demo → 恰好 10 处版本 → 真实安装与最终门禁。
+3. 写入边界：仅 README、中英文版本载体、允许的测试字面值、demo 与本进度；行为代码/Schema 不动。
+4. README 的 CLI 语义必须先以实际 `--help` 为准；9 个 Skill 名称与 description 保持逐字不变。
+5. demo 全部显式关闭 mobility/lodging/aviation 并使用 offline fixture 与固定时钟，绝不索取或猜 Key。
+6. stale 安装须先复现为 0.5.1/五文件差异，再在发布末尾用仓库脚本刷新真实 Codex。
+7. 任一任务 0 前提不符立即写 `BLOCKED.md` 并停止；本轮已在版本 grep 触发该规则。
+
+### 任务 0 原始输出与停止结论
+
+- 开工只读核对：`HEAD` 与 `origin/main` 均为 `11abcacddb5eced61996ff185310ed071256453e`，`git status --short --branch` 只有 `## main...origin/main`。
+- `/usr/bin/python3 -m unittest discover -s tests`（exit 0）：
+
+```text
+............................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................
+----------------------------------------------------------------------
+Ran 492 tests in 34.652s
+
+OK
+```
+
+- `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：
+
+```text
+secret scan: 0 finding(s) across 376 file(s)
+```
+
+- `scripts/install_local_plugin.sh --check`（预期且实际 exit 1）：
+
+```text
+codex: /Applications/ChatGPT.app/Contents/Resources/codex
+源码: /Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/plugins/china-trip-weaver (manifest 版本 0.5.1)
+Codex home: /Users/kangyishuai/.codex
+SKILL parser smoke: OK (9 SKILL.md via codex debug prompt-input)
+本地市场已注册 -> /Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver
+plugin list: installed, enabled 0.5.1
+校验失败：缓存与源码不一致（先跑不带 --check 的本脚本刷新）
+Files /Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/plugins/china-trip-weaver/schema/trip.schema.json and /Users/kangyishuai/.codex/plugins/cache/china-trip-weaver-local/china-trip-weaver/0.5.1/schema/trip.schema.json differ
+Files /Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/plugins/china-trip-weaver/src/china_trip_weaver/candidates.py and /Users/kangyishuai/.codex/plugins/cache/china-trip-weaver-local/china-trip-weaver/0.5.1/src/china_trip_weaver/candidates.py differ
+Files /Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/plugins/china-trip-weaver/src/china_trip_weaver/cli.py and /Users/kangyishuai/.codex/plugins/cache/china-trip-weaver-local/china-trip-weaver/0.5.1/src/china_trip_weaver/cli.py differ
+Files /Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/plugins/china-trip-weaver/src/china_trip_weaver/mobility.py and /Users/kangyishuai/.codex/plugins/cache/china-trip-weaver-local/china-trip-weaver/0.5.1/src/china_trip_weaver/mobility.py differ
+Files /Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/plugins/china-trip-weaver/src/china_trip_weaver/providers/amap.py and /Users/kangyishuai/.codex/plugins/cache/china-trip-weaver-local/china-trip-weaver/0.5.1/src/china_trip_weaver/providers/amap.py differ
+```
+
+- 指定版本 grep（exit 0）实际返回 25 行，不是要求的恰好 10 行：
+
+```text
+./plugins/china-trip-weaver/.codex-plugin/plugin.json:3:  "version": "0.5.1",
+./plugins/china-trip-weaver/src/china_trip_weaver/providers/mcp_stdio.py:143:                "clientInfo": {"name": "china-trip-weaver", "version": "0.5.1"},
+./plugins/china-trip-weaver/src/china_trip_weaver/__init__.py:3:__version__ = "0.5.1"
+./.npm-cache/_npx/a102998d90773fbe/node_modules/fresh/HISTORY.md:17:0.5.1 / 2017-09-11
+./.npm-cache/_npx/a102998d90773fbe/node_modules/zod-to-json-schema/changelog.md:82:| 0.5.1           | First working release with all relevant Zod types present with most validations (except for string patterns due to Zod not exposing the source regexp pattern for those).                                                                                                                                                                                                 |
+./.npm-cache/_npx/a102998d90773fbe/node_modules/zod-to-json-schema/changelog.md:83:| < 0.5.1         | Deprecated due to broken package structure. Please be patient, I eat crayons.                                                                                                                                                                                                                                                                                             |
+./.npm-cache/_npx/a102998d90773fbe/node_modules/accepts/HISTORY.md:148:  * deps: negotiator@0.5.1
+./.npm-cache/_npx/a102998d90773fbe/node_modules/cross-spawn/package.json:66:    "mkdirp": "^0.5.1",
+./.npm-cache/_npx/a102998d90773fbe/node_modules/finalhandler/HISTORY.md:124:0.5.1 / 2016-11-12
+./.npm-cache/_npx/a102998d90773fbe/node_modules/isexe/package.json:10:    "mkdirp": "^0.5.1",
+./.npm-cache/_npx/b9180bb7930b46b7/node_modules/fresh/HISTORY.md:17:0.5.1 / 2017-09-11
+./.npm-cache/_npx/b9180bb7930b46b7/node_modules/zod-to-json-schema/changelog.md:82:| 0.5.1           | First working release with all relevant Zod types present with most validations (except for string patterns due to Zod not exposing the source regexp pattern for those).                                                                                                                                                                                                 |
+./.npm-cache/_npx/b9180bb7930b46b7/node_modules/zod-to-json-schema/changelog.md:83:| < 0.5.1         | Deprecated due to broken package structure. Please be patient, I eat crayons.                                                                                                                                                                                                                                                                                             |
+./.npm-cache/_npx/b9180bb7930b46b7/node_modules/proper-lockfile/package.json:64:    "mkdirp": "^0.5.1",
+./.npm-cache/_npx/b9180bb7930b46b7/node_modules/accepts/HISTORY.md:148:  * deps: negotiator@0.5.1
+./.npm-cache/_npx/b9180bb7930b46b7/node_modules/cross-spawn/package.json:66:    "mkdirp": "^0.5.1",
+./.npm-cache/_npx/b9180bb7930b46b7/node_modules/finalhandler/HISTORY.md:124:0.5.1 / 2016-11-12
+./.npm-cache/_npx/b9180bb7930b46b7/node_modules/isexe/package.json:10:    "mkdirp": "^0.5.1",
+./tests/test_contracts.py:69:        self.assertEqual("0.5.1", __version__)
+./tests/test_packaging.py:24:    "version": "0.5.1",
+./tests/test_packaging.py:87:        self.assertEqual("0.5.1", payload["plugin_version"])
+./tests/test_credentials.py:204:        self.assertEqual("0.5.1", payload["plugin_version"])
+./tests/test_skills.py:122:        self.assertEqual("0.5.1", manifest["version"])
+./README.md:80:The expected result is `china-trip-weaver@china-trip-weaver-local`, version `0.5.1`, status `installed, enabled`. Use a fresh Codex task after installing or updating so its nine Skills and MCP configuration are reloaded.
+./README.zh-CN.md:79:期望结果是 `china-trip-weaver@china-trip-weaver-local`、版本 `0.5.1`、状态 `installed, enabled`。安装或更新后请新建一个 Codex 任务，让它的 9 个 Skill 与 MCP 配置重新加载。
+```
+
+- 结论：其中 10 行是预期版本面，另 15 行来自 `.npm-cache/_npx/a102998d90773fbe/node_modules` 与 `.npm-cache/_npx/b9180bb7930b46b7/node_modules`。依照“任何一条对不上就停下”的硬规则，本轮未进入任务 1–4，未修改 README、demo、版本号、行为代码、Schema、测试或真实 Codex 安装。
