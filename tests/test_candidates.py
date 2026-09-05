@@ -27,11 +27,13 @@ from china_trip_weaver.candidates import (
 )
 from china_trip_weaver.clock import FixedClock
 from china_trip_weaver.cli import main as cli_main
+from china_trip_weaver.journey import assemble_journey, validate_journey
 from china_trip_weaver.providers.base import ProviderTimeout, stable_id
 from tests.test_providers import AMAP_SCENARIOS, AMapScenarioTransport
 
 
 E2E = ROOT / "tests" / "fixtures" / "e2e"
+NAME_FIX = ROOT / "tests" / "fixtures" / "candidate-name-fix"
 CTW = PLUGIN / "scripts" / "ctw"
 VALID = sorted(E2E.glob("*/candidates.json"))
 INVALID = sorted((E2E / "candidates-invalid").glob("*.json"))
@@ -389,6 +391,215 @@ class CandidateContractTests(unittest.TestCase):
         self.assertIn("CANDIDATE_POI_ADDED", stdout)
         self.assertIsNone(value["pois"][0]["coordinates"])
         self.assertTrue(validate_candidates(value).ok)
+
+    def test_fix_name_trip_and_candidate_fixtures_are_valid(self):
+        trip = subprocess.run(
+            [str(CTW), "validate", str(NAME_FIX / "trip.json")],
+            text=True,
+            capture_output=True,
+        )
+        candidates = subprocess.run(
+            [str(CTW), "validate-candidates", str(NAME_FIX / "candidates.json")],
+            text=True,
+            capture_output=True,
+        )
+
+        self.assertEqual(0, trip.returncode, trip.stdout + trip.stderr)
+        self.assertIn("VALID", trip.stdout)
+        self.assertEqual(0, candidates.returncode, candidates.stdout + candidates.stderr)
+        self.assertIn("CANDIDATES VALID", candidates.stdout)
+
+    def test_fix_names_report_is_read_only_and_lists_auto_and_manual(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            candidates_path = Path(temporary) / "candidates.json"
+            candidates_path.write_bytes((NAME_FIX / "candidates.json").read_bytes())
+            before = candidates_path.read_bytes()
+            before_sha256 = hashlib.sha256(before).hexdigest()
+            result = subprocess.run(
+                [
+                    str(CTW), "candidates", "fix-names", str(candidates_path),
+                    "--trip", str(NAME_FIX / "trip.json"),
+                ],
+                text=True,
+                capture_output=True,
+            )
+            after = candidates_path.read_bytes()
+
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual("", result.stderr)
+        self.assertEqual(before_sha256, hashlib.sha256(after).hexdigest())
+        self.assertEqual(before, after)
+        self.assertIn("CANDIDATE_NAME_AUTO", result.stdout)
+        self.assertIn('"action":"would_apply"', result.stdout)
+        self.assertIn('"original_name":"合成星塔旧称"', result.stdout)
+        self.assertIn('"suggested_name":"合成星塔"', result.stdout)
+        self.assertIn("合成甲市/合成一区", result.stdout)
+        self.assertIn("CANDIDATE_NAME_MANUAL", result.stdout)
+        self.assertIn("合成云廊东门", result.stdout)
+        self.assertIn("合成云廊西门", result.stdout)
+        self.assertIn("合成丙市/合成东区", result.stdout)
+        self.assertIn("合成丙市/合成西区", result.stdout)
+        self.assertNotIn("poi-fix-control", result.stdout)
+        self.assertIn(
+            'CANDIDATE_NAME_FIX_SUMMARY {"applied":0,"automatic":1,"manual":1,"mode":"report"}',
+            result.stdout,
+        )
+
+    def test_fix_names_apply_changes_ref_id_target_only_and_remains_valid(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            candidates_path = Path(temporary) / "candidates.json"
+            candidates_path.write_bytes((NAME_FIX / "candidates.json").read_bytes())
+            before_bytes = candidates_path.read_bytes()
+            before = load(candidates_path)
+            expected = json.loads(json.dumps(before, ensure_ascii=False))
+            expected["pois"][0]["name"] = "合成星塔"
+            result = subprocess.run(
+                [
+                    str(CTW), "candidates", "fix-names", str(candidates_path),
+                    "--trip", str(NAME_FIX / "trip.json"), "--apply",
+                ],
+                text=True,
+                capture_output=True,
+            )
+            after_bytes = candidates_path.read_bytes()
+            after = load(candidates_path)
+            validation = subprocess.run(
+                [str(CTW), "validate-candidates", str(candidates_path)],
+                text=True,
+                capture_output=True,
+            )
+
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual("", result.stderr)
+        self.assertEqual("合成星塔", after["pois"][0]["name"])
+        self.assertEqual(before["pois"][1], after["pois"][1])
+        self.assertEqual(before["pois"][2], after["pois"][2])
+        self.assertEqual(expected, after)
+        expected_bytes = before_bytes.replace(
+            '"name": "合成星塔旧称"'.encode("utf-8"),
+            '"name": "合成星塔"'.encode("utf-8"),
+            1,
+        )
+        self.assertEqual(expected_bytes, after_bytes)
+        self.assertIn('"action":"applied"', result.stdout)
+        self.assertIn('"action":"unchanged"', result.stdout)
+        self.assertIn(
+            'CANDIDATE_NAME_FIX_SUMMARY {"applied":1,"automatic":1,"manual":1,"mode":"apply"}',
+            result.stdout,
+        )
+        self.assertEqual(0, validation.returncode, validation.stdout + validation.stderr)
+        self.assertIn("CANDIDATES VALID", validation.stdout)
+
+    def test_fix_names_accepts_journey_source(self):
+        trip = load(NAME_FIX / "trip.json")
+        journey = assemble_journey(
+            [trip],
+            trip["request"],
+            [],
+            FixedClock.from_iso("2026-09-05T09:00:00+08:00"),
+        )
+        self.assertTrue(validate_journey(journey).ok)
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            candidates_path = Path(temporary) / "candidates.json"
+            journey_path = Path(temporary) / "journey.json"
+            candidates_path.write_bytes((NAME_FIX / "candidates.json").read_bytes())
+            journey_path.write_text(json.dumps(journey, ensure_ascii=False), encoding="utf-8")
+            before = candidates_path.read_bytes()
+            result = subprocess.run(
+                [
+                    str(CTW), "candidates", "fix-names", str(candidates_path),
+                    "--trip", str(journey_path),
+                ],
+                text=True,
+                capture_output=True,
+            )
+            after = candidates_path.read_bytes()
+
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual(before, after)
+        self.assertIn('"automatic":1', result.stdout)
+        self.assertIn('"manual":1', result.stdout)
+
+    def test_fix_names_same_normalized_suggestion_requires_manual_review(self):
+        trip = load(NAME_FIX / "trip.json")
+        unique = next(
+            item for item in trip["unknowns"]
+            if "poi-fix-unique" in item["reason"]
+        )
+        feedback = {
+            "candidates": [{
+                "administrative_area": "合成甲市/合成一区",
+                "name": "合成星塔旧称",
+            }],
+            "suggested_names": ["合成星塔旧称"],
+        }
+        unique["reason"] = "identity_conflict:poi-fix-unique:poi_admin_mismatch:%s" % json.dumps(
+            feedback, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        )
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            candidates_path = Path(temporary) / "candidates.json"
+            trip_path = Path(temporary) / "trip.json"
+            candidates_path.write_bytes((NAME_FIX / "candidates.json").read_bytes())
+            trip_path.write_text(json.dumps(trip, ensure_ascii=False), encoding="utf-8")
+            before = candidates_path.read_bytes()
+            result = subprocess.run(
+                [
+                    str(CTW), "candidates", "fix-names", str(candidates_path),
+                    "--trip", str(trip_path), "--apply",
+                ],
+                text=True,
+                capture_output=True,
+            )
+            after = candidates_path.read_bytes()
+
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual(before, after)
+        self.assertIn('"reason":"suggestion_matches_original"', result.stdout)
+        self.assertIn('"applied":0', result.stdout)
+
+    def test_fix_names_conflicting_journey_feedback_stays_unchanged(self):
+        first_trip = load(NAME_FIX / "trip.json")
+        second_trip = json.loads(json.dumps(first_trip, ensure_ascii=False))
+        unique = next(
+            item for item in second_trip["unknowns"]
+            if "poi-fix-unique" in item["reason"]
+        )
+        feedback = {
+            "candidates": [{
+                "administrative_area": "合成甲市/合成二区",
+                "name": "合成星塔新馆",
+            }],
+            "suggested_names": ["合成星塔新馆"],
+        }
+        unique["reason"] = "identity_conflict:poi-fix-unique:poi_admin_mismatch:%s" % json.dumps(
+            feedback, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        )
+        second_trip["trip_id"] = "synthetic-name-fix-trip-two"
+        journey = {
+            "schema_version": "1.0.0",
+            "journey_id": "synthetic-name-fix-conflict-journey",
+            "trips": [first_trip, second_trip],
+        }
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            candidates_path = Path(temporary) / "candidates.json"
+            journey_path = Path(temporary) / "journey.json"
+            candidates_path.write_bytes((NAME_FIX / "candidates.json").read_bytes())
+            journey_path.write_text(json.dumps(journey, ensure_ascii=False), encoding="utf-8")
+            before = candidates_path.read_bytes()
+            result = subprocess.run(
+                [
+                    str(CTW), "candidates", "fix-names", str(candidates_path),
+                    "--trip", str(journey_path), "--apply",
+                ],
+                text=True,
+                capture_output=True,
+            )
+            after = candidates_path.read_bytes()
+
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual(before, after)
+        self.assertIn('"reason":"conflicting_feedback"', result.stdout)
+        self.assertIn('"applied":0', result.stdout)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,164 @@
+{
+  "schema_version": "1.0.0",
+  "trip_id": "synthetic-name-fix-trip",
+  "revision": {
+    "number": 1,
+    "parent_revision": null,
+    "created_at": "2026-09-05T09:00:00+08:00",
+    "reason": "synthetic name-fix fixture",
+    "created_by": "system"
+  },
+  "mode": "static",
+  "request": {
+    "origin": null,
+    "destinations": [
+      {
+        "ref_id": "city-synthetic-alpha",
+        "name": "合成甲市",
+        "city": "合成甲市"
+      }
+    ],
+    "start_date": "2026-09-05",
+    "end_date": "2026-09-05",
+    "travelers": 1,
+    "budget_cny": null,
+    "interests": ["合成地标"],
+    "pace": "balanced",
+    "constraints": [],
+    "assumptions": ["仅用于离线候选名回填测试"],
+    "locale": "zh-CN",
+    "pasted_notes": null
+  },
+  "days": [
+    {
+      "day_id": "day-synthetic-name-fix",
+      "date": "2026-09-05",
+      "city": "合成甲市",
+      "timezone": "Asia/Shanghai",
+      "slots": []
+    }
+  ],
+  "transport_legs": [],
+  "lodgings": [],
+  "pois": [
+    {
+      "poi_id": "poi-fix-ambiguous",
+      "name": "合成云廊",
+      "city": "合成丙市",
+      "category": "synthetic-landmark",
+      "coordinates": null,
+      "recommended_duration_minutes": 60,
+      "opening_windows": [],
+      "price": null,
+      "deep_links": ["https://example.invalid/synthetic/name-fix/ambiguous"],
+      "claim_ids": ["claim-fix-ambiguous-name"]
+    },
+    {
+      "poi_id": "poi-fix-unique",
+      "name": "合成星塔旧称",
+      "city": "合成甲市",
+      "category": "synthetic-landmark",
+      "coordinates": null,
+      "recommended_duration_minutes": 60,
+      "opening_windows": [],
+      "price": null,
+      "deep_links": ["https://example.invalid/synthetic/name-fix/unique"],
+      "claim_ids": ["claim-fix-unique-name"]
+    },
+    {
+      "poi_id": "poi-fix-control",
+      "name": "合成静湖",
+      "city": "合成乙市",
+      "category": "synthetic-landmark",
+      "coordinates": null,
+      "recommended_duration_minutes": 60,
+      "opening_windows": [],
+      "price": null,
+      "deep_links": ["https://example.invalid/synthetic/name-fix/control"],
+      "claim_ids": ["claim-fix-control-name"]
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "claim-fix-ambiguous-name",
+      "subject_ref": "poi-fix-ambiguous",
+      "field_path": "/name",
+      "value": "合成云廊",
+      "source_url": "https://example.invalid/synthetic/name-fix/ambiguous",
+      "provider": "synthetic-fixture",
+      "queried_at": "2026-09-05T09:00:00+08:00",
+      "status": "hypothesis",
+      "confidence": 0.55,
+      "mode": "static",
+      "as_of": null,
+      "raw_ref": null,
+      "response_hash": null,
+      "json_path": null
+    },
+    {
+      "claim_id": "claim-fix-unique-name",
+      "subject_ref": "poi-fix-unique",
+      "field_path": "/name",
+      "value": "合成星塔旧称",
+      "source_url": "https://example.invalid/synthetic/name-fix/unique",
+      "provider": "synthetic-fixture",
+      "queried_at": "2026-09-05T09:00:00+08:00",
+      "status": "hypothesis",
+      "confidence": 0.55,
+      "mode": "static",
+      "as_of": null,
+      "raw_ref": null,
+      "response_hash": null,
+      "json_path": null
+    },
+    {
+      "claim_id": "claim-fix-control-name",
+      "subject_ref": "poi-fix-control",
+      "field_path": "/name",
+      "value": "合成静湖",
+      "source_url": "https://example.invalid/synthetic/name-fix/control",
+      "provider": "synthetic-fixture",
+      "queried_at": "2026-09-05T09:00:00+08:00",
+      "status": "hypothesis",
+      "confidence": 0.55,
+      "mode": "static",
+      "as_of": null,
+      "raw_ref": null,
+      "response_hash": null,
+      "json_path": null
+    }
+  ],
+  "provider_health": [
+    {
+      "provider": "synthetic-fixture",
+      "version": "1",
+      "mode": "static",
+      "status": "ready",
+      "checked_at": "2026-09-05T09:00:00+08:00",
+      "capabilities": ["name-feedback"],
+      "reason": "offline synthetic fixture"
+    }
+  ],
+  "unknowns": [
+    {
+      "field_path": "/pois/0/coordinates",
+      "reason": "identity_conflict:poi-fix-ambiguous:ambiguous_name_margin:{\"candidates\":[{\"administrative_area\":\"合成丙市/合成东区\",\"name\":\"合成云廊东门\"},{\"administrative_area\":\"合成丙市/合成西区\",\"name\":\"合成云廊西门\"}],\"suggested_names\":[\"合成云廊东门\",\"合成云廊西门\"]}",
+      "provider": "amap",
+      "claim_id": null
+    },
+    {
+      "field_path": "/pois/1/coordinates",
+      "reason": "identity_conflict:poi-fix-unique:poi_admin_mismatch:{\"candidates\":[{\"administrative_area\":\"合成甲市/合成一区\",\"name\":\"合成星塔\"}],\"suggested_names\":[\"合成星塔\"]}",
+      "provider": "amap",
+      "claim_id": null
+    },
+    {
+      "field_path": "/pois/2/price",
+      "reason": "synthetic non-coordinate unknown",
+      "provider": "synthetic-fixture",
+      "claim_id": null
+    }
+  ],
+  "patches": [],
+  "generated_at": "2026-09-05T09:00:00+08:00"
+}

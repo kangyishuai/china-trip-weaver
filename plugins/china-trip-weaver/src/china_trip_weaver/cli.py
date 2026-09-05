@@ -117,6 +117,23 @@ def _parser() -> argparse.ArgumentParser:
     add_lodging.add_argument("--locked", action="store_true")
     add_lodging.add_argument("--queried-at", default=None)
 
+    fix_names = candidate_commands.add_parser(
+        "fix-names",
+        help="report safe Trip or Journey name feedback; write only with --apply",
+    )
+    fix_names.add_argument("path", type=Path, help="researched candidates JSON document")
+    fix_names.add_argument(
+        "--trip",
+        type=Path,
+        required=True,
+        help="Trip or Journey JSON containing coordinate identity-conflict unknowns",
+    )
+    fix_names.add_argument(
+        "--apply",
+        action="store_true",
+        help="write uniquely determined names to the candidate file",
+    )
+
     canonicalize = commands.add_parser("canonicalize", help="print canonical JSON")
     canonicalize.add_argument("trip", type=Path)
 
@@ -314,13 +331,35 @@ def main(
         print("INVALID %s (%d error%s)" % (args.trip, len(report.errors), "" if len(report.errors) == 1 else "s"), file=sys.stderr)
         return 1
     if args.command == "candidates":
-        from .candidates import add_lodging_candidate, add_poi_candidate, initialize_candidates
+        from .candidates import (
+            add_lodging_candidate,
+            add_poi_candidate,
+            fix_candidate_names,
+            initialize_candidates,
+        )
         from .clock import FixedClock, SystemClock
 
         try:
             if args.candidate_command == "init":
                 initialize_candidates(args.path, overwrite=args.force)
                 print("CANDIDATES_INITIALIZED %s" % args.path)
+                return 0
+            if args.candidate_command == "fix-names":
+                result = fix_candidate_names(args.path, args.trip, apply=args.apply)
+                for decision in result.decisions:
+                    kind = "AUTO" if decision.automatic else "MANUAL"
+                    print(
+                        "CANDIDATE_NAME_%s %s" % (
+                            kind,
+                            canonical_json(decision.as_dict(apply=args.apply)),
+                        )
+                    )
+                print("CANDIDATE_NAME_FIX_SUMMARY %s" % canonical_json({
+                    "applied": result.applied_count,
+                    "automatic": result.automatic_count,
+                    "manual": result.manual_count,
+                    "mode": "apply" if args.apply else "report",
+                }))
                 return 0
             clock = FixedClock.from_iso(args.queried_at) if args.queried_at else SystemClock()
             if args.candidate_command == "add-poi":

@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import copy
 import json
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Set
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
 from .clock import Clock
 from .contracts import read_json, write_canonical_json
@@ -25,6 +26,77 @@ TRIP_REF_PREFIX = "trip.schema.json#/$defs/"
 POINTER_EXPECTED = "a resolvable JSON Pointer using zero-based array indexes"
 POINTER_EXAMPLE = "/lodgings/0/price/amount"
 EXPECTED_DOCUMENT_KEYS = frozenset(("candidates_version", "pois", "lodgings", "claims", "unknowns"))
+
+
+@dataclass(frozen=True)
+class CandidateNameOption:
+    """One sanitized provider name and its administrative area."""
+
+    name: str
+    administrative_area: str
+
+    def as_dict(self) -> Mapping[str, str]:
+        return {
+            "name": self.name,
+            "administrative_area": self.administrative_area,
+        }
+
+
+@dataclass(frozen=True)
+class CandidateNameDecision:
+    """A ref-id-bound automatic replacement or a manual-review item."""
+
+    ref_id: str
+    original_name: Optional[str]
+    options: Tuple[CandidateNameOption, ...]
+    replacement_name: Optional[str]
+    reason: str
+    source_field_path: str
+
+    @property
+    def automatic(self) -> bool:
+        return self.replacement_name is not None
+
+    def as_dict(self, *, apply: bool) -> Mapping[str, Any]:
+        if self.automatic:
+            action = "applied" if apply else "would_apply"
+        else:
+            action = "unchanged"
+        return {
+            "action": action,
+            "administrative_areas": [item.administrative_area for item in self.options],
+            "original_name": self.original_name,
+            "reason": self.reason,
+            "ref_id": self.ref_id,
+            "source_field_path": self.source_field_path,
+            "suggested_name": self.replacement_name,
+            "suggested_names": [item.name for item in self.options],
+        }
+
+
+@dataclass(frozen=True)
+class CandidateNameFixResult:
+    """All decisions plus the number of names written by this invocation."""
+
+    decisions: Tuple[CandidateNameDecision, ...]
+    applied_count: int
+
+    @property
+    def automatic_count(self) -> int:
+        return sum(1 for item in self.decisions if item.automatic)
+
+    @property
+    def manual_count(self) -> int:
+        return len(self.decisions) - self.automatic_count
+
+
+@dataclass(frozen=True)
+class _CandidateNameObservation:
+    ref_id: str
+    identity_reason: str
+    source_field_path: str
+    options: Tuple[CandidateNameOption, ...]
+    error: Optional[str]
 
 
 class CandidatePointerError(ValueError):
@@ -169,6 +241,315 @@ def validate_candidates_file(path: Path, schema_path: Optional[Path] = None) -> 
     if not isinstance(value, dict):
         return ValidationReport((ValidationIssue("C_OBJECT", "/", "candidates must be an object"),))
     return validate_candidates(value, schema_path=schema_path)
+
+
+def fix_candidate_names(
+    candidates_path: Path,
+    trip_or_journey_path: Path,
+    *,
+    apply: bool = False,
+) -> CandidateNameFixResult:
+    """Report or apply safe candidate-name feedback from a Trip or Journey.
+
+    Trip array indexes are deliberately retained only for user-facing provenance.
+    Candidate lookup and mutation always use the ref_id embedded in the runtime
+    identity-conflict reason.
+    """
+
+    destination = Path(candidates_path)
+    if apply and destination.is_symlink():
+        raise ValueError("candidate path must not be a symlink")
+    document = read_json(destination)
+    report = validate_candidates(document)
+    if not report.ok:
+        raise ValueError("candidate file is invalid: " + "; ".join(
+            issue.render() for issue in report.errors
+        ))
+
+    source = read_json(Path(trip_or_journey_path))
+    observations = _candidate_name_observations(source)
+    entities = _candidate_entities(document)
+    decisions = tuple(
+        _candidate_name_decision(ref_id, grouped, entities)
+        for ref_id, grouped in observations.items()
+    )
+
+    replacements: Dict[Tuple[Any, ...], str] = {}
+    if apply:
+        for decision in decisions:
+            if not decision.automatic:
+                continue
+            group, index, entity = entities[decision.ref_id]
+            replacements[(group, index, "name")] = decision.replacement_name or ""
+            entity["name"] = decision.replacement_name
+        if replacements:
+            updated_report = validate_candidates(document)
+            if not updated_report.ok:
+                raise ValueError("fixed candidates are invalid: " + "; ".join(
+                    issue.render() for issue in updated_report.errors
+                ))
+            original_bytes = destination.read_bytes()
+            try:
+                original_text = original_bytes.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise ValueError("candidate file must be UTF-8 JSON") from exc
+            updated_text = _replace_json_string_values(original_text, replacements)
+            if json.loads(updated_text) != document:
+                raise ValueError("candidate file changed while names were being prepared")
+            destination.write_bytes(updated_text.encode("utf-8"))
+
+    return CandidateNameFixResult(decisions, len(replacements))
+
+
+def _candidate_entities(
+    document: Mapping[str, Any],
+) -> Dict[str, Tuple[str, int, Dict[str, Any]]]:
+    entities: Dict[str, Tuple[str, int, Dict[str, Any]]] = {}
+    for group, id_key in (("pois", "poi_id"), ("lodgings", "lodging_id")):
+        for index, entity in enumerate(document[group]):
+            entities[entity[id_key]] = (group, index, entity)
+    return entities
+
+
+def _candidate_name_observations(
+    source: Mapping[str, Any],
+) -> Dict[str, List[_CandidateNameObservation]]:
+    if isinstance(source.get("trip_id"), str):
+        trips: Sequence[Any] = (source,)
+    elif isinstance(source.get("journey_id"), str):
+        trips_value = source.get("trips")
+        if not isinstance(trips_value, list) or not trips_value:
+            raise ValueError("Journey must contain at least one Trip")
+        trips = trips_value
+    else:
+        raise ValueError("name feedback source must be a Trip or Journey JSON document")
+
+    grouped: Dict[str, List[_CandidateNameObservation]] = {}
+    for trip in trips:
+        if not isinstance(trip, Mapping) or not isinstance(trip.get("trip_id"), str):
+            raise ValueError("Journey trips must be complete Trip JSON documents")
+        unknowns = trip.get("unknowns")
+        if not isinstance(unknowns, list):
+            raise ValueError("Trip unknowns must be an array")
+        for unknown in unknowns:
+            observation = _candidate_name_observation(unknown)
+            if observation is not None:
+                grouped.setdefault(observation.ref_id, []).append(observation)
+    return grouped
+
+
+def _candidate_name_observation(unknown: Any) -> Optional[_CandidateNameObservation]:
+    if not isinstance(unknown, Mapping) or unknown.get("provider") != "amap":
+        return None
+    field_path = unknown.get("field_path")
+    if not isinstance(field_path, str):
+        return None
+    pointer_parts = field_path.split("/")
+    if (
+        len(pointer_parts) != 4
+        or pointer_parts[0] != ""
+        or pointer_parts[1] not in ("pois", "lodgings")
+        or not pointer_parts[2].isdigit()
+        or pointer_parts[3] != "coordinates"
+    ):
+        return None
+    reason = unknown.get("reason")
+    if not isinstance(reason, str):
+        return None
+    parts = reason.split(":", 3)
+    if len(parts) != 4 or parts[0] != "identity_conflict":
+        return None
+    ref_id = parts[1].strip()
+    identity_reason = parts[2].strip()
+    if not ref_id or not identity_reason:
+        raise ValueError("identity-conflict feedback must include ref_id and reason")
+    try:
+        feedback = json.loads(parts[3])
+    except json.JSONDecodeError:
+        return _CandidateNameObservation(
+            ref_id, identity_reason, field_path, (), "invalid_feedback_json",
+        )
+    options, error = _candidate_name_options(feedback)
+    return _CandidateNameObservation(
+        ref_id, identity_reason, field_path, options, error,
+    )
+
+
+def _candidate_name_options(
+    feedback: Any,
+) -> Tuple[Tuple[CandidateNameOption, ...], Optional[str]]:
+    if not isinstance(feedback, Mapping):
+        return (), "invalid_feedback_object"
+    suggestions = feedback.get("suggested_names")
+    projected = feedback.get("candidates")
+    if (
+        not isinstance(suggestions, list)
+        or not suggestions
+        or any(not isinstance(name, str) or not name.strip() for name in suggestions)
+    ):
+        return (), "invalid_suggested_names"
+    if not isinstance(projected, list) or not projected:
+        return (), "invalid_feedback_candidates"
+    options: List[CandidateNameOption] = []
+    for item in projected:
+        if not isinstance(item, Mapping):
+            return tuple(options), "invalid_feedback_candidates"
+        name = item.get("name")
+        administrative_area = item.get("administrative_area")
+        if (
+            not isinstance(name, str)
+            or not name.strip()
+            or not isinstance(administrative_area, str)
+            or not administrative_area.strip()
+        ):
+            return tuple(options), "invalid_feedback_candidates"
+        options.append(CandidateNameOption(name, administrative_area))
+    if [item.name for item in options] != suggestions:
+        return tuple(options), "feedback_name_mismatch"
+    return tuple(options), None
+
+
+def _candidate_name_decision(
+    ref_id: str,
+    observations: Sequence[_CandidateNameObservation],
+    entities: Mapping[str, Tuple[str, int, Dict[str, Any]]],
+) -> CandidateNameDecision:
+    first = observations[0]
+    combined_options: List[CandidateNameOption] = []
+    for observation in observations:
+        for option in observation.options:
+            if option not in combined_options:
+                combined_options.append(option)
+    entity_entry = entities.get(ref_id)
+    original_name = entity_entry[2]["name"] if entity_entry is not None else None
+    signatures = {
+        (observation.identity_reason, observation.options, observation.error)
+        for observation in observations
+    }
+    if len(signatures) != 1:
+        return CandidateNameDecision(
+            ref_id, original_name, tuple(combined_options), None,
+            "conflicting_feedback", first.source_field_path,
+        )
+    if first.error is not None:
+        return CandidateNameDecision(
+            ref_id, original_name, first.options, None,
+            first.error, first.source_field_path,
+        )
+    if entity_entry is None:
+        return CandidateNameDecision(
+            ref_id, None, first.options, None,
+            "ref_id_not_found", first.source_field_path,
+        )
+
+    replacement, reason = _unique_candidate_name(original_name, first.options)
+    return CandidateNameDecision(
+        ref_id, original_name, first.options, replacement, reason,
+        first.source_field_path,
+    )
+
+
+def _unique_candidate_name(
+    original_name: str,
+    options: Sequence[CandidateNameOption],
+) -> Tuple[Optional[str], str]:
+    if not options:
+        return None, "no_suggested_name"
+
+    # Import lazily because mobility imports validate_candidates from this module.
+    # Reusing these exact helpers keeps name selection aligned with the existing
+    # identity threshold without changing or copying that threshold here.
+    from .mobility import POI_NAME_SIMILARITY_MARGIN, _name_similarity, _normalized_name
+
+    preferred = options[0].name
+    if _normalized_name(preferred) == _normalized_name(original_name):
+        return None, "suggestion_matches_original"
+    if len(options) > 1:
+        preferred_score = _name_similarity(original_name, preferred)
+        nearest_alternative = max(
+            _name_similarity(original_name, option.name)
+            for option in options[1:]
+        )
+        if preferred_score - nearest_alternative < POI_NAME_SIMILARITY_MARGIN:
+            return None, "ambiguous_suggestions"
+    return preferred, "unique_suggestion"
+
+
+def _replace_json_string_values(
+    source: str,
+    replacements: Mapping[Tuple[Any, ...], str],
+) -> str:
+    """Replace selected JSON string values while preserving every other byte."""
+
+    decoder = json.JSONDecoder()
+    spans: Dict[Tuple[Any, ...], Tuple[int, int]] = {}
+
+    def skip_space(index: int) -> int:
+        while index < len(source) and source[index] in " \t\r\n":
+            index += 1
+        return index
+
+    def walk(index: int, path: Tuple[Any, ...]) -> int:
+        index = skip_space(index)
+        if index >= len(source):
+            raise ValueError("candidate JSON ended unexpectedly")
+        if source[index] == "{":
+            index = skip_space(index + 1)
+            if index < len(source) and source[index] == "}":
+                return index + 1
+            while True:
+                key, key_end = decoder.raw_decode(source, index)
+                if not isinstance(key, str):
+                    raise ValueError("candidate JSON object key must be text")
+                index = skip_space(key_end)
+                if index >= len(source) or source[index] != ":":
+                    raise ValueError("candidate JSON object is missing ':'")
+                index = walk(index + 1, path + (key,))
+                index = skip_space(index)
+                if index < len(source) and source[index] == "}":
+                    return index + 1
+                if index >= len(source) or source[index] != ",":
+                    raise ValueError("candidate JSON object is missing ','")
+                index = skip_space(index + 1)
+        if source[index] == "[":
+            index = skip_space(index + 1)
+            if index < len(source) and source[index] == "]":
+                return index + 1
+            item_index = 0
+            while True:
+                index = walk(index, path + (item_index,))
+                item_index += 1
+                index = skip_space(index)
+                if index < len(source) and source[index] == "]":
+                    return index + 1
+                if index >= len(source) or source[index] != ",":
+                    raise ValueError("candidate JSON array is missing ','")
+                index = skip_space(index + 1)
+
+        value_start = index
+        value, value_end = decoder.raw_decode(source, index)
+        if path in replacements:
+            if not isinstance(value, str) or path in spans:
+                raise ValueError("candidate name path is not one unique JSON string")
+            spans[path] = (value_start, value_end)
+        return value_end
+
+    end = skip_space(walk(0, ()))
+    if end != len(source):
+        raise ValueError("candidate JSON has trailing non-whitespace data")
+    missing = set(replacements) - set(spans)
+    if missing:
+        raise ValueError("candidate name path is missing from JSON")
+
+    updated = source
+    ordered = sorted(
+        ((spans[path][0], spans[path][1], value) for path, value in replacements.items()),
+        reverse=True,
+    )
+    for start, finish, value in ordered:
+        encoded = json.dumps(value, ensure_ascii=False, allow_nan=False)
+        updated = updated[:start] + encoded + updated[finish:]
+    return updated
 
 
 def initialize_candidates(path: Path, *, overwrite: bool = False) -> Mapping[str, Any]:

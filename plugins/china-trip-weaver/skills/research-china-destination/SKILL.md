@@ -29,4 +29,14 @@ scripts/ctw validate-candidates candidates.json
 
 Use `--force` with `candidates init` only when replacement is intentional. Add commands preserve unknown values explicitly and generate `/pois/<index>/...` or `/lodgings/<index>/...` pointers from the actual append index; never substitute an entity ID for an array index.
 
+After a Trip or Journey run reports AMap coordinate identity conflicts, review its bounded name feedback before editing the researched file. The first command is report-only and must leave `candidates.json` byte-for-byte unchanged; add `--apply` only after reviewing every automatic and manual item:
+
+```bash
+scripts/ctw candidates fix-names candidates.json --trip trip-or-journey.json
+scripts/ctw candidates fix-names candidates.json --trip trip-or-journey.json --apply
+scripts/ctw validate-candidates candidates.json
+```
+
+`fix-names` binds feedback to candidate entities by the reason's `ref_id`, never by a Trip or Journey array index. It changes only uniquely determined names. Items with equally close alternatives, conflicting Journey feedback, an unchanged normalized name, or malformed/unmatched feedback remain unchanged and are printed for manual review.
+
 Use `../../schema/candidates.schema.json` as the contract, read `../../references/provider-contracts.md` for the shared search ladder, and read `../../references/candidates.example.json` when an example is needed.

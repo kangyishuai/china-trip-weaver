@@ -2279,3 +2279,272 @@ OK
 - 相对 `HEAD` 逐 AST 源片段字节比较：`POI_NAME_SIMILARITY_MARGIN`、`_poi_identity_conflicts`、`_name_similarity`、`_normalized_name`、`_city_matches` 全部 `BYTE_EQUAL True`，`IDENTITY_DIFF_LINES 0`。
 - schema/、demo/、render/、journey.py、cli.py、manifest 与全部非文档版本载体的组合 `git diff --exit-code` 为 exit 0、无输出；当前 manifest/package/MCP clientInfo 读回均为 `0.5.0`。
 - `git diff --check` exit 0、无输出；未跑实网/demo、未安装 Codex、未改依赖/权限/版本。`BLOCKED.md` 已记录本轮新增阻塞为“无”。当前验收轮次 6/12。
+
+## 书 22 候选名回填开工理解（2026-09-05，≤10 行）
+1. 目标：新增 `ctw candidates fix-names`，把 Trip/Journey 坐标 unknown 的 `suggested_names` 安全送回原候选文件。
+2. 顺序：离线缺口复现 → 只读报告/零写入 → `--apply` 精确回填 → Skill 说明 → 精准与全量门禁 → 范围审计并提交。
+3. 默认只报告；只有显式 `--apply` 才写，写前后候选都必须通过现有 `validate_candidates`。
+4. 实体只用 reason 第二段 `ref_id` 匹配；Trip/Journey 的数组下标仅标示 unknown 字段，绝不用于选择候选实体。
+5. 首选建议与原名归一化后相同则不改；第二候选落入既有名称相似度 margin 或多段反馈冲突时一律人工挑选。
+6. 只改候选实体 `name`；稳定 ID、claims、unknowns 与其他实体原样保留，歧义项永不自动修改。
+7. 合成夹具故意让 Trip POI 顺序与 candidates 顺序不同，并同时覆盖唯一、歧义与无关 unknown。
+8. 最大风险：解析 reason 时把 JSON 内冒号切坏、按路径下标改错实体、或 dry-run/歧义路径意外重写用户文件。
+
+## 书 22 任务 0：基线与离线缺口复现（完成）
+
+- 开工 `HEAD` 与 `origin/main` 同为 `8e2fcac896636c884d602d405461b8c2552473b0`，工作树干净；未跑实网、demo 或安装 Codex。
+- `/usr/bin/python3 -m unittest discover -s tests`（exit 0）原始摘要：`Ran 444 tests in 29.698s`、`OK`、skipped 0。
+- `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 372 file(s)`。
+- 新建全合成 `tests/fixtures/candidate-name-fix/candidates.json` 与错序 `trip.json`；候选校验 exit 0：`CANDIDATES VALID tests/fixtures/candidate-name-fix/candidates.json`。
+- 候选文件校验前后 SHA-256 都是 `af27cf163f0492b5eda3832aa534b90b5cc5024b3ab03010b300f172dd3fbab6`。
+- 现有帮助原始输出证明只有三条子命令：
+
+```text
+usage: ctw candidates [-h] {init,add-poi,add-lodging} ...
+
+positional arguments:
+  {init,add-poi,add-lodging}
+    init                create an empty five-key candidate skeleton
+    add-poi             append one researched POI candidate
+    add-lodging         append one researched lodging candidate
+
+optional arguments:
+  -h, --help            show this help message and exit
+```
+
+- 对合成夹具尝试 `ctw candidates fix-names ...`（exit 2）原始错误：`invalid choice: 'fix-names' (choose from 'init', 'add-poi', 'add-lodging')`。当前验收轮次 1/12。
+
+## 书 22 任务 1：只读报告与零写入（完成）
+
+- 实现只读取 AMap 坐标 `identity_conflict:<ref_id>:<reason>:<JSON>`；Trip/Journey 数组下标只作为输出 provenance，候选查找不使用下标。名称唯一性复用现有 normalization/similarity margin，未改身份判定文件或阈值。
+- 对错序合成夹具执行报告模式（exit 0），候选 SHA-256 前后均为 `af27cf163f0492b5eda3832aa534b90b5cc5024b3ab03010b300f172dd3fbab6`；原始功能输出：
+
+```text
+CANDIDATE_NAME_MANUAL {"action":"unchanged","administrative_areas":["合成丙市/合成东区","合成丙市/合成西区"],"original_name":"合成云廊","reason":"ambiguous_suggestions","ref_id":"poi-fix-ambiguous","source_field_path":"/pois/0/coordinates","suggested_name":null,"suggested_names":["合成云廊东门","合成云廊西门"]}
+CANDIDATE_NAME_AUTO {"action":"would_apply","administrative_areas":["合成甲市/合成一区"],"original_name":"合成星塔旧称","reason":"unique_suggestion","ref_id":"poi-fix-unique","source_field_path":"/pois/1/coordinates","suggested_name":"合成星塔","suggested_names":["合成星塔"]}
+CANDIDATE_NAME_FIX_SUMMARY {"applied":0,"automatic":1,"manual":1,"mode":"report"}
+```
+
+- 反向验证只临时把写入门从 `if apply` 改成必进；精准测试（exit 1）原始摘要：`test_fix_names_report_is_read_only_and_lists_auto_and_manual ... FAIL`，失败点 `self.assertEqual(before, after)`，bytes 差异显示 `合成星塔旧称` 被错误写成 `合成星塔`；`Ran 1 test in 0.071s`、`FAILED (failures=1)`。
+- 用 `apply_patch` 恢复唯一临时改动后 `/usr/bin/python3 -m unittest tests.test_candidates -v`（exit 0）：`Ran 21 tests in 0.885s`、`OK`、skipped 0。当前验收轮次 2/12，任务 1 完成。
+
+## 书 22 任务 2：`--apply` 精确回填（完成）
+
+- apply 写入前后都用现有 `validate_candidates` 门禁；实体由 reason 第二段 `ref_id` 映射到候选的 `poi_id`/`lodging_id`。写入器只替换被选实体的 JSON `name` 字符串，测试逐字节断言其余内容不变，稳定 ID、claims、unknowns 均未改。
+- 错序合成夹具临时副本 apply（exit 0）原始输出：
+
+```text
+CANDIDATE_NAME_MANUAL {"action":"unchanged","administrative_areas":["合成丙市/合成东区","合成丙市/合成西区"],"original_name":"合成云廊","reason":"ambiguous_suggestions","ref_id":"poi-fix-ambiguous","source_field_path":"/pois/0/coordinates","suggested_name":null,"suggested_names":["合成云廊东门","合成云廊西门"]}
+CANDIDATE_NAME_AUTO {"action":"applied","administrative_areas":["合成甲市/合成一区"],"original_name":"合成星塔旧称","reason":"unique_suggestion","ref_id":"poi-fix-unique","source_field_path":"/pois/1/coordinates","suggested_name":"合成星塔","suggested_names":["合成星塔"]}
+CANDIDATE_NAME_FIX_SUMMARY {"applied":1,"automatic":1,"manual":1,"mode":"apply"}
+POI_NAMES {"poi-fix-ambiguous":"合成云廊","poi-fix-control":"合成静湖","poi-fix-unique":"合成星塔"}
+CANDIDATES VALID /tmp/ctw-name-fix.xN9q65/candidates.json
+```
+
+- apply 前 SHA-256 为 `af27cf163f0492b5eda3832aa534b90b5cc5024b3ab03010b300f172dd3fbab6`，只替换唯一名称后为 `8b408e4e58a7e40b2d9d6030a6717d7300410101ddae0ba9818f6a7262869fde`；临时目录已逐文件清理。
+- 反向验证只临时把 apply 目标改为解析 Trip 的 `/pois/N`；“改对了人”精准测试（exit 1）原始差异：`AssertionError: '合成星塔' != '合成星塔旧称'`，`Ran 1 test in 0.133s`、`FAILED (failures=1)`，证明 Trip index=1 错指候选 control 而漏改 `ref_id=poi-fix-unique`。
+- 恢复 `group, index, entity = entities[decision.ref_id]` 后同一精准测试（exit 0）：`Ran 1 test in 0.131s`、`OK`；随后完整 `/usr/bin/python3 -m unittest tests.test_candidates -v`（exit 0）：`Ran 21 tests in 0.908s`、`OK`、skipped 0。当前验收轮次 3/12，任务 2 完成。
+
+## 书 22 离线合同与 Skill 说明（完成）
+
+- 将反馈夹具补成完整一日合成 Trip；`ctw validate tests/fixtures/candidate-name-fix/trip.json`（exit 0）原始输出：`VALID tests/fixtures/candidate-name-fix/trip.json`。候选夹具此前同样 `CANDIDATES VALID`，两份均无真实地名或服务商响应。
+- `research-china-destination/SKILL.md` 新增 report → review → `--apply` → `validate-candidates` 流程，明确 dry-run 字节不变、reason `ref_id` 匹配和歧义/冲突/同名/畸形反馈人工处理。
+- 合同收紧后 `/usr/bin/python3 -m unittest tests.test_candidates -v`（exit 0）：`Ran 21 tests in 0.888s`、`OK`、skipped 0。当前验收轮次 4/12。
+
+## 书 22 合并工作树首轮核心门（完成）
+
+- `/usr/bin/python3 -m unittest discover -s tests`（exit 0）：`Ran 455 tests in 31.818s`、`OK`、skipped 0；达到本书 ≥449，计数包含并行书 23 当前新增回归。
+- `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 374 file(s)`。
+- `ctw candidates fix-names --help`（exit 0）显示位置参数 `path`、必需 `--trip TRIP`（说明可为 Trip 或 Journey）和显式 `--apply`；默认无写入 flag。
+- 同轮 `git diff --check` exit 0，书 22 三份 Python 文件 AST 解析输出 `AST_PARSE_OK 3`。当前验收轮次 5/12。
+
+## 书 22 只读 SHA 反向证据收紧（完成）
+
+- 为逐字满足“SHA-256 断言变红”，仅把既有 SHA 断言移到 bytes 断言之前，两条断言都保留且未放宽；再次临时让 dry-run 进入写入块。
+- 精准反向测试（exit 1）在 SHA 断言直接失败：期望 `af27cf163f0492b5eda3832aa534b90b5cc5024b3ab03010b300f172dd3fbab6`，实际 `8b408e4e58a7e40b2d9d6030a6717d7300410101ddae0ba9818f6a7262869fde`；`Ran 1 test in 0.071s`、`FAILED (failures=1)`。
+- 恢复唯一临时写入门后 `/usr/bin/python3 -m unittest tests.test_candidates -v`（exit 0）：`Ran 22 tests in 0.997s`、`OK`、skipped 0；其中新增 6 条严格回归，任务 1 红→绿证据闭合。当前验收轮次 6/12。
+
+## 书 22 提交前最终核心门（完成）
+
+- `/usr/bin/python3 -m unittest tests.test_candidates -v`（exit 0）：`Ran 22 tests in 1.038s`、`OK`、skipped 0；开工 16 条，本书新增恰好 6 条且无 skip/todo。
+- `/usr/bin/python3 -m unittest discover -s tests`（exit 0）：`Ran 456 tests in 31.825s`、`OK`、skipped 0；满足完成条件 ≥449。
+- `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 375 file(s)`。
+- 合成合同双门（exit 0）：`VALID tests/fixtures/candidate-name-fix/trip.json` 与 `CANDIDATES VALID tests/fixtures/candidate-name-fix/candidates.json`。
+- Journey 回归现用 `assemble_journey` 生成并先验证完整 Journey，再驱动同一 dry-run；不是缩减投影。当前验收轮次 7/12。
+
+## 书 23 组合排查任务 0：基线与覆盖矩阵（2026-09-05）
+
+- 正确 Git 根为本目录；开工 `HEAD` 与 `origin/main` 同为 `8e2fcac896636c884d602d405461b8c2552473b0`，工作树干净。
+- `/usr/bin/python3 -m unittest discover -s tests`（exit 0）：`Ran 444 tests in 30.299s`、`OK`；无 skipped 汇总，故 skipped 0。
+- `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 372 file(s)`。
+- 表格图例：`●`=已有实体编排/富化分支回归，`△`=只有 provider adapter/相邻 transport 夹具、实体分支仍为空，`○`=适用但没有该形状回归，`—`=该 provider 对该实体没有此语义。表格是新增测试前的开工快照。
+
+| 实体 × provider | 成功 | 无结果 | 行政区不符 | 歧义 | 限流 | 契约漂移 | 网络失败 |
+|---|---|---|---|---|---|---|---|
+| POI × AMap mobility | ● live matrix | △ `amap/empty` | ● POI/geocode mismatch | ● name margin | △ `amap/rate_limit` | △ `amap/wrong_shape` | ○（timeout 夹具不等于 network） |
+| 住宿 × AMap geocode | ● live plan | ○ | ● lodging admin mismatch | ○ | ○ | ○ | ○ |
+| 车站 × 12306 station resolution | ● exact/fallback | ● three-layer empty | — | ● multi-station | △ rail-capability fixture | ● station shape/tool drift | ○ |
+| 车站 × AMap distance enrichment | ● unique distance | ● empty centre/POI | ○ | ○ | ○ | ○ | ● network preserves stations |
+| 住宿 × FlyAI inventory | ● keyless/keyed lodging | ○ | — | —（多酒店是正常 inventory） | ● plan fallback | ● lodging itemList drift | ○（现有失败链是 timeout） |
+| 航班 × FlyAI inventory | ● live flight | △ `flyai/empty` | — | —（多航班是正常 inventory） | △ `flyai/rate_limit` | △ `flyai/wrong_shape` | △ `flyai/stderr_error` |
+| 航班 × VariFlight enrichment | ● search/status/comfort | △ `variflight/empty` | — | —（多航班是正常 inventory） | △ `variflight/rate_limit` | ● tool fingerprint + adapter fixture | ○ |
+
+### 本轮认领的 6 个空格
+
+1. 住宿 × AMap geocode × 无结果。
+2. 住宿 × AMap geocode × 多结果歧义。
+3. 住宿 × AMap geocode × 限流。
+4. 车站 × AMap distance enrichment × 行政区不符。
+5. 车站 × 12306 station resolution × 限流。
+6. 航班 × VariFlight comfort enrichment × 网络失败。
+
+### 书 23 开工理解（≤10 行）
+
+1. 目标：从实体 × provider × 结果形态矩阵找真实编排空档，最多认领 6 格，新增至少 6 条严格回归并修掉其中真 bug。
+2. 顺序：基线与矩阵 → 每格先单独落测试并观察首跑红/绿 → 真 bug 最小修复 → 逐格记证据 → 全量/secret/边界/提交。
+3. 写绿的格必须记为“本来就对”；写红的格必须保存原始失败，再修到同一测试绿，不能事后改断言解释失败。
+4. 优先覆盖刚出过事故的住宿直连 geocode，再覆盖 AMap 车站富化、12306 station 与测试最薄的 VariFlight。
+5. 未认领空格及任何需要禁碰文件的修复进入 `BLOCKED.md`，并给最小合成输入，不借机扩大到第 7 格。
+6. 只写本书白名单；不碰 `cli.py`、`candidates.py`、Schema、demo、版本、CI，不装 Codex，不重构 provider 层或改阈值。
+7. 最大风险：分支局部状态跨实体泄漏，以及 provider 已返回部分 claims 时后续失败被 health 的“部分成功”掩盖。
+8. 当前验收轮次 1/12；尚未新增测试或修改产品行为。
+
+## 书 23 空格 1/6：住宿 × AMap geocode × 无结果（本来就对）
+
+- 先只新增 `test_lodging_geocode_no_results_degrades_without_crashing`，未改实现；合成 geocode 返回 `status=1, geocodes=[]`。
+- 首跑即绿（exit 0）：`test_lodging_geocode_no_results_degrades_without_crashing ... ok`、`Ran 1 test in 0.002s`、`OK`。
+- 实际行为：只调用一次 geocode；住宿不进入 locations；health=`degraded` 且 reason 含 `errors=no_results`；实体 warning 以 `no_results:lodging-bjs-central:geocode_lookup:` 开头。
+- 结论：本来就对，测试保留为住宿否定分支回归；当前验收轮次 2/12。
+
+## 书 23 空格 2/6：住宿 × AMap geocode × 多结果歧义（真 bug 已修）
+
+- 先只新增 `test_lodging_geocode_multiple_results_remain_ambiguous`；输入为同城但地址、坐标均不同的两个合成 geocode 候选，要求不静默选第一条。
+- 修复前首跑（exit 1）原始输出：
+
+```text
+test_lodging_geocode_multiple_results_remain_ambiguous (tests.test_amap_live.AMapMobilityTests) ... FAIL
+
+======================================================================
+FAIL: test_lodging_geocode_multiple_results_remain_ambiguous (tests.test_amap_live.AMapMobilityTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_amap_live.py", line 477, in test_lodging_geocode_multiple_results_remain_ambiguous
+    result = MobilityBackend("live", credentials(), transport).resolve(
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/plugins/china-trip-weaver/src/china_trip_weaver/mobility.py", line 362, in resolve
+    result = adapter.query(request, context)
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/plugins/china-trip-weaver/src/china_trip_weaver/providers/base.py", line 196, in query
+    envelope = context.transport.execute(self.provider, request)
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_amap_live.py", line 460, in execute
+    raise AssertionError("lodging probe must only call AMap geocode")
+AssertionError: lodging probe must only call AMap geocode
+
+----------------------------------------------------------------------
+Ran 1 test in 0.003s
+
+FAILED (failures=1)
+```
+
+- 红态说明代码已把第一条歧义住宿坐标收入 locations，随后才会错误发起 route。`mobility.py` 现要求 geocode normalized items 恰为 1；多结果把全部相关 claims 标为 conflict、留下 `identity_conflict:<ref>:geocode_ambiguous:<bounded feedback>`，不选坐标。
+- 修复后同一测试连同既有行政区不符样板（exit 0）：两项均 `ok`，`Ran 2 tests in 0.004s`、`OK`。
+- 结论：真 bug 已修；当前验收轮次 3/12。
+
+## 书 23 空格 3/6：住宿 × AMap geocode × 限流（本来就对）
+
+- 先只新增 `test_lodging_geocode_rate_limit_is_not_hidden`，未改实现；合成 transport 对住宿 geocode 返回 HTTP 429，关闭 transport 自身 retry。
+- 首跑即绿（exit 0）：`test_lodging_geocode_rate_limit_is_not_hidden ... ok`、`Ran 1 test in 0.002s`、`OK`。
+- 实际行为：只调用一次 geocode；住宿不进入 locations；顶层 health 保持 `rate_limited`，reason 含 `errors=rate_limited`，实体 warning 以 `rate_limited:lodging-bjs-central:geocode_lookup:` 开头。
+- 结论：本来就对，测试保留；当前验收轮次 4/12。
+
+## 书 23 空格 4/6：车站 × AMap distance enrichment × 行政区不符（本来就对）
+
+- 先只新增 `test_wrong_city_station_pois_do_not_add_distance_or_remove_candidates`；合成 POI 名称和铁路类别均匹配，但 `cityname=另一座城市`。
+- 首跑即绿（exit 0）：`test_wrong_city_station_pois_do_not_add_distance_or_remove_candidates ... ok`、`Ran 1 test in 0.053s`、`OK`。
+- 实际行为：1 次 geocode + 3 次 POI；异城 POI 不产生任何 `distance_meters`；三站以 `CCX,BBX,AAX` 全部保留，resolution 仍 `ambiguous`、rail health=`ready`，没有越过歧义去查票。
+- 结论：本来就对，测试保留；当前验收轮次 5/12。
+
+## 书 23 空格 5/6：车站 × 12306 station resolution × 限流（真 bug 已修）
+
+- 先新增书 23 专用全合成 `tests/fixtures/provider_matrix_mcp_server.py` 的 `rail-station-rate-limit` 模式，只对真实 stdio 的 `get-stations-code-in-city` 返回 `isError=true` 与 `Error 429: synthetic station lookup rate limit`；再新增 `test_station_capability_rate_limit_is_not_misclassified_as_no_results`，未先改实现。
+- 修复前首跑（exit 1）原始输出：
+
+```text
+test_station_capability_rate_limit_is_not_misclassified_as_no_results (tests.test_rail_station_fallback.RailStationFallbackTests) ... FAIL
+
+======================================================================
+FAIL: test_station_capability_rate_limit_is_not_misclassified_as_no_results (tests.test_rail_station_fallback.RailStationFallbackTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_rail_station_fallback.py", line 427, in test_station_capability_rate_limit_is_not_misclassified_as_no_results
+    self.assertEqual("rate_limited", result.error_class)
+AssertionError: 'rate_limited' != 'no_results'
+- rate_limited
++ no_results
+
+----------------------------------------------------------------------
+Ran 1 test in 0.052s
+
+FAILED (failures=1)
+```
+
+- 根因是 `rail12306._call_payload` 在读取 `isError` 正文前把 station 错误一律归为 no-results。最小修复只识别 `429/rate limit/rate_limit/quota/限流/请求过于频繁` 为 `rate_limited`；其他 station error 的既有 no-results 行为不变。
+- 修复后同一测试 + 既有 station not-found + station shape drift（exit 0）：三项均 `ok`，`Ran 3 tests in 0.160s`、`OK`。
+- 结论：真 bug 已修；当前验收轮次 6/12。
+
+## 书 23 空格 6/6：航班 × VariFlight adapter/transport × 网络失败（本来就对；上层 bug 阻塞）
+
+- 同一书 23 专用合成 MCP fixture 的 `variflight-comfort-network` 模式会让 `flightHappinessIndex` 进程以 7 退出。第一版测试同时探到了更高层 `VariFlightBackend` 的 partial-success health，首跑（exit 1）原始输出：
+
+```text
+test_comfort_network_failure_degrades_without_dropping_search_candidate (tests.test_variflight_live.VariFlightLiveTests) ... FAIL
+
+======================================================================
+FAIL: test_comfort_network_failure_degrades_without_dropping_search_candidate (tests.test_variflight_live.VariFlightLiveTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_variflight_live.py", line 158, in test_comfort_network_failure_degrades_without_dropping_search_candidate
+    self.assertEqual("degraded", result.health["status"])
+AssertionError: 'degraded' != 'ready'
+- degraded
++ ready
+
+----------------------------------------------------------------------
+Ran 1 test in 0.145s
+
+FAILED (failures=1)
+```
+
+- 根因确认是 `variflight_enrichment.py` 用“已有 claims”优先判 ready，掩盖后续 comfort error；但该文件不在本书白名单。边界审阅发现后，曾用于验证假设的 6 行实现改动已用精确反向 patch 完整收回，`git diff -- variflight_enrichment.py` 为空；不以违规改动冒充修复。
+- 保留的允许范围回归为 `test_comfort_network_failure_is_classified_without_partial_output`：直接走真实 stdio transport + `VariFlightAdapter`，同一网络断线首跑即绿（exit 0）：`... ok`、`Ran 1 test in 0.095s`、`OK`；error=`network`、health=`degraded`、items/claims 为空、stderr 凭据脱敏。
+- 上层真 bug 已附最小输入与实际 `health_status=ready` / `errors=network` 输出写入 `BLOCKED.md`，没有绕到其他层补偿。结论：第 6 格的 adapter/transport 边界本来就对，上层 orchestration 未修；6 个空格已认领完毕。当前验收轮次 7/12。
+
+## 书 23 精准门与未认领项（完成）
+
+- 白名单纠正后的四组相关精准门 `/usr/bin/python3 -m unittest tests.test_amap_live tests.test_rail_station_fallback tests.test_variflight_live tests.test_providers -v`（exit 0）：`Ran 149 tests in 2.495s`、`OK`、skipped 0。
+- `BLOCKED.md` 已新增 6 格上限外的 18 个分支级覆盖空格；均标为 open coverage debt、未冒充产品 bug，并逐格给出最小合成响应/异常与调用入口。
+- 其中“住宿 × AMap geocode × network”已按记录实际执行（exit 0）：`calls=2`、`lodging_located=false`、health=`degraded`，reason 含 `errors=network`，warning 精确指向 `lodging-bjs-central`；当前行为可运行但尚无第 7 条回归。
+- 工作树同时存在书 22 独占的 `cli.py`、`candidates.py`、`tests/test_candidates.py` 与 `tests/fixtures/candidate-name-fix/`；本书未修改、暂存或提交这些路径，最终范围审计将单独排除并核对。
+- 当前验收轮次 8/12；进入全量、secret 与白名单门禁。
+
+## 书 23 全量与边界门禁（代码态完成）
+
+- 白名单纠正后的完整树 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）：`Ran 455 tests in 30.904s`、`OK`；无 skipped 汇总，故 skipped 0。开工 444；本书新增恰好 6 条，合并树另含书 22 新测。
+- `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 374 file(s)`；本书 6 个 Python 改动文件 `py_compile` exit 0，`git diff --check` exit 0。
+- 本书三个测试文件的新增方法审计恰列 6 个名称：住宿 AMap no-results/ambiguity/rate-limit、车站 AMap wrong-city、车站 12306 rate-limit、VariFlight comfort network；删除 test 方法搜索 exit 1、无输出。
+- 本书差异的 skip/todo 新增搜索 exit 1、无输出；版本载体关键词 `0.5.0|__version__|clientInfo|"version"` 差异搜索 exit 1、无输出。
+- `planning.py`、`variflight_enrichment.py`、`journey.py`、`replan.py`、`station_distance.py`、Schema、demo、render、scheduler、validator、manifest、docs 与 secret scanner 的本书禁碰组合 diff exit 0、无输出。
+- 边界审阅时发现并立即收回的 `variflight_enrichment.py` 临时假设修改没有进入本状态；对应真 bug 已写 `BLOCKED.md`，没有用允许文件绕路掩盖。
+- 现有 `tests/fixtures/mcp_stdio_server.py` 与 `variflight_mcp_server.py` 的探索性修改均已精确收回，二者组合 diff exit 0；故 fixture 只新增书 23 专用合成文件，不改既有夹具。
+- 当前验收轮次 9/12；剩余是等待共享书 22 独占改动提交后，复跑最终门、精确暂存本书 8 路径并提交。
+
+## 书 22 提交前逻辑与禁碰审计（完成）
+
+- 相对开工 `HEAD` 逐 AST 源片段字节比较：`POI_NAME_SIMILARITY_MARGIN`、`_poi_identity_conflicts`、`_name_similarity`、`_normalized_name`、`_city_matches` 全部 `IDENTITY_BYTE_EQUAL ... True`，汇总 `IDENTITY_ALL_EQUAL True`。
+- `planning.py`、Schema、demo、render、scheduler、`validate_trip.py` 与 manifest 的组合 `git diff --exit-code` 为 exit 0、无输出；unknown 生成顺序/逻辑没有改动。
+- 非文档 `0.5.0` 承载/锁定文件实际枚举为 README 双语、`__init__.py`、`mcp_stdio.py` 和四份锁定测试；组合 diff exit 0、无输出，版本保持 0.5.0。
+- 书 22 Python/tests 新增 skip/todo 搜索 exit 1、无输出；`git diff --check` exit 0。并行书 23 的 mobility/provider/tests 改动保持未暂存，书 22 只会精确暂存自己的 8 条白名单路径。当前验收轮次 8/12。
+
+## 书 22 精确暂存审计（完成）
+
+- `git diff --cached --name-only` 恰为 8 条允许路径：`BLOCKED.md`、`PROGRESS.md`、research Skill、`candidates.py`、`cli.py`、两份 `tests/fixtures/candidate-name-fix/*.json`、`tests/test_candidates.py`。
+- cached stat 为 `8 files changed, 1231 insertions(+), 2 deletions(-)`；共享两份 Markdown 保留两书并行追加记录。`git diff --cached --check` exit 0。
+- 书 23 的 `mobility.py`、`providers/rail12306.py`、三份测试与新 `provider_matrix_mcp_server.py` 均保持 unstaged/untracked，没有进入书 22 暂存区。当前验收轮次 9/12。

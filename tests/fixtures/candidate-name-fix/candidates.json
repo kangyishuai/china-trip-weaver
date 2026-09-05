@@ -1,0 +1,93 @@
+{
+  "candidates_version": "1.0.0",
+  "pois": [
+    {
+      "poi_id": "poi-fix-unique",
+      "name": "合成星塔旧称",
+      "city": "合成甲市",
+      "category": "synthetic-landmark",
+      "coordinates": null,
+      "recommended_duration_minutes": 60,
+      "opening_windows": [],
+      "price": null,
+      "deep_links": ["https://example.invalid/synthetic/name-fix/unique"],
+      "claim_ids": ["claim-fix-unique-name"]
+    },
+    {
+      "poi_id": "poi-fix-control",
+      "name": "合成静湖",
+      "city": "合成乙市",
+      "category": "synthetic-landmark",
+      "coordinates": null,
+      "recommended_duration_minutes": 60,
+      "opening_windows": [],
+      "price": null,
+      "deep_links": ["https://example.invalid/synthetic/name-fix/control"],
+      "claim_ids": ["claim-fix-control-name"]
+    },
+    {
+      "poi_id": "poi-fix-ambiguous",
+      "name": "合成云廊",
+      "city": "合成丙市",
+      "category": "synthetic-landmark",
+      "coordinates": null,
+      "recommended_duration_minutes": 60,
+      "opening_windows": [],
+      "price": null,
+      "deep_links": ["https://example.invalid/synthetic/name-fix/ambiguous"],
+      "claim_ids": ["claim-fix-ambiguous-name"]
+    }
+  ],
+  "lodgings": [],
+  "claims": [
+    {
+      "claim_id": "claim-fix-unique-name",
+      "subject_ref": "poi-fix-unique",
+      "field_path": "/name",
+      "value": "合成星塔旧称",
+      "source_url": "https://example.invalid/synthetic/name-fix/unique",
+      "provider": "synthetic-fixture",
+      "queried_at": "2026-09-05T09:00:00+08:00",
+      "status": "hypothesis",
+      "confidence": 0.55,
+      "mode": "static",
+      "as_of": null,
+      "raw_ref": null,
+      "response_hash": null,
+      "json_path": null
+    },
+    {
+      "claim_id": "claim-fix-control-name",
+      "subject_ref": "poi-fix-control",
+      "field_path": "/name",
+      "value": "合成静湖",
+      "source_url": "https://example.invalid/synthetic/name-fix/control",
+      "provider": "synthetic-fixture",
+      "queried_at": "2026-09-05T09:00:00+08:00",
+      "status": "hypothesis",
+      "confidence": 0.55,
+      "mode": "static",
+      "as_of": null,
+      "raw_ref": null,
+      "response_hash": null,
+      "json_path": null
+    },
+    {
+      "claim_id": "claim-fix-ambiguous-name",
+      "subject_ref": "poi-fix-ambiguous",
+      "field_path": "/name",
+      "value": "合成云廊",
+      "source_url": "https://example.invalid/synthetic/name-fix/ambiguous",
+      "provider": "synthetic-fixture",
+      "queried_at": "2026-09-05T09:00:00+08:00",
+      "status": "hypothesis",
+      "confidence": 0.55,
+      "mode": "static",
+      "as_of": null,
+      "raw_ref": null,
+      "response_hash": null,
+      "json_path": null
+    }
+  ],
+  "unknowns": []
+}

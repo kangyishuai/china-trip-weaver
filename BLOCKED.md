@@ -280,3 +280,71 @@ should mean pending work. They live where they are enforced:
 ## 坐标定位失败 unknown（2026-09-05）
 
 - 本轮新增阻塞：无。
+
+## 书 23 组合排查：达到 6 格上限后仍开放的覆盖空格（2026-09-05）
+
+- 状态：open coverage debt，不是已证明的产品 bug。本轮已按任务上限认领 6 格，以下实体编排组合没有新增第 7 条测试，也没有为它们改实现；开工矩阵中的 adapter-only 夹具不能证明上层按实体降级时没有分支状态问题。
+- 共同复现入口均为离线合成输入：POI 用 `tests.test_providers.amap_scenario_candidates`，住宿 AMap 用 `tests.test_amap_live.lodging_geocode_candidates`，车站用 `tests.test_rail_station_fallback.RailStationFallbackTests._query`，FlyAI/VariFlight 用各自 backend 与 `tests/fixtures/e2e/beijing-shanghai-3d` route；不得访问实网。
+
+| 未认领实体分支 | 最小 provider 输入/失败 | 为什么仍开放 |
+|---|---|---|
+| POI × AMap × 无结果 | `poi-v5` + `page_num=1,page_size=2,pois=[]` | 只有 `amap/empty.json` adapter 夹具，没有 `MobilityBackend` 实体 warning/health 回归 |
+| POI × AMap × 限流 | POI 请求返回 HTTP 429 | 只有 `amap/rate_limit.json` adapter 夹具 |
+| POI × AMap × 契约漂移 | `poi-v5` 但 `pois={}` | 只有 adapter shape gate，没有 mobility 分支回归 |
+| POI × AMap × 网络失败 | transport 连续两次抛 `ProviderNetworkError` | timeout 与 network 是不同 error class，现无 POI network 分支回归 |
+| 住宿 × AMap × 契约漂移 | `geocode-v3` 但 `geocodes={}` | geocode adapter 可 fail closed，上层住宿分支仍未钉住 |
+| 住宿 × AMap × 网络失败 | transport 连续抛 `ProviderNetworkError` | 本轮只做了可读试跑，没有新增第 7 条回归 |
+| 车站 × 12306 station × 网络失败 | 合成 MCP 在 `get-stations-code-in-city` 回答前退出 | 当前 station tests 覆盖 no-results/rate-limit/shape drift，未覆盖进程网络失败 |
+| 车站 × AMap enrichment × 歧义 | city geocode 返回两个不同同城坐标，或一个站名返回两个不同精确站点坐标 | `_unique_point` 路径没有专门回归 |
+| 车站 × AMap enrichment × 限流 | geocode 或 POI 返回 HTTP 429 | best-effort 外层应保留站点，但未按此 error class 钉住 |
+| 车站 × AMap enrichment × 契约漂移 | geocode `geocodes={}` 或 POI `pois={}` | best-effort 外层应保留站点，但未按 shape drift 钉住 |
+| 住宿 × FlyAI × 无结果 | `status=0,data.itemList=[]` 的 lodging 请求 | `flyai/empty.json` 是 flight capability，不覆盖 lodging merge/fallback |
+| 住宿 × FlyAI × 网络失败 | lodging transport 连续抛 `ProviderNetworkError` | 现有完整 plan 失败链使用 `ProviderTimeout`，不是 network |
+| 航班 × FlyAI × 无结果/限流/契约漂移/网络失败 | 分别复用 `flyai/empty.json`、`rate_limit.json`、`wrong_shape.json`、`stderr_error.json` 的 transport body/kind | 这些只在 adapter corpus 运行，未钉住 `FlyAIBackend` 到 plan 的 comparison-leg/health 分支 |
+| 航班 × VariFlight search × 无结果/限流 | 分别复用 `variflight/empty.json`、`rate_limit.json`，通过 `VariFlightBackend.enrich` 而非直接 adapter | adapter 已测，search orchestration 的候选保留、warning 与 health 组合仍未专门回归 |
+
+- 已实际验证其中一条可复现输入（exit 0），命令在仓库根运行；这证明当前住宿 network 行为是“可运行但未固化”，不是声称已有测试：
+
+```text
+/usr/bin/python3 - <<'PY'
+import json
+from tests.test_amap_live import FIXED_NOW, credentials, lodging_geocode_candidates
+from china_trip_weaver.clock import FixedClock
+from china_trip_weaver.mobility import MobilityBackend
+from china_trip_weaver.providers.base import ProviderNetworkError
+class NetworkFailure:
+    def __init__(self): self.calls = 0
+    def execute(self, provider, request):
+        self.calls += 1
+        assert provider == 'amap' and request.capability == 'geocode'
+        raise ProviderNetworkError('synthetic lodging geocode outage')
+transport = NetworkFailure()
+result = MobilityBackend('live', credentials(), transport).resolve(
+    lodging_geocode_candidates(), FixedClock.from_iso(FIXED_NOW), ('walking',),
+)
+print(json.dumps({'calls': transport.calls, 'health_status': result.health['status'],
+    'lodging_located': 'lodging-bjs-central' in {item.ref_id for item in result.locations},
+    'health_reason': result.health['reason'], 'warnings': list(result.warnings)},
+    ensure_ascii=False, sort_keys=True, separators=(',', ':')))
+PY
+```
+
+```text
+{"calls":2,"health_reason":"calls=2/80 qps<=2; live_cells=0; locations=1; errors=network; warnings=network","health_status":"degraded","lodging_located":false,"warnings":["network:lodging-bjs-central:geocode_lookup:{\"candidates\":[],\"suggested_names\":[]}"]}
+```
+
+### 书 23 已确认但因禁碰文件未修：VariFlight 部分成功掩盖 comfort 网络失败
+
+- 状态：open product bug。最小合成流程是 `VariFlightBackend("auto", configured_credentials, transport).enrich([], [北京→上海 route], clock)`；transport 使用 `tests/fixtures/provider_matrix_mcp_server.py variflight-comfort-network`，search 返回一条航班，随后的 `flightHappinessIndex` 在响应前退出。
+- 仓库根实际运行该输入（exit 0）的原始输出：
+
+```text
+{"claim_fields":["/depart_at","/price","/status"],"flights":1,"health_reason":"tools=9; business_calls=2; candidates=1; status_claims=1; comfort_claims=0; errors=network","health_status":"ready","warnings":["network:leg-vf-ae710e3412b6:service=XX1001;date=2026-09-10;action=comfort"]}
+```
+
+- 判定：reason 与实体 warning 已承认 `network`，但 health 仍为 `ready`；search 航班与 claims 应保留，health 应为 `degraded`。需要改包根 `plugins/china-trip-weaver/src/china_trip_weaver/variflight_enrichment.py` 的 status 聚合，该文件不在书 23 只允许的 `mobility.py`、`planning.py`、`providers/` 范围内。
+- 边界处理：曾用于验证根因的 6 行临时改动已精确收回，未绕到 `planning.py` 做补偿，也没有留下失败/skip 测试。允许范围内保留 `test_comfort_network_failure_is_classified_without_partial_output`，只证明 transport + adapter 能正确给出 `network/degraded`；它不关闭本条上层 bug。
+
+## 书 22 候选名回填（2026-09-05）
+
+- 本轮新增阻塞：无。
