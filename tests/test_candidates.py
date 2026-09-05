@@ -19,6 +19,7 @@ PLUGIN = ROOT / "plugins" / "china-trip-weaver"
 SRC = PLUGIN / "src"
 sys.path.insert(0, str(SRC))
 
+import china_trip_weaver.candidates as candidate_module
 from china_trip_weaver.candidates import (
     CandidateNameOption,
     _unique_candidate_name,
@@ -35,6 +36,7 @@ from china_trip_weaver.credentials import resolve_credentials
 from china_trip_weaver.journey import assemble_journey, validate_journey
 from china_trip_weaver.mobility import MobilityBackend, apply_locations
 from china_trip_weaver.providers.base import ProviderTimeout, stable_id
+from china_trip_weaver.validate_trip import ValidationIssue, ValidationReport
 from tests.test_providers import (
     AMAP_SCENARIOS,
     AMapScenarioTransport,
@@ -87,6 +89,20 @@ class CandidateContractTests(unittest.TestCase):
         )
         credential_path.chmod(0o600)
         return credential_path
+
+    def _export_manual_name_review(self, candidates_path, review_path):
+        result = subprocess.run(
+            [
+                str(CTW), "candidates", "fix-names", str(candidates_path),
+                "--trip", str(NAME_FIX / "trip.json"),
+                "--export-manual", str(review_path),
+            ],
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual("", result.stderr)
+        return result, load(review_path)
 
     def test_schema_reuses_frozen_trip_definitions(self):
         schema = load_candidates_schema()
@@ -457,6 +473,250 @@ class CandidateContractTests(unittest.TestCase):
             'CANDIDATE_NAME_FIX_SUMMARY {"applied":0,"automatic":1,"manual":1,"mode":"report"}',
             result.stdout,
         )
+
+    def test_fix_names_export_manual_review_is_read_only_and_complete(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            candidates_path = Path(temporary) / "candidates.json"
+            review_path = Path(temporary) / "manual-name-review.json"
+            candidates_path.write_bytes((NAME_FIX / "candidates.json").read_bytes())
+            before = candidates_path.read_bytes()
+            before_sha256 = hashlib.sha256(before).hexdigest()
+            result, review = self._export_manual_name_review(
+                candidates_path, review_path,
+            )
+            after = candidates_path.read_bytes()
+
+        self.assertEqual(before, after)
+        self.assertEqual(before_sha256, hashlib.sha256(after).hexdigest())
+        self.assertEqual(1, len(review))
+        self.assertEqual({
+            "administrative_areas": ["合成丙市/合成东区", "合成丙市/合成西区"],
+            "chosen": "",
+            "original_name": "合成云廊",
+            "ref_id": "poi-fix-ambiguous",
+            "suggested_names": ["合成云廊东门", "合成云廊西门"],
+        }, review[0])
+        self.assertIn("CANDIDATE_NAME_MANUAL_EXPORTED", result.stdout)
+        self.assertIn('"entries":1', result.stdout)
+        self.assertIn(
+            'CANDIDATE_NAME_FIX_SUMMARY {"applied":0,"automatic":1,"manual":1,"mode":"report"}',
+            result.stdout,
+        )
+
+    def test_fix_names_apply_manual_review_writes_exact_suggestion_and_validates(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            candidates_path = Path(temporary) / "candidates.json"
+            review_path = Path(temporary) / "manual-name-review.json"
+            candidates_path.write_bytes((NAME_FIX / "candidates.json").read_bytes())
+            before_bytes = candidates_path.read_bytes()
+            before = load(candidates_path)
+            _, review = self._export_manual_name_review(candidates_path, review_path)
+            review[0]["chosen"] = "合成云廊东门"
+            review_path.write_text(
+                json.dumps(review, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                [
+                    str(CTW), "candidates", "fix-names", str(candidates_path),
+                    "--trip", str(NAME_FIX / "trip.json"),
+                    "--apply-manual", str(review_path),
+                ],
+                text=True,
+                capture_output=True,
+            )
+            after_bytes = candidates_path.read_bytes()
+            after = load(candidates_path)
+            validation = subprocess.run(
+                [str(CTW), "validate-candidates", str(candidates_path)],
+                text=True,
+                capture_output=True,
+            )
+
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual("", result.stderr)
+        expected = copy.deepcopy(before)
+        expected["pois"][2]["name"] = "合成云廊东门"
+        self.assertEqual(expected, after)
+        self.assertEqual("合成星塔旧称", after["pois"][0]["name"])
+        self.assertEqual(
+            before_bytes.replace(
+                '"name": "合成云廊"'.encode("utf-8"),
+                '"name": "合成云廊东门"'.encode("utf-8"),
+                1,
+            ),
+            after_bytes,
+        )
+        self.assertIn("CANDIDATE_NAME_MANUAL_APPLIED", result.stdout)
+        self.assertIn('"applied":1', result.stdout)
+        self.assertIn('"skipped":0', result.stdout)
+        self.assertIn(
+            'CANDIDATE_NAME_FIX_SUMMARY {"applied":0,"automatic":1,"manual":1,"mode":"report"}',
+            result.stdout,
+        )
+        self.assertEqual(0, validation.returncode, validation.stdout + validation.stderr)
+        self.assertIn("CANDIDATES VALID", validation.stdout)
+
+    def test_fix_names_apply_manual_review_rejects_unlisted_choice_atomically(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            candidates_path = Path(temporary) / "candidates.json"
+            review_path = Path(temporary) / "manual-name-review.json"
+            candidates_path.write_bytes((NAME_FIX / "candidates.json").read_bytes())
+            _, review = self._export_manual_name_review(candidates_path, review_path)
+            review[0]["chosen"] = "合成云廊北门"
+            review_path.write_text(
+                json.dumps(review, ensure_ascii=False), encoding="utf-8",
+            )
+            before = candidates_path.read_bytes()
+            result = subprocess.run(
+                [
+                    str(CTW), "candidates", "fix-names", str(candidates_path),
+                    "--trip", str(NAME_FIX / "trip.json"),
+                    "--apply-manual", str(review_path),
+                ],
+                text=True,
+                capture_output=True,
+            )
+            after = candidates_path.read_bytes()
+
+        self.assertNotEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual(before, after)
+        self.assertIn("CANDIDATES_FAILED", result.stderr)
+        self.assertIn("poi-fix-ambiguous", result.stderr)
+        self.assertIn("exactly match", result.stderr)
+
+    def test_fix_names_apply_manual_review_rejects_unknown_ref_even_when_empty(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            candidates_path = Path(temporary) / "candidates.json"
+            review_path = Path(temporary) / "manual-name-review.json"
+            candidates_path.write_bytes((NAME_FIX / "candidates.json").read_bytes())
+            _, review = self._export_manual_name_review(candidates_path, review_path)
+            review[0]["chosen"] = "合成云廊东门"
+            unknown = copy.deepcopy(review[0])
+            unknown["ref_id"] = "poi-fix-missing"
+            unknown["chosen"] = ""
+            review.append(unknown)
+            review_path.write_text(
+                json.dumps(review, ensure_ascii=False), encoding="utf-8",
+            )
+            before = candidates_path.read_bytes()
+            result = subprocess.run(
+                [
+                    str(CTW), "candidates", "fix-names", str(candidates_path),
+                    "--trip", str(NAME_FIX / "trip.json"),
+                    "--apply-manual", str(review_path),
+                ],
+                text=True,
+                capture_output=True,
+            )
+            after = candidates_path.read_bytes()
+
+        self.assertNotEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual(before, after)
+        self.assertIn("CANDIDATES_FAILED", result.stderr)
+        self.assertIn("poi-fix-missing", result.stderr)
+
+    def test_fix_names_apply_manual_review_skips_empty_or_missing_choice(self):
+        for chosen_state in ("empty", "missing"):
+            with self.subTest(chosen_state=chosen_state):
+                with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+                    candidates_path = Path(temporary) / "candidates.json"
+                    review_path = Path(temporary) / "manual-name-review.json"
+                    candidates_path.write_bytes((NAME_FIX / "candidates.json").read_bytes())
+                    _, review = self._export_manual_name_review(candidates_path, review_path)
+                    if chosen_state == "missing":
+                        del review[0]["chosen"]
+                    review_path.write_text(
+                        json.dumps(review, ensure_ascii=False), encoding="utf-8",
+                    )
+                    before = candidates_path.read_bytes()
+                    result = subprocess.run(
+                        [
+                            str(CTW), "candidates", "fix-names", str(candidates_path),
+                            "--trip", str(NAME_FIX / "trip.json"),
+                            "--apply-manual", str(review_path),
+                        ],
+                        text=True,
+                        capture_output=True,
+                    )
+                    after = candidates_path.read_bytes()
+
+                self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+                self.assertEqual(before, after)
+                self.assertIn("CANDIDATE_NAME_MANUAL_APPLIED", result.stdout)
+                self.assertIn('"applied":0', result.stdout)
+                self.assertIn('"skipped":1', result.stdout)
+
+    def test_fix_names_apply_manual_review_does_not_trim_chosen(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            candidates_path = Path(temporary) / "candidates.json"
+            review_path = Path(temporary) / "manual-name-review.json"
+            candidates_path.write_bytes((NAME_FIX / "candidates.json").read_bytes())
+            _, review = self._export_manual_name_review(candidates_path, review_path)
+            review[0]["chosen"] = "合成云廊东门 "
+            review_path.write_text(
+                json.dumps(review, ensure_ascii=False), encoding="utf-8",
+            )
+            before = candidates_path.read_bytes()
+            result = subprocess.run(
+                [
+                    str(CTW), "candidates", "fix-names", str(candidates_path),
+                    "--trip", str(NAME_FIX / "trip.json"),
+                    "--apply-manual", str(review_path),
+                ],
+                text=True,
+                capture_output=True,
+            )
+            after = candidates_path.read_bytes()
+
+        self.assertNotEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual(before, after)
+        self.assertIn("poi-fix-ambiguous", result.stderr)
+        self.assertIn("exactly match", result.stderr)
+
+    def test_fix_names_apply_manual_review_rolls_back_failed_post_write_validation(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            candidates_path = Path(temporary) / "candidates.json"
+            review_path = Path(temporary) / "manual-name-review.json"
+            candidates_path.write_bytes((NAME_FIX / "candidates.json").read_bytes())
+            _, review = self._export_manual_name_review(candidates_path, review_path)
+            review[0]["chosen"] = "合成云廊东门"
+            review_path.write_text(
+                json.dumps(review, ensure_ascii=False), encoding="utf-8",
+            )
+            before = candidates_path.read_bytes()
+            original_validate = candidate_module.validate_candidates_file
+
+            def fail_only_after_destination_write(path, schema_path=None):
+                if Path(path) == candidates_path and candidates_path.read_bytes() != before:
+                    return ValidationReport((
+                        ValidationIssue(
+                            "C_SYNTHETIC_POST_WRITE",
+                            "/pois/2/name",
+                            "synthetic post-write validation failure",
+                        ),
+                    ))
+                return original_validate(Path(path), schema_path=schema_path)
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with mock.patch.object(
+                candidate_module,
+                "validate_candidates_file",
+                side_effect=fail_only_after_destination_write,
+            ):
+                with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    return_code = cli_main([
+                        "candidates", "fix-names", str(candidates_path),
+                        "--trip", str(NAME_FIX / "trip.json"),
+                        "--apply-manual", str(review_path),
+                    ])
+            after = candidates_path.read_bytes()
+
+        self.assertEqual(1, return_code, stdout.getvalue() + stderr.getvalue())
+        self.assertEqual(before, after)
+        self.assertIn("CANDIDATES_FAILED", stderr.getvalue())
+        self.assertIn("C_SYNTHETIC_POST_WRITE", stderr.getvalue())
 
     def test_fix_names_apply_changes_ref_id_target_only_and_remains_valid(self):
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:

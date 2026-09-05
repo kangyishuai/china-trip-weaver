@@ -88,10 +88,14 @@ CODEX_HOME=/path/to/an/isolated/codex-home \
 
 `ctw candidates fix-names` 读取 Trip 或 Journey 里的高德坐标 unknown，把可采用的规范名报告给对应的调研候选。它默认只报告；只有加 `--apply` 才会把唯一确定的名称写回候选文件。歧义、冲突、同名或格式异常的建议都留给人工确认，绝不自动修改。
 
+处理这些人工项时，`--export-manual NAME-REVIEW.json` 会导出一份可填写的 JSON 清单，绝不修改候选文件。给任意条目的 `chosen` 填值后，再用 `--apply-manual NAME-REVIEW.json` 应用；每个非空值都必须与该条当前 `suggested_names` 中的一个名字逐字相等，空值或缺失值会跳过。只要出现未知 `ref_id` 或建议外名字，整次应用就失败，候选文件字节不变。若要使用完全自定义的名字，请直接编辑候选文件，再运行 `validate-candidates`。
+
 ```bash
 plugins/china-trip-weaver/scripts/ctw validate-candidates demo/candidates.json
 plugins/china-trip-weaver/scripts/ctw candidates fix-names CANDIDATES.json --trip TRIP_OR_JOURNEY.json
 plugins/china-trip-weaver/scripts/ctw candidates fix-names CANDIDATES.json --trip TRIP_OR_JOURNEY.json --apply
+plugins/china-trip-weaver/scripts/ctw candidates fix-names CANDIDATES.json --trip TRIP_OR_JOURNEY.json --export-manual NAME-REVIEW.json
+plugins/china-trip-weaver/scripts/ctw candidates fix-names CANDIDATES.json --trip TRIP_OR_JOURNEY.json --apply-manual NAME-REVIEW.json
 ```
 
 参见示例 [`candidates.example.json`](plugins/china-trip-weaver/references/candidates.example.json) 和机器合同 [`candidates.schema.json`](plugins/china-trip-weaver/schema/candidates.schema.json)。
@@ -164,7 +168,7 @@ ctw doctor
 ctw validate TRIP.json
 ctw validate-candidates CANDIDATES.json
 ctw candidates add-poi CANDIDATES.json --name NAME --city CITY --category CATEGORY --source-url URL [--verify-name]
-ctw candidates fix-names CANDIDATES.json --trip TRIP_OR_JOURNEY.json [--apply]
+ctw candidates fix-names CANDIDATES.json --trip TRIP_OR_JOURNEY.json [--apply | --export-manual NAME-REVIEW.json | --apply-manual NAME-REVIEW.json]
 ctw canonicalize TRIP.json
 ctw rail --date YYYY-MM-DD --from CITY --to CITY --output-json rail-result.json
 ctw mobility --candidates CANDIDATES.json --modes transit,walking --output-json mobility.json

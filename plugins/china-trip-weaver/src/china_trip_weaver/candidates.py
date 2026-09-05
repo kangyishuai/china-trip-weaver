@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import copy
 import json
+import os
+import tempfile
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -88,6 +90,15 @@ class CandidateNameFixResult:
     @property
     def manual_count(self) -> int:
         return len(self.decisions) - self.automatic_count
+
+
+@dataclass(frozen=True)
+class CandidateNameManualApplyResult:
+    """Counts from one filled manual-name review list."""
+
+    entry_count: int
+    applied_count: int
+    skipped_count: int
 
 
 @dataclass(frozen=True)
@@ -299,6 +310,172 @@ def fix_candidate_names(
             destination.write_bytes(updated_text.encode("utf-8"))
 
     return CandidateNameFixResult(decisions, len(replacements))
+
+
+def export_candidate_name_review(
+    candidates_path: Path,
+    trip_or_journey_path: Path,
+    review_path: Path,
+) -> Tuple[CandidateNameFixResult, int]:
+    """Write every manual decision as a human-fillable, read-only review list."""
+
+    source_path = Path(candidates_path)
+    destination = Path(review_path)
+    if _paths_refer_to_same_file(source_path, destination):
+        raise ValueError("manual name review output must not be the candidate file")
+    result = fix_candidate_names(source_path, trip_or_journey_path, apply=False)
+    entries = []
+    for decision in result.decisions:
+        if decision.automatic:
+            continue
+        entries.append({
+            "administrative_areas": [
+                option.administrative_area for option in decision.options
+            ],
+            "chosen": "",
+            "original_name": decision.original_name,
+            "ref_id": decision.ref_id,
+            "suggested_names": [option.name for option in decision.options],
+        })
+    destination.write_text(
+        json.dumps(
+            entries,
+            ensure_ascii=False,
+            allow_nan=False,
+            indent=2,
+            sort_keys=True,
+        ) + "\n",
+        encoding="utf-8",
+    )
+    return result, len(entries)
+
+
+def apply_candidate_name_review(
+    candidates_path: Path,
+    trip_or_journey_path: Path,
+    review_path: Path,
+) -> Tuple[CandidateNameFixResult, CandidateNameManualApplyResult]:
+    """Apply exact, currently suggested manual choices and preserve all other bytes."""
+
+    destination = Path(candidates_path)
+    if destination.is_symlink():
+        raise ValueError("candidate path must not be a symlink")
+    result = fix_candidate_names(destination, trip_or_journey_path, apply=False)
+    review = _read_candidate_name_review(Path(review_path))
+
+    original_bytes = destination.read_bytes()
+    try:
+        original_text = original_bytes.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError("candidate file must be UTF-8 JSON") from exc
+    document = json.loads(original_text)
+    if not isinstance(document, dict):
+        raise ValueError("candidate file must be a JSON object")
+    report = validate_candidates(document)
+    if not report.ok:
+        raise ValueError("candidate file is invalid: " + "; ".join(
+            issue.render() for issue in report.errors
+        ))
+
+    entities = _candidate_entities(document)
+    current_decisions = {
+        decision.ref_id: decision
+        for decision in result.decisions
+    }
+    prepared: List[Tuple[str, int, str]] = []
+    seen_ref_ids: Set[str] = set()
+    skipped_count = 0
+    for index, entry in enumerate(review):
+        if not isinstance(entry, Mapping):
+            raise ValueError("manual name review entry %d must be an object" % index)
+        ref_id = entry.get("ref_id")
+        if not isinstance(ref_id, str) or not ref_id:
+            raise ValueError("manual name review entry %d has an invalid ref_id" % index)
+        if ref_id in seen_ref_ids:
+            raise ValueError("manual name review has duplicate ref_id %r" % ref_id)
+        seen_ref_ids.add(ref_id)
+        entity_entry = entities.get(ref_id)
+        if entity_entry is None:
+            raise ValueError(
+                "manual name review ref_id %r is not in the candidate file" % ref_id
+            )
+
+        chosen = entry.get("chosen")
+        if chosen is None or chosen == "":
+            skipped_count += 1
+            continue
+        if not isinstance(chosen, str):
+            raise ValueError(
+                "manual name review chosen for ref_id %r must be a string" % ref_id
+            )
+
+        decision = current_decisions.get(ref_id)
+        if decision is None:
+            raise ValueError(
+                "manual name review ref_id %r has no current name suggestions" % ref_id
+            )
+        current_suggestions = [option.name for option in decision.options]
+        listed_suggestions = entry.get("suggested_names")
+        if listed_suggestions != current_suggestions:
+            raise ValueError(
+                "manual name review suggested_names for ref_id %r do not exactly "
+                "match the current suggestions" % ref_id
+            )
+        if chosen not in current_suggestions:
+            raise ValueError(
+                "manual name review chosen for ref_id %r must exactly match one of "
+                "suggested_names" % ref_id
+            )
+        group, entity_index, entity = entity_entry
+        if (
+            entry.get("original_name") != entity["name"]
+            or decision.original_name != entity["name"]
+        ):
+            raise ValueError(
+                "manual name review original_name for ref_id %r no longer matches "
+                "the candidate file" % ref_id
+            )
+        prepared.append((group, entity_index, chosen))
+
+    replacements: Dict[Tuple[Any, ...], str] = {}
+    for group, entity_index, chosen in prepared:
+        replacements[(group, entity_index, "name")] = chosen
+        document[group][entity_index]["name"] = chosen
+    if replacements:
+        updated_report = validate_candidates(document)
+        if not updated_report.ok:
+            raise ValueError("manually fixed candidates are invalid: " + "; ".join(
+                issue.render() for issue in updated_report.errors
+            ))
+        updated_text = _replace_json_string_values(original_text, replacements)
+        if json.loads(updated_text) != document:
+            raise ValueError("candidate file changed while manual names were being prepared")
+        _replace_candidate_bytes_atomically(
+            destination,
+            original_bytes,
+            updated_text.encode("utf-8"),
+        )
+
+    return result, CandidateNameManualApplyResult(
+        entry_count=len(review),
+        applied_count=len(replacements),
+        skipped_count=skipped_count,
+    )
+
+
+def _read_candidate_name_review(path: Path) -> List[Any]:
+    with path.open("r", encoding="utf-8") as handle:
+        review = json.load(handle)
+    if not isinstance(review, list):
+        raise ValueError("manual name review must be a JSON array")
+    return review
+
+
+def _paths_refer_to_same_file(left: Path, right: Path) -> bool:
+    try:
+        return left.samefile(right)
+    except OSError:
+        return left.resolve() == right.resolve()
 
 
 def _candidate_entities(
@@ -561,6 +738,88 @@ def _replace_json_string_values(
         encoded = json.dumps(value, ensure_ascii=False, allow_nan=False)
         updated = updated[:start] + encoded + updated[finish:]
     return updated
+
+
+def _replace_candidate_bytes_atomically(
+    destination: Path,
+    original_bytes: bytes,
+    updated_bytes: bytes,
+) -> None:
+    """Atomically install validated bytes and restore the exact original on failure."""
+
+    mode = destination.stat().st_mode & 0o7777
+    updated_path: Optional[Path] = None
+    backup_path: Optional[Path] = None
+    try:
+        updated_path = _stage_bytes(destination, updated_bytes, mode, "updated")
+        staged_report = validate_candidates_file(updated_path)
+        if not staged_report.ok:
+            raise ValueError("manually fixed candidates are invalid before write: " + "; ".join(
+                issue.render() for issue in staged_report.errors
+            ))
+        backup_path = _stage_bytes(destination, original_bytes, mode, "backup")
+        if destination.read_bytes() != original_bytes:
+            raise ValueError("candidate file changed while manual names were being prepared")
+
+        os.replace(str(updated_path), str(destination))
+        updated_path = None
+        try:
+            written_report = validate_candidates_file(destination)
+            if not written_report.ok:
+                raise ValueError("manually fixed candidates failed post-write validation: " + "; ".join(
+                    issue.render() for issue in written_report.errors
+                ))
+        except Exception:
+            try:
+                os.replace(str(backup_path), str(destination))
+                backup_path = None
+            except OSError as rollback_error:
+                raise RuntimeError(
+                    "manual candidate-name write failed and rollback could not be completed"
+                ) from rollback_error
+            if destination.read_bytes() != original_bytes:
+                raise RuntimeError(
+                    "manual candidate-name write rollback did not restore the original bytes"
+                )
+            raise
+    finally:
+        for temporary_path in (updated_path, backup_path):
+            if temporary_path is not None:
+                try:
+                    temporary_path.unlink()
+                except FileNotFoundError:
+                    pass
+
+
+def _stage_bytes(
+    destination: Path,
+    payload: bytes,
+    mode: int,
+    label: str,
+) -> Path:
+    descriptor, raw_path = tempfile.mkstemp(
+        prefix=".%s.%s." % (destination.name, label),
+        suffix=".tmp",
+        dir=str(destination.parent),
+    )
+    temporary_path = Path(raw_path)
+    try:
+        os.fchmod(descriptor, mode)
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except Exception:
+        try:
+            os.close(descriptor)
+        except OSError:
+            pass
+        try:
+            temporary_path.unlink()
+        except FileNotFoundError:
+            pass
+        raise
+    return temporary_path
 
 
 def initialize_candidates(path: Path, *, overwrite: bool = False) -> Mapping[str, Any]:

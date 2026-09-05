@@ -128,10 +128,23 @@ def _parser() -> argparse.ArgumentParser:
         required=True,
         help="Trip or Journey JSON containing coordinate identity-conflict unknowns",
     )
-    fix_names.add_argument(
+    fix_names_mode = fix_names.add_mutually_exclusive_group()
+    fix_names_mode.add_argument(
         "--apply",
         action="store_true",
         help="write uniquely determined names to the candidate file",
+    )
+    fix_names_mode.add_argument(
+        "--export-manual",
+        type=Path,
+        metavar="REVIEW.json",
+        help="write manual decisions to a human-fillable JSON list without changing candidates",
+    )
+    fix_names_mode.add_argument(
+        "--apply-manual",
+        type=Path,
+        metavar="REVIEW.json",
+        help="write filled exact suggestions from a manual review JSON list",
     )
 
     canonicalize = commands.add_parser("canonicalize", help="print canonical JSON")
@@ -334,6 +347,8 @@ def main(
         from .candidates import (
             add_lodging_candidate,
             add_poi_candidate,
+            apply_candidate_name_review,
+            export_candidate_name_review,
             fix_candidate_names,
             initialize_candidates,
         )
@@ -345,7 +360,37 @@ def main(
                 print("CANDIDATES_INITIALIZED %s" % args.path)
                 return 0
             if args.candidate_command == "fix-names":
-                result = fix_candidate_names(args.path, args.trip, apply=args.apply)
+                manual_event = None
+                if args.export_manual is not None:
+                    result, entry_count = export_candidate_name_review(
+                        args.path,
+                        args.trip,
+                        args.export_manual,
+                    )
+                    manual_event = (
+                        "CANDIDATE_NAME_MANUAL_EXPORTED",
+                        {
+                            "entries": entry_count,
+                            "path": str(args.export_manual),
+                        },
+                    )
+                elif args.apply_manual is not None:
+                    result, manual_result = apply_candidate_name_review(
+                        args.path,
+                        args.trip,
+                        args.apply_manual,
+                    )
+                    manual_event = (
+                        "CANDIDATE_NAME_MANUAL_APPLIED",
+                        {
+                            "applied": manual_result.applied_count,
+                            "entries": manual_result.entry_count,
+                            "path": str(args.apply_manual),
+                            "skipped": manual_result.skipped_count,
+                        },
+                    )
+                else:
+                    result = fix_candidate_names(args.path, args.trip, apply=args.apply)
                 for decision in result.decisions:
                     kind = "AUTO" if decision.automatic else "MANUAL"
                     print(
@@ -360,6 +405,11 @@ def main(
                     "manual": result.manual_count,
                     "mode": "apply" if args.apply else "report",
                 }))
+                if manual_event is not None:
+                    print("%s %s" % (
+                        manual_event[0],
+                        canonical_json(manual_event[1]),
+                    ))
                 return 0
             clock = FixedClock.from_iso(args.queried_at) if args.queried_at else SystemClock()
             if args.candidate_command == "add-poi":

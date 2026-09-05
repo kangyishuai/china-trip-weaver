@@ -89,10 +89,14 @@ For Codex Desktop UI installation, add this repository as a local marketplace, e
 
 `ctw candidates fix-names` reads AMap coordinate unknowns from a Trip or Journey and reports canonical names that can be sent back to the matching researched candidates. It only reports by default; add `--apply` to write uniquely determined names to the candidate file. Ambiguous, conflicting, unchanged, or malformed suggestions are left for manual review and are never changed automatically.
 
+For those manual results, `--export-manual NAME-REVIEW.json` writes a human-fillable JSON list and never changes the candidate file. Fill any entry's `chosen` field, then pass that list to `--apply-manual NAME-REVIEW.json`; every non-empty choice must exactly equal one of that entry's current `suggested_names`, while empty or missing choices are skipped. An unknown `ref_id` or any other choice aborts the whole apply and leaves the candidate file byte-for-byte unchanged. To use a completely custom name, edit the candidate file directly and run `validate-candidates` instead.
+
 ```bash
 plugins/china-trip-weaver/scripts/ctw validate-candidates demo/candidates.json
 plugins/china-trip-weaver/scripts/ctw candidates fix-names CANDIDATES.json --trip TRIP_OR_JOURNEY.json
 plugins/china-trip-weaver/scripts/ctw candidates fix-names CANDIDATES.json --trip TRIP_OR_JOURNEY.json --apply
+plugins/china-trip-weaver/scripts/ctw candidates fix-names CANDIDATES.json --trip TRIP_OR_JOURNEY.json --export-manual NAME-REVIEW.json
+plugins/china-trip-weaver/scripts/ctw candidates fix-names CANDIDATES.json --trip TRIP_OR_JOURNEY.json --apply-manual NAME-REVIEW.json
 ```
 
 See [`candidates.example.json`](plugins/china-trip-weaver/references/candidates.example.json) and the machine contract [`candidates.schema.json`](plugins/china-trip-weaver/schema/candidates.schema.json).
@@ -165,7 +169,7 @@ ctw doctor
 ctw validate TRIP.json
 ctw validate-candidates CANDIDATES.json
 ctw candidates add-poi CANDIDATES.json --name NAME --city CITY --category CATEGORY --source-url URL [--verify-name]
-ctw candidates fix-names CANDIDATES.json --trip TRIP_OR_JOURNEY.json [--apply]
+ctw candidates fix-names CANDIDATES.json --trip TRIP_OR_JOURNEY.json [--apply | --export-manual NAME-REVIEW.json | --apply-manual NAME-REVIEW.json]
 ctw canonicalize TRIP.json
 ctw rail --date YYYY-MM-DD --from CITY --to CITY --output-json rail-result.json
 ctw mobility --candidates CANDIDATES.json --modes transit,walking --output-json mobility.json
