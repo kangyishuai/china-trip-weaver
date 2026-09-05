@@ -1848,3 +1848,10 @@ BUSINESS_CALL_ATTEMPTS ["amap.geocode:lodging-j16-shanghai-central", "amap.poi:p
 - 最终同任务 0 CLI（exit 0）仍输出 `JOURNEY_PLAN_COMPLETE ... trips=3 days=16 max_trip_days=6 ... errors=0`；三段完整 AMap reason 分别以 `×3`、`×2`、`×3` 结束。
 - 最终单次语义采样原始输出：`MERGED_REASON calls=1/1 errors=rate_limited; calls=1/1 errors=timeout` 与 `COUNT_SUFFIX_PRESENT False`；原文和 `; ` 分隔未变。
 - `git diff --stat` 只含 `BLOCKED.md`、`PROGRESS.md`、目标 `journey.py` 与 `tests/test_journey.py`；`journey.py` 唯一 hunk 在 `_merge_provider_health`，`git diff --check` exit 0。当前验收轮次 5/8，待提交。
+
+## 书 17 提交后核验（完成）
+
+- 实现与验收提交 `4c54c6a3cc65ddc0ce9f26761480503a48d8f806`（`Count repeated Journey provider reasons`）恰含 4 个白名单文件，`116 insertions/4 deletions`；`BLOCKED.md` 已随提交写明“本轮新增阻塞：无”。
+- 提交后全量 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）：`Ran 424 tests in 29.985s`、`OK`、skipped 0。
+- 提交后 `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 372 file(s)`。
+- 提交后工作树 clean，状态仅 `main...origin/main [ahead 1]`；版本仍为 0.4.0，未 push、未发布、未安装 Codex、未改 demo。当前验收轮次 6/8，书 17 完成。
