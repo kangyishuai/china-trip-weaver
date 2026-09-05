@@ -2849,3 +2849,11 @@ _normalized_name_BYTE_EQUAL True SHA256 c461fcf9f25c4911fdaef57da4324e841ebfd743
 - README 双语、manifest、`__init__.py`、`mcp_stdio.py` 及四份版本锁定测试的组合 diff 为 exit 0、无输出；允许实现/测试/夹具 diff 新增长版本标识搜索为 exit 1、无输出，版本保持 0.5.1。
 - 新夹具去掉了非必要 `fixture_version` 字段，且门禁逐项断言所有城市/名称为 `合成*`、ID 为 `SYNTHETIC-*`、坐标绝对值小于 1；不含真实地名、真实坐标或捕获响应。
 - `git diff --check` exit 0；`BLOCKED.md` 已追加本轮新增阻塞为“无”，既有记录未改口。当前验收轮次 6/12，下一步仅做白名单暂存审计与交付提交。
+
+## 书 25 实现提交与读回（完成）
+
+- 实现提交 `4419a57d1708efbf9d8c04e738e2f45aa75578d9`（`Fix POI identity ambiguity dead corners`）恰含 7 个白名单文件，stat 为 `540 insertions(+), 28 deletions(-)`；新夹具以普通 tracked JSON 提交。
+- 提交范围对 planning/journey/replan/station distance/providers/cli/schema/demo/render/scheduler/validator/manifest/docs 的组合 diff 为 exit 0、无输出。
+- 提交父子版本的 AST 源片段读回均为 true：`POI_NAME_SIMILARITY_MARGIN_COMMIT_DIFF_EMPTY`、`_name_similarity_COMMIT_DIFF_EMPTY`、`_normalized_name_COMMIT_DIFF_EMPTY`。
+- 实现提交后工作树 clean，本地 `main` 相对 `origin/main` ahead 1；本任务未 push、未跑实网/demo、未安装 Codex、未改 CI/依赖/权限，版本保持 0.5.1。
+- 当前验收轮次 7/12；书 25 完成条件全部满足，本段仅作断线恢复记录并单独提交，不再新增实现。
