@@ -17,9 +17,9 @@ from china_trip_weaver.contracts import ProviderRequest
 from china_trip_weaver.credentials import resolve_credentials
 from china_trip_weaver.flyai_inventory import FlyAIBackend
 from china_trip_weaver.planning import RailBackend, plan_trip
-from china_trip_weaver.providers.base import ContractMismatch, ProviderContext
+from china_trip_weaver.providers.base import ContractMismatch, ProviderContext, ProviderEnvelope
 from china_trip_weaver.providers.flyai_cli import FlyAISubprocessTransport
-from china_trip_weaver.providers.variflight import VariFlightAdapter
+from china_trip_weaver.providers.variflight import EXPECTED_TOOLS, VariFlightAdapter
 from china_trip_weaver.providers.variflight_mcp import VariFlightMCPTransport
 from china_trip_weaver.variflight_enrichment import VariFlightBackend
 
@@ -161,6 +161,115 @@ class VariFlightLiveTests(unittest.TestCase):
         diagnostics = "\n".join(transport.last_stderr)
         self.assertIn("[REDACTED]", diagnostics)
         self.assertNotIn(resolved.get("VARIFLIGHT_API_KEY"), diagnostics)
+
+    def test_partial_comfort_network_failure_degrades_without_dropping_search_output(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            resolved = credentials(True)
+            transport = VariFlightMCPTransport(
+                resolved,
+                cache_dir=Path(temporary) / "npm-cache",
+                temp_root=Path(temporary) / "variflight-home",
+                command=(
+                    sys.executable, str(MATRIX_SERVER),
+                    "variflight-comfort-network",
+                ),
+                cwd=ROOT,
+            )
+            route = SimpleNamespace(
+                from_place={"name": "北京", "ref_id": "city-beijing"},
+                to_place={"name": "上海", "ref_id": "city-shanghai"},
+                travel_date="2026-09-10",
+            )
+            result = VariFlightBackend("auto", resolved, transport).enrich(
+                (), (route,), CLOCK,
+            )
+
+        self.assertEqual(1, len(result.flights))
+        self.assertEqual(3, len(result.claims))
+        self.assertEqual(
+            ["/depart_at", "/price", "/status"],
+            sorted(claim["field_path"] for claim in result.claims),
+        )
+        self.assertEqual(
+            ("network:leg-vf-ae710e3412b6:service=XX1001;"
+             "date=2026-09-10;action=comfort",),
+            result.warnings,
+        )
+        self.assertEqual(
+            "tools=9; business_calls=2; candidates=1; status_claims=1; "
+            "comfort_claims=0; errors=network",
+            result.health["reason"],
+        )
+        self.assertEqual("live", result.health["mode"])
+        self.assertEqual("degraded", result.health["status"])
+
+    def test_partial_contract_mismatch_keeps_claims_and_has_status_priority(self):
+        class PartialContractMismatchTransport(VariFlightMCPTransport):
+            def __init__(self, resolved):
+                self.credentials = resolved
+                self.business_calls = 0
+
+            def execute(self, provider, provider_request):
+                self.business_calls += 1
+                action = provider_request.parameters["action"]
+                payload = {
+                    "code": 200,
+                    "message": "Success",
+                    "data": [{
+                        "FlightNo": "XX1001",
+                        "FlightCompany": "示例航空",
+                        "FlightDep": "BJS",
+                        "FlightArr": "SHA",
+                        "FlightDepcode": "BEX",
+                        "FlightArrcode": "SHX",
+                        "FlightDeptimePlanDate": "2026-09-10 10:00:00",
+                        "FlightArrtimePlanDate": "2026-09-10 12:00:00",
+                        "FlightState": "计划",
+                        "FlightStateNum": 0,
+                        "OntimeRate": "88.00%",
+                        "ArrOntimeRate": "88.00%",
+                    }],
+                }
+                tools = EXPECTED_TOOLS if action == "search" else EXPECTED_TOOLS[:-1]
+                return ProviderEnvelope(
+                    status_code=200,
+                    body={
+                        "tools": list(tools),
+                        "tool": (
+                            "searchFlightsByDepArr"
+                            if action == "search"
+                            else "flightHappinessIndex"
+                        ),
+                        "content": [{
+                            "type": "text",
+                            "text": json.dumps(payload, ensure_ascii=False),
+                        }],
+                        "isError": False,
+                    },
+                    headers={},
+                    raw_ref="synthetic-partial-contract-mismatch",
+                )
+
+        resolved = credentials(True)
+        transport = PartialContractMismatchTransport(resolved)
+        route = SimpleNamespace(
+            from_place={"name": "北京", "ref_id": "city-beijing"},
+            to_place={"name": "上海", "ref_id": "city-shanghai"},
+            travel_date="2026-09-10",
+        )
+        result = VariFlightBackend("auto", resolved, transport).enrich(
+            (), (route,), CLOCK,
+        )
+
+        self.assertEqual(1, len(result.flights))
+        self.assertEqual(3, len(result.claims))
+        self.assertEqual(
+            "tools=9; business_calls=2; candidates=1; status_claims=1; "
+            "comfort_claims=0; errors=contract_mismatch",
+            result.health["reason"],
+        )
+        self.assertEqual("live", result.health["mode"])
+        self.assertEqual("contract_mismatch", result.health["status"])
 
     def test_tool_fingerprint_drift_fails_closed(self):
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:

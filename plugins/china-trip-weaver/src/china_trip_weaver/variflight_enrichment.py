@@ -223,7 +223,7 @@ class VariFlightBackend:
         status_claims = sum(item["field_path"] == "/status" for item in claims)
         comfort_claims = sum(item["field_path"] == "/comfort" for item in claims)
         candidate_count = sum(item.get("provider") == "variflight" for item in copied_flights)
-        status = "ready" if claims or not errors else ("contract_mismatch" if "contract_mismatch" in errors else "degraded")
+        status = "contract_mismatch" if "contract_mismatch" in errors else ("degraded" if errors else "ready")
         return VariFlightEnrichmentResult(
             tuple(copied_flights),
             tuple(claims),
