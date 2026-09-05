@@ -585,6 +585,50 @@ class JourneyContinuityTests(unittest.TestCase):
         self.assertNotIn("北京 → 广州", visible)
         self.assertTrue(validate_journey_html(rendered, journey).ok)
 
+    def test_cli_expected_segment_days_reaches_the_planner(self):
+        """The CLI flag must actually change the partition and reject out-of-range values."""
+
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            output = Path(temporary)
+            request_path = output / "request.json"
+            candidates_path = output / "candidates.json"
+            request_path.write_text(json.dumps(self.case["request"], ensure_ascii=False), encoding="utf-8")
+            candidates_path.write_text(json.dumps(self.case["candidates"], ensure_ascii=False), encoding="utf-8")
+
+            def plan(extra, name):
+                return subprocess.run(
+                    [
+                        str(CTW), "journey", "plan",
+                        "--request", str(request_path),
+                        "--candidates", str(candidates_path),
+                        "--rail", "off", "--offline-fixture",
+                        "--fixed-clock", FIXED_NOW,
+                        "--output-json", str(output / name),
+                    ] + extra,
+                    text=True,
+                    capture_output=True,
+                )
+
+            default = plan([], "default.json")
+            self.assertEqual(0, default.returncode, default.stdout + default.stderr)
+            five = plan(["--expected-segment-days", "5"], "five.json")
+            self.assertEqual(0, five.returncode, five.stdout + five.stderr)
+
+            baseline = json.loads((output / "default.json").read_text(encoding="utf-8"))
+            shaped = json.loads((output / "five.json").read_text(encoding="utf-8"))
+            self.assertIsNone(baseline["segmentation"]["expected_segment_days"])
+            self.assertEqual(5, shaped["segmentation"]["expected_segment_days"])
+            self.assertNotEqual(
+                baseline["segmentation"]["actual_segment_days"],
+                shaped["segmentation"]["actual_segment_days"],
+            )
+            for journey in (baseline, shaped):
+                self.assertTrue(all(days <= 7 for days in journey["segmentation"]["actual_segment_days"]))
+
+            rejected = plan(["--expected-segment-days", "9"], "nine.json")
+            self.assertNotEqual(0, rejected.returncode)
+            self.assertIn("between one and seven", rejected.stdout + rejected.stderr)
+
     def test_cli_plans_and_validates_the_sixteen_day_journey(self):
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
             output = Path(temporary)

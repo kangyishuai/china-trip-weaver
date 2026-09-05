@@ -151,6 +151,12 @@ def _parser() -> argparse.ArgumentParser:
     journey_plan.add_argument("--mobility", choices=("live", "off"), default="off")
     journey_plan.add_argument("--lodging", choices=("live", "off"), default="off")
     journey_plan.add_argument("--aviation", choices=("auto", "off"), default="auto")
+    journey_plan.add_argument(
+        "--expected-segment-days",
+        type=int,
+        default=None,
+        help="preferred Trip length in days (1-7); segmentation still obeys the 7-day cap and the lodging chain",
+    )
     journey_plan.add_argument("--output-json", type=Path, default=Path("journey.json"))
     journey_plan.add_argument("--offline-fixture", action="store_true")
     journey_plan.add_argument("--fixed-clock", default=None)
@@ -478,6 +484,7 @@ def main(argv: Optional[Sequence[str]] = None, *, credential_path: Optional[Path
                 flyai_backend,
                 variflight_backend,
                 amap_lodging_backend,
+                expected_segment_days=args.expected_segment_days,
             )
             args.output_json.parent.mkdir(parents=True, exist_ok=True)
             write_canonical_json(args.output_json, result.journey)
