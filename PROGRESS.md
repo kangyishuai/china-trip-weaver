@@ -2579,3 +2579,11 @@ FAILED (failures=1)
 - 实现提交后合并工作树全量（exit 0）：`Ran 456 tests in 30.783s`、`OK`、skipped 0；secret scan（exit 0）：`0 finding(s) across 375 file(s)`。
 - 并行书 23 随后提交 `4c59da2`（`Cover provider entity result combinations`）；当前 `HEAD=4c59da2`，工作树 clean，本地相对 `origin/main` ahead 2。书 22 未暂存或提交其实现文件。
 - 未跑实网/demo、未安装 Codex、未改 CI/依赖/权限/版本；`BLOCKED.md` 已随 `218ea36` 写明书 22 本轮新增阻塞为“无”。当前验收轮次 10/12，书 22 实现与范围完成。
+
+## 书 22 最终合并 HEAD 门禁（完成）
+
+- 当前 `HEAD=81cf219`（书 22 验证记录），父链包含书 23 `4c59da2` 与书 22 实现 `218ea36`；门禁开始前 `git status --short --branch` 只有 `## main...origin/main [ahead 3]`，`git diff --stat` 和 `git diff --check` 均无输出。
+- 最终 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）：`Ran 456 tests in 30.031s`、`OK`、skipped 0。
+- 最终 `/usr/bin/python3 -m unittest tests.test_candidates -v`（exit 0）：`Ran 22 tests in 1.047s`、`OK`、skipped 0。
+- 最终 `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 375 file(s)`。
+- 当前验收轮次 12/12；完成条件全部满足，按止损规则停止新增工作，只提交本段最终记录。
