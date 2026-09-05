@@ -20,6 +20,7 @@ from china_trip_weaver.station_distance import AMapStationDistanceEnricher
 
 
 SERVER = ROOT / "tests" / "fixtures" / "mcp_stdio_server.py"
+MATRIX_SERVER = ROOT / "tests" / "fixtures" / "provider_matrix_mcp_server.py"
 EXPECTED_TOOL_FINGERPRINT = (
     "get-current-date",
     "get-stations-code-in-city",
@@ -42,6 +43,7 @@ class StationAMapFixtureTransport:
         fail=False,
         station_points=None,
         station_name_overrides=None,
+        station_city="多站城市",
     ):
         self.centre_available = centre_available
         self.fail = fail
@@ -50,6 +52,7 @@ class StationAMapFixtureTransport:
             "多站城远站": "100.010000,20.000000",
         })
         self.station_name_overrides = dict(station_name_overrides or {})
+        self.station_city = station_city
         self.requests = []
 
     def execute(self, provider, request):
@@ -89,7 +92,7 @@ class StationAMapFixtureTransport:
                     "name": self.station_name_overrides.get(station_name, amap_name),
                     "location": location,
                     "pname": "合成省",
-                    "cityname": "多站城市",
+                    "cityname": self.station_city,
                     "adname": "合成站区",
                     "address": "合成铁路大道",
                     "adcode": "990001",
@@ -286,6 +289,27 @@ class RailStationFallbackTests(unittest.TestCase):
         self.assertEqual(["BBX", "AAX", "CCX"], [item["station_code"] for item in candidates])
         self.assertNotIn("distance_meters", candidates[2])
 
+    def test_wrong_city_station_pois_do_not_add_distance_or_remove_candidates(self):
+        amap = StationAMapFixtureTransport(station_city="另一座城市")
+        result, diagnostics = self._query(
+            "station-ambiguous", "多站城", "昆明南", self._amap_enricher(amap),
+        )
+
+        candidates = [
+            item for item in result.normalized_items
+            if item["resolution_for"] == "from"
+        ]
+        self.assertEqual(["CCX", "BBX", "AAX"], [
+            item["station_code"] for item in candidates
+        ])
+        self.assertTrue(all("distance_meters" not in item for item in candidates))
+        self.assertEqual(["geocode", "poi", "poi", "poi"], [
+            request.capability for request in amap.requests
+        ])
+        self.assertEqual("ambiguous", result.error_class)
+        self.assertEqual("ready", result.health["status"])
+        self.assertNotIn("get-tickets", self._calls(diagnostics))
+
     def test_amap_network_failure_keeps_all_candidates_and_rail_health_ready(self):
         amap = StationAMapFixtureTransport(fail=True)
         result, diagnostics = self._query(
@@ -371,6 +395,42 @@ class RailStationFallbackTests(unittest.TestCase):
         self.assertEqual("no_results", result.error_class)
         self.assertEqual("ready", result.health["status"])
         self.assertNotIn("contract_mismatch", result.health["reason"])
+
+    def test_station_capability_rate_limit_is_not_misclassified_as_no_results(self):
+        credentials = resolve_credentials(
+            {}, ROOT / ".tmp" / "rail-station-rate-limit-no-credentials",
+        )
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            transport = RailMCPStdioTransport(
+                cache_dir=Path(temporary) / "npm-cache",
+                credentials=credentials,
+                command=(
+                    sys.executable, str(MATRIX_SERVER), "rail-station-rate-limit",
+                ),
+                cwd=ROOT,
+            )
+            station_request = ProviderRequest(
+                request_id="station-capability-rate-limit",
+                capability="station",
+                parameters={"city": "合成限流城"},
+                deadline_ms=2000,
+                as_of="2026-09-10",
+                cache_policy="bypass",
+            )
+            result = Rail12306Adapter().query(
+                station_request,
+                ProviderContext(
+                    clock=FixedClock.from_iso("2026-09-03T20:46:00+08:00"),
+                    credentials=credentials,
+                    transport=transport,
+                ),
+            )
+            diagnostics = tuple(transport.last_stderr)
+
+        self.assertEqual("rate_limited", result.error_class)
+        self.assertEqual("rate_limited", result.health["status"])
+        self.assertEqual((), result.normalized_items)
+        self.assertEqual(["get-stations-code-in-city"], self._calls(diagnostics))
 
 
 if __name__ == "__main__":

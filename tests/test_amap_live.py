@@ -17,6 +17,7 @@ from china_trip_weaver.clock import FixedClock
 from china_trip_weaver.contracts import ProviderRequest
 from china_trip_weaver.credentials import resolve_credentials
 from china_trip_weaver.flyai_inventory import FlyAIBackend
+from china_trip_weaver.geo import Point, coordinate_record
 from china_trip_weaver.mobility import MobilityBackend, apply_locations, normalize_modes
 from china_trip_weaver.planning import RailBackend, _combined_amap_health, plan_trip
 from china_trip_weaver.providers.amap import AMapAdapter
@@ -42,6 +43,29 @@ FLYAI_SERVER = ROOT / "tests" / "fixtures" / "flyai_cli_server.py"
 
 def load(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def lodging_geocode_candidates():
+    source = load(E2E / "candidates.json")
+    poi = copy.deepcopy(source["pois"][0])
+    poi["coordinates"] = coordinate_record(
+        "GCJ02", Point(121.0, 31.0), FixedClock.from_iso(FIXED_NOW), accuracy_m=50,
+    )
+    lodging = copy.deepcopy(source["lodgings"][0])
+    entity_refs = {poi["poi_id"], lodging["lodging_id"]}
+    return {
+        "candidates_version": source["candidates_version"],
+        "pois": [poi],
+        "lodgings": [lodging],
+        "claims": [
+            copy.deepcopy(claim) for claim in source["claims"]
+            if claim["subject_ref"] in entity_refs
+        ],
+        "unknowns": [
+            copy.deepcopy(item) for item in source["unknowns"]
+            if item["field_path"].startswith("/lodgings/")
+        ],
+    }
 
 
 def credentials(configured=True):
@@ -376,6 +400,117 @@ class AMapMobilityTests(unittest.TestCase):
         self.assertEqual(coordinates["native"], coordinates["gcj02"])
         self.assertIsNotNone(coordinates["wgs84"])
         self.assertEqual(["wgs84"], coordinates["conversion"]["derived_fields"])
+
+    def test_lodging_geocode_no_results_degrades_without_crashing(self):
+        class EmptyGeocodeTransport:
+            def __init__(self):
+                self.calls = 0
+                self.capabilities = []
+
+            def execute(self, provider, provider_request):
+                self.calls += 1
+                self.capabilities.append(provider_request.capability)
+                self.assert_request(provider, provider_request)
+                return ProviderEnvelope(200, {
+                    "status": "1",
+                    "info": "OK",
+                    "api": "geocode-v3",
+                    "geocodes": [],
+                }, {})
+
+            @staticmethod
+            def assert_request(provider, provider_request):
+                if provider != "amap" or provider_request.capability != "geocode":
+                    raise AssertionError("lodging probe must only call AMap geocode")
+
+        transport = EmptyGeocodeTransport()
+        result = MobilityBackend("live", credentials(), transport).resolve(
+            lodging_geocode_candidates(), self.clock, ("walking",),
+        )
+
+        self.assertEqual(["geocode"], transport.capabilities)
+        self.assertNotIn(
+            "lodging-bjs-central", {item.ref_id for item in result.locations},
+        )
+        self.assertEqual("degraded", result.health["status"])
+        self.assertIn("errors=no_results", result.health["reason"])
+        self.assertTrue(any(
+            item.startswith("no_results:lodging-bjs-central:geocode_lookup:")
+            for item in result.warnings
+        ), result.warnings)
+
+    def test_lodging_geocode_multiple_results_remain_ambiguous(self):
+        class AmbiguousGeocodeTransport:
+            def __init__(self):
+                self.calls = 0
+
+            def execute(self, provider, provider_request):
+                self.calls += 1
+                if provider != "amap" or provider_request.capability != "geocode":
+                    raise AssertionError("lodging probe must only call AMap geocode")
+                return ProviderEnvelope(200, {
+                    "status": "1",
+                    "info": "OK",
+                    "api": "geocode-v3",
+                    "geocodes": [{
+                        "location": "121.470000,31.230000",
+                        "formatted_address": "上海市合成甲住宿",
+                        "city": "上海市",
+                    }, {
+                        "location": "121.490000,31.250000",
+                        "formatted_address": "上海市合成乙住宿",
+                        "city": "上海市",
+                    }],
+                }, {})
+
+        transport = AmbiguousGeocodeTransport()
+        result = MobilityBackend("live", credentials(), transport).resolve(
+            lodging_geocode_candidates(), self.clock, ("walking",),
+        )
+
+        self.assertEqual(1, transport.calls)
+        self.assertNotIn(
+            "lodging-bjs-central", {item.ref_id for item in result.locations},
+        )
+        self.assertEqual("degraded", result.health["status"])
+        self.assertIn("errors=identity_conflict", result.health["reason"])
+        self.assertTrue(any(
+            item.startswith(
+                "identity_conflict:lodging-bjs-central:geocode_ambiguous:"
+            )
+            for item in result.warnings
+        ), result.warnings)
+
+    def test_lodging_geocode_rate_limit_is_not_hidden(self):
+        class RateLimitedGeocodeTransport:
+            retry_rate_limits = False
+
+            def __init__(self):
+                self.calls = 0
+
+            def execute(self, provider, provider_request):
+                self.calls += 1
+                if provider != "amap" or provider_request.capability != "geocode":
+                    raise AssertionError("lodging probe must only call AMap geocode")
+                return ProviderEnvelope(
+                    429, {"error": "synthetic quota"}, {"Retry-After": "30"},
+                )
+
+        transport = RateLimitedGeocodeTransport()
+        result = MobilityBackend("live", credentials(), transport).resolve(
+            lodging_geocode_candidates(), self.clock, ("walking",),
+        )
+
+        self.assertEqual(1, transport.calls)
+        self.assertNotIn(
+            "lodging-bjs-central", {item.ref_id for item in result.locations},
+        )
+        self.assertEqual("rate_limited", result.health["status"])
+        self.assertIn("errors=rate_limited", result.health["reason"])
+        self.assertTrue(any(
+            item.startswith("rate_limited:lodging-bjs-central:geocode_lookup:")
+            for item in result.warnings
+        ), result.warnings)
 
     def test_g3_ambiguous_poi_and_wrong_geocode_admin_leave_coordinates_unknown(self):
         scenario = load(AMAP_SCENARIOS / "g3_identity_conflict.json")

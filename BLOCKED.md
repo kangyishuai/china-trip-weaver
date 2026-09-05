@@ -345,6 +345,10 @@ PY
 - 判定：reason 与实体 warning 已承认 `network`，但 health 仍为 `ready`；search 航班与 claims 应保留，health 应为 `degraded`。需要改包根 `plugins/china-trip-weaver/src/china_trip_weaver/variflight_enrichment.py` 的 status 聚合，该文件不在书 23 只允许的 `mobility.py`、`planning.py`、`providers/` 范围内。
 - 边界处理：曾用于验证根因的 6 行临时改动已精确收回，未绕到 `planning.py` 做补偿，也没有留下失败/skip 测试。允许范围内保留 `test_comfort_network_failure_is_classified_without_partial_output`，只证明 transport + adapter 能正确给出 `network/degraded`；它不关闭本条上层 bug。
 
+### 书 23 交付标记
+
+- 上述 18 个上限外覆盖空格与 1 个已确认的 VariFlight 上层 health bug 均保持 open；本轮没有把未修项写成“无”，也没有用越界代码、skip 或弱断言掩盖。
+
 ## 书 22 候选名回填（2026-09-05）
 
 - 本轮新增阻塞：无。

@@ -2536,6 +2536,29 @@ FAILED (failures=1)
 - 现有 `tests/fixtures/mcp_stdio_server.py` 与 `variflight_mcp_server.py` 的探索性修改均已精确收回，二者组合 diff exit 0；故 fixture 只新增书 23 专用合成文件，不改既有夹具。
 - 当前验收轮次 9/12；剩余是等待共享书 22 独占改动提交后，复跑最终门、精确暂存本书 8 路径并提交。
 
+## 书 23 稳定合并树最终门（提交前）
+
+- 书 22 已先提交 `218ea3616cc388f6a15e0de51097c5e04ef11cd1`；其 `cli.py`、`candidates.py`、Skill、`tests/test_candidates.py` 与候选夹具相对新 HEAD 全部 clean。本书没有暂存或提交其独占路径。
+- `/usr/bin/python3 -m unittest discover -s tests`（exit 0）原始摘要：`Ran 456 tests in 30.598s`、`OK`；无 skipped 汇总，故 skipped 0。书 23 相对开工固定新增 6 条测试，满足 444→至少 450；额外 6 条来自已提交的并行书 22。
+- `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 375 file(s)`；`tests.test_no_captured_provider_data` 为 `Ran 1 ... OK`；6 个本书 Python 改动文件 `py_compile` exit 0。
+- 白名单脚本实际输出 `ALLOWLIST files=6 forbidden=0`（追加本节与交付标记后预期为 8）；`git diff --check` exit 0。
+- 禁碰组合 `cli.py/candidates.py/journey.py/replan.py/station_distance.py/variflight_enrichment.py/render/scheduler/validate_trip.py/schema/demo/docs/manifest/scan_secrets.py/tests/test_candidates.py` 的 `git diff --exit-code` 为 exit 0、无输出。
+- 新增 skip/todo 与版本载体关键词差异搜索均 exit 1、无输出；现有两个共享 MCP fixture server 的 diff 也为空。
+
+### 6 格最终结论（不再扩到第 7 格）
+
+1. 住宿 × AMap × 无结果：本来就对；新增回归首跑绿。
+2. 住宿 × AMap × 多结果歧义：真 bug 已修；不再静默选第一坐标，红→绿原始输出见上。
+3. 住宿 × AMap × 限流：本来就对；429 health 保持 `rate_limited`。
+4. 车站 × AMap × 行政区不符：本来就对；站点全集保留且不猜距离。
+5. 车站 × 12306 × 限流：真 bug 已修；`isError` 429 不再误报 no-results，红→绿原始输出见上。
+6. 航班 × VariFlight adapter/transport × 网络失败：本来就对；更上层 partial-success health 真 bug 因禁碰文件未修，已附复现写入 `BLOCKED.md`。
+
+- 当前验收轮次 10/12；只剩追加状态文件后的 secret/allowlist 复核、精确暂存、cached 审计与提交。
+
+- 状态文件追加后复核：secret scan 仍为 `0 finding(s) across 375 file(s)`；`ALLOWLIST files=8 forbidden=0`；禁碰组合与 `git diff --check` 均 exit 0；新增 skip/todo 与版本载体差异搜索均 exit 1、无输出。当前验收轮次 11/12，可以精确暂存。
+- 精确暂存后：`CACHED_ALLOWLIST files=8 forbidden=0`；cached stat 为 8 文件、`407 insertions(+), 1 deletion(-)`；cached `diff --check` 与禁碰组合均 exit 0，未暂存 diff 和未跟踪文件均为空。下一步只执行交付提交。
+
 ## 书 22 提交前逻辑与禁碰审计（完成）
 
 - 相对开工 `HEAD` 逐 AST 源片段字节比较：`POI_NAME_SIMILARITY_MARGIN`、`_poi_identity_conflicts`、`_name_similarity`、`_normalized_name`、`_city_matches` 全部 `IDENTITY_BYTE_EQUAL ... True`，汇总 `IDENTITY_ALL_EQUAL True`。

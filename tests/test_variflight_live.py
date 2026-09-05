@@ -25,6 +25,7 @@ from china_trip_weaver.variflight_enrichment import VariFlightBackend
 
 
 SERVER = ROOT / "tests" / "fixtures" / "variflight_mcp_server.py"
+MATRIX_SERVER = ROOT / "tests" / "fixtures" / "provider_matrix_mcp_server.py"
 FLYAI_SERVER = ROOT / "tests" / "fixtures" / "flyai_cli_server.py"
 E2E = ROOT / "tests" / "fixtures" / "e2e" / "beijing-shanghai-3d"
 CLOCK = FixedClock.from_iso("2026-09-03T23:30:00+08:00")
@@ -135,6 +136,31 @@ class VariFlightLiveTests(unittest.TestCase):
         self.assertEqual("ready", result.health["status"])
         self.assertIn("candidates=1", result.health["reason"])
         self.assertEqual(2, transport.business_calls)
+
+    def test_comfort_network_failure_is_classified_without_partial_output(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            resolved = credentials(True)
+            transport = VariFlightMCPTransport(
+                resolved,
+                cache_dir=Path(temporary) / "npm-cache",
+                temp_root=Path(temporary) / "variflight-home",
+                command=(
+                    sys.executable, str(MATRIX_SERVER),
+                    "variflight-comfort-network",
+                ),
+                cwd=ROOT,
+            )
+            result = VariFlightAdapter().query(
+                request("comfort"), ProviderContext(CLOCK, resolved, transport),
+            )
+
+        self.assertEqual("network", result.error_class)
+        self.assertEqual("degraded", result.health["status"])
+        self.assertEqual((), result.normalized_items)
+        self.assertEqual((), result.claims)
+        diagnostics = "\n".join(transport.last_stderr)
+        self.assertIn("[REDACTED]", diagnostics)
+        self.assertNotIn(resolved.get("VARIFLIGHT_API_KEY"), diagnostics)
 
     def test_tool_fingerprint_drift_fails_closed(self):
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:

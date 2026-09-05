@@ -329,6 +329,17 @@ def _call_payload(call: Mapping[str, Any], request: ProviderRequest, clock: Cloc
     if not isinstance(result, dict):
         raise ContractMismatch("12306 MCP tool result is not an object")
     if result.get("isError") is True:
+        content = result.get("content")
+        error_text = " ".join(
+            str(item.get("text", ""))
+            for item in content
+            if isinstance(item, dict)
+        ) if isinstance(content, list) else ""
+        lowered = error_text.lower()
+        if any(marker in lowered for marker in (
+            "429", "rate limit", "rate_limit", "quota", "限流", "请求过于频繁",
+        )):
+            raise ProviderFailure("rate_limited", "12306 MCP reported rate limiting")
         if request.capability == "station":
             raise ProviderFailure("no_results", "station lookup returned no matching stations")
         requested = _request_date(request)

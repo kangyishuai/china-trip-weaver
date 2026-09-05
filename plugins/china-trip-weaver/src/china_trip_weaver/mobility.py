@@ -272,6 +272,21 @@ class MobilityBackend:
             if _transport_calls(self.transport) > calls_before:
                 calls.append("amap.geocode:%s" % entity["ref_id"])
             if result.normalized_items and result.claims:
+                if len(result.normalized_items) != 1:
+                    claims.extend(_claims_with_status(
+                        identity_claims + list(result.claims), "conflict",
+                    ))
+                    errors.append("identity_conflict")
+                    warnings.extend((
+                        "identity_conflict",
+                        "identity_conflict:%s:geocode_ambiguous:%s" % (
+                            entity["ref_id"],
+                            poi_identity_feedback(
+                                result.normalized_items, result.claims,
+                            ),
+                        ),
+                    ))
+                    continue
                 provider_place = result.normalized_items[0]
                 coordinate_claim = result.claims[0] if result.claims[0]["field_path"] == "/coordinates" else None
                 if coordinate_claim is None or not isinstance(coordinate_claim.get("value"), dict):
