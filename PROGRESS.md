@@ -1717,3 +1717,11 @@ OK
 - 同轮 `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 372 file(s)`。
 - 白名单审计原始输出为 `ALLOWLIST_OK files=9`；仅 `BLOCKED.md`、`PROGRESS.md`、4 个允许源文件与 3 个允许测试。schema/、demo/、render/、cli.py、Journey、station_distance、candidates、scheduler、Trip validator、禁碰 AMap/MCP providers、docs 与所有版本承载文件的 diff 均为空；`git diff --check` exit 0。
 - 没有改 `demo/candidates.json`、没有重跑 demo、没有改 0.4.0、没有安装 Codex、没有新增依赖或流程。当前验收轮次 9/12，代码与文档已可提交。
+
+## Provider 运行时 unknown 原因覆盖：提交后核验（完成）
+
+- 实现提交 `fff7fbc6851840e9750929f5dde600ad0a1b97bc`（`Report runtime provider reasons for unknowns`）：9 个白名单文件，554 insertions/4 deletions；包含 `BLOCKED.md` 的“无”记录。
+- 提交后全量 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）→ `Ran 408 tests in 27.374s`、`OK`、skipped 0。
+- 提交后 `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）→ `secret scan: 0 finding(s) across 372 file(s)`。
+- `HEAD^..HEAD` 复核输出：`POST_COMMIT_FORBIDDEN_DIFF_OK paths=14`、`POST_COMMIT_VERSION_DIFF_OK files=8 value=0.4.0`、`POST_COMMIT_WORKTREE_CLEAN`。
+- `demo/candidates.json` 与实现提交父树逐字节相同，SHA-256=`2668b3ed8c0862eef9036ef7d62c882b5cedadb37496932f540970dae9ff3f99`；未 push、未发布、未安装 Codex。当前验收轮次 10/12，任务完成。
