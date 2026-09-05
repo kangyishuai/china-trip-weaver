@@ -1,6 +1,6 @@
 # Unresolved items
 
-One item is open. Everything else on this page is closed and kept only for provenance;
+Nothing is open. Everything on this page is closed and kept only for provenance;
 the per-round evidence lives in `PROGRESS.md`.
 
 ## Current task baseline note (not a blocker)
@@ -11,17 +11,20 @@ That commit changes only this task's allowlisted `PROGRESS.md`; `git diff a1bf1a
 is empty for product source, tests, and scripts. It is preserved as user-owned history and
 does not block the code baseline or the required 386-test and zero-secret gates.
 
-## Open
-
-### Public-distribution legal links
-
-`interface.websiteURL` points at the real repository. `privacyPolicyURL` and
-`termsOfServiceURL` are deliberately absent rather than invented: [ADR-0013](docs/design/adr/0013-stay-off-the-public-marketplace.md)
-keeps this plugin off the public marketplace and the project publishes no policy pages.
-Before any public distribution, publish reviewed pages, add their real HTTPS URLs, and
-rerun plugin ingestion validation.
-
 ## Closed
+
+### Public-distribution legal links are a consequence of ADR-0013, not pending work
+
+Reclassified on 2026-09-05 — reviewed and moved, not fixed, because it was never a task.
+`interface.websiteURL` points at the real repository; `privacyPolicyURL` and
+`termsOfServiceURL` are deliberately absent rather than invented. That follows directly
+from [ADR-0013](docs/design/adr/0013-stay-off-the-public-marketplace.md): the plugin ships
+as source and installs from a local marketplace, because every user must obtain their own
+AMap, FlyAI, and VariFlight credentials and AMap requires personal verification before it
+grants any quota. A public listing would promise an installability that does not exist.
+If that decision is ever revisited, publishing reviewed privacy and terms pages, adding
+their real HTTPS URLs, and rerunning plugin ingestion validation become prerequisites of
+the new decision — reopen it there, not here.
 
 ### 12306 station candidates now carry best-effort distance signals
 
