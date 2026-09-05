@@ -168,13 +168,20 @@ class StationAMapFailureTransport(StationAMapFixtureTransport):
 
 
 class RailStationFallbackTests(unittest.TestCase):
-    def _query(self, mode, from_name, to_name, station_distance_enricher=None):
+    def _query(
+        self,
+        mode,
+        from_name,
+        to_name,
+        station_distance_enricher=None,
+        server=SERVER,
+    ):
         credentials = resolve_credentials({}, ROOT / ".tmp" / "rail-station-fallback-no-credentials")
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
             transport = RailMCPStdioTransport(
                 cache_dir=Path(temporary) / "npm-cache",
                 credentials=credentials,
-                command=(sys.executable, str(SERVER), mode),
+                command=(sys.executable, str(server), mode),
                 cwd=ROOT,
                 station_distance_enricher=station_distance_enricher,
             )
@@ -558,6 +565,41 @@ class RailStationFallbackTests(unittest.TestCase):
         self.assertEqual("rate_limited", result.health["status"])
         self.assertEqual((), result.normalized_items)
         self.assertEqual(["get-stations-code-in-city"], self._calls(diagnostics))
+
+    def test_station_network_exit_retries_then_degrades_exact_entity(self):
+        marker = '            elif name == "get-stations-code-in-city":\n'
+        source = SERVER.read_text(encoding="utf-8")
+        self.assertEqual(1, source.count(marker))
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            network_exit_server = Path(temporary) / "station_network_exit_server.py"
+            network_exit_server.write_text(
+                source.replace(
+                    marker,
+                    marker + "                raise SystemExit(7)\n",
+                ),
+                encoding="utf-8",
+            )
+            result, diagnostics = self._query(
+                "station-no-results",
+                "合成网络城",
+                "合成终点",
+                server=network_exit_server,
+            )
+
+        self.assertEqual("network", result.error_class)
+        self.assertEqual(("network",), result.warnings)
+        self.assertEqual("degraded", result.health["status"])
+        self.assertEqual("network: provider network failure", result.health["reason"])
+        self.assertEqual((), result.normalized_items)
+        self.assertEqual((), result.claims)
+        self.assertEqual(
+            [
+                "get-station-code-by-names",
+                "get-station-code-of-citys",
+                "get-stations-code-in-city",
+            ],
+            self._calls(diagnostics),
+        )
 
 
 if __name__ == "__main__":

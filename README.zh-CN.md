@@ -130,7 +130,7 @@ plugins/china-trip-weaver/scripts/ctw validate-html demo/trip.html demo/trip.jso
 
 [`demo/grouped-departures/`](demo/grouped-departures/) 下的分组出发示例让两组合成旅客分别从北京、广州前往上海会合点。提交的 Trip 保持严格的分组 request 形状，并可见地展示各组出发地、3 人总数、分组归属交通腿，以及分组/全团交通价格。
 
-第五组示例位于 [`demo/journey-16d/`](demo/journey-16d/)：一份完全合成的上海→杭州→苏州 16 天 Journey，拆成三个完整 Trip。用 `/usr/bin/python3 scripts/build_renderer_fixtures.py` 可重复生成，再运行：
+第五组示例位于 [`demo/journey-16d/`](demo/journey-16d/)：一份完全合成的上海→杭州→苏州 16 天 Journey，拆成三个完整 Trip。它的已提交文件由 `scripts/build_renderer_fixtures.py` 独占写入；该生成器固定使用 `2026-09-05T09:00:00+08:00`，有意不同于其余四组 demo 使用的 `2026-09-04T00:00:00+08:00`，不要单独手工重跑第五组。用 `/usr/bin/python3 scripts/build_renderer_fixtures.py` 可重复生成，再运行：
 
 ```bash
 plugins/china-trip-weaver/scripts/ctw journey validate demo/journey-16d/journey.json

@@ -100,6 +100,8 @@ def write_json(path: Path, value: Mapping[str, Any]) -> None:
 def build_journey_demo() -> Mapping[str, Any]:
     """Generate the fifth demo entirely from the repository's synthetic fixture."""
 
+    # This script exclusively owns demo/journey-16d. Its fixed clock intentionally
+    # differs from the other four demos; do not hand-run the fifth demo separately.
     case = journey_sixteen_day_case()
     result = plan_journey(
         case["request"],

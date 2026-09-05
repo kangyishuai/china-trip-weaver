@@ -12,6 +12,7 @@ import time
 import unittest
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 
@@ -438,6 +439,34 @@ class FlyAIBackendEntityFailureTests(unittest.TestCase):
             {}, ROOT / ".tmp" / "flyai-book30-synthetic-no-file",
         )
 
+    @staticmethod
+    def synthetic_route():
+        return SimpleNamespace(
+            from_place={"name": "合成起城", "ref_id": "city-synthetic-origin"},
+            to_place={"name": "合成终城", "ref_id": "city-synthetic-destination"},
+            travel_date="2026-09-10",
+        )
+
+    def resolve_flight_failure(self, fixture_name):
+        fixture = load(
+            ROOT / "tests" / "fixtures" / "providers" / "flyai"
+            / (fixture_name + ".json")
+        )
+        transport = ReplayTransport(fixture["transport"])
+        result = FlyAIBackend(
+            "live", self.resolved_credentials(), transport,
+        ).resolve(
+            {
+                "start_date": "2026-09-10",
+                "end_date": "2026-09-10",
+                "destinations": [{"city": "合成终城"}],
+                "travelers": 2,
+            },
+            (self.synthetic_route(),),
+            CLOCK,
+        )
+        return result, transport
+
     def test_lodging_no_results_keeps_empty_inventory_with_ready_health_warning(self):
         transport = ReplayTransport({
             "kind": "response",
@@ -497,6 +526,98 @@ class FlyAIBackendEntityFailureTests(unittest.TestCase):
         )
         self.assertEqual(
             ("flyai.lodging:合成云港:2026-09-10:2026-09-11",),
+            result.business_calls,
+        )
+        self.assertEqual(2, transport.calls)
+
+    def test_flight_no_results_keeps_empty_comparisons_with_exact_warning_and_health(self):
+        result, transport = self.resolve_flight_failure("empty")
+
+        self.assertEqual((), result.flights)
+        self.assertEqual((), result.claims)
+        self.assertEqual(
+            ("no_results:flight@city-synthetic-origin->city-synthetic-destination:"
+             "route=city-synthetic-origin->city-synthetic-destination;date=2026-09-10",),
+            result.warnings,
+        )
+        self.assertEqual(
+            "calls=1; credential=keyless-trial; lodging_items=0; "
+            "flight_items=0; errors=no_results",
+            result.health["reason"],
+        )
+        self.assertEqual("ready", result.health["status"])
+        self.assertEqual("static", result.health["mode"])
+        self.assertEqual(
+            ("flyai.flight:2026-09-10:合成起城:合成终城",),
+            result.business_calls,
+        )
+        self.assertEqual(1, transport.calls)
+
+    def test_flight_rate_limit_keeps_empty_comparisons_with_exact_warning_and_health(self):
+        result, transport = self.resolve_flight_failure("rate_limit")
+
+        self.assertEqual((), result.flights)
+        self.assertEqual((), result.claims)
+        self.assertEqual(
+            ("rate_limited:flight@city-synthetic-origin->city-synthetic-destination:"
+             "route=city-synthetic-origin->city-synthetic-destination;date=2026-09-10",),
+            result.warnings,
+        )
+        self.assertEqual(
+            "calls=1; credential=keyless-trial; lodging_items=0; "
+            "flight_items=0; errors=rate_limited",
+            result.health["reason"],
+        )
+        self.assertEqual("degraded", result.health["status"])
+        self.assertEqual("static", result.health["mode"])
+        self.assertEqual(
+            ("flyai.flight:2026-09-10:合成起城:合成终城",),
+            result.business_calls,
+        )
+        self.assertEqual(1, transport.calls)
+
+    def test_flight_contract_drift_keeps_empty_comparisons_with_exact_warning_and_health(self):
+        result, transport = self.resolve_flight_failure("wrong_shape")
+
+        self.assertEqual((), result.flights)
+        self.assertEqual((), result.claims)
+        self.assertEqual(
+            ("contract_mismatch:flight@city-synthetic-origin->city-synthetic-destination:"
+             "route=city-synthetic-origin->city-synthetic-destination;date=2026-09-10",),
+            result.warnings,
+        )
+        self.assertEqual(
+            "calls=1; credential=keyless-trial; lodging_items=0; "
+            "flight_items=0; errors=contract_mismatch",
+            result.health["reason"],
+        )
+        self.assertEqual("contract_mismatch", result.health["status"])
+        self.assertEqual("static", result.health["mode"])
+        self.assertEqual(
+            ("flyai.flight:2026-09-10:合成起城:合成终城",),
+            result.business_calls,
+        )
+        self.assertEqual(1, transport.calls)
+
+    def test_flight_network_failure_retries_and_keeps_empty_comparisons_with_exact_warning_and_health(self):
+        result, transport = self.resolve_flight_failure("stderr_error")
+
+        self.assertEqual((), result.flights)
+        self.assertEqual((), result.claims)
+        self.assertEqual(
+            ("network:flight@city-synthetic-origin->city-synthetic-destination:"
+             "route=city-synthetic-origin->city-synthetic-destination;date=2026-09-10",),
+            result.warnings,
+        )
+        self.assertEqual(
+            "calls=1; credential=keyless-trial; lodging_items=0; "
+            "flight_items=0; errors=network",
+            result.health["reason"],
+        )
+        self.assertEqual("degraded", result.health["status"])
+        self.assertEqual("static", result.health["mode"])
+        self.assertEqual(
+            ("flyai.flight:2026-09-10:合成起城:合成终城",),
             result.business_calls,
         )
         self.assertEqual(2, transport.calls)

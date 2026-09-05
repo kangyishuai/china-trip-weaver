@@ -131,7 +131,7 @@ The one-day round trip under [`demo/guangzhou-shenzhen/`](demo/guangzhou-shenzhe
 
 The grouped-departure example under [`demo/grouped-departures/`](demo/grouped-departures/) sends two synthetic traveler groups from Beijing and Guangzhou to a Shanghai meeting anchor. Its checked-in Trip keeps the strict grouped request shape and visibly shows each origin, the three-person total, group-owned transport legs, and per-group/whole-party transport pricing.
 
-The fifth example under [`demo/journey-16d/`](demo/journey-16d/) is a fully synthetic 16-day Shanghai → Hangzhou → Suzhou Journey split into three complete Trips. Regenerate it with `/usr/bin/python3 scripts/build_renderer_fixtures.py`, then validate both artifacts with:
+The fifth example under [`demo/journey-16d/`](demo/journey-16d/) is a fully synthetic 16-day Shanghai → Hangzhou → Suzhou Journey split into three complete Trips. Its checked-in files are owned exclusively by `scripts/build_renderer_fixtures.py`, whose fixed clock `2026-09-05T09:00:00+08:00` intentionally differs from the `2026-09-04T00:00:00+08:00` clock used by the other four demos; do not hand-run the fifth demo separately. Regenerate it with `/usr/bin/python3 scripts/build_renderer_fixtures.py`, then validate both artifacts with:
 
 ```bash
 plugins/china-trip-weaver/scripts/ctw journey validate demo/journey-16d/journey.json

@@ -205,6 +205,65 @@ class VariFlightLiveTests(unittest.TestCase):
         )
         self.assertEqual(1, transport.business_calls)
 
+    def test_search_rate_limit_keeps_empty_candidates_with_exact_warning_and_health(self):
+        class RateLimitedSearchTransport(VariFlightMCPTransport):
+            def __init__(self, resolved, specification):
+                self.credentials = resolved
+                self.specification = specification
+                self.business_calls = 0
+
+            def execute(self, provider, provider_request):
+                if provider != "variflight" or provider_request.parameters["action"] != "search":
+                    raise AssertionError("synthetic transport only serves VariFlight search")
+                self.business_calls += 1
+                return ProviderEnvelope(
+                    status_code=self.specification["status_code"],
+                    body=self.specification["body"],
+                    headers=self.specification["headers"],
+                    raw_ref="synthetic-rate-limited-search",
+                )
+
+        fixture = load(
+            ROOT / "tests" / "fixtures" / "providers" / "variflight"
+            / "rate_limit.json"
+        )
+        resolved = credentials(True)
+        transport = RateLimitedSearchTransport(resolved, fixture["transport"])
+        route = SimpleNamespace(
+            from_place={"name": "合成起城", "ref_id": "city-synthetic-origin"},
+            to_place={"name": "合成终城", "ref_id": "city-synthetic-destination"},
+            travel_date="2026-09-10",
+        )
+        with mock.patch.dict(
+            CITY_IATA,
+            {"合成起城": "AAA", "合成终城": "BBB"},
+            clear=True,
+        ):
+            result = VariFlightBackend("auto", resolved, transport).enrich(
+                (), (route,), CLOCK,
+            )
+
+        self.assertEqual((), result.flights)
+        self.assertEqual((), result.claims)
+        self.assertEqual(
+            ("rate_limited:flight@city-synthetic-origin->city-synthetic-destination:"
+             "route=city-synthetic-origin->city-synthetic-destination;"
+             "date=2026-09-10;action=search",),
+            result.warnings,
+        )
+        self.assertEqual(
+            "tools=9; business_calls=1; candidates=0; status_claims=0; "
+            "comfort_claims=0; errors=rate_limited",
+            result.health["reason"],
+        )
+        self.assertEqual("degraded", result.health["status"])
+        self.assertEqual("static", result.health["mode"])
+        self.assertEqual(
+            ("variflight.search:2026-09-10:AAA:BBB",),
+            result.business_calls,
+        )
+        self.assertEqual(1, transport.business_calls)
+
     def test_comfort_network_failure_is_classified_without_partial_output(self):
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
             resolved = credentials(True)
