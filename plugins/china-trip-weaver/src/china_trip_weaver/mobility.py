@@ -206,7 +206,9 @@ class MobilityBackend:
                         break
                     continue
                 selected = poi_result.normalized_items[0]
-                conflict_reasons = _poi_identity_conflicts(entity, poi_result.normalized_items)
+                conflict_reasons = _poi_identity_conflicts(
+                    entity, poi_result.normalized_items, poi_result.claims,
+                )
                 if conflict_reasons:
                     claims.extend(_claims_with_status(poi_result.claims, "conflict"))
                     errors.append("identity_conflict")
@@ -517,7 +519,9 @@ def check_poi_name_identity(
         feedback = poi_identity_feedback((), ()) if status == "ambiguous" else None
         return POINameCheck(status, (reason,), feedback)
     feedback = poi_identity_feedback(result.normalized_items, result.claims)
-    conflicts = _poi_identity_conflicts(entity, result.normalized_items)
+    conflicts = _poi_identity_conflicts(
+        entity, result.normalized_items, result.claims,
+    )
     if conflicts:
         return POINameCheck("ambiguous", conflicts, feedback)
     selected_ids = set(result.normalized_items[0].get("claim_ids", ()))
@@ -550,14 +554,38 @@ def normalize_modes(modes: Sequence[str]) -> Tuple[str, ...]:
 def _poi_identity_conflicts(
     entity: Mapping[str, Any],
     candidates: Sequence[Mapping[str, Any]],
+    claims: Sequence[Mapping[str, Any]],
 ) -> Tuple[str, ...]:
     first = candidates[0]
     reasons = []
-    if not _city_matches(entity["city"], first.get("city")):
+    if not _poi_admin_matches(entity, first, claims):
         reasons.append("poi_admin_mismatch")
     if _poi_name_is_ambiguous(entity["name"], candidates):
         reasons.append("ambiguous_name_margin")
     return tuple(reasons)
+
+
+def _poi_admin_matches(
+    entity: Mapping[str, Any],
+    candidate: Mapping[str, Any],
+    claims: Sequence[Mapping[str, Any]],
+) -> bool:
+    administrative_areas = [candidate.get("city")]
+    selected_claim_ids = set(candidate.get("claim_ids", ()))
+    for claim in claims:
+        if (
+            claim.get("claim_id") in selected_claim_ids
+            and claim.get("subject_ref") == entity.get("ref_id")
+            and claim.get("field_path") == "/provider_identity"
+        ):
+            identity = claim.get("value")
+            if isinstance(identity, dict):
+                administrative_areas.append(identity.get("district"))
+            break
+    return any(
+        _city_matches(entity.get("city"), actual)
+        for actual in administrative_areas
+    )
 
 
 def _poi_name_is_ambiguous(

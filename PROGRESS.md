@@ -2900,6 +2900,14 @@ _normalized_name_BYTE_EQUAL True SHA256 c461fcf9f25c4911fdaef57da4324e841ebfd743
 6. 原 warning 为 `network:leg-vf-ae710e3412b6:service=XX1001;date=2026-09-10;action=comfort`。
 7. 下一步先新增上层回归并取得旧实现红态，再做一行最小实现与正反验收。
 
+## 书 27 开工回执（2026-09-05，≤10 行）
+- 任务 0 通过：`平潭 -> '平潭'`、`福州市 -> '福州'`，且 `_city_matches('平潭','福州市')` 为 `False`。
+- `mobility.py` 中 `_poi_identity_conflicts` 有两个调用点，二者均持有 provider claims。
+- AMap normalized POI item 不含 `district`；同 subject 的 `/provider_identity` claim `value` 已含该字段。
+- 只改 POI identity 路径：新增 claim-aware 精确 city/district 匹配，不改旧 `_city_key`、`_city_matches` 或名字歧义路径。
+- 仅写 `mobility.py`、`tests/test_amap_live.py` 与本文件；不动 providers、版本、CI 或书 26 的 VariFlight 改动。
+- `station_distance.py` 的独立 `_city_matches` 可能同病，本轮只记疑点、不修改。
+
 ## 书 26 新增回归红→绿（完成）
 
 - 新增两条上层回归：network 部分失败必须保留 1 个航班、3 条 claims、warning/reason 并报 `degraded`；部分成功中若 error 为 `contract_mismatch`，状态仍须优先报 `contract_mismatch`。
@@ -2983,3 +2991,136 @@ OK
 - 实现提交 `229530fb7e39068d7eb72cbb27ba2442859dfe76`（`Fix VariFlight partial-failure health`）恰含 `variflight_enrichment.py` 与 `tests/test_variflight_live.py`；未含并行书 27 的 mobility/test/progress 改动。
 - `BLOCKED.md` 保留书 23 原缺陷与旧输出，状态改为已关闭，并写入实现提交号与合成 MCP 回归命令；18 个无关 coverage debt 原样保持 open。
 - 本书未改 claims 产出、providers、planning、mobility、candidates、schema、版本、CI；未跑实网、未安装 Codex、未 push。
+
+## 书 27 城市匹配认区县（完成）
+
+- 实现仅让 `_poi_identity_conflicts` 的两个调用点传入 provider claims；新增 `_poi_admin_matches`，从首候选绑定且 subject 相符的 `/provider_identity` claim 读取 district，与 normalized city 一并走原 `_city_matches` 的后缀剥离后精确相等判断。
+- 新增 4 个离线合成 `MobilityBackend.resolve` 回归；测试数据只用“合成”名称、假地址与近零坐标，没有真实酒店或行程地点。
+- 新测试先红（exit 1）原始输出：
+
+```text
+test_poi_admin_district_exact_match_resolves_coordinates (tests.test_amap_live.AMapMobilityTests) ... FAIL
+test_poi_admin_city_exact_match_resolves_coordinates (tests.test_amap_live.AMapMobilityTests) ... ok
+test_poi_admin_city_and_district_non_matches_remain_conflicts (tests.test_amap_live.AMapMobilityTests) ... ok
+test_poi_admin_empty_district_preserves_city_only_conflict (tests.test_amap_live.AMapMobilityTests) ... ok
+
+======================================================================
+FAIL: test_poi_admin_district_exact_match_resolves_coordinates (tests.test_amap_live.AMapMobilityTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_amap_live.py", line 445, in test_poi_admin_district_exact_match_resolves_coordinates
+    self.assertEqual(["poi", "geocode"], transport.capabilities)
+AssertionError: Lists differ: ['poi', 'geocode'] != ['poi']
+
+First list contains 1 additional elements.
+First extra element 1:
+'geocode'
+
+- ['poi', 'geocode']
++ ['poi']
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.008s
+
+FAILED (failures=1)
+```
+
+- 正确实现后同 4 项（exit 0）原始输出：
+
+```text
+test_poi_admin_district_exact_match_resolves_coordinates (tests.test_amap_live.AMapMobilityTests) ... ok
+test_poi_admin_city_exact_match_resolves_coordinates (tests.test_amap_live.AMapMobilityTests) ... ok
+test_poi_admin_city_and_district_non_matches_remain_conflicts (tests.test_amap_live.AMapMobilityTests) ... ok
+test_poi_admin_empty_district_preserves_city_only_conflict (tests.test_amap_live.AMapMobilityTests) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.007s
+
+OK
+```
+
+- 反向验证：临时改为标准化后的 `expected in actual`，控制测试如约变红（exit 1）：
+
+```text
+test_poi_admin_city_and_district_non_matches_remain_conflicts (tests.test_amap_live.AMapMobilityTests) ... FAIL
+
+======================================================================
+FAIL: test_poi_admin_city_and_district_non_matches_remain_conflicts (tests.test_amap_live.AMapMobilityTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_amap_live.py", line 465, in test_poi_admin_city_and_district_non_matches_remain_conflicts
+    self.assertEqual(["poi"], transport.capabilities)
+AssertionError: Lists differ: ['poi'] != ['poi', 'geocode']
+
+Second list contains 1 additional elements.
+First extra element 1:
+'geocode'
+
+- ['poi']
++ ['poi', 'geocode']
+
+----------------------------------------------------------------------
+Ran 1 test in 0.002s
+
+FAILED (failures=1)
+```
+
+- 子串改动已用补丁精确恢复；相对正确实现运行 `git diff --exit-code -- plugins/china-trip-weaver/src/china_trip_weaver/mobility.py` 为 exit 0、无输出，控制测试恢复为 `Ran 1 test in 0.002s`、`OK`。
+- 完整 `tests.test_amap_live`：`Ran 38 tests in 0.500s`、`OK`。最终组合工作树全量原始摘要：
+
+```text
+----------------------------------------------------------------------
+Ran 469 tests in 32.618s
+
+OK
+skipped=0
+```
+
+- 密钥扫描（exit 0）：`secret scan: 0 finding(s) across 376 file(s)`。
+- 逐段 `git diff --no-index` 对 HEAD 与工作树比较：`_city_key`、`_city_matches`、`_poi_name_is_ambiguous`、`_name_similarity`、`POI_NAME_SIMILARITY_MARGIN` 均为 `git diff empty`。
+- `station_distance.py` 的独立 `_city_matches` 仍可能存在同类行政层级问题；遵照范围只保留疑点，本轮未修改。
+
+## 书 26 / 27 领导验收（2026-09-05，Claude 亲自复跑）
+
+### 书 26（已提交 `229530f`）：通过
+
+- 书 26 单独跑（把书 27 的工作树改动暂存后）：`Ran 465 tests`、`OK`、skipped 0；`secret scan: 0 finding(s) across 376 file(s)`。
+- 越界为零：`planning.py`、`mobility.py`、`candidates.py`、`providers/`、`schema/` 的 diff 均 0 行；版本号未动。实现 diff 恰好一行。
+- 验收命令原始输出（`variflight-comfort-network` 同一条输入）：
+
+```text
+{"claims": 3, "flights": 1, "mode": "live", "reason": "tools=9; business_calls=2; candidates=1; status_claims=1; comfort_claims=0; errors=network", "status": "degraded", "warnings": ["network:leg-vf-ae710e3412b6:service=XX1001;date=2026-09-10;action=comfort"]}
+```
+
+  `status` 从 `ready` 变 `degraded`，航班、3 条 claims、warning、reason 与 mode 逐字未变。
+- 领导侧独立反向验证：在 status 聚合前强行插入 `errors = []` 重跑同一输入，`status` 回到 `ready`、`flights` 仍为 1——判的确实是 errors，不是一刀切。恢复后 diff 为空。
+- 销账属实：`BLOCKED.md` 那条改为已关闭并附提交号与复现命令，条目未删，「书 23 交付标记」同步更新。
+
+### 书 27（验收时仍在工作树未提交，领导侧代为提交）：通过
+
+- 合并后全量 `Ran 469 tests`、`OK`、skipped 0；`secret scan: 0 finding(s) across 376 file(s)`。
+- 越界为零：`providers/`、`planning.py`、`cli.py`、`candidates.py`、`station_distance.py`、`schema/` 均 0 行。完成条件二的五处（`_city_key`、`_city_matches`、`_poi_name_is_ambiguous`、`POI_NAME_SIMILARITY_MARGIN`、`_name_similarity`）diff 全空。
+- 领导侧独立反向验证：把 `_poi_admin_matches` 的比较临时放宽成子串包含，`tests.test_amap_live` 立刻 `FAILED (failures=1)`，命中的正是「两者都不命中」那条控制测试；恢复后 38 项全绿。
+- 新增四类测试走真实 `MobilityBackend.resolve`，夹具无任何福建真实地名。
+
+### 关键指标：同一份福建实网数据，改前 vs 改后
+
+三段全实网重跑（`--mobility live --lodging live --aviation auto`），三段 `errors=0`：
+
+```text
+段      改前 unknown/admin/歧义   ->  改后 unknown/admin/歧义
+north   4/4/0  ->  4/0/2
+coast   11/6/5 ->  11/0/9
+south   8/4/2  ->  8/0/6
+合计    23/14/7 -> 23/0/17
+```
+
+- **`poi_admin_mismatch` 从 14 条清零**，POI 那一关全部放行，修复确实生效。
+- **但坐标 unknown 总数一条没降（23 → 23）**。原因是这些 POI 通过 POI 关之后，立刻卡在下一道关上：改后 23 条的构成是 `ambiguous_name_margin` 17、`geocode_admin_mismatch` 4、`incomplete_address` 1、`geocode_ambiguous` 1。
+- 我在书 27 里拍板「geocode 那条路留下一份书」，现在它暴露成了实测证据：`poi-longwangtou` 的 POI 关已放行（district=平潭县 匹配用户写的「平潭」），geocode 关却报 `actual_administrative_area: 福州市` 又拦一次——**同一个行政层级缺陷，在 geocode 分支上原样存在**。涉及 `poi-wuyi-palace`、`poi-dahongpao-trail`、`poi-longwangtou`、`poi-xianrenjing` 四条。
+- 修 geocode 分支必须动 `providers/amap.py`：geocode 的 normalized item 只有 `{ref_id, name, city}`，没保留 district，而 POI 的 district 是从 `/provider_identity` claim 里取的。这是下一份任务书。
+- 另外两条新暴露的原因，本轮首次出现在记录里：`poi_address_missing_admin_detail`（洛阳桥）与 `geocode_ambiguous`（泉州海外交通史博物馆）。
+
+### 修正一条我此前给出的判断
+
+书 27 立项时我说「行政层级缺陷占 26%、是单一最大来源」。实测证明它不是**独立**的 26%——那 14 条里多数同时压着名字歧义或 geocode 侧的同种缺陷，修掉 POI 这一关并不直接换来坐标。真正决定坐标能不能落地的是这条链上**最后一道**关。
