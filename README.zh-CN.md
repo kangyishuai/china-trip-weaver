@@ -14,6 +14,8 @@ planner 继续支持既有的一日游与单城市行程，并支持 2–7 天�
 
 Journey 的高德调用额度按最终子 Trip 分配。缺省总额度是每个 Trip 80 次、且单个 Trip 仍封顶 80；`ctw journey plan --amap-total-max-calls N` 设置非负的全程总上限，并在最终各段之间尽可能均分。该上限不会反向扩大缺省额度。
 
+高德真正尝试定位 POI 却无法确认身份或坐标时，Trip 的 `unknowns` 会留下可照着改的坐标记录；可用时也会带经过脱敏的失败原因与候选名称。关闭 mobility 或没有高德 Key 时，不会凭空制造这类记录。
+
 旅客输入有两种互斥写法：既有 `origin + travelers`，或 `traveler_groups[] + meeting_anchor`。每组提供稳定的 `group_id`、本组人数与 origin，可另带 mobility profile；会合锚点提供地点和 `meet_by`，`buffer_minutes` 缺省为 60。任何一组无法留出足够缓冲都会得到结构化冲突；混合输入会被拒绝，输出 Trip 也只保留被选中的那一种写法。验证、渲染与 inventory 查询都会原生消费分组写法。分组交通腿必须有明确 `group_refs`；`transport_pricing` 分别给出每组交通总价与全团交通总价。
 
 `pace=slow` 先按严格慢节奏排程。只要无解，就累计尝试：降低每日 POI 上限、把 POI／餐点时长压到推荐值的 70%、最后把当日结束时间放宽到 balanced 的 21:30。排得出的第一步就停止，实际采用的每一步都会追加到 `request.assumptions`；三步无法改变的硬冲突保留原结构化冲突，并列出全部已尝试降配。
@@ -74,7 +76,7 @@ CODEX_HOME=/path/to/an/isolated/codex-home \
   plugin list
 ```
 
-期望结果是 `china-trip-weaver@china-trip-weaver-local`、版本 `0.5.0`、状态 `installed, enabled`。安装或更新后请新建一个 Codex 任务，让它的 9 个 Skill 与 MCP 配置重新加载。
+期望结果是 `china-trip-weaver@china-trip-weaver-local`、版本 `0.5.1`、状态 `installed, enabled`。安装或更新后请新建一个 Codex 任务，让它的 9 个 Skill 与 MCP 配置重新加载。
 
 用 Codex 桌面版界面安装时：把本仓库添加为本地市场，确认 `china-travel-assistant` 已禁用，安装 China Trip Weaver Local，重启，再新建任务。两个插件不能同时启用，因为它们都暴露 `plan-china-trip`。
 
@@ -84,8 +86,12 @@ CODEX_HOME=/path/to/an/isolated/codex-home \
 
 `ctw candidates add-poi ... --verify-name` 会在写入前用高德核对 POI 名称。它只报告经过脱敏的 `unique`、`ambiguous` 或 `unavailable` 结果并最多给出三个候选名称建议，不会凭这次核名写入坐标；缺 Key 或 provider 核名失败都不会阻断候选写入。
 
+`ctw candidates fix-names` 读取 Trip 或 Journey 里的高德坐标 unknown，把可采用的规范名报告给对应的调研候选。它默认只报告；只有加 `--apply` 才会把唯一确定的名称写回候选文件。歧义、冲突、同名或格式异常的建议都留给人工确认，绝不自动修改。
+
 ```bash
 plugins/china-trip-weaver/scripts/ctw validate-candidates demo/candidates.json
+plugins/china-trip-weaver/scripts/ctw candidates fix-names CANDIDATES.json --trip TRIP_OR_JOURNEY.json
+plugins/china-trip-weaver/scripts/ctw candidates fix-names CANDIDATES.json --trip TRIP_OR_JOURNEY.json --apply
 ```
 
 参见示例 [`candidates.example.json`](plugins/china-trip-weaver/references/candidates.example.json) 和机器合同 [`candidates.schema.json`](plugins/china-trip-weaver/schema/candidates.schema.json)。
@@ -158,6 +164,7 @@ ctw doctor
 ctw validate TRIP.json
 ctw validate-candidates CANDIDATES.json
 ctw candidates add-poi CANDIDATES.json --name NAME --city CITY --category CATEGORY --source-url URL [--verify-name]
+ctw candidates fix-names CANDIDATES.json --trip TRIP_OR_JOURNEY.json [--apply]
 ctw canonicalize TRIP.json
 ctw rail --date YYYY-MM-DD --from CITY --to CITY --output-json rail-result.json
 ctw mobility --candidates CANDIDATES.json --modes transit,walking --output-json mobility.json

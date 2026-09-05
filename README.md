@@ -14,6 +14,8 @@ Requests longer than seven days become one Journey whose complete, standalone ch
 
 AMap calls in a Journey are budgeted per resulting Trip. The default Journey-wide allowance is 80 calls per Trip, with every Trip still capped at 80; `ctw journey plan --amap-total-max-calls N` sets a non-negative total ceiling and distributes it as evenly as possible across the resulting Trips. The ceiling never increases the default allowance.
 
+When AMap actually attempts to locate a POI but cannot resolve its identity or coordinates, the Trip keeps an actionable coordinate record in `unknowns`, including sanitized reasons and name suggestions when available. Turning mobility off or lacking an AMap key does not manufacture these records.
+
 Traveler input has two mutually exclusive forms: the existing `origin + travelers` form, or `traveler_groups[] + meeting_anchor`. Every group supplies a stable `group_id`, its own traveler count and origin, plus an optional mobility profile. The meeting anchor supplies a location and `meet_by`; `buffer_minutes` defaults to 60, and any group that cannot arrive with that much buffer produces a structured conflict. Mixed input is rejected and the emitted Trip preserves only the selected representation. Validation, rendering, and inventory lookup consume the grouped form directly. Grouped transport legs carry explicit `group_refs`; `transport_pricing` exposes each group's total and the whole party's transport total separately.
 
 `pace=slow` first uses the strict slow profile. If that schedule has no solution, the planner cumulatively tries a smaller daily POI cap, 70% POI/meal durations, and finally the balanced 21:30 day end. It stops at the first feasible result and appends every applied step to `request.assumptions`; hard conflicts that none of those steps can change keep their original structured conflict and report all attempted relaxations.
@@ -75,7 +77,7 @@ CODEX_HOME=/path/to/an/isolated/codex-home \
   plugin list
 ```
 
-The expected result is `china-trip-weaver@china-trip-weaver-local`, version `0.5.0`, status `installed, enabled`. Use a fresh Codex task after installing or updating so its nine Skills and MCP configuration are reloaded.
+The expected result is `china-trip-weaver@china-trip-weaver-local`, version `0.5.1`, status `installed, enabled`. Use a fresh Codex task after installing or updating so its nine Skills and MCP configuration are reloaded.
 
 For Codex Desktop UI installation, add this repository as a local marketplace, ensure `china-travel-assistant` is disabled, install China Trip Weaver Local, restart, and create a new task. The two plugins must not be enabled together because both expose `plan-china-trip`.
 
@@ -85,8 +87,12 @@ For Codex Desktop UI installation, add this repository as a local marketplace, e
 
 `ctw candidates add-poi ... --verify-name` checks the POI name with AMap before writing. It reports a sanitized `unique`, `ambiguous`, or `unavailable` result with at most three candidate-name suggestions, never writes a coordinate from this check, and still writes the candidate when the key is missing or the provider check fails.
 
+`ctw candidates fix-names` reads AMap coordinate unknowns from a Trip or Journey and reports canonical names that can be sent back to the matching researched candidates. It only reports by default; add `--apply` to write uniquely determined names to the candidate file. Ambiguous, conflicting, unchanged, or malformed suggestions are left for manual review and are never changed automatically.
+
 ```bash
 plugins/china-trip-weaver/scripts/ctw validate-candidates demo/candidates.json
+plugins/china-trip-weaver/scripts/ctw candidates fix-names CANDIDATES.json --trip TRIP_OR_JOURNEY.json
+plugins/china-trip-weaver/scripts/ctw candidates fix-names CANDIDATES.json --trip TRIP_OR_JOURNEY.json --apply
 ```
 
 See [`candidates.example.json`](plugins/china-trip-weaver/references/candidates.example.json) and the machine contract [`candidates.schema.json`](plugins/china-trip-weaver/schema/candidates.schema.json).
@@ -159,6 +165,7 @@ ctw doctor
 ctw validate TRIP.json
 ctw validate-candidates CANDIDATES.json
 ctw candidates add-poi CANDIDATES.json --name NAME --city CITY --category CATEGORY --source-url URL [--verify-name]
+ctw candidates fix-names CANDIDATES.json --trip TRIP_OR_JOURNEY.json [--apply]
 ctw canonicalize TRIP.json
 ctw rail --date YYYY-MM-DD --from CITY --to CITY --output-json rail-result.json
 ctw mobility --candidates CANDIDATES.json --modes transit,walking --output-json mobility.json

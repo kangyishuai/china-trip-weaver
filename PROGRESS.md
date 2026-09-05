@@ -2604,3 +2604,134 @@ FAILED (failures=1)
 - 两份书 23 提交分别对全部禁碰路径执行 commit-range diff，均 exit 0、无输出；最终端点的版本数字新增搜索 exit 1、无输出。
 - `BLOCKED.md` 的 18 个上限外空格、VariFlight 上层真 bug、两条实际复现输出已由 `4c59da2` 随交付提交；没有写“无”。
 - 读回时 `git diff --stat` 无输出，工作树 clean；未 push、未改 CI、未跑 demo/实网、未安装 Codex，版本保持 0.5.0。
+
+## 0.5.1 发布开工理解（2026-09-05，≤10 行）
+1. 目标：把当前源码中的回归修复、POI 定位失败 unknown、`ctw candidates fix-names` 与住宿 geocode 歧义修复发布为 0.5.1，并刷入领导真实 Codex。
+2. 顺序：任务 0 基线 → README 双语能力对齐 → 五组离线 demo 重跑 → 10 处版本同步 → 全量门禁 → 真实安装与缓存核验 → 提交。
+3. README 只按当前 CLI `--help` 写真实命令：默认报告、`--apply` 才写、歧义不自动改，并说明坐标 unknown 的可操作反馈。
+4. demo 只走 `PROGRESS.md` 已验证的合成 fixture 命令，不接触真实 provider；每组 Trip/Journey 与 HTML 都单独验证。
+5. 安装优先于文案完整、速度最后；最终必须同时看到 installed/enabled 0.5.1 与源码/缓存一致。
+6. 只改任务书白名单；docs/schema 与产品行为冻结，测试断言仍精确相等，不新增 skip/todo、依赖、权限或流程。
+7. 最大风险：10 个版本载体漏改、demo 误用 live 模式、缓存刷新后仍指旧版本，或范围审计把历史 docs 版本误算进本轮。
+8. 止损：同一验收连败 3 次换项；最多 12 轮；不可裁决或越界事项写 `BLOCKED.md`，不猜、不绕。
+
+## 0.5.1 任务 0：基线与安装差异（完成）
+
+- Git 根为本目录；开工 `HEAD=5c5d8d4f092e5079a78d4649302b7ec78e5193a9`，与 `origin/main` 完全一致，工作树 clean。
+- `/usr/bin/python3 -m unittest discover -s tests`（exit 0）：`Ran 456 tests in 31.691s`、`OK`、skipped 0。
+- `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 375 file(s)`。
+- `scripts/install_local_plugin.sh --check`（exit 1，符合任务书预期）：当前 `plugin list: installed, enabled 0.5.0`，随后报告缓存与源码不一致。
+- 不一致文件恰为 5 个：`skills/research-china-destination/SKILL.md`、`src/china_trip_weaver/candidates.py`、`cli.py`、`mobility.py`、`planning.py`；没有额外差异。
+- 当前验收轮次 1/12；基线全部与任务书一致，可以开始 README，未写 `BLOCKED.md` 阻塞项。
+
+## 0.5.1 任务 1：README 对齐实际能力（完成）
+
+- README 双语都新增 `ctw candidates fix-names`：读取 Trip/Journey 的高德坐标 unknown、默认只报告、只有 `--apply` 写回唯一名称，歧义/冲突/同名/畸形建议不自动改；候选章节与命令总表都给出可执行语法。
+- README 双语能力描述都明确：只有高德实际尝试定位 POI 但失败，Trip `unknowns` 才留下可照着改的坐标记录；mobility off 或缺 Key 不凭空制造记录。
+- 两份 README 的 `rg` 均命中 `fix-names`、`--apply`、默认报告与 unknown 描述；`git diff --check -- README.md README.zh-CN.md` exit 0。
+- `plugins/china-trip-weaver/scripts/ctw candidates fix-names --help`（exit 0）原始输出：
+
+```text
+usage: ctw candidates fix-names [-h] --trip TRIP [--apply] path
+
+positional arguments:
+  path         researched candidates JSON document
+
+optional arguments:
+  -h, --help   show this help message and exit
+  --trip TRIP  Trip or Journey JSON containing coordinate identity-conflict
+               unknowns
+  --apply      write uniquely determined names to the candidate file
+```
+
+- README 参数与上述帮助逐项一致，没有写入不存在的开关。当前验收轮次 2/12；任务 1 完成。
+
+## 0.5.1 任务 2：五组离线 demo 重跑（完成）
+
+- `/usr/bin/python3 scripts/build_plan_fixtures.py`（exit 0）：`wrote 3 plan cases, 3 invalid candidates, one Journey lodging-chain fixture, and single/multi-city/grouped demo inputs; packaged reference verified`。
+- `/usr/bin/python3 scripts/build_renderer_fixtures.py`（exit 0）：`wrote 9 Trip and 11 HTML renderer fixtures; Journey demo trips=3 days=16 journey_sha256=7ada91c09a6ef253a23f930b454a2d13510d9a4326f906f6299337ec0ce7628e html_sha256=6caf8904759fc72392b6bcaa17493ddd5174bc296627b3214603eb912342df13`。
+- 四个普通 demo 全部显式使用 `--mobility off --lodging off --aviation off --offline-fixture --fixed-clock 2026-09-04T00:00:00+08:00`；北京→上海、广州→深圳使用合成 empty rail fixture，多城市 rail off，分组出发使用既有合成 success rail fixture。
+- 四条 plan（均 exit 0）原始输出：
+
+```text
+PLAN_COMPLETE json=demo/trip.json html=demo/trip.html mode=static stages=INTAKE,RESEARCHED,CANDIDATES_READY,MATRIX_DEGRADED,SCHEDULED,VALIDATED,RENDERED calls=rail12306.fixture:2026-10-16:北京:上海,rail12306.fixture:2026-10-18:上海:北京 trip_sha256=7ea7888f5478bb949e2d565e653212dfb67ff8be041ee61f0d45386a2d9c788c html_sha256=c2d07708cb0cc088afab02331642f91e40c58ef3c45db3862b45c480a8bca927 errors=0
+PLAN_COMPLETE json=demo/guangzhou-shenzhen/trip.json html=demo/guangzhou-shenzhen/trip.html mode=static stages=INTAKE,RESEARCHED,CANDIDATES_READY,MATRIX_DEGRADED,SCHEDULED,VALIDATED,RENDERED calls=rail12306.fixture:2026-09-10:广州:深圳,rail12306.fixture:2026-09-10:深圳:广州 trip_sha256=f9d41614d817b865511d57ba0d336def50285f56b08e148864e0cc1aa713abd2 html_sha256=fb241f77c07f0262a48e98d7464282fe91dae0ba1b506a4e15b3b45c0753cf98 errors=0
+PLAN_COMPLETE json=demo/multicity-5d/trip.json html=demo/multicity-5d/trip.html mode=static stages=INTAKE,RESEARCHED,CANDIDATES_READY,MATRIX_DEGRADED,SCHEDULED,VALIDATED,RENDERED calls= trip_sha256=12b01b2971970d291253d8e5e0a0b611bfa3211d30290bcbc9d3988e61c132c1 html_sha256=a8f83e9aeb00b89c3067fb4e734f06746533499e54a8598ec64804c82865ef9f errors=0
+PLAN_COMPLETE json=demo/grouped-departures/trip.json html=demo/grouped-departures/trip.html mode=static stages=INTAKE,RESEARCHED,CANDIDATES_READY,MATRIX_DEGRADED,SCHEDULED,VALIDATED,RENDERED calls=rail12306.fixture:2026-09-10:北京:上海虹桥国际机场,rail12306.fixture:2026-09-10:广州:上海虹桥国际机场 trip_sha256=4be53526d0c77112344b3a0aa99f0168f03a2cf75ba54f0b2b5afb9c18206c96 html_sha256=3715615d7514a8ace116235a72c68caf2d03f173d190606d0d115c1d85774162 errors=0
+```
+
+- 五组 JSON/HTML 公开校验十条全部 exit 0，原始输出：
+
+```text
+VALID demo/trip.json
+HTML VALID demo/trip.html errors=0
+VALID demo/guangzhou-shenzhen/trip.json
+HTML VALID demo/guangzhou-shenzhen/trip.html errors=0
+VALID demo/multicity-5d/trip.json
+HTML VALID demo/multicity-5d/trip.html errors=0
+VALID demo/grouped-departures/trip.json
+HTML VALID demo/grouped-departures/trip.html errors=0
+JOURNEY VALID demo/journey-16d/journey.json trips=3
+JOURNEY HTML VALID demo/journey-16d/journey.html errors=0
+```
+
+- `rg --files demo` 枚举 20 个文件；对全部 20 个运行 `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 20 file(s)`。
+- 生成后 `git diff --name-only` 没有 demo 或 tests/fixture 路径，证明五组与生成器产物均确定性重建为原字节；没有真实 provider 调用。当前验收轮次 3/12；任务 2 完成。
+
+## 0.5.1 任务 3：10 处版本同步（完成）
+
+- 改动前对任务书列出的 9 个版本承载文件执行 `rg -n '0\.5\.0'`，原始输出恰为 10 行：README 双语各一行、manifest、package `__version__`、MCP `clientInfo`、contracts/skills/credentials 各一行、packaging 两行。
+- 一次 `apply_patch` 将上述 10 处全部同步为 `0.5.1`；四份测试仍使用精确 `assertEqual("0.5.1", ...)`，manifest 期望对象仍逐字段冻结，没有放宽或删除断言。
+- 对 README 双语、manifest、两个允许版本源码点、全部 Skills/demo、四份允许测试与四个允许 fixture builder 搜索 `0.5.0`：`rg` exit 1、输出为空；历史状态文件不作为当前版本载体，docs 按任务书排除。
+- 对 9 个当前承载文件搜索 `0.5.1`（exit 0）恰返回 10 行，没有漏改或多改。
+- `/usr/bin/python3 -m unittest discover -s tests`（exit 0）原始摘要：`Ran 456 tests in 31.834s`、`OK`、skipped 0。
+- `plugin-creator` 的默认个人 marketplace 名称读取因 `~/.agents/plugins/marketplace.json` 不存在而 exit 1；任务 0 的安装检查已确认当前插件来自已注册、指向本仓库的 `china-trip-weaver-local`，故按专用 `install_local_plugin.sh` 路径继续，不创建或改写 marketplace 文件。
+- 当前验收轮次 4/12；任务 3 完成，进入无 `CODEX_HOME` 的真实安装。
+
+## 0.5.1 任务 4：安装进真实 Codex（完成）
+
+- 未设置 `CODEX_HOME`，运行 `scripts/install_local_plugin.sh`（exit 0），目标为真实 `/Users/kangyishuai/.codex`。原始输出：
+
+```text
+codex: /Applications/ChatGPT.app/Contents/Resources/codex
+源码: /Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/plugins/china-trip-weaver (manifest 版本 0.5.1)
+Codex home: /Users/kangyishuai/.codex
+SKILL parser smoke: OK (9 SKILL.md via codex debug prompt-input)
+本地市场已注册 -> /Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver
+已执行 plugin add china-trip-weaver@china-trip-weaver-local
+plugin list: installed, enabled 0.5.1
+OK：china-trip-weaver@china-trip-weaver-local 0.5.1 已安装且缓存与源码一致
+提醒：在 Codex 里新建一个任务才会加载新版本；若 Skill 未出现，重启 Codex 桌面版
+```
+
+- 独立、带 `pipefail` 的 `/Applications/ChatGPT.app/Contents/Resources/codex plugin list | rg -F 'china-trip-weaver@china-trip-weaver-local'`（exit 0）原始输出：
+
+```text
+china-trip-weaver@china-trip-weaver-local  installed, enabled  0.5.1    /Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/plugins/china-trip-weaver
+```
+
+- 安装后 `scripts/install_local_plugin.sh --check`（exit 0）原始输出：
+
+```text
+codex: /Applications/ChatGPT.app/Contents/Resources/codex
+源码: /Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/plugins/china-trip-weaver (manifest 版本 0.5.1)
+Codex home: /Users/kangyishuai/.codex
+SKILL parser smoke: OK (9 SKILL.md via codex debug prompt-input)
+本地市场已注册 -> /Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver
+plugin list: installed, enabled 0.5.1
+OK：china-trip-weaver@china-trip-weaver-local 0.5.1 已安装且缓存与源码一致
+```
+
+- 任务 0 的缓存差异由 exit 1 转为 exit 0；当前验收轮次 5/12，任务 4 完成。
+
+## 0.5.1 最终核心门与范围审计（完成）
+
+- 当前交付态 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）：`Ran 456 tests in 31.311s`、`OK`、skipped 0；`/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 375 file(s)`。
+- 五组公开校验再次全部 exit 0：四个 Trip 各为 `VALID` + `HTML VALID ... errors=0`；16 天组为 `JOURNEY VALID ... trips=3` + `JOURNEY HTML VALID ... errors=0`。
+- `ctw candidates fix-names --help` 再次 exit 0，仍精确显示必需 `--trip TRIP`、可选 `[--apply]`、`path`，以及 Trip/Journey coordinate identity-conflict unknowns；README 双语 grep 同时命中默认报告、`--apply`、歧义不自动改和 POI 可操作 unknown。
+- `plugin-creator/scripts/validate_plugin.py plugins/china-trip-weaver`（exit 0）：`Plugin validation passed: /Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/plugins/china-trip-weaver`。
+- 最终 `scripts/install_local_plugin.sh --check`（exit 0）仍显示 9 Skill parser smoke OK、`plugin list: installed, enabled 0.5.1` 与 `OK：china-trip-weaver@china-trip-weaver-local 0.5.1 已安装且缓存与源码一致`；独立目标行同样为 `installed, enabled  0.5.1`。
+- 当前 `git diff --stat` 只含 11 个白名单文件；自动 case 审计输出 `ALLOWLIST_OK files=11`，`git diff --check` exit 0。
+- `git diff --exit-code -- docs`、packaged `schema/` 与排除 `__init__.py`/`mcp_stdio.py` 后的其余 `src/` 均 exit 0、无输出；两个允许源码点的 unified=0 diff 各仅一行 `0.5.0`→`0.5.1`。
+- 对允许发布面搜索旧 `0.5.0` 为 exit 1、输出为空；当前 9 个版本承载文件内 `0.5.1` 恰 10 行。`BLOCKED.md` 已追加本轮“无新增阻塞”，既有开放事项原样保留。
+- 当前验收轮次 6/12；完成条件已满足。下一步只在追加本段后重跑最终门、精确暂存、cached 范围审计并提交，不再新增实现。
