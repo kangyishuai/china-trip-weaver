@@ -211,6 +211,15 @@ class ProviderCorpusTests(unittest.TestCase):
         riding = load(FIXTURES / "amap" / "riding.json")["transport"]["body"]
         self.assertEqual(0, riding["errcode"])
         self.assertIsInstance(riding["data"]["paths"][0]["duration"], int)
+        geocode_fixture = load(FIXTURES / "amap" / "geocode.json")
+        geocode_raw = geocode_fixture["transport"]["body"]["geocodes"][0]
+        geocode = run_fixture_value(FIXTURES / "amap" / "geocode.json")
+        self.assertEqual({
+            "ref_id": geocode_fixture["request"]["parameters"]["subject_ref"],
+            "name": geocode_raw["formatted_address"],
+            "city": geocode_raw["city"],
+            "district": geocode_raw["district"],
+        }, geocode.normalized_items[0])
 
     def test_flyai_synthetic_responses_distinguish_trial_masks_and_exact_prices(self):
         for case in ("success", "hotel", "version_help"):

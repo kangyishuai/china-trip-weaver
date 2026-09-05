@@ -3124,3 +3124,206 @@ south   8/4/2  ->  8/0/6
 ### 修正一条我此前给出的判断
 
 书 27 立项时我说「行政层级缺陷占 26%、是单一最大来源」。实测证明它不是**独立**的 26%——那 14 条里多数同时压着名字歧义或 geocode 侧的同种缺陷，修掉 POI 这一关并不直接换来坐标。真正决定坐标能不能落地的是这条链上**最后一道**关。
+
+## 书 28 任务 0：只读事实与开工回执（2026-09-05）
+
+三条命令均从正确 Git 根依次执行，原始输出如下：
+
+```text
+$ grep -o '"district": *"[^"]*"' tests/fixtures/providers/amap/geocode.json | head -3
+"district": "示例区"
+$ grep -n 'places.append' plugins/china-trip-weaver/src/china_trip_weaver/providers/amap.py
+127:            places.append({"ref_id": ref_id, "name": name, "city": sanitize_text(city_value, 80)})
+$ grep -n 'geocode_admin_mismatch' plugins/china-trip-weaver/src/china_trip_weaver/mobility.py
+311:                        "identity_conflict:%s:geocode_admin_mismatch:%s" % (
+```
+
+开工回执（≤10 行）：
+1. 三条事实门禁全部吻合；相邻源码确认 geocode 比较仅为 `_city_matches(entity["city"], provider_place["city"])`。
+2. 正确 Git 根为本目录；`HEAD=b2c72e6`、`origin/main=b2c72e6`，开工工作树 clean。
+3. 先在 `tests/test_amap_live.py` 增加四类合成 geocode 路径回归，保留旧实现红态原始输出。
+4. `amap.py` 只给 geocode normalized place 增加可选 `district` 键；不改其余三键算法或其他能力。
+5. `mobility.py` 只扩展 `_poi_admin_matches` 的 district 来源优先级，并让 geocode 行政比较复用它。
+6. 书 27 四条 POI 断言与五个冻结符号保持逐字不动；district 缺失/空值继续只比 city。
+7. 完成后做子串反向验证，要求 POI 与 geocode 两条控制测试同时变红，再精确恢复。
+8. 最终跑至少 473 项全量、skipped 0、secret scan 0，并审计白名单与冻结 diff。
+
+## 书 28 新增 geocode 回归红态（完成）
+
+- `tests/test_amap_live.py` 新增四个全合成场景，均真实经过 `MobilityBackend.resolve` 的 POI→geocode 路径；POI 前置关以精确 city 放行。
+- 旧实现精准命令（exit 1）原始输出：
+
+```text
+test_geocode_admin_district_exact_match_resolves_coordinates (tests.test_amap_live.AMapMobilityTests) ... FAIL
+test_geocode_admin_city_exact_match_resolves_coordinates (tests.test_amap_live.AMapMobilityTests) ... ok
+test_geocode_admin_city_and_district_non_matches_remain_conflicts (tests.test_amap_live.AMapMobilityTests) ... ok
+test_geocode_admin_missing_or_empty_district_preserves_city_only_conflict (tests.test_amap_live.AMapMobilityTests) ... ok
+
+======================================================================
+FAIL: test_geocode_admin_district_exact_match_resolves_coordinates (tests.test_amap_live.AMapMobilityTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_amap_live.py", line 532, in test_geocode_admin_district_exact_match_resolves_coordinates
+    self.assertEqual(1, len(result.locations))
+AssertionError: 1 != 0
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.010s
+
+FAILED (failures=1)
+```
+
+## 书 28 最小实现与正向精准门（完成）
+
+- `amap.py` 的 geocode normalized place 只新增 `district=_optional_text(raw, "district", 80)`；`name`、`city`、`ref_id` 与其他 capability 未改。
+- geocode 行政比较改为复用 `_poi_admin_matches`；该 helper 优先采用候选自带的非空字符串 district，仅在其缺失、空串、空列表归一为 `None` 时回查绑定的 `/provider_identity` claim。
+- 四类新增回归转绿（exit 0）原始输出：
+
+```text
+test_geocode_admin_district_exact_match_resolves_coordinates (tests.test_amap_live.AMapMobilityTests) ... ok
+test_geocode_admin_city_exact_match_resolves_coordinates (tests.test_amap_live.AMapMobilityTests) ... ok
+test_geocode_admin_city_and_district_non_matches_remain_conflicts (tests.test_amap_live.AMapMobilityTests) ... ok
+test_geocode_admin_missing_or_empty_district_preserves_city_only_conflict (tests.test_amap_live.AMapMobilityTests) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.010s
+
+OK
+```
+
+- 首轮 `tests.test_providers tests.test_amap_live` 暴露冻结 Trip `placeRef` 不允许内部 normalized `district`：`Ran 136 ... FAILED (failures=1)`，唯一错误为 `S_ADDITIONAL /district additional property is not allowed`。
+- 遵守 Schema 禁改边界后，`tests/test_providers.py` 为 AMap geocode 构造严格的测试期 placeRef：新增 district 且设为 required，类型只许 string/null，`additionalProperties: false` 继续生效；另以整对象逐字断言四个键和值，未改成子集比较。
+- 修正后的完整 provider+AMap 精准门（exit 0）原始输出：
+
+```text
+........................................................................................................................................
+----------------------------------------------------------------------
+Ran 136 tests in 0.603s
+
+OK
+```
+
+## 书 28 子串反向验证（完成）
+
+- 先把正确实现的 5 个白名单文件精确暂存为比较基准，再临时把 `_poi_admin_matches` 改为标准化后的 `expected in actual`。
+- POI 与 geocode 两条“两者都不命中”控制测试（exit 1）同时变红，原始输出：
+
+```text
+test_poi_admin_city_and_district_non_matches_remain_conflicts (tests.test_amap_live.AMapMobilityTests) ... FAIL
+test_geocode_admin_city_and_district_non_matches_remain_conflicts (tests.test_amap_live.AMapMobilityTests) ... FAIL
+
+======================================================================
+FAIL: test_poi_admin_city_and_district_non_matches_remain_conflicts (tests.test_amap_live.AMapMobilityTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_amap_live.py", line 465, in test_poi_admin_city_and_district_non_matches_remain_conflicts
+    self.assertEqual(["poi"], transport.capabilities)
+AssertionError: Lists differ: ['poi'] != ['poi', 'geocode']
+
+Second list contains 1 additional elements.
+First extra element 1:
+'geocode'
+
+- ['poi']
++ ['poi', 'geocode']
+
+======================================================================
+FAIL: test_geocode_admin_city_and_district_non_matches_remain_conflicts (tests.test_amap_live.AMapMobilityTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_amap_live.py", line 552, in test_geocode_admin_city_and_district_non_matches_remain_conflicts
+    self.assertEqual((), result.locations)
+AssertionError: Tuples differ: () != (MobilityLocation(ref_id='poi-geocode-admi[452 chars]')),)
+
+Second tuple contains 1 additional elements.
+First extra element 0:
+MobilityLocation(ref_id='poi-geocode-admin-neither-hit', name='合成星港观测点', city='合成海湾市', coordinates={'source_crs': 'GCJ02', 'native': {'lng': 0.34, 'lat': 0.45}, 'wgs84': {'lng': 0.34, 'lat': 0.45}, 'gcj02': {'lng': 0.34, 'lat': 0.45}, 'conversion': {'status': 'not-needed', 'method': 'identity-outside-mainland', 'version': 'ctw-1', 'derived_fields': [], 'converted_at': None, 'accuracy_m': 50}}, claim_ids=('claim-79441b70ab50afca', 'claim-amap-business-526f06ff17ab', 'claim-f0a6eca24c5736b2'))
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.004s
+
+FAILED (failures=2)
+```
+
+- 用反向补丁精确恢复后，`git diff --exit-code` 相对已暂存的正确实现为 exit 0、无输出。
+- 恢复后的两条控制（exit 0）原始输出：
+
+```text
+test_poi_admin_city_and_district_non_matches_remain_conflicts (tests.test_amap_live.AMapMobilityTests) ... ok
+test_geocode_admin_city_and_district_non_matches_remain_conflicts (tests.test_amap_live.AMapMobilityTests) ... ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.003s
+
+OK
+```
+
+## 书 28 最终代码态门禁（完成）
+
+- 全量 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）保留到的原始摘要：
+
+```text
+----------------------------------------------------------------------
+Ran 473 tests in 32.172s
+
+OK
+```
+
+- 无 skipped 汇总，故 skipped 0；相对基线 469 新增恰好 4 项。
+- `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）原始输出：
+
+```text
+secret scan: 0 finding(s) across 376 file(s)
+```
+
+- 从 HEAD 与工作树分别提取冻结定义后逐个执行 `git diff --no-index`（exit 0），原始输出：
+
+```text
+_city_key: git diff empty
+_city_matches: git diff empty
+_poi_name_is_ambiguous: git diff empty
+_name_similarity: git diff empty
+POI_NAME_SIMILARITY_MARGIN: git diff empty
+```
+
+- 同法逐个比较书 27 的四个 POI 测试方法（exit 0），原始输出：
+
+```text
+test_poi_admin_district_exact_match_resolves_coordinates: assertions git diff empty
+test_poi_admin_city_exact_match_resolves_coordinates: assertions git diff empty
+test_poi_admin_city_and_district_non_matches_remain_conflicts: assertions git diff empty
+test_poi_admin_empty_district_preserves_city_only_conflict: assertions git diff empty
+```
+
+- 暂存白名单门（exit 0）原始输出为 `ALLOWLIST_OK files=5`；路径恰为 `PROGRESS.md`、`amap.py`、`mobility.py`、`test_amap_live.py`、`test_providers.py`。
+- 默认 `git diff --exit-code` 与 `git diff --cached --check` 均 exit 0、无输出；未改版本、Schema、其他 provider、禁碰源码或其他 tests，未安装 Codex。
+
+## 书 28 领导验收（2026-09-05，Claude 亲自复跑）
+
+- 明卷：`Ran 473 tests`、`OK`、skipped 0；`secret scan: 0 finding(s) across 376 file(s)`。
+- 越界为零：`planning.py`、`cli.py`、`candidates.py`、`station_distance.py`、`variflight_enrichment.py`、`providers/` 下除 `amap.py` 外全部、`schema/`（执行者侧）的 diff 均 0 行；版本号未动。
+- 完成条件二属实：`_city_key`、`_city_matches`、`_poi_name_is_ambiguous`、`POI_NAME_SIMILARITY_MARGIN`、`_name_similarity` diff 全空；书 27 那四条 POI 测试的断言一字未改。
+- 实现干净：`providers/amap.py` 的 geocode 归一化只多留一个 `district`（用文件里现成的 `_optional_text`）；`mobility.py` 的 geocode 比较改调 `_poi_admin_matches`，该函数扩展为「先读候选自带 district，读不到再回查 claims」，判定仍走 `_city_matches`，口径未放宽。
+- 领导侧独立反向验证：把 `_poi_admin_matches` 的比较临时放宽成子串包含，`tests.test_amap_live` 报 `FAILED (failures=2)`，且恰好是 POI 与 geocode 各一条控制测试——两条路确实共用同一个判定，不是各写一套。恢复后 42 项全绿。
+
+### 关键指标：同一份福建实网数据，书 27 后 vs 书 28 后
+
+三段全实网重跑，三段 `errors=0`：
+
+```text
+坐标 unknown 总数：23 -> 19
+  ambiguous_name_margin              17 -> 17
+  geocode_admin_mismatch              4 ->  0
+  geocode_ambiguous                   1 ->  1
+  poi_address_missing_admin_detail    1 ->  1
+```
+
+- `geocode_admin_mismatch` 清零，其余原因**一条未变**——没有副作用，也没有把口径放宽到误伤别的判定。
+- 这是行政层级这条链上第一次真正换来坐标：书 27 打通 POI 关但被 geocode 关挡住，书 28 打通后那 4 个地点真正定位成功。
+
+### 领导补课：schema 的 placeRef 少了 district（我造成的约束缺口）
+
+- 我在书 28 里把 `schema/` 列为禁碰，但 geocode 归一化产物正是由 `#/$defs/placeRef` 声明契约的，`placeRef` 又是 `additionalProperties: false`。执行者只能在 `tests/test_providers.py` 里给 schema 打临时补丁才能让契约测试通过——它没有放松断言（补丁还把 district 加进了 required），但产品契约与实际产出确实脱节了。
+- 这与书 5、书 8、书 13 是同一类错误：我限死了必须一起改的文件。按惯例由我自己补。
+- 补法：给 `plugins/china-trip-weaver/schema/trip.schema.json` 与 `docs/design/schema/trip.schema.json` 的 `placeRef` 加一个可选 `district`（`{"type": ["string", "null"]}`，不进 `required`），两份仍字节相同；随后撤掉 `test_providers.py` 里的临时补丁，改回 `SchemaSubsetValidator(load_schema())`。
+- 加的是可选属性，属纯放宽，现有 Trip/Journey 数据全部仍合法，`schema_version` 保持 `1.0.0`。撤掉补丁后全量仍 `Ran 473 tests`、`OK`，证明 schema 才是正解、测试补丁只是绕路。

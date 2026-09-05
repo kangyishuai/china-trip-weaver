@@ -303,7 +303,7 @@ class MobilityBackend:
                     )
                     fatal_status = "contract_mismatch"
                     break
-                if not _city_matches(entity["city"], provider_place["city"]):
+                if not _poi_admin_matches(entity, provider_place, result.claims):
                     claims.extend(_claims_with_status(identity_claims + list(result.claims), "conflict"))
                     errors.append("identity_conflict")
                     warnings.extend((
@@ -571,17 +571,21 @@ def _poi_admin_matches(
     claims: Sequence[Mapping[str, Any]],
 ) -> bool:
     administrative_areas = [candidate.get("city")]
-    selected_claim_ids = set(candidate.get("claim_ids", ()))
-    for claim in claims:
-        if (
-            claim.get("claim_id") in selected_claim_ids
-            and claim.get("subject_ref") == entity.get("ref_id")
-            and claim.get("field_path") == "/provider_identity"
-        ):
-            identity = claim.get("value")
-            if isinstance(identity, dict):
-                administrative_areas.append(identity.get("district"))
-            break
+    district = candidate.get("district")
+    if isinstance(district, str) and district.strip():
+        administrative_areas.append(district)
+    else:
+        selected_claim_ids = set(candidate.get("claim_ids", ()))
+        for claim in claims:
+            if (
+                claim.get("claim_id") in selected_claim_ids
+                and claim.get("subject_ref") == entity.get("ref_id")
+                and claim.get("field_path") == "/provider_identity"
+            ):
+                identity = claim.get("value")
+                if isinstance(identity, dict):
+                    administrative_areas.append(identity.get("district"))
+                break
     return any(
         _city_matches(entity.get("city"), actual)
         for actual in administrative_areas

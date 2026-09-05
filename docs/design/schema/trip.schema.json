@@ -313,7 +313,8 @@
       "properties": {
         "ref_id": {"type": "string", "minLength": 1},
         "name": {"type": "string", "minLength": 1},
-        "city": {"type": "string", "minLength": 1}
+        "city": {"type": "string", "minLength": 1},
+        "district": {"type": ["string", "null"]}
       }
     },
     "clockWindow": {

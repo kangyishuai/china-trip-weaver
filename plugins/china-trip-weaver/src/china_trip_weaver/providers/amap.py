@@ -124,7 +124,7 @@ class AMapAdapter(BaseAdapter):
                 source_url="https://restapi.amap.com/v3/geocode/geo", provider=self.provider,
                 status="verified", confidence=0.85, mode="live", clock=clock,
             )
-            places.append({"ref_id": ref_id, "name": name, "city": sanitize_text(city_value, 80)})
+            places.append({"ref_id": ref_id, "name": name, "city": sanitize_text(city_value, 80), "district": _optional_text(raw, "district", 80)})
             claims.append(claim)
         return Normalization(tuple(places), tuple(claims))
 

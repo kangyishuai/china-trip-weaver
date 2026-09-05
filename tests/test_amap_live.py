@@ -483,6 +483,94 @@ class AMapMobilityTests(unittest.TestCase):
             for item in result.warnings
         ), result.warnings)
 
+    def _resolve_geocode_admin_case(
+        self, case_name, expected_city, provider_city, district=None,
+    ):
+        ref_id = "poi-geocode-admin-" + case_name
+        name = "合成星港观测点"
+        geocode = {
+            "formatted_address": "合成省合成星港区合成大道200号",
+            "province": "合成省",
+            "city": provider_city,
+            "adcode": "990200",
+            "location": "0.340000,0.450000",
+        }
+        if district is not None:
+            geocode["district"] = district
+        scenario = {"entities": [{
+            "ref_id": ref_id,
+            "name": name,
+            "city": expected_city,
+            "poi_results": [{
+                "id": "SYNTHETIC-GEOCODE-ADMIN-" + case_name.upper(),
+                "name": name,
+                "pname": "合成省",
+                "cityname": expected_city + "市",
+                "adname": "合成星港区",
+                "address": "合成大道200号",
+                "adcode": "990200",
+                "type": "合成测试地点",
+                "business": {"opentime_today": "09:00-17:00"},
+                "location": "0.340000,0.450000",
+            }],
+            "geocode": geocode,
+        }]}
+        candidates = amap_scenario_candidates(scenario)
+        transport = AMapScenarioTransport(scenario)
+        result = MobilityBackend("live", credentials(), transport).resolve(
+            candidates, self.clock, ("walking",),
+        )
+        pois, _ = apply_locations(candidates["pois"], (), result)
+        return ref_id, pois[0], result, transport
+
+    def test_geocode_admin_district_exact_match_resolves_coordinates(self):
+        _, poi, result, transport = self._resolve_geocode_admin_case(
+            "district-hit", "合成星河", "合成远洋市", "合成星河县",
+        )
+
+        self.assertEqual(["poi", "geocode"], transport.capabilities)
+        self.assertEqual(1, len(result.locations))
+        self.assertIsNotNone(poi["coordinates"])
+        self.assertFalse(any("geocode_admin_mismatch" in item for item in result.warnings))
+
+    def test_geocode_admin_city_exact_match_resolves_coordinates(self):
+        _, poi, result, transport = self._resolve_geocode_admin_case(
+            "city-hit", "合成月湾", "合成月湾市", "合成远洋区",
+        )
+
+        self.assertEqual(["poi", "geocode"], transport.capabilities)
+        self.assertEqual(1, len(result.locations))
+        self.assertIsNotNone(poi["coordinates"])
+        self.assertFalse(any("geocode_admin_mismatch" in item for item in result.warnings))
+
+    def test_geocode_admin_city_and_district_non_matches_remain_conflicts(self):
+        ref_id, poi, result, transport = self._resolve_geocode_admin_case(
+            "neither-hit", "合成海", "合成海湾市", "合成海岛县",
+        )
+
+        self.assertEqual(["poi", "geocode"], transport.capabilities)
+        self.assertEqual((), result.locations)
+        self.assertIsNone(poi["coordinates"])
+        self.assertTrue(any(
+            item.startswith("identity_conflict:%s:geocode_admin_mismatch:" % ref_id)
+            for item in result.warnings
+        ), result.warnings)
+
+    def test_geocode_admin_missing_or_empty_district_preserves_city_only_conflict(self):
+        for suffix, district in (("missing", None), ("empty-text", ""), ("empty-list", [])):
+            with self.subTest(district=suffix):
+                ref_id, poi, result, transport = self._resolve_geocode_admin_case(
+                    suffix, "合成林野", "合成远山市", district,
+                )
+
+                self.assertEqual(["poi", "geocode"], transport.capabilities)
+                self.assertEqual((), result.locations)
+                self.assertIsNone(poi["coordinates"])
+                self.assertTrue(any(
+                    item.startswith("identity_conflict:%s:geocode_admin_mismatch:" % ref_id)
+                    for item in result.warnings
+                ), result.warnings)
+
     def test_poi_identity_decision_fixture_is_synthetic_and_complete(self):
         fixture = load(POI_IDENTITY_DECISIONS)
         self.assertIn("locally generated synthetic", fixture["source"])
