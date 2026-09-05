@@ -2046,6 +2046,14 @@ OK
 - AST/source 逐字审计相对开工 `f1b8d48`：`POI_NAME_SIMILARITY_MARGIN`、`_poi_identity_conflicts`、`_name_similarity` 均 `DIFF_LINES 0` 且 `BYTE_EQUAL True`；`git diff --check` exit 0。
 - `.codex-plugin/plugin.json`、packaged Schema、`planning.py`、`replan.py` 工作树 diff 均 exit 0 且无输出；未跑实网、未安装 Codex、版本保持 0.4.0。
 - 实现提交 `ba26cac`（`Make POI identity conflicts actionable`）恰含 `mobility.py`、`cli.py`、mobility Skill 与两份规定测试，`442 insertions/7 deletions`；没有暂存并行书 19 的 Journey 文件。`BLOCKED.md` 已写“本轮新增阻塞：无”。当前验收轮次 5/12，待共享进度收尾提交。
+
+## 书 19 最终父提交上的提交前验收
+
+- 共享文档提交 `9ea58d0` 落定后，工作树只剩本书 `journey.py` 与 `tests/test_journey.py`；该父提交已纳入本书完整 `PROGRESS.md` 证据和 `BLOCKED.md` 的“本轮新增阻塞：无”，没有带走本书源文件。
+- 最终父提交上 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）：`Ran 434 tests in 32.275s`、`OK`、skipped 0；基线 424 + 本书 4 + 书 18 六条，满足 ≥428。
+- 同轮 `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 372 file(s)`。
+- 暂存前 `git diff --stat` 原始输出：`journey.py | 156`、`tests/test_journey.py | 166`、`2 files changed, 319 insertions(+), 3 deletions(-)`；仅两条白名单路径。
+- `git diff --check` exit 0；`cli.py`、`mobility.py`、`planning.py`、`replan.py`、Journey/Trip Schema、manifest 和全部非文档 0.4.0 承载/锁定文件 diff exit 0、无输出。当前验收轮次 8/12，待暂存审计与实现提交。
 - 实现提交后再次跑全量（exit 0）：`Ran 434 tests in 30.696s`、`OK`、skipped 0；当前代码内容与提交前最终门一致。当前验收轮次 6/12。
 
 ## 书 18 提交区间与收尾（完成）

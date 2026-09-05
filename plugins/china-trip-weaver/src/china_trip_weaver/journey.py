@@ -6,8 +6,9 @@ import copy
 import hashlib
 import json
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from functools import lru_cache
+from math import ceil
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
@@ -1973,12 +1974,28 @@ def validate_journey(
         if right_start > expected_start:
             issues.append(ValidationIssue(
                 "J_DATE_GAP", "/trips/%d/request/start_date" % (index + 1),
-                "adjacent Trips leave an uncovered calendar gap",
+                _continuity_message(
+                    left,
+                    right,
+                    "calendar",
+                    (right_start - expected_start).days * 24 * 60,
+                    expected_start.isoformat(),
+                    right_start.isoformat(),
+                    "uncovered_calendar_gap",
+                ),
             ))
         elif right_start < expected_start:
             issues.append(ValidationIssue(
                 "J_DATE_OVERLAP", "/trips/%d/request/start_date" % (index + 1),
-                "adjacent Trips overlap calendar dates",
+                _continuity_message(
+                    left,
+                    right,
+                    "calendar",
+                    (expected_start - right_start).days * 24 * 60,
+                    expected_start.isoformat(),
+                    right_start.isoformat(),
+                    "overlapping_calendar_dates",
+                ),
             ))
         if index >= len(connections):
             continue
@@ -2006,6 +2023,138 @@ def validate_journey_file(
     if not isinstance(value, dict):
         return ValidationReport((ValidationIssue("J_OBJECT", "/", "Journey must be an object"),))
     return validate_journey(value, schema_path=schema_path)
+
+
+def _continuity_message(
+    left: Mapping[str, Any],
+    right: Mapping[str, Any],
+    seam: str,
+    difference_minutes: int,
+    expected_at: str,
+    actual_at: str,
+    reason: str,
+    connection_id: Optional[str] = None,
+) -> str:
+    details: Dict[str, Any] = {
+        "actual_at": actual_at,
+        "difference_minutes": difference_minutes,
+        "expected_at": expected_at,
+        "from_trip_id": left["trip_id"],
+        "reason": reason,
+        "seam": seam,
+        "to_trip_id": right["trip_id"],
+    }
+    if connection_id is not None:
+        details["connection_id"] = connection_id
+    return canonical_json(details)
+
+
+def _journey_datetime(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def _difference_minutes(later: datetime, earlier: datetime) -> int:
+    return max(1, int(ceil((later - earlier).total_seconds() / 60.0)))
+
+
+def _latest_active_slot_end(trip: Mapping[str, Any]) -> Optional[datetime]:
+    ends = [
+        _journey_datetime(slot["end_at"])
+        for day_item in trip["days"]
+        for slot in day_item["slots"]
+        if slot["status"] != "skipped"
+    ]
+    return max(ends) if ends else None
+
+
+def _validate_connection_timing(
+    connection: Mapping[str, Any],
+    left: Mapping[str, Any],
+    right: Mapping[str, Any],
+    index: int,
+    issues: List[ValidationIssue],
+) -> None:
+    path = "/segment_connections/%d" % index
+    connection_id = str(connection["connection_id"])
+    boundary = _journey_datetime(right["request"]["start_date"] + "T00:00:00+08:00")
+    latest_left_end = _latest_active_slot_end(left)
+    if latest_left_end is not None and latest_left_end > boundary:
+        issues.append(ValidationIssue(
+            "J_LODGING_CONTINUITY_GAP",
+            path + "/lodging_continuity",
+            _continuity_message(
+                left,
+                right,
+                "lodging_continuity",
+                _difference_minutes(latest_left_end, boundary),
+                boundary.isoformat(timespec="seconds"),
+                latest_left_end.isoformat(timespec="seconds"),
+                "preceding_trip_overruns_overnight_handoff",
+                connection_id,
+            ),
+        ))
+
+    transport = connection["cross_segment_transport"]
+    if transport["status"] != "included_in_next_trip":
+        return
+    leg = next(
+        (
+            item for item in right["transport_legs"]
+            if item["leg_id"] == transport["leg_id"]
+        ),
+        None,
+    )
+    if leg is None or not isinstance(leg.get("depart_at"), str):
+        return
+    departure = _journey_datetime(leg["depart_at"]).astimezone(boundary.tzinfo)
+    if departure.date().isoformat() != right["request"]["start_date"]:
+        issues.append(ValidationIssue(
+            "J_TRANSPORT_CONTINUITY_GAP",
+            path + "/cross_segment_transport",
+            _continuity_message(
+                left,
+                right,
+                "cross_segment_transport",
+                _difference_minutes(max(departure, boundary), min(departure, boundary)),
+                boundary.isoformat(timespec="seconds"),
+                departure.isoformat(timespec="seconds"),
+                "departure_outside_following_trip_start_date",
+                connection_id,
+            ),
+        ))
+    if latest_left_end is not None and latest_left_end > departure:
+        issues.append(ValidationIssue(
+            "J_TRANSPORT_CONTINUITY_GAP",
+            path + "/cross_segment_transport",
+            _continuity_message(
+                left,
+                right,
+                "cross_segment_transport",
+                _difference_minutes(latest_left_end, departure),
+                departure.isoformat(timespec="seconds"),
+                latest_left_end.isoformat(timespec="seconds"),
+                "preceding_trip_ends_after_departure",
+                connection_id,
+            ),
+        ))
+    if isinstance(leg.get("arrive_at"), str):
+        arrival = _journey_datetime(leg["arrive_at"]).astimezone(boundary.tzinfo)
+        start_day_end = boundary + timedelta(days=1)
+        if arrival > start_day_end:
+            issues.append(ValidationIssue(
+                "J_TRANSPORT_CONTINUITY_GAP",
+                path + "/cross_segment_transport",
+                _continuity_message(
+                    left,
+                    right,
+                    "cross_segment_transport",
+                    _difference_minutes(arrival, start_day_end),
+                    start_day_end.isoformat(timespec="seconds"),
+                    arrival.isoformat(timespec="seconds"),
+                    "arrival_overruns_following_trip_start_date",
+                    connection_id,
+                ),
+            ))
 
 
 def _validate_connection(
@@ -2141,6 +2290,7 @@ def _validate_connection(
             "J_TRANSPORT_OWNER", path + "/cross_segment_transport/included_in_trip_id",
             "separate transport cannot also be included in a Trip",
         ))
+    _validate_connection_timing(connection, left, right, index, issues)
 
 
 def _prefixed_path(prefix: str, path: str) -> str:

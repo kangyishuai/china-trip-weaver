@@ -718,6 +718,86 @@ class JourneyContinuityTests(unittest.TestCase):
             FixedClock.from_iso(FIXED_NOW),
             RailBackend.from_spec("off", ROOT),
         )
+        cls.replan_case = load(LODGING_CHAIN_FIXTURE)
+        cls.replan_journey = plan_journey(
+            cls.replan_case["request"],
+            cls.replan_case["candidates"],
+            FixedClock.from_iso(FIXED_NOW),
+            RailBackend.from_spec("off", ROOT),
+        ).journey
+
+    def replan_boundary_slot(self, delta_minutes):
+        journey = copy.deepcopy(self.replan_journey)
+        middle_index = len(journey["trips"]) // 2
+        middle = journey["trips"][middle_index]
+        end_date = middle["request"]["end_date"]
+        middle["days"][-1]["slots"].append({
+            "slot_id": "slot-synthetic-boundary-watch",
+            "start_at": end_date + "T23:00:00+08:00",
+            "end_at": end_date + "T23:30:00+08:00",
+            "kind": "free",
+            "ref_id": None,
+            "title": "synthetic boundary watch",
+            "locked": False,
+            "status": "scheduled",
+            "claim_ids": [],
+        })
+        baseline = validate_journey(journey)
+        self.assertTrue(baseline.ok, [item.render() for item in baseline.errors])
+        result = replan_trip(
+            middle,
+            {
+                "type": "delay",
+                "subject_ref": "slot-synthetic-boundary-watch",
+                "delta_minutes": delta_minutes,
+                "reason": "synthetic Journey boundary delay",
+            },
+            base_revision=middle["revision"]["number"],
+            user_locked_refs=[],
+            clock=FixedClock.from_iso(FIXED_NOW),
+        )
+        journey["trips"][middle_index] = result.trip
+        return journey, result.trip, middle_index
+
+    def replan_boundary_transport(self, delta_minutes):
+        journey = copy.deepcopy(self.replan_journey)
+        middle_index = len(journey["trips"]) // 2
+        connection_index = middle_index - 1
+        middle = journey["trips"][middle_index]
+        connection = journey["segment_connections"][connection_index]
+        leg_id = connection["cross_segment_transport"]["leg_id"]
+        start_date = middle["request"]["start_date"]
+        depart_at = start_date + "T23:00:00+08:00"
+        arrive_at = start_date + "T23:30:00+08:00"
+        leg = next(item for item in middle["transport_legs"] if item["leg_id"] == leg_id)
+        leg["depart_at"] = depart_at
+        leg["arrive_at"] = arrive_at
+        leg["duration_minutes"] = 30
+        slot = next(
+            slot
+            for day_item in middle["days"]
+            for slot in day_item["slots"]
+            if slot.get("ref_id") == leg_id
+        )
+        slot["start_at"] = depart_at
+        slot["end_at"] = arrive_at
+        middle["days"][0]["slots"] = [slot]
+        baseline = validate_journey(journey)
+        self.assertTrue(baseline.ok, [item.render() for item in baseline.errors])
+        result = replan_trip(
+            middle,
+            {
+                "type": "delay",
+                "subject_ref": leg_id,
+                "delta_minutes": delta_minutes,
+                "reason": "synthetic cross-segment transport delay",
+            },
+            base_revision=middle["revision"]["number"],
+            user_locked_refs=[],
+            clock=FixedClock.from_iso(FIXED_NOW),
+        )
+        journey["trips"][middle_index] = result.trip
+        return journey, result.trip, connection_index
 
     def assertJourneyItemTraceable(self, journey, item):
         trip = journey["trips"][item["trip_index"]]
@@ -807,6 +887,92 @@ class JourneyContinuityTests(unittest.TestCase):
         journey["trips"][1]["request"]["start_date"] = "2026-10-05"
         report = validate_journey(journey)
         self.assertIn("J_DATE_OVERLAP", {item.code for item in report.errors})
+
+    def test_replan_replace_validate_covers_small_and_boundary_delays(self):
+        small_journey, small_trip, _ = self.replan_boundary_slot(15)
+        small_child_report = validate_trip(small_trip)
+        self.assertTrue(
+            small_child_report.ok,
+            [item.render() for item in small_child_report.errors],
+        )
+        small_report = validate_journey(small_journey)
+        self.assertTrue(small_report.ok, [item.render() for item in small_report.errors])
+
+        broken_journey, broken_trip, _ = self.replan_boundary_slot(45)
+        broken_child_report = validate_trip(broken_trip)
+        self.assertTrue(
+            broken_child_report.ok,
+            [item.render() for item in broken_child_report.errors],
+        )
+        broken_report = validate_journey(broken_journey)
+        self.assertFalse(broken_report.ok)
+        self.assertIn(
+            "J_LODGING_CONTINUITY_GAP",
+            {item.code for item in broken_report.errors},
+        )
+
+    def test_replan_boundary_overrun_reports_structured_lodging_difference(self):
+        journey, replanned, middle_index = self.replan_boundary_slot(45)
+        self.assertTrue(validate_trip(replanned).ok)
+        report = validate_journey(journey)
+        issues = [
+            item for item in report.errors
+            if item.code == "J_LODGING_CONTINUITY_GAP"
+        ]
+        self.assertEqual(1, len(issues), [item.render() for item in report.errors])
+        self.assertEqual(
+            "/segment_connections/%d/lodging_continuity" % middle_index,
+            issues[0].path,
+        )
+        details = json.loads(issues[0].message)
+        self.assertEqual({
+            "actual_at": "2026-10-06T00:15:00+08:00",
+            "connection_id": journey["segment_connections"][middle_index]["connection_id"],
+            "difference_minutes": 15,
+            "expected_at": "2026-10-06T00:00:00+08:00",
+            "from_trip_id": journey["trips"][middle_index]["trip_id"],
+            "reason": "preceding_trip_overruns_overnight_handoff",
+            "seam": "lodging_continuity",
+            "to_trip_id": journey["trips"][middle_index + 1]["trip_id"],
+        }, details)
+
+    def test_replan_boundary_overrun_reports_structured_transport_difference(self):
+        small_journey, small_replanned, _ = self.replan_boundary_transport(15)
+        self.assertTrue(validate_trip(small_replanned).ok)
+        small_report = validate_journey(small_journey)
+        self.assertTrue(small_report.ok, [item.render() for item in small_report.errors])
+
+        journey, replanned, connection_index = self.replan_boundary_transport(45)
+        self.assertTrue(validate_trip(replanned).ok)
+        report = validate_journey(journey)
+        issues = [
+            item for item in report.errors
+            if item.code == "J_TRANSPORT_CONTINUITY_GAP"
+            and json.loads(item.message)["reason"] == "arrival_overruns_following_trip_start_date"
+        ]
+        self.assertEqual(1, len(issues), [item.render() for item in report.errors])
+        self.assertEqual(
+            "/segment_connections/%d/cross_segment_transport" % connection_index,
+            issues[0].path,
+        )
+        details = json.loads(issues[0].message)
+        self.assertEqual(15, details["difference_minutes"])
+        self.assertEqual("cross_segment_transport", details["seam"])
+        self.assertEqual(journey["trips"][connection_index]["trip_id"], details["from_trip_id"])
+        self.assertEqual(journey["trips"][connection_index + 1]["trip_id"], details["to_trip_id"])
+
+    def test_calendar_gap_reports_structured_pair_and_minute_difference(self):
+        journey = copy.deepcopy(self.result.journey)
+        left = journey["trips"][0]
+        right = journey["trips"][1]
+        right["request"]["start_date"] = "2026-10-07"
+        report = validate_journey(journey)
+        issue = next(item for item in report.errors if item.code == "J_DATE_GAP")
+        details = json.loads(issue.message)
+        self.assertEqual(24 * 60, details["difference_minutes"])
+        self.assertEqual("calendar", details["seam"])
+        self.assertEqual(left["trip_id"], details["from_trip_id"])
+        self.assertEqual(right["trip_id"], details["to_trip_id"])
 
     def test_budget_tampering_is_rejected(self):
         journey = copy.deepcopy(self.result.journey)
