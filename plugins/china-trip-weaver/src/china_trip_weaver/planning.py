@@ -2254,12 +2254,18 @@ def _combined_amap_health(
         "missing": 1,
         "ready": 0,
     }
+    statuses = tuple(
+        _effective_amap_health_status(item)
+        for item in (mobility, lodging)
+    )
     successful = any(item.get("status") == "ready" and item.get("mode") == "live" for item in (mobility, lodging))
-    if successful:
+    if "rate_limited" in statuses:
+        status = "rate_limited"
+    elif successful:
         status = "ready"
     else:
         status = max(
-            (str(item.get("status", "degraded")) for item in (mobility, lodging)),
+            statuses,
             key=lambda value: severity.get(value, 3),
         )
     capabilities = list(dict.fromkeys(
@@ -2274,6 +2280,16 @@ def _combined_amap_health(
         "capabilities": capabilities,
         "reason": "lodging=%s; mobility=%s" % (lodging["reason"], mobility["reason"]),
     }
+
+
+def _effective_amap_health_status(health: Mapping[str, Any]) -> str:
+    status = str(health.get("status", "degraded"))
+    reason = str(health.get("reason", ""))
+    if status == "degraded" and "errors=" in reason:
+        errors = reason.split("errors=", 1)[1].split(";", 1)[0].split(",")
+        if "rate_limited" in errors:
+            return "rate_limited"
+    return status
 
 
 def _provider_health(

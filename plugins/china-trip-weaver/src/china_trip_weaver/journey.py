@@ -34,6 +34,13 @@ from .validate_trip import (
     load_schema,
     validate_trip,
 )
+from .providers.amap_http import (
+    AMapBudgetedTransport,
+    AMapCallBudget,
+    AMapHTTPTransport,
+    AMapRequestMemo,
+    MAX_CALLS_PER_RUN,
+)
 from .variflight_enrichment import VariFlightBackend
 
 
@@ -205,6 +212,7 @@ def plan_journey(
     variflight_backend: Optional[VariFlightBackend] = None,
     amap_lodging_backend: Optional[AMapLodgingBackend] = None,
     expected_segment_days: Optional[int] = None,
+    amap_total_max_calls: Optional[int] = None,
 ) -> JourneyPlanResult:
     """Plan lodging-aligned units, merge logical Trips, then assemble a Journey."""
 
@@ -215,10 +223,33 @@ def plan_journey(
         candidates,
         expected_segment_days=expected_days,
     )
+    amap_segment_limits = _amap_segment_call_limits(
+        len(segment_inputs),
+        amap_total_max_calls,
+    )
+    amap_budget_template = _amap_budget_template(
+        mobility_backend,
+        amap_lodging_backend,
+    )
+    mobility_memo = AMapRequestMemo()
+    lodging_memo = AMapRequestMemo()
     trip_documents: List[Dict[str, Any]] = []
     calls: List[str] = []
     stages: List[Tuple[str, ...]] = []
-    for segment in segment_inputs:
+    for segment_index, segment in enumerate(segment_inputs):
+        segment_budget = amap_budget_template.fork(
+            amap_segment_limits[segment_index],
+        )
+        segment_mobility = _scoped_mobility_backend(
+            mobility_backend,
+            segment_budget,
+            mobility_memo,
+        )
+        segment_amap_lodging = _scoped_amap_lodging_backend(
+            amap_lodging_backend,
+            segment_budget,
+            lodging_memo,
+        )
         atomic_inputs = _planning_inputs_for_segment(segment)
         atomic_trips: List[Dict[str, Any]] = []
         segment_stages: List[str] = []
@@ -231,10 +262,10 @@ def plan_journey(
                 atomic.candidates,
                 clock,
                 rail_backend,
-                mobility_backend,
+                segment_mobility,
                 flyai_backend,
                 variflight_backend,
-                amap_lodging_backend,
+                segment_amap_lodging,
             )
             atomic_trips.append(copy.deepcopy(dict(result.trip)))
             calls.extend(result.business_calls)
@@ -262,6 +293,87 @@ def plan_journey(
         business_calls=tuple(calls),
         trip_stages=tuple(stages),
         journey_sha256=digest,
+    )
+
+
+def _amap_segment_call_limits(
+    segment_count: int,
+    total_max_calls: Optional[int],
+) -> Tuple[int, ...]:
+    if segment_count <= 0:
+        raise ValueError("Journey must contain at least one segment")
+    if (
+        total_max_calls is not None
+        and (
+            not isinstance(total_max_calls, int)
+            or isinstance(total_max_calls, bool)
+            or total_max_calls < 0
+        )
+    ):
+        raise ValueError("Journey AMap total max calls must be a non-negative integer")
+    journey_default = MAX_CALLS_PER_RUN * segment_count
+    available = min(
+        journey_default,
+        journey_default if total_max_calls is None else total_max_calls,
+    )
+    base, remainder = divmod(available, segment_count)
+    return tuple(
+        base + (1 if index < remainder else 0)
+        for index in range(segment_count)
+    )
+
+
+def _amap_budget_template(
+    mobility_backend: Optional[MobilityBackend],
+    lodging_backend: Optional[AMapLodgingBackend],
+) -> AMapCallBudget:
+    for backend in (mobility_backend, lodging_backend):
+        transport = getattr(backend, "transport", None)
+        budget = getattr(transport, "budget", None)
+        if isinstance(budget, AMapCallBudget):
+            return budget
+    return AMapCallBudget()
+
+
+def _scoped_amap_transport(
+    transport: Any,
+    budget: AMapCallBudget,
+    memo: AMapRequestMemo,
+) -> Any:
+    if transport is None:
+        return None
+    if isinstance(transport, AMapHTTPTransport):
+        return transport.with_budget(budget, memo)
+    return AMapBudgetedTransport(transport, budget, memo)
+
+
+def _scoped_mobility_backend(
+    backend: Optional[MobilityBackend],
+    budget: AMapCallBudget,
+    memo: AMapRequestMemo,
+) -> Optional[MobilityBackend]:
+    if backend is None or backend.transport is None:
+        return backend
+    return MobilityBackend(
+        backend.mode,
+        backend.credentials,
+        _scoped_amap_transport(backend.transport, budget, memo),
+        deadline_seconds=backend.deadline_seconds,
+    )
+
+
+def _scoped_amap_lodging_backend(
+    backend: Optional[AMapLodgingBackend],
+    budget: AMapCallBudget,
+    memo: AMapRequestMemo,
+) -> Optional[AMapLodgingBackend]:
+    if backend is None or backend.transport is None:
+        return backend
+    return AMapLodgingBackend(
+        backend.mode,
+        backend.credentials,
+        _scoped_amap_transport(backend.transport, budget, memo),
+        deadline_seconds=backend.deadline_seconds,
     )
 
 

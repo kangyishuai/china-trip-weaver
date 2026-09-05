@@ -101,6 +101,20 @@ should mean pending work. They live where they are enforced:
 - Architecture decisions, including why this plugin is not listed on a public
   marketplace: `docs/design/adr/`.
 
+## Book 16: Journey AMap segment budgets and run-local reuse
+
+- Status: 无新增阻塞（no new blocker）。The three-segment synthetic Journey now
+  receives one independently counted AMap allowance per logical Trip under a
+  configurable Journey-wide ceiling. Exhaustion remains visibly
+  `rate_limited`, and the Trip falls back to static routing without widening
+  either the segment or total limit.
+- Repeated entity POI/geocode responses are reused only in memory and only
+  inside one `plan_journey` invocation. No provider response is written to
+  disk; a second Journey invocation performs its own calls. Route responses
+  remain uncached so their time-sensitive result is queried per segment.
+- All evidence is synthetic and offline. No demo, schema, renderer, version,
+  Codex installation, publication, or provider cache-policy work was performed.
+
 ## Lodging and flight inventory have a single upstream source (closed)
 
 - Status: closed on 2026-09-04, superseded by the tested independent fallbacks

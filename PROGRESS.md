@@ -1725,3 +1725,68 @@ OK
 - 提交后 `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）→ `secret scan: 0 finding(s) across 372 file(s)`。
 - `HEAD^..HEAD` 复核输出：`POST_COMMIT_FORBIDDEN_DIFF_OK paths=14`、`POST_COMMIT_VERSION_DIFF_OK files=8 value=0.4.0`、`POST_COMMIT_WORKTREE_CLEAN`。
 - `demo/candidates.json` 与实现提交父树逐字节相同，SHA-256=`2668b3ed8c0862eef9036ef7d62c882b5cedadb37496932f540970dae9ff3f99`；未 push、未发布、未安装 Codex。当前验收轮次 10/12，任务完成。
+
+## 书 16 Journey AMap 预算与运行内去重：开工理解（2026-09-05，8 行）
+1. 目标：每个 Journey 逻辑段各有独立的最多 80 次 AMap 额度，同时以 CLI 可配的 Journey 总上限约束用户配额消耗。
+2. 同一次 Journey 内，同一实体的坐标解析结果只在内存中解析一次并跨段复用；不落盘、不跨运行。
+3. 顺序：任务 0 基线/离线复现/health 溯源 → 任务 1 分段预算与 CLI 总上限 → 任务 2 实体去重 → 全量门禁与提交。
+4. 先保证算得准，再减少重复调用，最后才考虑运行时间；不得降低 POI 身份、行政区或坐标语义校验强度。
+5. 任一分段或总额度耗尽都必须继续映射为 `rate_limited`，保留静态估算降级，不得隐式扩容。
+6. 只改任务书白名单；版本保持 0.4.0，不跑实网/demo、不安装 Codex、不改 provider 响应缓存条款。
+7. 最大风险：当前一个逻辑段可含多个 atomic Trip，预算必须按最终逻辑段隔离，而去重生命周期必须覆盖整次 Journey。
+8. 次大风险：AMap mobility 与 lodging fallback 可持有不同 transport；总上限和 health 数字不能漏算或误报。
+
+## 书 16 任务 0：基线、预算耗尽复现与 health 溯源（完成）
+
+- 仓库根为 `china-trip-weaver/`，开工 `HEAD` 与 `origin/main` 均为 `03fced1ba39514cb1e9f05b13b10811db712e4ee`，工作树 clean；全程未发实网请求。
+- 基线 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）原始摘要：`Ran 409 tests in 27.385s`、`OK`；无 skipped 汇总，即 skipped 0。
+- 基线 `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 372 file(s)`。
+- 用现有全合成 `journey_sixteen_day_case()`、`ScriptedAmapTransport` 与真实 `AMapCallBudget(max_calls=4,qps=1000000)` 包装器跑完整 `plan_journey`；包装器在 delegate 前 acquire，故走正式 adapter 的 `ProviderRateLimited → rate_limited`，`NETWORK_CALLS 0`。
+
+```text
+JOURNEY_TRIPS 3
+SHARED_BUDGET_CALLS 4 MAX 4
+TRIP 1 DATES 2026-10-01 2026-10-05 AMAP_STATUS rate_limited MODE live
+TRIP 1 AMAP_REASON calls=4/80 qps<=2; live_cells=1; locations=2; errors=rate_limited; warnings=none
+TRIP 2 DATES 2026-10-06 2026-10-10 AMAP_STATUS rate_limited MODE static
+TRIP 2 AMAP_REASON calls=4/80 qps<=2; live_cells=0; locations=0; errors=rate_limited; warnings=rate_limited
+TRIP 3 DATES 2026-10-11 2026-10-16 AMAP_STATUS rate_limited MODE static
+TRIP 3 AMAP_REASON calls=4/80 qps<=2; live_cells=0; locations=0; errors=rate_limited; warnings=rate_limited
+BUSINESS_CALL_ATTEMPTS ["amap.geocode:lodging-j16-shanghai-central", "amap.poi:poi-j16-shanghai", "amap.geocode:poi-j16-shanghai", "amap.route:transit:lodging-j16-shanghai-central:poi-j16-shanghai", "amap.route:transit:poi-j16-shanghai:lodging-j16-shanghai-central", "amap.geocode:lodging-j16-hangzhou-central", "amap.geocode:lodging-j16-suzhou-central"]
+```
+
+- 复现结论：同一 mobility transport 的计数停在 4；第一段耗尽额度后，第二、三段首次 geocode 即得到 `rate_limited`，继续生成有效 Journey 但以 static matrix 降级，准确复现“后段拿不到额度”。当前 reason 的 `/80` 是硬编码显示，和注入的 4 不一致，也纳入任务 1 修复。
+- 两组统计来源已独立用全合成六城 Journey 证实：最终三个逻辑段分别由 3/2/3 个住宿对齐 atomic Trip 构成；`_merge_provider_health` 对同 provider 的 reason 做分号去重合并，所以 `CALL_STAT_GROUPS` 分别为 3/2/3，第二段原始 reason 为 `calls=30/80 ...; calls=40/80 ...`。这不是 `_combined_amap_health` 的 lodging+mobility 拼接；本次 fixture 的 lodging fallback 为 off。
+- 决定：任务 1 会让同一逻辑段内的 atomic Trip 共用该段额度，并让 health 展示段内真实计数/上限；不会删除多来源 health 事实来掩盖问题。当前验收轮次 1/12。
+
+## 书 16 任务 1：按段预算与 CLI 总上限（完成）
+
+- `AMapCallBudget.fork()` 现在创建独立空计数器但共享同一个 start-rate limiter；所以 Journey 各逻辑段单独计数、同段的 mobility 与 AMap lodging 共用额度，同时整次运行仍守全局 `qps<=2`。零额度会在首次 acquire 原样抛 `ProviderRateLimited`，不会扩容。
+- `plan_journey(..., amap_total_max_calls=None)` 缺省按 `80×逻辑段数`；显式非负总量先封顶于该默认值，再尽可能平均分配，余数从前段依次加一。每段上限永不超过 80，总量 3/三段得到 `[1,1,1]`。
+- `ctw journey plan --amap-total-max-calls N` 已暴露并传入 planner。正向 CLI 用 checked-in 合成 16 天输入、rail/lodging/aviation off、mobility live 与总量 0；预算在 HTTP opener 前拒绝，物理网络调用为 0。原始输出为 `JOURNEY_PLAN_COMPLETE ... trips=3 days=16 max_trip_days=6 calls= ... errors=0`，三段 health 均为 `status=rate_limited mode=static`、`calls=0/0 ... errors=rate_limited`。负数 subprocess 另以 `JOURNEY_PLAN_FAILED Journey AMap total max calls must be a non-negative integer`（exit 1）证明参数确实到达 planner。
+- mobility health 的分母改为 transport 的真实段上限；总量 12 的三段离线原始输出均为 `calls=4/4`、`status=rate_limited`，delegate 实际总调用 12。总量 3 的永久回归逐段为 `calls=1/1`、`errors=rate_limited`，三段 Journey validator 仍通过。
+- 规定组合门首轮 `/usr/bin/python3 -m unittest tests.test_journey tests.test_amap_live -v`（exit 0）：`Ran 54 tests in 4.704s`、`OK`、skipped 0。
+- 反向红态：临时改回一个 `shared_amap_budget(max_calls=80)` 后，精准测试 exit 1；原始差异为 `['calls=5/80 ...', 'calls=10/80 ...', 'calls=15/80 ...']` 不满足每段都以 `calls=5/80` 开始，`Ran 1 test in 0.135s`、`FAILED (failures=1)`。
+- 还原绿态：恢复每段 `fork(amap_segment_limits[index])` 后，两条预算精准门 `Ran 2 tests in 0.320s`、`OK`、skipped 0；临时共享计数器已完整撤销。当前验收轮次 2/12。
+
+## 书 16 任务 2：单次 Journey 内实体去重（完成）
+
+- `AMapRequestMemo` 只由每次 `plan_journey` 在栈内新建，键只含非敏感的 provider/request id/capability/parameters/as-of；只深拷贝内存中的 `ProviderEnvelope`，不写文件、不复用异常、不跨 Journey 调用。
+- 每个段 transport 在预算 acquire 前查询同一 Journey memo；所以命中不会消耗段额度或 2 QPS 起始槽，未命中才走正式 transport、身份校验、行政区校验、语义异常校验并保存响应。没有降低任何坐标验证强度。
+- 四段六城合成场景（`expected_segment_days=4`）改前 transport 实际调用 65；改后为 57，恰好省掉 8 次跨段重复实体调用。同一实体的永久计数从两轮降为一轮：两个重复 POI 各 `poi=1, geocode=1`，四个重复住宿各 `geocode=1`；route 为保证时效性仍逐段查询。
+- 两个跨段 POI 均在恰好两个最终 Trip 中出现；`poi-j16-six-city-synthetic-a` 两段 GCJ02 都是 `{lng:121.2,lat:31.2}`，`synthetic-e` 两段都是 `{lng:122.2,lat:32.2}`，完整 coordinates 对象逐字相等，Journey validator 通过。
+- 跨运行保护：对同一个 backend/transport 连续调用两次 `plan_journey`，delegate 计数严格从 15 增至 30；第二次没有读取第一次 memo。
+- 严格失败去重：某重复 POI 的第一次实际调用抛合成 timeout 后，后段复用同一失败事实，delegate 与公开 `business_calls` 均恰为 1；本地段预算在发网前拒绝的异常不保存，因此新段仍可用自己的独立额度尝试。
+- 反向红态：临时把两个 memo 移入 segment 循环（等价于关闭跨段复用），精准测试 exit 1，原始错误 `AssertionError: 1 != 2` 位于重复 POI 调用计数，`Ran 1 test in 0.290s`、`FAILED (failures=1)`。
+- 还原绿态：恢复每次 Journey 一份 memo 后 `/usr/bin/python3 -m unittest tests.test_journey -v`（exit 0）→ `Ran 38 tests in 4.150s`、`OK`、skipped 0；临时关闭去重已完整撤销。当前验收轮次 3/12。
+
+## 书 16 最终提交前验收
+
+- 最终代码态全量 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）原始摘要：`Ran 422 tests in 29.354s`、`OK`、skipped 0；基线 409 + 13 个严格回归，满足 ≥414。
+- 同轮 `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 372 file(s)`。
+- 最终任务 2 精准门 `/usr/bin/python3 -m unittest tests.test_journey -v`（exit 0）→ `Ran 39 tests in 4.613s`、`OK`、skipped 0。
+- 最终任务 1 规定门 `/usr/bin/python3 -m unittest tests.test_journey tests.test_amap_live -v`（exit 0）→ `Ran 59 tests in 5.190s`、`OK`、skipped 0。
+- CLI 正向零网络原始 health：三个 Trip 逐个输出 `STATUS rate_limited MODE static` 与 `REASON calls=0/0 qps<=2; live_cells=0; locations=0; errors=rate_limited; warnings=rate_limited`；CLI 主输出 `JOURNEY_PLAN_COMPLETE ... trips=3 days=16 max_trip_days=6 calls= ... errors=0`。
+- 机器白名单审计原始输出 `ALLOWLIST_OK files=9`；仅 `BLOCKED.md`、`PROGRESS.md`、5 个允许源文件与 2 个允许测试。`git diff --check` exit 0。
+- schema/、demo/、render/、station_distance、candidates、FlyAI、VariFlight、scheduler、Trip validator、plugin manifest、docs 与 secret scanner 的组合 `git diff --exit-code` exit 0、无输出；README/manifest/`__init__.py` 等版本承载文件 diff 亦为空，版本保持 0.4.0。
+- `BLOCKED.md` 已随交付记录“无新增阻塞”；未跑实网/demo、未安装 Codex、未发布、未写 provider 响应到磁盘。当前验收轮次 4/12，下一步仅最终文档态门禁、暂存复核与提交。

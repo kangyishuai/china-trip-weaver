@@ -157,6 +157,12 @@ def _parser() -> argparse.ArgumentParser:
         default=None,
         help="preferred Trip length in days (1-7); segmentation still obeys the 7-day cap and the lodging chain",
     )
+    journey_plan.add_argument(
+        "--amap-total-max-calls",
+        type=int,
+        default=None,
+        help="Journey-wide AMap call ceiling; default is 80 per resulting Trip and each Trip remains capped at 80",
+    )
     journey_plan.add_argument("--output-json", type=Path, default=Path("journey.json"))
     journey_plan.add_argument("--offline-fixture", action="store_true")
     journey_plan.add_argument("--fixed-clock", default=None)
@@ -485,6 +491,7 @@ def main(argv: Optional[Sequence[str]] = None, *, credential_path: Optional[Path
                 variflight_backend,
                 amap_lodging_backend,
                 expected_segment_days=args.expected_segment_days,
+                amap_total_max_calls=args.amap_total_max_calls,
             )
             args.output_json.parent.mkdir(parents=True, exist_ok=True)
             write_canonical_json(args.output_json, result.journey)

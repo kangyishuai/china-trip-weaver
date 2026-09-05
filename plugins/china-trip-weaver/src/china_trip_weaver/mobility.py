@@ -166,8 +166,10 @@ class MobilityBackend:
                     cache_policy="bypass",
                     trace={"stage": "mobility-poi-identity"},
                 )
+                calls_before = _transport_calls(self.transport)
                 poi_result = adapter.query(poi_request, context)
-                calls.append("amap.poi:%s" % entity["ref_id"])
+                if _transport_calls(self.transport) > calls_before:
+                    calls.append("amap.poi:%s" % entity["ref_id"])
                 if not poi_result.normalized_items:
                     error = poi_result.error_class or "no_results"
                     errors.append(error)
@@ -229,8 +231,10 @@ class MobilityBackend:
                 cache_policy="bypass",
                 trace={"stage": "mobility-geocode"},
             )
+            calls_before = _transport_calls(self.transport)
             result = adapter.query(request, context)
-            calls.append("amap.geocode:%s" % entity["ref_id"])
+            if _transport_calls(self.transport) > calls_before:
+                calls.append("amap.geocode:%s" % entity["ref_id"])
             if result.normalized_items and result.claims:
                 provider_place = result.normalized_items[0]
                 coordinate_claim = result.claims[0] if result.claims[0]["field_path"] == "/coordinates" else None
@@ -300,8 +304,10 @@ class MobilityBackend:
                         cache_policy="bypass",
                         trace={"stage": "mobility-route"},
                     )
+                    calls_before = _transport_calls(self.transport)
                     result = adapter.query(request, context)
-                    calls.append("amap.route:%s:%s:%s" % (mode, left_ref, right_ref))
+                    if _transport_calls(self.transport) > calls_before:
+                        calls.append("amap.route:%s:%s:%s" % (mode, left_ref, right_ref))
                     if result.normalized_items:
                         leg = result.normalized_items[0]
                         distance = next(
@@ -365,6 +371,7 @@ class MobilityBackend:
                     break
 
         call_count = _transport_calls(self.transport)
+        call_limit = _transport_max_calls(self.transport)
         live_cells = sum(1 for item in cells if item.mode == "live")
         if fatal_status is not None:
             status = fatal_status
@@ -379,8 +386,8 @@ class MobilityBackend:
             "live" if live_cells else "static",
             status,
             now,
-            "calls=%d/80 qps<=2; live_cells=%d; locations=%d; errors=%s; warnings=%s" % (
-                call_count, live_cells, len(locations), error_summary,
+            "calls=%d/%d qps<=2; live_cells=%d; locations=%d; errors=%s; warnings=%s" % (
+                call_count, call_limit, live_cells, len(locations), error_summary,
                 ",".join(sorted(set(item.split(":", 1)[0] for item in warnings))) if warnings else "none",
             ),
         )
@@ -697,6 +704,11 @@ def _route_source(mode: str) -> str:
 def _transport_calls(transport: ProviderTransport) -> int:
     value = getattr(transport, "calls", 0)
     return int(value) if isinstance(value, int) else 0
+
+
+def _transport_max_calls(transport: ProviderTransport) -> int:
+    value = getattr(transport, "max_calls", MAX_CALLS_PER_RUN)
+    return int(value) if isinstance(value, int) and value >= 0 else MAX_CALLS_PER_RUN
 
 
 def _health(mode: str, status: str, checked_at: str, reason: str) -> Mapping[str, Any]:

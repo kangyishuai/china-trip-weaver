@@ -3,11 +3,13 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
 import tempfile
 import unittest
+from collections import Counter
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -18,6 +20,7 @@ SRC = PLUGIN / "src"
 sys.path.insert(0, str(SRC))
 
 from china_trip_weaver.clock import FixedClock
+from china_trip_weaver.credentials import resolve_credentials
 from china_trip_weaver.journey import (
     assemble_journey,
     journey_booking_checklist,
@@ -27,7 +30,10 @@ from china_trip_weaver.journey import (
     split_journey_inputs,
     validate_journey,
 )
+from china_trip_weaver.mobility import MobilityBackend
 from china_trip_weaver.planning import RailBackend, _normalize_request, plan_trip
+from china_trip_weaver.providers.amap_http import AMapCallBudget
+from china_trip_weaver.providers.base import ProviderTimeout
 from china_trip_weaver.render import render_journey, validate_journey_html
 from china_trip_weaver.render.validate_html import AuditParser
 from china_trip_weaver.replan import replan_trip
@@ -36,6 +42,7 @@ from scripts.build_plan_fixtures import (
     journey_six_city_lodging_chain_case,
     journey_sixteen_day_case,
 )
+from tests.test_amap_live import ScriptedAmapTransport
 
 
 FIXED_NOW = "2026-09-05T09:00:00+08:00"
@@ -48,6 +55,31 @@ CTW = PLUGIN / "scripts" / "ctw"
 
 def load(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+class RecordingJourneyAMapTransport(ScriptedAmapTransport):
+    """All-synthetic delegate; Journey adds the real scoped budget and memo."""
+
+    def __init__(self):
+        super().__init__()
+        self.budget = AMapCallBudget(max_calls=999, qps=1000000)
+        self.entity_requests = []
+
+    def execute(self, provider, provider_request):
+        if provider_request.capability in ("poi", "geocode"):
+            self.entity_requests.append((
+                provider_request.capability,
+                provider_request.parameters["subject_ref"],
+            ))
+        return super().execute(provider, provider_request)
+
+
+def journey_mobility(transport):
+    credentials = resolve_credentials(
+        {"AMAP_WEBSERVICE_KEY": "ctw-canary-journey-amap-not-real"},
+        ROOT / ".tmp" / "journey-amap-no-credential-file",
+    )
+    return MobilityBackend("live", credentials, transport)
 
 
 class JourneyModelTests(unittest.TestCase):
@@ -398,6 +430,230 @@ class JourneySplitTests(unittest.TestCase):
             )
             self.assertEqual(0, validated.returncode, validated.stdout + validated.stderr)
             self.assertIn("JOURNEY VALID", validated.stdout)
+
+
+class JourneyAMapRuntimeTests(unittest.TestCase):
+    def setUp(self):
+        self.clock = FixedClock.from_iso(FIXED_NOW)
+        self.rail = RailBackend.from_spec("off", ROOT)
+
+    def test_three_logical_trips_each_receive_an_independent_default_budget(self):
+        case = journey_sixteen_day_case()
+        transport = RecordingJourneyAMapTransport()
+        result = plan_journey(
+            case["request"],
+            case["candidates"],
+            self.clock,
+            self.rail,
+            journey_mobility(transport),
+        )
+        reasons = [
+            next(
+                item for item in trip["provider_health"]
+                if item["provider"] == "amap"
+            )["reason"]
+            for trip in result.journey["trips"]
+        ]
+        self.assertEqual(3, len(reasons))
+        self.assertTrue(all(reason.startswith("calls=5/80 ") for reason in reasons), reasons)
+        self.assertEqual(15, transport.calls)
+        self.assertTrue(validate_journey(result.journey).ok)
+
+    def test_tight_journey_total_is_fairly_split_and_truthfully_degraded(self):
+        case = journey_sixteen_day_case()
+        transport = RecordingJourneyAMapTransport()
+        result = plan_journey(
+            case["request"],
+            case["candidates"],
+            self.clock,
+            self.rail,
+            journey_mobility(transport),
+            amap_total_max_calls=3,
+        )
+        health = [
+            next(
+                item for item in trip["provider_health"]
+                if item["provider"] == "amap"
+            )
+            for trip in result.journey["trips"]
+        ]
+        self.assertEqual(3, transport.calls)
+        self.assertEqual(["rate_limited"] * 3, [item["status"] for item in health])
+        self.assertTrue(all("calls=1/1 " in item["reason"] for item in health), health)
+        self.assertTrue(all("errors=rate_limited" in item["reason"] for item in health), health)
+        self.assertTrue(validate_journey(result.journey).ok)
+
+    def test_cli_exposes_and_forwards_the_journey_total_limit(self):
+        help_result = subprocess.run(
+            [str(CTW), "journey", "plan", "--help"],
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(0, help_result.returncode, help_result.stdout + help_result.stderr)
+        self.assertIn("--amap-total-max-calls", help_result.stdout)
+
+        case = journey_sixteen_day_case()
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            output = Path(temporary)
+            request_path = output / "request.json"
+            candidates_path = output / "candidates.json"
+            journey_path = output / "journey.json"
+            request_path.write_text(
+                json.dumps(case["request"], ensure_ascii=False),
+                encoding="utf-8",
+            )
+            candidates_path.write_text(
+                json.dumps(case["candidates"], ensure_ascii=False),
+                encoding="utf-8",
+            )
+            environment = dict(os.environ)
+            environment["AMAP_WEBSERVICE_KEY"] = "ctw-canary-cli-zero-budget-not-real"
+            tightened = subprocess.run(
+                [
+                    sys.executable, str(CTW), "journey", "plan",
+                    "--request", str(request_path),
+                    "--candidates", str(candidates_path),
+                    "--rail", "off",
+                    "--mobility", "live",
+                    "--lodging", "off",
+                    "--aviation", "off",
+                    "--amap-total-max-calls", "0",
+                    "--output-json", str(journey_path),
+                ],
+                text=True,
+                capture_output=True,
+                env=environment,
+            )
+            self.assertEqual(0, tightened.returncode, tightened.stdout + tightened.stderr)
+            tightened_journey = load(journey_path)
+            amap_health = [
+                next(
+                    item for item in trip["provider_health"]
+                    if item["provider"] == "amap"
+                )
+                for trip in tightened_journey["trips"]
+            ]
+            self.assertEqual(
+                ["rate_limited"] * 3,
+                [item["status"] for item in amap_health],
+            )
+            self.assertTrue(
+                all("calls=0/0" in item["reason"] for item in amap_health),
+                amap_health,
+            )
+            rejected = subprocess.run(
+                [
+                    sys.executable, str(CTW), "journey", "plan",
+                    "--request", str(request_path),
+                    "--candidates", str(candidates_path),
+                    "--rail", "off",
+                    "--offline-fixture",
+                    "--fixed-clock", FIXED_NOW,
+                    "--amap-total-max-calls", "-1",
+                    "--output-json", str(journey_path),
+                ],
+                text=True,
+                capture_output=True,
+            )
+        self.assertNotEqual(0, rejected.returncode)
+        self.assertIn(
+            "Journey AMap total max calls must be a non-negative integer",
+            rejected.stdout + rejected.stderr,
+        )
+
+    def test_cross_segment_entities_are_resolved_once_with_identical_coordinates(self):
+        case = journey_six_city_lodging_chain_case()
+        transport = RecordingJourneyAMapTransport()
+        result = plan_journey(
+            case["request"],
+            case["candidates"],
+            self.clock,
+            self.rail,
+            journey_mobility(transport),
+            expected_segment_days=4,
+        )
+        counts = Counter(transport.entity_requests)
+        repeated_pois = (
+            "poi-j16-six-city-synthetic-a",
+            "poi-j16-six-city-synthetic-e",
+        )
+        repeated_lodgings = (
+            "lodging-j16-six-city-synthetic-a-first-central",
+            "lodging-j16-six-city-synthetic-a-return-central",
+            "lodging-j16-six-city-synthetic-e-first-central",
+            "lodging-j16-six-city-synthetic-e-return-central",
+        )
+        for ref_id in repeated_pois:
+            self.assertEqual(1, counts[("poi", ref_id)])
+            self.assertEqual(1, counts[("geocode", ref_id)])
+            coordinates = [
+                item["coordinates"]
+                for trip in result.journey["trips"]
+                for item in trip["pois"]
+                if item["poi_id"] == ref_id
+            ]
+            self.assertEqual(2, len(coordinates))
+            self.assertEqual(coordinates[0], coordinates[1])
+            self.assertIsNotNone(coordinates[0]["gcj02"])
+        for ref_id in repeated_lodgings:
+            self.assertEqual(1, counts[("geocode", ref_id)])
+        self.assertEqual(57, transport.calls)
+        visible_calls = Counter(
+            item for item in result.business_calls if item.startswith("amap.")
+        )
+        self.assertEqual(57, sum(visible_calls.values()))
+        for ref_id in repeated_pois:
+            self.assertEqual(1, visible_calls["amap.poi:%s" % ref_id])
+            self.assertEqual(1, visible_calls["amap.geocode:%s" % ref_id])
+        for ref_id in repeated_lodgings:
+            self.assertEqual(1, visible_calls["amap.geocode:%s" % ref_id])
+        self.assertTrue(validate_journey(result.journey).ok)
+
+    def test_amap_response_reuse_never_crosses_journey_invocations(self):
+        case = journey_sixteen_day_case()
+        transport = RecordingJourneyAMapTransport()
+        backend = journey_mobility(transport)
+        first = plan_journey(
+            case["request"], case["candidates"], self.clock, self.rail, backend,
+        )
+        self.assertEqual(15, transport.calls)
+        second = plan_journey(
+            case["request"], case["candidates"], self.clock, self.rail, backend,
+        )
+        self.assertEqual(30, transport.calls)
+        self.assertTrue(validate_journey(first.journey).ok)
+        self.assertTrue(validate_journey(second.journey).ok)
+
+    def test_cross_segment_entity_failure_is_not_called_twice(self):
+        target = "poi-j16-six-city-synthetic-a"
+
+        class TimeoutTransport(RecordingJourneyAMapTransport):
+            def execute(self, provider, provider_request):
+                if (
+                    provider_request.capability == "poi"
+                    and provider_request.parameters.get("subject_ref") == target
+                ):
+                    self.entity_requests.append(("poi", target))
+                    self.calls += 1
+                    raise ProviderTimeout("synthetic entity timeout")
+                return super().execute(provider, provider_request)
+
+        case = journey_six_city_lodging_chain_case()
+        transport = TimeoutTransport()
+        result = plan_journey(
+            case["request"],
+            case["candidates"],
+            self.clock,
+            self.rail,
+            journey_mobility(transport),
+            expected_segment_days=4,
+        )
+        self.assertEqual(1, Counter(transport.entity_requests)[("poi", target)])
+        self.assertEqual(
+            1,
+            Counter(result.business_calls)["amap.poi:%s" % target],
+        )
+        self.assertTrue(validate_journey(result.journey).ok)
 
 
 class JourneyContinuityTests(unittest.TestCase):

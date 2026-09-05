@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import socket
 import threading
@@ -26,12 +27,44 @@ AMAP_ORIGIN = "https://restapi.amap.com"
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 MAX_CALLS_PER_RUN = 80
 MAX_QPS = 2.0
+_MEMOIZED_AMAP_ERRORS = (
+    ContractMismatch,
+    ProviderNetworkError,
+    ProviderRateLimited,
+    ProviderTimeout,
+)
 
 
 class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         del req, fp, code, msg, headers, newurl
         return None
+
+
+class _AMapStartRateLimiter:
+    """Share one start-rate clock across independently counted call budgets."""
+
+    def __init__(
+        self,
+        qps: float,
+        monotonic: Callable[[], float],
+        sleep: Callable[[float], None],
+    ) -> None:
+        self.qps = float(qps)
+        self._monotonic = monotonic
+        self._sleep = sleep
+        self._last_started: Optional[float] = None
+        self._lock = threading.Lock()
+
+    def acquire(self) -> None:
+        with self._lock:
+            now = self._monotonic()
+            if self._last_started is not None:
+                wait = (1.0 / self.qps) - (now - self._last_started)
+                if wait > 0:
+                    self._sleep(wait)
+                    now = self._monotonic()
+            self._last_started = now
 
 
 class AMapCallBudget:
@@ -44,15 +77,18 @@ class AMapCallBudget:
         *,
         monotonic: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
+        _rate_limiter: Optional[_AMapStartRateLimiter] = None,
     ) -> None:
-        if max_calls <= 0 or qps <= 0:
-            raise ValueError("positive AMap max_calls and qps are required")
+        if max_calls < 0 or qps <= 0:
+            raise ValueError("non-negative AMap max_calls and positive qps are required")
         self.max_calls = int(max_calls)
-        self.qps = float(qps)
-        self._monotonic = monotonic
-        self._sleep = sleep
+        self._rate_limiter = _rate_limiter or _AMapStartRateLimiter(
+            qps,
+            monotonic,
+            sleep,
+        )
+        self.qps = self._rate_limiter.qps
         self._calls = 0
-        self._last_started: Optional[float] = None
         self._lock = threading.Lock()
 
     @property
@@ -64,14 +100,103 @@ class AMapCallBudget:
         with self._lock:
             if self._calls >= self.max_calls:
                 raise ProviderRateLimited("AMap call budget exhausted")
-            now = self._monotonic()
-            if self._last_started is not None:
-                wait = (1.0 / self.qps) - (now - self._last_started)
-                if wait > 0:
-                    self._sleep(wait)
-                    now = self._monotonic()
+            self._rate_limiter.acquire()
             self._calls += 1
-            self._last_started = now
+
+    def fork(self, max_calls: int) -> "AMapCallBudget":
+        """Create an empty counter while retaining this run's global QPS gate."""
+
+        return AMapCallBudget(
+            max_calls=max_calls,
+            qps=self.qps,
+            _rate_limiter=self._rate_limiter,
+        )
+
+
+class AMapRequestMemo:
+    """Ephemeral entity-query outcome reuse for one Journey invocation."""
+
+    def __init__(self) -> None:
+        self._outcomes: Dict[str, Tuple[str, Any]] = {}
+        self._lock = threading.Lock()
+
+    def get(self, provider: str, request: ProviderRequest) -> Optional[ProviderEnvelope]:
+        if not _memoizable_entity_request(request):
+            return None
+        key = _request_memo_key(provider, request)
+        with self._lock:
+            outcome = self._outcomes.get(key)
+        if outcome is None:
+            return None
+        kind, value = outcome
+        if kind == "response":
+            return copy.deepcopy(value)
+        error_type, message = value
+        raise error_type(message)
+
+    def store(
+        self,
+        provider: str,
+        request: ProviderRequest,
+        response: ProviderEnvelope,
+    ) -> None:
+        if not _memoizable_entity_request(request):
+            return
+        key = _request_memo_key(provider, request)
+        with self._lock:
+            self._outcomes[key] = ("response", copy.deepcopy(response))
+
+    def store_error(
+        self,
+        provider: str,
+        request: ProviderRequest,
+        error: Exception,
+    ) -> None:
+        if not _memoizable_entity_request(request):
+            return
+        if not isinstance(error, _MEMOIZED_AMAP_ERRORS):
+            raise TypeError("unsupported AMap memo error")
+        key = _request_memo_key(provider, request)
+        with self._lock:
+            self._outcomes[key] = ("error", (type(error), str(error)))
+
+
+class AMapBudgetedTransport:
+    """Apply a Journey segment budget and run-local memo to a non-HTTP transport."""
+
+    def __init__(
+        self,
+        transport: Any,
+        budget: AMapCallBudget,
+        memo: AMapRequestMemo,
+    ) -> None:
+        self.transport = transport
+        self.budget = budget
+        self.memo = memo
+        self.retry_rate_limits = bool(getattr(transport, "retry_rate_limits", False))
+        if hasattr(transport, "progress"):
+            self.progress = transport.progress
+
+    @property
+    def calls(self) -> int:
+        return self.budget.calls
+
+    @property
+    def max_calls(self) -> int:
+        return self.budget.max_calls
+
+    def execute(self, provider: str, request: ProviderRequest) -> ProviderEnvelope:
+        cached = self.memo.get(provider, request)
+        if cached is not None:
+            return cached
+        self.budget.acquire()
+        try:
+            response = self.transport.execute(provider, request)
+        except _MEMOIZED_AMAP_ERRORS as exc:
+            self.memo.store_error(provider, request, exc)
+            raise
+        self.memo.store(provider, request, response)
+        return response
 
 
 class AMapHTTPTransport:
@@ -85,14 +210,37 @@ class AMapHTTPTransport:
         *,
         budget: Optional[AMapCallBudget] = None,
         opener: Optional[Callable[..., Any]] = None,
+        memo: Optional[AMapRequestMemo] = None,
     ) -> None:
         self.credentials = credentials
         self.budget = budget or AMapCallBudget()
         self._open = opener or urllib.request.build_opener(_NoRedirectHandler()).open
+        self.memo = memo
 
     @property
     def calls(self) -> int:
         return self.budget.calls
+
+    @property
+    def max_calls(self) -> int:
+        return self.budget.max_calls
+
+    def with_budget(
+        self,
+        budget: AMapCallBudget,
+        memo: AMapRequestMemo,
+    ) -> "AMapHTTPTransport":
+        """Create a same-endpoint transport scoped to one Journey segment."""
+
+        scoped = AMapHTTPTransport(
+            self.credentials,
+            budget=budget,
+            opener=self._open,
+            memo=memo,
+        )
+        if hasattr(self, "progress"):
+            scoped.progress = self.progress
+        return scoped
 
     def execute(self, provider: str, request: ProviderRequest) -> ProviderEnvelope:
         if provider != "amap":
@@ -101,8 +249,29 @@ class AMapHTTPTransport:
         if not key:
             raise ContractMismatch("AMap transport requires configured credentials")
         endpoint, parameters, api = _request_contract(request)
+        if self.memo is not None:
+            cached = self.memo.get(provider, request)
+            if cached is not None:
+                return cached
         parameters["key"] = key
         self.budget.acquire()
+        try:
+            response = self._execute_acquired(request, endpoint, parameters, api)
+        except _MEMOIZED_AMAP_ERRORS as exc:
+            if self.memo is not None:
+                self.memo.store_error(provider, request, exc)
+            raise
+        if self.memo is not None:
+            self.memo.store(provider, request, response)
+        return response
+
+    def _execute_acquired(
+        self,
+        request: ProviderRequest,
+        endpoint: str,
+        parameters: Mapping[str, Any],
+        api: str,
+    ) -> ProviderEnvelope:
         url = endpoint + "?" + urllib.parse.urlencode(parameters)
         http_request = urllib.request.Request(
             url,
@@ -147,12 +316,38 @@ class AMapHTTPTransport:
             if request.capability == "poi":
                 body["page_size"] = parameters["page_size"]
                 body["page_num"] = parameters["page_num"]
-        return ProviderEnvelope(
+        response = ProviderEnvelope(
             status_code=status,
             body=body,
             headers=headers,
             raw_ref=endpoint,
         )
+        return response
+
+
+def _request_memo_key(provider: str, request: ProviderRequest) -> str:
+    """Key only non-secret request context; never serialize credentials."""
+
+    return json.dumps(
+        {
+            "provider": provider,
+            "request_id": request.request_id,
+            "capability": request.capability,
+            "parameters": request.parameters,
+            "as_of": request.as_of,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def _memoizable_entity_request(request: ProviderRequest) -> bool:
+    return (
+        request.capability in ("poi", "geocode")
+        and isinstance(request.parameters.get("subject_ref"), str)
+        and bool(request.parameters["subject_ref"])
+    )
 
 
 def _request_contract(request: ProviderRequest) -> Tuple[str, Dict[str, Any], str]:

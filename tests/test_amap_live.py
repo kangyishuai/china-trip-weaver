@@ -18,10 +18,19 @@ from china_trip_weaver.contracts import ProviderRequest
 from china_trip_weaver.credentials import resolve_credentials
 from china_trip_weaver.flyai_inventory import FlyAIBackend
 from china_trip_weaver.mobility import MobilityBackend, apply_locations, normalize_modes
-from china_trip_weaver.planning import RailBackend, plan_trip
+from china_trip_weaver.planning import RailBackend, _combined_amap_health, plan_trip
 from china_trip_weaver.providers.amap import AMapAdapter
-from china_trip_weaver.providers.amap_http import AMapCallBudget, AMapHTTPTransport
-from china_trip_weaver.providers.base import ProviderContext, ProviderEnvelope, ProviderRateLimited
+from china_trip_weaver.providers.amap_http import (
+    AMapCallBudget,
+    AMapHTTPTransport,
+    AMapRequestMemo,
+)
+from china_trip_weaver.providers.base import (
+    ProviderContext,
+    ProviderEnvelope,
+    ProviderRateLimited,
+    ProviderTimeout,
+)
 from china_trip_weaver.providers.flyai_cli import FlyAISubprocessTransport
 from tests.test_providers import AMAP_SCENARIOS, AMapScenarioTransport, amap_scenario_candidates
 
@@ -215,6 +224,138 @@ class AMapHTTPTransportTests(unittest.TestCase):
         with self.assertRaises(ProviderRateLimited):
             budget.acquire()
 
+    def test_zero_call_budget_is_an_immediate_truthful_rate_limit(self):
+        budget = AMapCallBudget(max_calls=0, qps=1000000)
+        with self.assertRaisesRegex(ProviderRateLimited, "budget exhausted"):
+            budget.acquire()
+        self.assertEqual(0, budget.calls)
+
+    def test_forked_budgets_have_independent_counts_and_one_qps_gate(self):
+        now = [0.0]
+        sleeps = []
+
+        def monotonic():
+            return now[0]
+
+        def sleep(seconds):
+            sleeps.append(seconds)
+            now[0] += seconds
+
+        template = AMapCallBudget(
+            max_calls=80,
+            qps=2,
+            monotonic=monotonic,
+            sleep=sleep,
+        )
+        first = template.fork(1)
+        second = template.fork(1)
+        first.acquire()
+        second.acquire()
+        self.assertEqual((1, 1, 0), (first.calls, second.calls, template.calls))
+        self.assertEqual([0.5], sleeps)
+
+    def test_request_memo_is_in_memory_and_explicitly_run_scoped(self):
+        opener = RecordingOpener()
+        provider_request = request("geocode", {
+            "subject_ref": "poi-synthetic-memo",
+            "address": "合成大道1号",
+            "city": "合成甲城",
+        })
+        first_run = AMapHTTPTransport(
+            credentials(),
+            budget=AMapCallBudget(max_calls=2, qps=1000000),
+            opener=opener,
+            memo=AMapRequestMemo(),
+        )
+        self.assertEqual(
+            first_run.execute("amap", provider_request),
+            first_run.execute("amap", provider_request),
+        )
+        self.assertEqual(1, first_run.calls)
+        self.assertEqual(1, len(opener.requests))
+
+        second_run = AMapHTTPTransport(
+            credentials(),
+            budget=AMapCallBudget(max_calls=2, qps=1000000),
+            opener=opener,
+            memo=AMapRequestMemo(),
+        )
+        second_run.execute("amap", provider_request)
+        self.assertEqual(1, second_run.calls)
+        self.assertEqual(2, len(opener.requests))
+
+    def test_same_run_timeout_is_replayed_without_a_second_http_call(self):
+        calls = []
+
+        def timeout_opener(http_request, timeout):
+            calls.append((http_request, timeout))
+            raise TimeoutError("synthetic timeout")
+
+        provider_request = request("geocode", {
+            "subject_ref": "poi-synthetic-timeout",
+            "address": "合成大道2号",
+            "city": "合成甲城",
+        })
+        transport = AMapHTTPTransport(
+            credentials(),
+            budget=AMapCallBudget(max_calls=2, qps=1000000),
+            opener=timeout_opener,
+            memo=AMapRequestMemo(),
+        )
+        for _ in range(2):
+            with self.assertRaisesRegex(ProviderTimeout, "deadline exceeded"):
+                transport.execute("amap", provider_request)
+        self.assertEqual(1, transport.calls)
+        self.assertEqual(1, len(calls))
+
+    def test_preflight_budget_exhaustion_does_not_poison_the_next_segment_memo(self):
+        opener = RecordingOpener()
+        memo = AMapRequestMemo()
+        provider_request = request("geocode", {
+            "subject_ref": "poi-synthetic-next-segment",
+            "address": "合成大道3号",
+            "city": "合成乙城",
+        })
+        exhausted = AMapHTTPTransport(
+            credentials(),
+            budget=AMapCallBudget(max_calls=0, qps=1000000),
+            opener=opener,
+            memo=memo,
+        )
+        with self.assertRaises(ProviderRateLimited):
+            exhausted.execute("amap", provider_request)
+        available = AMapHTTPTransport(
+            credentials(),
+            budget=AMapCallBudget(max_calls=1, qps=1000000),
+            opener=opener,
+            memo=memo,
+        )
+        available.execute("amap", provider_request)
+        self.assertEqual((0, 1), (exhausted.calls, available.calls))
+        self.assertEqual(1, len(opener.requests))
+
+    def test_run_memo_does_not_reuse_time_sensitive_route_queries(self):
+        opener = RecordingOpener()
+        transport = AMapHTTPTransport(
+            credentials(),
+            budget=AMapCallBudget(max_calls=2, qps=1000000),
+            opener=opener,
+            memo=AMapRequestMemo(),
+        )
+        provider_request = request("route", {
+            "from_ref": "poi-route-a",
+            "to_ref": "poi-route-b",
+            "origin": "121.1000000,31.1000000",
+            "destination": "121.2000000,31.2000000",
+            "city": "合成甲城",
+            "destination_city": "合成甲城",
+            "travel_mode": "transit",
+        })
+        transport.execute("amap", provider_request)
+        transport.execute("amap", provider_request)
+        self.assertEqual(2, transport.calls)
+        self.assertEqual(2, len(opener.requests))
+
 
 class AMapMobilityTests(unittest.TestCase):
     def setUp(self):
@@ -396,6 +537,28 @@ class AMapMobilityTests(unittest.TestCase):
         self.assertEqual((), result.cells)
         self.assertEqual("forbidden", result.health["status"])
         self.assertIn("calls=1/80", result.health["reason"])
+
+    def test_combined_health_never_hides_lodging_budget_exhaustion(self):
+        common = {
+            "provider": "amap",
+            "version": "web-service-v5-v3-route",
+            "checked_at": FIXED_NOW,
+        }
+        mobility = dict(common, **{
+            "mode": "live",
+            "status": "ready",
+            "capabilities": ["geocode", "poi", "route"],
+            "reason": "calls=4/4 qps<=2; live_cells=1; locations=2; errors=none; warnings=none",
+        })
+        lodging = dict(common, **{
+            "mode": "static",
+            "status": "degraded",
+            "capabilities": ["lodging"],
+            "reason": "poi_calls=1; lodging_items=0; prices=verify-on-click; errors=rate_limited",
+        })
+        combined = _combined_amap_health(mobility, lodging)
+        self.assertEqual("rate_limited", combined["status"])
+        self.assertIn("errors=rate_limited", combined["reason"])
 
     def test_missing_key_makes_no_call(self):
         transport = ScriptedAmapTransport()
