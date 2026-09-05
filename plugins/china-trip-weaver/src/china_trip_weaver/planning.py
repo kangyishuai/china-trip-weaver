@@ -162,7 +162,14 @@ def plan_trip(
     pois = copy.deepcopy(normalized_candidates["pois"])
     lodging_candidates = copy.deepcopy(normalized_candidates["lodgings"])
     routes = _route_specs(normalized_request)
-    transport_legs, rail_claims, rail_unknowns, rail_health, business_calls = _resolve_rail(
+    (
+        transport_legs,
+        rail_claims,
+        rail_unknowns,
+        rail_health,
+        business_calls,
+        rail_warnings,
+    ) = _resolve_rail(
         routes, clock, rail_backend
     )
     _validate_meeting_anchor(normalized_request, transport_legs)
@@ -298,6 +305,17 @@ def plan_trip(
     ):
         raise ValueError("scheduler and Trip budget ledgers disagree")
     unknowns.extend(budget_unknowns)
+    unknowns = _apply_runtime_unknown_reasons(
+        unknowns,
+        entities,
+        claims,
+        {
+            "12306-mcp": rail_warnings,
+            "flyai": inventory.warnings,
+            "amap": mobility.warnings,
+            "variflight": enrichment.warnings,
+        },
+    )
     transport_pricing = _transport_pricing(
         normalized_request, days, transport_legs,
     )
@@ -857,16 +875,137 @@ def _selected_candidate_unknowns(
     return result
 
 
+def _apply_runtime_unknown_reasons(
+    unknowns: Sequence[Mapping[str, Any]],
+    entities: Mapping[str, Sequence[Mapping[str, Any]]],
+    claims: Sequence[Mapping[str, Any]],
+    warnings_by_provider: Mapping[str, Sequence[str]],
+) -> List[Mapping[str, Any]]:
+    """Replace research-time reasons only with entity-matched runtime evidence.
+
+    Runtime warning entries use ``cause:scope:detail``.  A scope is either an
+    exact entity reference or a capability kind such as ``lodging`` or
+    ``flight``.  Bare provider warnings are deliberately ignored: without an
+    entity or a step scope they cannot establish that the unknown field was
+    actually reached.
+    """
+
+    claim_subjects = {
+        str(claim["claim_id"]): str(claim["subject_ref"])
+        for claim in claims
+        if isinstance(claim.get("claim_id"), str)
+        and isinstance(claim.get("subject_ref"), str)
+    }
+    result: List[Mapping[str, Any]] = []
+    for unknown in unknowns:
+        selected = copy.deepcopy(dict(unknown))
+        provider = selected.get("provider")
+        provider_warnings = warnings_by_provider.get(str(provider), ())
+        target = _runtime_unknown_target(selected, entities, claim_subjects)
+        if target is not None and provider_warnings:
+            identifier, aliases, scopes = target
+            parsed = [
+                (warning, warning.split(":", 2))
+                for warning in provider_warnings
+                if isinstance(warning, str) and len(warning.split(":", 2)) == 3
+            ]
+            exact = next((
+                warning for warning, parts in parsed
+                if all(parts) and parts[1] in aliases
+            ), None)
+            scoped = next((
+                "%s:%s:%s" % (parts[0], identifier, parts[2])
+                for _, parts in parsed
+                if all(parts) and parts[1] in scopes
+            ), None)
+            runtime_reason = exact or scoped
+            if runtime_reason is not None:
+                selected["reason"] = runtime_reason
+        result.append(selected)
+    return result
+
+
+def _runtime_unknown_target(
+    unknown: Mapping[str, Any],
+    entities: Mapping[str, Sequence[Mapping[str, Any]]],
+    claim_subjects: Mapping[str, str],
+) -> Optional[Tuple[str, set, set]]:
+    specifications = {
+        "pois": ("poi_id", "poi"),
+        "lodgings": ("lodging_id", "lodging"),
+        "transport_legs": ("leg_id", "transport"),
+    }
+    claim_id = unknown.get("claim_id")
+    claim_subject = claim_subjects.get(claim_id) if isinstance(claim_id, str) else None
+    path = unknown.get("field_path")
+    if isinstance(path, str):
+        parts = path.split("/")
+        if len(parts) >= 3 and parts[2].isdigit() and parts[1] in specifications:
+            group = parts[1]
+            values = entities.get(group, ())
+            index = int(parts[2])
+            if index < len(values):
+                return _runtime_entity_target(
+                    values[index], group, specifications[group], claim_subject,
+                )
+    if claim_subject is None:
+        return None
+    for group, specification in specifications.items():
+        id_key, _ = specification
+        for entity in entities.get(group, ()):
+            if claim_subject in (entity.get(id_key), entity.get("candidate_ref")):
+                return _runtime_entity_target(entity, group, specification, claim_subject)
+    return None
+
+
+def _runtime_entity_target(
+    entity: Mapping[str, Any],
+    group: str,
+    specification: Tuple[str, str],
+    claim_subject: Optional[str],
+) -> Optional[Tuple[str, set, set]]:
+    id_key, kind = specification
+    identifier = entity.get(id_key)
+    if not isinstance(identifier, str):
+        return None
+    aliases = {identifier}
+    candidate_ref = entity.get("candidate_ref")
+    if isinstance(candidate_ref, str):
+        aliases.add(candidate_ref)
+    if claim_subject is not None:
+        aliases.add(claim_subject)
+    scopes = {kind, group}
+    city = entity.get("city")
+    if isinstance(city, str):
+        scopes.add("%s@%s" % (kind, city))
+    travel_mode = entity.get("travel_mode")
+    if isinstance(travel_mode, str):
+        scopes.add(travel_mode)
+        from_ref = entity.get("from_ref")
+        to_ref = entity.get("to_ref")
+        if isinstance(from_ref, str) and isinstance(to_ref, str):
+            scopes.add("%s@%s->%s" % (travel_mode, from_ref, to_ref))
+    return identifier, aliases, scopes
+
+
 def _resolve_rail(
     routes: Sequence[RouteSpec],
     clock: Clock,
     backend: RailBackend,
-) -> Tuple[List[Mapping[str, Any]], List[Mapping[str, Any]], List[Mapping[str, Any]], Mapping[str, Any], Tuple[str, ...]]:
+) -> Tuple[
+    List[Mapping[str, Any]],
+    List[Mapping[str, Any]],
+    List[Mapping[str, Any]],
+    Mapping[str, Any],
+    Tuple[str, ...],
+    Tuple[str, ...],
+]:
     legs: List[Mapping[str, Any]] = []
     claims: List[Mapping[str, Any]] = []
     unknowns: List[Mapping[str, Any]] = []
     calls: List[str] = []
     errors: List[str] = []
+    runtime_warnings: List[str] = []
     live_count = 0
 
     for route in routes:
@@ -900,6 +1039,13 @@ def _resolve_rail(
             legs.append(_leg_for_route(selected, route))
             claims.extend(copy.deepcopy(list(selected_claims)))
             live_count += 1
+            if selected.get("price", {}).get("amount") is None:
+                runtime_warnings.append(
+                    "no_inventory:%s:service=%s;date=%s" % (
+                        selected["leg_id"], selected.get("service_number") or "unknown",
+                        route.travel_date,
+                    )
+                )
             continue
         if result is not None:
             errors.append(result.error_class or "rail result did not match the requested date")
@@ -923,6 +1069,16 @@ def _resolve_rail(
                 "claim_id": fallback_claims[1]["claim_id"],
             },
         ))
+        if result is not None:
+            runtime_warnings.append(
+                "%s:%s:route=%s->%s;date=%s" % (
+                    _rail_runtime_cause(result),
+                    fallback["leg_id"],
+                    route.from_place["ref_id"],
+                    route.to_place["ref_id"],
+                    route.travel_date,
+                )
+            )
 
     checked_at = isoformat_seconds(clock)
     if not routes:
@@ -941,7 +1097,17 @@ def _resolve_rail(
             "12306-mcp", "0.3.10", "static", status, checked_at, ("rail",),
             "dated deep-link fallback used: " + ", ".join(sorted(set(errors))),
         )
-    return legs, claims, unknowns, health, tuple(calls)
+    return legs, claims, unknowns, health, tuple(calls), tuple(runtime_warnings)
+
+
+def _rail_runtime_cause(result: AdapterResult) -> str:
+    if "outside_presale_window" in result.warnings:
+        return "outside_presale_window"
+    if result.error_class:
+        return result.error_class
+    if result.warnings:
+        return str(result.warnings[0])
+    return "no_matching_result"
 
 
 def _leg_for_route(

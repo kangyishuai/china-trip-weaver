@@ -476,6 +476,38 @@ class FlyAIIsAnOptionalSourceTests(unittest.TestCase):
         for lodging in result.trip["lodgings"]:
             self.assertNotEqual("live", lodging["price"]["price_type"])
 
+    def test_rate_limited_live_run_replaces_stale_lodging_unknown_reason(self):
+        fixture = load(ROOT / "tests" / "fixtures" / "providers" / "flyai" / "rate_limit.json")
+        resolved = resolve_credentials(
+            {"FLYAI_API_KEY": "ctw-canary-flyai-rate-limit-not-real"},
+            ROOT / ".tmp" / "flyai-rate-limit-no-file",
+        )
+        transport = ReplayTransport(fixture["transport"])
+        result = plan_trip(
+            load(E2E / "request.json"),
+            load(E2E / "candidates.json"),
+            CLOCK,
+            RailBackend.from_spec("fixture:" + str(E2E / "rail.json"), ROOT),
+            flyai_backend=FlyAIBackend("live", resolved, transport),
+        )
+
+        health = next(
+            item for item in result.trip["provider_health"]
+            if item["provider"] == "flyai"
+        )
+        unknown = next(
+            item for item in result.trip["unknowns"]
+            if item["field_path"] == "/lodgings/0/price/amount"
+            and item["provider"] == "flyai"
+        )
+        self.assertEqual(3, transport.calls)
+        self.assertEqual("degraded", health["status"])
+        self.assertEqual(
+            "rate_limited:lodging-bjs-central:"
+            "city=上海;check_in=2026-10-16;check_out=2026-10-18",
+            unknown["reason"],
+        )
+
 
 class AMapRateLimitRetryTests(unittest.TestCase):
     def test_retry_after_is_honored_with_a_fixed_safe_cap(self):

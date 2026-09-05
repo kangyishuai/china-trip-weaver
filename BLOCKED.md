@@ -237,3 +237,7 @@ should mean pending work. They live where they are enforced:
 ## 书 13 Journey 拆分粒度（2026-09-05）
 
 - 本轮新增阻塞：无。
+
+## Provider 运行时 unknown 原因覆盖（2026-09-05）
+
+- 本轮新增阻塞：无。

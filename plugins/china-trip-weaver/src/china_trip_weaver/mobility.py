@@ -171,6 +171,9 @@ class MobilityBackend:
                 if not poi_result.normalized_items:
                     error = poi_result.error_class or "no_results"
                     errors.append(error)
+                    warnings.append(
+                        "%s:%s:poi_identity_lookup" % (error, entity["ref_id"])
+                    )
                     if error in FATAL_ERRORS:
                         fatal_status = poi_result.health["status"]
                         break
@@ -200,6 +203,7 @@ class MobilityBackend:
                     warnings.extend((
                         "incomplete_address",
                         "incomplete_address:%s" % entity["ref_id"],
+                        "incomplete_address:%s:poi_address_missing_admin_detail" % entity["ref_id"],
                     ))
                     continue
                 if _business_conflict(entity, candidates, identity_claims):
@@ -207,6 +211,7 @@ class MobilityBackend:
                     warnings.extend((
                         "business_conflict",
                         "business_conflict:%s" % entity["ref_id"],
+                        "business_conflict:%s:provider_identity_disagrees_with_candidate" % entity["ref_id"],
                     ))
                 provider_name = selected["name"]
                 geocode_address = identity["formatted_address"]
@@ -231,6 +236,9 @@ class MobilityBackend:
                 coordinate_claim = result.claims[0] if result.claims[0]["field_path"] == "/coordinates" else None
                 if coordinate_claim is None or not isinstance(coordinate_claim.get("value"), dict):
                     errors.append("contract_mismatch")
+                    warnings.append(
+                        "contract_mismatch:%s:geocode_coordinates" % entity["ref_id"]
+                    )
                     fatal_status = "contract_mismatch"
                     break
                 if not _city_matches(entity["city"], provider_place["city"]):
@@ -254,6 +262,9 @@ class MobilityBackend:
                 claims.extend(identity_claims)
                 error = result.error_class or "no_results"
                 errors.append(error)
+                warnings.append(
+                    "%s:%s:geocode_lookup" % (error, entity["ref_id"])
+                )
                 if error in FATAL_ERRORS:
                     fatal_status = result.health["status"]
                     break

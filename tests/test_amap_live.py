@@ -306,6 +306,70 @@ class AMapMobilityTests(unittest.TestCase):
         self.assertEqual("珠海市", provider_answer.locations[0].city)
         self.assertEqual("海岛生态廊道甲区", provider_answer.locations[0].name)
 
+    def _identity_conflict_plan(self, mobility):
+        scenario = load(AMAP_SCENARIOS / "g3_identity_conflict.json")
+        candidates = amap_scenario_candidates(scenario)
+        stale_reason = "AMap is not configured; coordinates remain unverified"
+        candidates["unknowns"] = [{
+            "claim_id": candidates["claims"][0]["claim_id"],
+            "field_path": "/pois/0/coordinates",
+            "provider": "amap",
+            "reason": stale_reason,
+        }]
+        request_value = {
+            "origin": None,
+            "destinations": [{"ref_id": "city-zhuhai", "name": "珠海", "city": "珠海"}],
+            "start_date": "2026-09-10",
+            "end_date": "2026-09-10",
+            "travelers": 1,
+            "budget_cny": 2000,
+            "interests": ["synthetic-test-place"],
+            "pace": "balanced",
+            "constraints": [],
+            "assumptions": ["synthetic offline identity-conflict acceptance"],
+            "locale": "zh-CN",
+            "pasted_notes": None,
+        }
+        result = plan_trip(
+            request_value,
+            candidates,
+            self.clock,
+            RailBackend.from_spec("off", ROOT),
+            mobility,
+        )
+        return result, stale_reason
+
+    def test_full_plan_replaces_stale_amap_unknown_with_entity_conflict(self):
+        scenario = load(AMAP_SCENARIOS / "g3_identity_conflict.json")
+        transport = AMapScenarioTransport(scenario)
+        result, stale_reason = self._identity_conflict_plan(
+            MobilityBackend("live", credentials(), transport),
+        )
+
+        unknown = next(
+            item for item in result.trip["unknowns"]
+            if item["field_path"] == "/pois/0/coordinates"
+        )
+        self.assertEqual(1, transport.calls)
+        self.assertNotEqual(stale_reason, unknown["reason"])
+        self.assertEqual(
+            "identity_conflict:poi-g3-corridor:ambiguous_name_margin",
+            unknown["reason"],
+        )
+
+    def test_full_plan_mobility_off_preserves_candidate_reason_byte_for_byte(self):
+        transport = ScriptedAmapTransport()
+        result, stale_reason = self._identity_conflict_plan(
+            MobilityBackend("off", credentials(), transport),
+        )
+
+        unknown = next(
+            item for item in result.trip["unknowns"]
+            if item["field_path"] == "/pois/0/coordinates"
+        )
+        self.assertEqual(0, transport.calls)
+        self.assertEqual(stale_reason, unknown["reason"])
+
     def test_demo_candidates_produce_bounded_two_mode_live_matrix(self):
         transport = ScriptedAmapTransport()
         backend = MobilityBackend("live", credentials(), transport)

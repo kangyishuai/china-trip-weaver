@@ -1601,3 +1601,119 @@ OK：china-trip-weaver@china-trip-weaver-local 0.3.0 已安装且缓存与源码
 - 期望值 5 的独立原始摘要：`trips=4`、`actual_segment_days=[4,4,5,3]`、`max_trip_days=5`、`night_city_matches=15/15`、`journey_valid=true`，assumptions 写明 requested/actual 与住宿变化/7 天上限原因。
 - 书 13 代码提交 `279bed2` 只含 Journey Schema、`journey.py`、`tests/test_journey.py`；记录提交 `b28d9c6` 只含 `PROGRESS.md`/`BLOCKED.md`。并行书 14 提交 `3d1980a` 独立夹在两者之间，未混入书 13 提交。
 - 两个书 13 提交对 Trip/candidates Schema、`planning.py`、`candidates.py`、CLI、providers、render、demo、mobility、scheduler、Trip validator、manifest/docs 的路径审计均为空；版本保持 0.4.0，未安装 Codex。`BLOCKED.md` 本轮为“无”。当前轮次 5/12。
+
+## Provider 运行时 unknown 原因覆盖：开工理解（2026-09-05，8 行）
+1. 目标：provider 真正执行后，用可操作的运行时事实覆盖同 provider 候选 unknown 的陈旧 reason；未执行时逐字保留。
+2. 通用覆盖范围是 AMap、12306、FlyAI、VariFlight，不改 unknown 结构，也不做 AMap 特判补丁。
+3. 顺序：任务 0 离线复现 → 通用映射/AMap → off 保护与反向红绿 → 其余三 provider → 全量门禁与提交。
+4. AMap 优先使用带实体的 `identity_conflict:<ref_id>:<detail>` 等 warning；其余 provider 从实际调用的结果错误/警告生成同样可操作的实体原因。
+5. provider off、缺凭据、没有业务调用或流程没走到时，绝不把 health 的具体降级描述冒充已运行结果。
+6. 最大风险：候选 unknown 的 JSON Pointer、claim subject 与 provider 调用实体并非总是一一对应，错误广播会把真文案改成另一句假话。
+7. 夹具全部合成，禁止实网、demo 重跑、版本变更与 Codex 安装；只写任务书白名单。
+8. 开工 HEAD/origin=`dfe0d3e`、工作树 clean；当前验收轮次 1/12，尚未修改产品代码。
+
+## Provider 运行时 unknown 原因覆盖：任务 0（完成）
+
+- 基线 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）：`Ran 403 tests in 27.977s`、`OK`、skipped 0。
+- 基线 `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 372 file(s)`。
+- 使用现有纯合成 `g3_identity_conflict.json`，内存加入陈旧 AMap unknown，注入合成 configured credential 与 replay transport，跑完整 `plan_trip`；没有实网调用。
+- 改前原始核心输出：
+
+```text
+AMAP_CONFIGURED True
+AMAP_CALLS 1 ['poi']
+AMAP_WARNINGS ['identity_conflict', 'identity_conflict:poi-g3-corridor:ambiguous_name_margin']
+AMAP_HEALTH {"capabilities": ["geocode", "poi", "route"], "checked_at": "2026-09-05T12:00:00+08:00", "mode": "static", "provider": "amap", "reason": "calls=1/80 qps<=2; live_cells=0; locations=0; errors=identity_conflict; warnings=identity_conflict", "status": "degraded", "version": "web-service-v5-v3-route"}
+TRIP_UNKNOWN {"claim_id": "claim-9bcdb062394bae07", "field_path": "/pois/0/coordinates", "provider": "amap", "reason": "AMap is not configured; coordinates remain unverified"}
+TRIP_VALID 873887719d7865973451ca4ffbb34dfb0c632c050bb4b0f875c18400326ab02f ('INTAKE', 'RESEARCHED', 'CANDIDATES_READY', 'MATRIX_DEGRADED', 'SCHEDULED', 'VALIDATED', 'RENDERED')
+```
+
+- 结论：运行时已有带实体的真实冲突原因，但 `_selected_candidate_unknowns` 仍原样携带候选 reason，缺陷被完整离线复现。当前验收轮次 2/12。
+
+## Provider 运行时 unknown 原因覆盖：任务 1（完成）
+
+- `planning.py` 新增唯一中心规则 `_apply_runtime_unknown_reasons`：由 final unknown JSON Pointer、claim subject 与 lodging `candidate_ref` 解析实体；只接受 `cause:scope:detail` 三段式运行时证据，精确实体优先、能力范围次之，裸 health/warning 不足以覆盖。
+- AMap 接入既有 `MobilityResult.warnings`；同一合成完整 plan 改后 reason 精确为 `identity_conflict:poi-g3-corridor:ambiguous_name_margin`，transport calls=1。
+- 永久 off 回归用同一候选原文和完整 plan，断言 transport calls=0 且 reason 逐字等于 `AMap is not configured; coordinates remain unverified`。
+- 两条精准门恢复后原始摘要：
+
+```text
+test_full_plan_replaces_stale_amap_unknown_with_entity_conflict ... ok
+test_full_plan_mobility_off_preserves_candidate_reason_byte_for_byte ... ok
+Ran 2 tests in 0.024s
+OK
+```
+
+- 反向验证临时在零 warning 时注入 `provider_not_run:poi:synthetic_reverse_check`，off 保护断言按预期变红（exit 1）：
+
+```text
+AssertionError: 'AMap is not configured; coordinates remain unverified' != 'provider_not_run:poi-g3-corridor:synthetic_reverse_check'
+Ran 1 test in 0.013s
+FAILED (failures=1)
+```
+
+- 立即还原临时注入并确认源码无 `synthetic_reverse_check|provider_not_run`；规定门 `/usr/bin/python3 -m unittest tests.test_keyless_e2e tests.test_amap_live -v`（exit 0）→ `Ran 45 tests in 4.384s`、`OK`、skipped 0。当前验收轮次 4/12。
+
+## Provider 运行时 unknown 原因覆盖：任务 2（完成）
+
+- 12306 规划层现在保留每次实际 adapter 结果的原因并绑定最终 leg；`outside_presale_window` 优先于泛化 `no_results`，已选车次无库存也会绑定 service/date。rail=off 的 `result is None` 分支不生成 runtime warning。
+- `FlyAIInventoryResult` 与 `VariFlightEnrichmentResult` 新增内部 `warnings`（默认空，非 Trip Schema 字段）；只有实际 lodging/flight/search/comfort adapter query 返回错误时才写 `cause:scope:detail`。VariFlight 无 Key 仅 probe、unsupported city 未调用时均保持空。
+- Mobility 同步为无结果、限流、契约漂移等实际 POI/geocode 失败补充精确 ref_id warning；既有两段式/汇总 warning 保留供 health 使用，中心规则只消费三段式项。
+- 三条新增精准门首次运行（exit 0）：
+
+```text
+test_rail_runtime_presale_reason_replaces_each_fallback_unknown ... ok
+test_variflight_contract_drift_reason_targets_the_queried_flight ... ok
+test_rate_limited_live_run_replaces_stale_lodging_unknown_reason ... ok
+Ran 3 tests in 0.105s
+OK
+```
+
+- 铁路完整 plan 的 4 条 fallback unknown 均精确为 `outside_presale_window:<leg_id>:route=<from_ref>-><to_ref>;date=<date>`；实际 fixture business calls=2、health=degraded。
+- FlyAI 完整 plan 实际合成 429 调用 3 次；被选住宿 reason 精确为 `rate_limited:lodging-bjs-central:city=上海;check_in=2026-10-16;check_out=2026-10-18`，health=degraded。
+- VariFlight 使用本地 MCP stdio `wrong-tools`（8/9 tool）真实执行一次 search；health=contract_mismatch，reason 精确绑定 `leg-flight-runtime-target` 与 route/date/action。
+- 规定门 `/usr/bin/python3 -m unittest tests.test_flyai_live tests.test_keyless_e2e -v`（exit 0）→ `Ran 56 tests in 6.195s`、`OK`、skipped 0。当前验收轮次 6/12。
+
+## Provider 运行时 unknown 原因覆盖：改后完整 plan 原始输出
+
+- 与任务 0 完全相同的合成输入，使用记录单次 `resolve` 结果的内存 backend 重跑，命令 exit 0；configured 与 off 两支原始输出：
+
+```text
+AMAP_CONFIGURED True
+AMAP_CALLS 1 ['poi']
+AMAP_WARNINGS ['identity_conflict', 'identity_conflict:poi-g3-corridor:ambiguous_name_margin']
+AMAP_HEALTH {"capabilities": ["geocode", "poi", "route"], "checked_at": "2026-09-05T12:00:00+08:00", "mode": "static", "provider": "amap", "reason": "calls=1/80 qps<=2; live_cells=0; locations=0; errors=identity_conflict; warnings=identity_conflict", "status": "degraded", "version": "web-service-v5-v3-route"}
+TRIP_UNKNOWN {"claim_id": "claim-9bcdb062394bae07", "field_path": "/pois/0/coordinates", "provider": "amap", "reason": "identity_conflict:poi-g3-corridor:ambiguous_name_margin"}
+TRIP_VALID 04b0b98ac78b852dca5e4a6790c7d197a5519b9201a1b780d11eefb858dea5a2 ('INTAKE', 'RESEARCHED', 'CANDIDATES_READY', 'MATRIX_DEGRADED', 'SCHEDULED', 'VALIDATED', 'RENDERED')
+OFF_CALLS 0
+OFF_WARNINGS []
+OFF_UNKNOWN_REASON 'AMap is not configured; coordinates remain unverified'
+```
+
+- 对照任务 0 的改前 `TRIP_UNKNOWN.reason`，唯一语义变化是陈旧“未配置”被真实 `identity_conflict:<entity>:<detail>` 替代；unknown 结构未变。当前验收轮次 7/12。
+
+## Provider 运行时 unknown 原因覆盖：首轮全量与真值收紧
+
+- 首轮全量 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）：`Ran 408 tests in 27.848s`、`OK`、skipped 0，满足 ≥407。
+- 同轮 `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 372 file(s)`。
+- 代码审查后主动去掉 VariFlight provider-wide warning 广播，并把能力 scope 收紧为 `lodging@城市`、`flight@from->to`；这防止已查询 A 城住宿或一条航线时误改 B 城/另一航线的 unknown，落实“没到那一步不覆盖”。
+- 收紧后五条核心回归 `/usr/bin/python3 -m unittest ... -v`（exit 0）→ `Ran 5 tests in 0.132s`、`OK`、skipped 0；所有原精确 reason 断言保持不变。
+- `BLOCKED.md` 已追加本轮“新增阻塞：无”；当前验收轮次 8/12。
+
+## Provider 运行时 unknown 原因覆盖：最终提交前验收
+
+- 暂存态规定门 `/usr/bin/python3 -m unittest tests.test_keyless_e2e tests.test_amap_live -v`（exit 0）→ `Ran 47 tests in 4.570s`、`OK`、skipped 0。
+- 暂存态规定门 `/usr/bin/python3 -m unittest tests.test_flyai_live tests.test_keyless_e2e -v`（exit 0）→ `Ran 56 tests in 6.202s`、`OK`、skipped 0。
+- 暂存态全量 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）原始摘要：
+
+```text
+........................................................................................................................................................................................................................................................................................................................................................................................................................
+----------------------------------------------------------------------
+Ran 408 tests in 27.633s
+
+OK
+```
+
+- 同轮 `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 372 file(s)`。
+- 白名单审计原始输出为 `ALLOWLIST_OK files=9`；仅 `BLOCKED.md`、`PROGRESS.md`、4 个允许源文件与 3 个允许测试。schema/、demo/、render/、cli.py、Journey、station_distance、candidates、scheduler、Trip validator、禁碰 AMap/MCP providers、docs 与所有版本承载文件的 diff 均为空；`git diff --check` exit 0。
+- 没有改 `demo/candidates.json`、没有重跑 demo、没有改 0.4.0、没有安装 Codex、没有新增依赖或流程。当前验收轮次 9/12，代码与文档已可提交。

@@ -26,6 +26,7 @@ class FlyAIInventoryResult:
     health: Mapping[str, Any]
     business_calls: Tuple[str, ...]
     unknowns: Tuple[Mapping[str, Any], ...] = ()
+    warnings: Tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -163,6 +164,7 @@ class FlyAIBackend:
         unknowns: List[Mapping[str, Any]] = []
         calls: List[str] = []
         errors: List[str] = []
+        runtime_warnings: List[str] = []
         if request["start_date"] != request["end_date"]:
             city = request["destinations"][0]["city"]
             lodging_parameters = _lodging_parameters_from_trip(request, city)
@@ -175,6 +177,15 @@ class FlyAIBackend:
             ))
             if lodging_result.error_class:
                 errors.append(lodging_result.error_class)
+                runtime_warnings.append(
+                    "%s:lodging@%s:city=%s;check_in=%s;check_out=%s" % (
+                        lodging_result.error_class,
+                        city,
+                        city,
+                        request["start_date"],
+                        request["end_date"],
+                    )
+                )
 
         for route in routes:
             flight_result = self.query_flight(
@@ -188,6 +199,16 @@ class FlyAIBackend:
             claims.extend(copy.deepcopy(list(flight_result.claims)))
             if flight_result.error_class:
                 errors.append(flight_result.error_class)
+                runtime_warnings.append(
+                    "%s:flight@%s->%s:route=%s->%s;date=%s" % (
+                        flight_result.error_class,
+                        route.from_place["ref_id"],
+                        route.to_place["ref_id"],
+                        route.from_place["ref_id"],
+                        route.to_place["ref_id"],
+                        route.travel_date,
+                    )
+                )
 
         item_count = len(lodgings) + len(flights)
         status = "ready" if item_count or not errors or set(errors) == {"no_results"} else ("contract_mismatch" if "contract_mismatch" in errors else "degraded")
@@ -203,7 +224,7 @@ class FlyAIBackend:
         )
         return FlyAIInventoryResult(
             tuple(lodgings), tuple(flights), tuple(claims), health, tuple(calls),
-            tuple(unknowns),
+            tuple(unknowns), tuple(runtime_warnings),
         )
 
     def _query(self, request: ProviderRequest, clock: Clock) -> AdapterResult:

@@ -28,7 +28,9 @@ from china_trip_weaver.flyai_inventory import (
 from china_trip_weaver.mobility import MobilityResult
 from china_trip_weaver.planning import (
     RailBackend,
+    RouteSpec,
     SUPPORTED_KEY_NAMES,
+    _apply_runtime_unknown_reasons,
     _cost_range,
     _route_specs,
     _schedule_problems,
@@ -642,6 +644,99 @@ class KeylessE2ETests(unittest.TestCase):
         self.assertIn("static estimates", health["amap"]["reason"])
         self.assertIn("no business call was made", health["variflight"]["reason"])
         self.assertIn("no auto-registration or business call was made", health["anysearch"]["reason"])
+
+    def test_rail_runtime_presale_reason_replaces_each_fallback_unknown(self):
+        folder = E2E / "beijing-shanghai-3d"
+        rail_fixture = ROOT / "tests" / "fixtures" / "providers" / "rail12306" / "outside_presale.json"
+        result = plan_trip(
+            load(folder / "request.json"),
+            load(folder / "candidates.json"),
+            FixedClock.from_iso(FIXED_NOW),
+            RailBackend.from_spec("fixture:" + str(rail_fixture), ROOT),
+        )
+
+        rail_health = next(
+            item for item in result.trip["provider_health"]
+            if item["provider"] == "12306-mcp"
+        )
+        rail_unknowns = [
+            item for item in result.trip["unknowns"]
+            if item["provider"] == "12306-mcp"
+            and item["field_path"].startswith("/transport_legs/")
+        ]
+        self.assertEqual("degraded", rail_health["status"])
+        self.assertEqual(2, len([
+            item for item in result.business_calls if item.startswith("rail12306.fixture:")
+        ]))
+        self.assertEqual(4, len(rail_unknowns))
+        for unknown in rail_unknowns:
+            leg_index = int(unknown["field_path"].split("/")[2])
+            leg = result.trip["transport_legs"][leg_index]
+            self.assertEqual(
+                "outside_presale_window:%s:route=%s->%s;date=%s" % (
+                    leg["leg_id"], leg["from_ref"], leg["to_ref"], leg["depart_at"][:10],
+                ),
+                unknown["reason"],
+            )
+
+    def test_variflight_contract_drift_reason_targets_the_queried_flight(self):
+        flight = {
+            "leg_id": "leg-flight-runtime-target",
+            "travel_mode": "flight",
+            "from_ref": "city-beijing",
+            "to_ref": "city-shanghai",
+            "depart_at": "2026-10-16T10:00:00+08:00",
+            "service_number": "XX1001",
+            "claim_ids": ["claim-flight-runtime-target"],
+        }
+        route = RouteSpec(
+            {"ref_id": "city-beijing", "name": "北京", "city": "北京"},
+            {"ref_id": "city-shanghai", "name": "上海", "city": "上海"},
+            "2026-10-16",
+        )
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            folder = Path(temporary)
+            resolved = resolve_credentials(
+                {"VARIFLIGHT_API_KEY": "ctw-canary-variflight-drift-not-real"},
+                folder / "no-variflight-file",
+            )
+            transport = VariFlightMCPTransport(
+                resolved,
+                cache_dir=folder / "npm-cache",
+                temp_root=folder / "variflight-home",
+                command=(sys.executable, str(VARIFLIGHT_SERVER), "wrong-tools"),
+                cwd=ROOT,
+            )
+            enrichment = VariFlightBackend("auto", resolved, transport).enrich(
+                (flight,), (route,), FixedClock.from_iso(FIXED_NOW),
+            )
+        stale_reason = "VariFlight was not configured during research"
+        actual = _apply_runtime_unknown_reasons(
+            ({
+                "field_path": "/transport_legs/0/status",
+                "reason": stale_reason,
+                "provider": "variflight",
+                "claim_id": "claim-flight-runtime-target",
+            },),
+            {"transport_legs": enrichment.flights, "lodgings": (), "pois": ()},
+            ({
+                "claim_id": "claim-flight-runtime-target",
+                "subject_ref": "leg-flight-runtime-target",
+            },),
+            {"variflight": enrichment.warnings},
+        )
+
+        self.assertEqual("contract_mismatch", enrichment.health["status"])
+        self.assertEqual(
+            ("variflight.search:2026-10-16:BJS:SHA",),
+            enrichment.business_calls,
+        )
+        self.assertNotEqual(stale_reason, actual[0]["reason"])
+        self.assertEqual(
+            "contract_mismatch:leg-flight-runtime-target:"
+            "route=city-beijing->city-shanghai;date=2026-10-16;action=search",
+            actual[0]["reason"],
+        )
 
     def test_flyai_total_failure_uses_price_less_variflight_and_amap_candidates(self):
         result = run_flyai_total_failure_plan()

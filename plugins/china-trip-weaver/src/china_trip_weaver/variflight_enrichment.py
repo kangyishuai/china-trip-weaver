@@ -30,6 +30,7 @@ class VariFlightEnrichmentResult:
     claims: Tuple[Mapping[str, Any], ...]
     health: Mapping[str, Any]
     business_calls: Tuple[str, ...]
+    warnings: Tuple[str, ...] = ()
 
 
 class VariFlightBackend:
@@ -103,6 +104,7 @@ class VariFlightBackend:
         claims: List[Mapping[str, Any]] = []
         calls: List[str] = []
         errors: List[str] = []
+        runtime_warnings: List[str] = []
         for route in routes:
             dep_city = CITY_IATA.get(route.from_place["name"])
             arr_city = CITY_IATA.get(route.to_place["name"])
@@ -149,6 +151,16 @@ class VariFlightBackend:
             claims.extend(copy.deepcopy(list(search.claims)))
             if search.error_class:
                 errors.append(search.error_class)
+                runtime_warnings.extend(_runtime_failure_warnings(
+                    search.error_class,
+                    tuple(service_map.values()),
+                    "flight@%s->%s" % (
+                        route.from_place["ref_id"], route.to_place["ref_id"],
+                    ),
+                    "route=%s->%s;date=%s;action=search" % (
+                        route.from_place["ref_id"], route.to_place["ref_id"], route.travel_date,
+                    ),
+                ))
                 continue
             if candidate_mode:
                 route_flights = copy.deepcopy(list(search.normalized_items))
@@ -164,6 +176,12 @@ class VariFlightBackend:
                 ), None)
             if selected is None:
                 errors.append("no_matching_flight")
+                runtime_warnings.append(
+                    "no_matching_flight:flight@%s->%s:route=%s->%s;date=%s;action=search" % (
+                        route.from_place["ref_id"], route.to_place["ref_id"],
+                        route.from_place["ref_id"], route.to_place["ref_id"], route.travel_date,
+                    )
+                )
                 continue
             comfort_request = ProviderRequest(
                 request_id=stable_id("variflight-comfort", selected["service_number"], route.travel_date),
@@ -184,6 +202,16 @@ class VariFlightBackend:
             claims.extend(copy.deepcopy(list(comfort.claims)))
             if comfort.error_class:
                 errors.append(comfort.error_class)
+                runtime_warnings.extend(_runtime_failure_warnings(
+                    comfort.error_class,
+                    (selected["leg_id"],),
+                    "flight@%s->%s" % (
+                        route.from_place["ref_id"], route.to_place["ref_id"],
+                    ),
+                    "service=%s;date=%s;action=comfort" % (
+                        selected["service_number"], route.travel_date,
+                    ),
+                ))
 
         claim_ids_by_subject: Dict[str, List[str]] = {}
         for claim in claims:
@@ -209,7 +237,20 @@ class VariFlightBackend:
                 ),
             ),
             tuple(calls),
+            tuple(runtime_warnings),
         )
+
+
+def _runtime_failure_warnings(
+    cause: str,
+    entity_refs: Sequence[str],
+    scope: str,
+    detail: str,
+) -> Tuple[str, ...]:
+    warnings = ["%s:%s:%s" % (cause, ref_id, detail) for ref_id in entity_refs]
+    if not warnings:
+        warnings.append("%s:%s:%s" % (cause, scope, detail))
+    return tuple(warnings)
 
 
 def _health(mode: str, status: str, checked_at: str, reason: str) -> Mapping[str, Any]:
