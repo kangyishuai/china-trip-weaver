@@ -272,3 +272,7 @@ should mean pending work. They live where they are enforced:
 ## 书 18 候选身份反馈（2026-09-05）
 
 - 本轮新增阻塞：无。
+
+## 0.5.0 本机发布（2026-09-05）
+
+- 本轮新增阻塞：无。

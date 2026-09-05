@@ -10,7 +10,9 @@
 
 planner 继续支持既有的一日游与单城市行程，并支持 2–7 天的有序多城市行程。多个目的地严格按 `origin → D1 → D2 → …` 行进；默认单向，只有用户明确写往返，或最后一个目的地本来就是 origin，行程才包含返程。跨城当天归到到达城市，每个过夜日期都必须在该城市明确选中且仅选中一个 stay。调研得到的住宿候选不等于已选 stay；任一晚没有可覆盖的候选时，规划会返回结构化无解结果。
 
-超过 7 天的请求会生成一个 Journey；其中每个完整、可独立使用的子 Trip 仍严格限制在 1–7 天。拆分优先选跨城日，再按七天边界硬切；相邻日期、边界住宿、跨段交通和全程预算都会显式记录并校验。Journey 总览页展示全程路线、各段日期、总预算区间、按截止时间排序的预订／核验清单，以及全部降级能力、冲突 claim 与未解决 unknown，同时不向可见文本暴露内部 id。
+超过 7 天的请求会生成一个 Journey；其中每个完整、可独立使用的子 Trip 仍严格限制在 1–7 天。缺省拆分会在服从七天上限与已调研住宿链的前提下尽量减少子 Trip 数；`ctw journey plan --expected-segment-days N` 接受 1–7 的整数，优先把各段长度靠近 `N`，但不会突破这些硬约束。相邻日期、边界住宿、跨段交通和全程预算都会显式记录并校验。某个子 Trip 被 replan 后，Journey validator 会从完整子 Trip 重新核对段缝两侧，结构化报告住宿或跨段交通断裂，而不会静默顺延后段。Journey 总览页展示全程路线、各段日期、总预算区间、按截止时间排序的预订／核验清单，以及全部降级能力、冲突 claim 与未解决 unknown，同时不向可见文本暴露内部 id。
+
+Journey 的高德调用额度按最终子 Trip 分配。缺省总额度是每个 Trip 80 次、且单个 Trip 仍封顶 80；`ctw journey plan --amap-total-max-calls N` 设置非负的全程总上限，并在最终各段之间尽可能均分。该上限不会反向扩大缺省额度。
 
 旅客输入有两种互斥写法：既有 `origin + travelers`，或 `traveler_groups[] + meeting_anchor`。每组提供稳定的 `group_id`、本组人数与 origin，可另带 mobility profile；会合锚点提供地点和 `meet_by`，`buffer_minutes` 缺省为 60。任何一组无法留出足够缓冲都会得到结构化冲突；混合输入会被拒绝，输出 Trip 也只保留被选中的那一种写法。验证、渲染与 inventory 查询都会原生消费分组写法。分组交通腿必须有明确 `group_refs`；`transport_pricing` 分别给出每组交通总价与全团交通总价。
 
@@ -72,13 +74,15 @@ CODEX_HOME=/path/to/an/isolated/codex-home \
   plugin list
 ```
 
-期望结果是 `china-trip-weaver@china-trip-weaver-local`、版本 `0.4.0`、状态 `installed, enabled`。安装或更新后请新建一个 Codex 任务，让它的 9 个 Skill 与 MCP 配置重新加载。
+期望结果是 `china-trip-weaver@china-trip-weaver-local`、版本 `0.5.0`、状态 `installed, enabled`。安装或更新后请新建一个 Codex 任务，让它的 9 个 Skill 与 MCP 配置重新加载。
 
 用 Codex 桌面版界面安装时：把本仓库添加为本地市场，确认 `china-travel-assistant` 已禁用，安装 China Trip Weaver Local，重启，再新建任务。两个插件不能同时启用，因为它们都暴露 `plan-china-trip`。
 
 ## 候选输入
 
 `candidates.json` 恰好包含 `candidates_version`、`pois`、`lodgings`、`claims` 和 `unknowns` 五个字段，不包含交通段。它的实体形状复用冻结的 Trip `$defs`，每个实体、价格和开放时段的证据引用都必须能解析到。
+
+`ctw candidates add-poi ... --verify-name` 会在写入前用高德核对 POI 名称。它只报告经过脱敏的 `unique`、`ambiguous` 或 `unavailable` 结果并最多给出三个候选名称建议，不会凭这次核名写入坐标；缺 Key 或 provider 核名失败都不会阻断候选写入。
 
 ```bash
 plugins/china-trip-weaver/scripts/ctw validate-candidates demo/candidates.json
@@ -121,7 +125,9 @@ plugins/china-trip-weaver/scripts/ctw journey validate demo/journey-16d/journey.
 plugins/china-trip-weaver/scripts/ctw journey validate-html demo/journey-16d/journey.html demo/journey-16d/journey.json
 ```
 
-铁路、网络或服务商失败，永远不会变成假成功。每项能力保留自己的健康状态，要么使用带标记的降级方案，要么停在一个有类型的 unknown 上。高德每次规划最多 80 次调用、不超过 2 QPS。FlyAI 的遮罩价（例如 `¥4xx`）一律是 `verify-on-click`，只有精确数字才是 `live`。FlyAI 的坐标始终是 `provider-unknown`，不做转换也不上图。
+铁路、网络或服务商失败，永远不会变成假成功。每项能力保留自己的健康状态，要么使用带标记的降级方案，要么停在一个有类型的 unknown 上。高德对每个 Trip 最多调用 80 次、不超过 2 QPS；Journey 服从上文说明的总额度分配。FlyAI 的遮罩价（例如 `¥4xx`）一律是 `verify-on-click`，只有精确数字才是 `live`。FlyAI 的坐标始终是 `provider-unknown`，不做转换也不上图。
+
+当 12306 返回多个可能车站且高德可用时，插件会用城市中心与精确匹配的铁路车站 POI 附加直线距离信号。它保留全部候选，已知距离按近到远、未知距离排在最后，绝不替用户选站；距离无法取得也不会把原本成功的铁路结果降级。
 
 ## 不配任何 Key 也能跑
 
@@ -151,6 +157,7 @@ plugins/china-trip-weaver/scripts/ctw plan \
 ctw doctor
 ctw validate TRIP.json
 ctw validate-candidates CANDIDATES.json
+ctw candidates add-poi CANDIDATES.json --name NAME --city CITY --category CATEGORY --source-url URL [--verify-name]
 ctw canonicalize TRIP.json
 ctw rail --date YYYY-MM-DD --from CITY --to CITY --output-json rail-result.json
 ctw mobility --candidates CANDIDATES.json --modes transit,walking --output-json mobility.json
@@ -159,7 +166,7 @@ ctw air --origin CITY --destination CITY --date YYYY-MM-DD --output-json air.jso
 ctw replan --trip TRIP.json --event EVENT.json --base-revision N --output-json TRIP-rN.json --output-html TRIP-rN.html
 ctw render TRIP.json --output TRIP.html
 ctw validate-html TRIP.html TRIP.json
-ctw journey plan --request REQUEST.json --candidates CANDIDATES.json --output-json JOURNEY.json
+ctw journey plan --request REQUEST.json --candidates CANDIDATES.json [--expected-segment-days N] [--amap-total-max-calls N] --output-json JOURNEY.json
 ctw journey validate JOURNEY.json
 ctw journey render JOURNEY.json --output JOURNEY.html
 ctw journey validate-html JOURNEY.html JOURNEY.json

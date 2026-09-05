@@ -21,7 +21,7 @@ PLUGIN_VALIDATOR = CODEX_HOME / "skills/.system/plugin-creator/scripts/validate_
 
 EXPECTED_MANIFEST = {
     "name": "china-trip-weaver",
-    "version": "0.4.0",
+    "version": "0.5.0",
     "description": "Evidence-backed, read-only planning for 1-7 day trips within mainland China, with provider degradation, local replanning, and deterministic mobile HTML.",
     "author": {"name": "kangyishuai"},
     "license": "MIT",
@@ -84,7 +84,7 @@ class PackagingTests(unittest.TestCase):
         result = subprocess.run([str(entry), "doctor"], cwd="/", text=True, capture_output=True)
         self.assertEqual(0, result.returncode, result.stderr)
         payload = json.loads(result.stdout)
-        self.assertEqual("0.4.0", payload["plugin_version"])
+        self.assertEqual("0.5.0", payload["plugin_version"])
         self.assertTrue(payload["schema_exists"])
 
     def test_package_contains_required_contracts_and_notices(self):

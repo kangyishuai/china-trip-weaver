@@ -10,7 +10,9 @@ It never logs in, submits identity, holds inventory, books, pays, cancels, or ch
 
 The planner supports existing one-day and single-city trips plus ordered multi-city trips lasting 2–7 days. For multiple destinations it follows `origin → D1 → D2 → …`; the default is one-way, and a return is added only when the request explicitly says round trip or the final destination is the origin. Each travel day belongs to the city reached by that day's route leg, and every overnight date must resolve to exactly one explicitly selected stay in that city. Researched lodging candidates are not selected stays; if no candidate can cover a night, planning returns a structured no-solution result.
 
-Requests longer than seven days become one Journey whose complete, standalone child Trips each retain the 1–7 day limit. The split prefers cross-city days, then seven-day boundaries; adjacent dates, boundary lodging, cross-segment transport, and the aggregate budget remain explicit and validated. The Journey overview shows the whole route, segment dates, total budget range, a deadline-ordered booking/verification checklist, and every degraded capability, conflicting claim, and unresolved unknown without exposing internal ids.
+Requests longer than seven days become one Journey whose complete, standalone child Trips each retain the 1–7 day limit. By default the split minimizes the number of child Trips while honoring the seven-day cap and the researched lodging chain. `ctw journey plan --expected-segment-days N` accepts an integer from 1 to 7 and prefers segment lengths near `N`, but never overrides those hard constraints. Adjacent dates, boundary lodging, cross-segment transport, and the aggregate budget remain explicit and validated. After a child Trip is replanned, Journey validation recomputes both sides of every seam and reports structured lodging or cross-segment transport gaps instead of silently shifting a later segment. The Journey overview shows the whole route, segment dates, total budget range, a deadline-ordered booking/verification checklist, and every degraded capability, conflicting claim, and unresolved unknown without exposing internal ids.
+
+AMap calls in a Journey are budgeted per resulting Trip. The default Journey-wide allowance is 80 calls per Trip, with every Trip still capped at 80; `ctw journey plan --amap-total-max-calls N` sets a non-negative total ceiling and distributes it as evenly as possible across the resulting Trips. The ceiling never increases the default allowance.
 
 Traveler input has two mutually exclusive forms: the existing `origin + travelers` form, or `traveler_groups[] + meeting_anchor`. Every group supplies a stable `group_id`, its own traveler count and origin, plus an optional mobility profile. The meeting anchor supplies a location and `meet_by`; `buffer_minutes` defaults to 60, and any group that cannot arrive with that much buffer produces a structured conflict. Mixed input is rejected and the emitted Trip preserves only the selected representation. Validation, rendering, and inventory lookup consume the grouped form directly. Grouped transport legs carry explicit `group_refs`; `transport_pricing` exposes each group's total and the whole party's transport total separately.
 
@@ -73,13 +75,15 @@ CODEX_HOME=/path/to/an/isolated/codex-home \
   plugin list
 ```
 
-The expected result is `china-trip-weaver@china-trip-weaver-local`, version `0.4.0`, status `installed, enabled`. Use a fresh Codex task after installing or updating so its nine Skills and MCP configuration are reloaded.
+The expected result is `china-trip-weaver@china-trip-weaver-local`, version `0.5.0`, status `installed, enabled`. Use a fresh Codex task after installing or updating so its nine Skills and MCP configuration are reloaded.
 
 For Codex Desktop UI installation, add this repository as a local marketplace, ensure `china-travel-assistant` is disabled, install China Trip Weaver Local, restart, and create a new task. The two plugins must not be enabled together because both expose `plan-china-trip`.
 
 ## Candidate input
 
 `candidates.json` contains exactly `candidates_version`, `pois`, `lodgings`, `claims`, and `unknowns`. It does not contain transport legs. Its entity shapes reuse the frozen Trip `$defs`, and every entity/price/opening-window claim reference must resolve.
+
+`ctw candidates add-poi ... --verify-name` checks the POI name with AMap before writing. It reports a sanitized `unique`, `ambiguous`, or `unavailable` result with at most three candidate-name suggestions, never writes a coordinate from this check, and still writes the candidate when the key is missing or the provider check fails.
 
 ```bash
 plugins/china-trip-weaver/scripts/ctw validate-candidates demo/candidates.json
@@ -122,7 +126,9 @@ plugins/china-trip-weaver/scripts/ctw journey validate demo/journey-16d/journey.
 plugins/china-trip-weaver/scripts/ctw journey validate-html demo/journey-16d/journey.html demo/journey-16d/journey.json
 ```
 
-Railway/network/provider failure never becomes fake success. Each capability preserves its own health and either uses a labeled fallback or stops at a typed unknown. AMap is capped at 80 calls per plan and no more than 2 QPS. FlyAI masked prices such as `¥4xx` are always `verify-on-click`; only exact numeric prices are `live`. FlyAI coordinates remain `provider-unknown` and are never converted or mapped.
+Railway/network/provider failure never becomes fake success. Each capability preserves its own health and either uses a labeled fallback or stops at a typed unknown. AMap is capped at 80 calls per Trip and no more than 2 QPS; a Journey follows the total allocation described above. FlyAI masked prices such as `¥4xx` are always `verify-on-click`; only exact numeric prices are `live`. FlyAI coordinates remain `provider-unknown` and are never converted or mapped.
+
+When 12306 returns multiple possible stations and AMap is available, the plugin uses the city center and exact-match railway-station POIs to attach straight-line distance signals. It preserves every station candidate, orders known distances nearest-first and unknown distances last, and never chooses a station for the user; failure to obtain a distance does not degrade an otherwise successful railway result.
 
 ## Run without provider keys
 
@@ -152,6 +158,7 @@ This mode is for regression testing only and labels outside-presale/fixture resu
 ctw doctor
 ctw validate TRIP.json
 ctw validate-candidates CANDIDATES.json
+ctw candidates add-poi CANDIDATES.json --name NAME --city CITY --category CATEGORY --source-url URL [--verify-name]
 ctw canonicalize TRIP.json
 ctw rail --date YYYY-MM-DD --from CITY --to CITY --output-json rail-result.json
 ctw mobility --candidates CANDIDATES.json --modes transit,walking --output-json mobility.json
@@ -160,7 +167,7 @@ ctw air --origin CITY --destination CITY --date YYYY-MM-DD --output-json air.jso
 ctw replan --trip TRIP.json --event EVENT.json --base-revision N --output-json TRIP-rN.json --output-html TRIP-rN.html
 ctw render TRIP.json --output TRIP.html
 ctw validate-html TRIP.html TRIP.json
-ctw journey plan --request REQUEST.json --candidates CANDIDATES.json --output-json JOURNEY.json
+ctw journey plan --request REQUEST.json --candidates CANDIDATES.json [--expected-segment-days N] [--amap-total-max-calls N] --output-json JOURNEY.json
 ctw journey validate JOURNEY.json
 ctw journey render JOURNEY.json --output JOURNEY.html
 ctw journey validate-html JOURNEY.html JOURNEY.json

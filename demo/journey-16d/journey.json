@@ -11,7 +11,7 @@
         "included_in_total": true,
         "price_type": null,
         "reason": "Trip ledger contains an incomparable price bound",
-        "ref_id": "trip-1aae22afc56a7f64"
+        "ref_id": "trip-c5eba1b26542ed43"
       },
       {
         "amount_max_cny": null,
@@ -21,7 +21,7 @@
         "included_in_total": true,
         "price_type": null,
         "reason": "Trip ledger contains an incomparable price bound",
-        "ref_id": "trip-61f6f9be103aff7a"
+        "ref_id": "trip-340ff80bd26a58fd"
       },
       {
         "amount_max_cny": null,
@@ -31,7 +31,7 @@
         "included_in_total": true,
         "price_type": null,
         "reason": "Trip ledger contains an incomparable price bound",
-        "ref_id": "trip-67bb8740dc5834ab"
+        "ref_id": "trip-9a8586b503e3f574"
       },
       {
         "amount_max_cny": 0,
@@ -40,8 +40,8 @@
         "category": "cross_segment_transport",
         "included_in_total": true,
         "price_type": "unknown",
-        "reason": "cross-segment transport is already included in trip-61f6f9be103aff7a",
-        "ref_id": "connection-6238f539f1e73e98"
+        "reason": "cross-segment transport is already included in trip-340ff80bd26a58fd",
+        "ref_id": "connection-ca34a4c8226b59cd"
       },
       {
         "amount_max_cny": 0,
@@ -50,8 +50,8 @@
         "category": "cross_segment_transport",
         "included_in_total": true,
         "price_type": "unknown",
-        "reason": "cross-segment transport is already included in trip-67bb8740dc5834ab",
-        "ref_id": "connection-b6c0dfd37b816bbd"
+        "reason": "cross-segment transport is already included in trip-9a8586b503e3f574",
+        "ref_id": "connection-ef686f4e7b229a10"
       }
     ],
     "known_cost_cny": 4200,
@@ -64,7 +64,7 @@
   },
   "end_date": "2026-10-16",
   "generated_at": "2026-09-05T09:00:00+08:00",
-  "journey_id": "journey-2a5205b65cd09cbb",
+  "journey_id": "journey-d7d147568550c48c",
   "origin": {
     "city": "北京",
     "name": "北京",
@@ -80,18 +80,18 @@
   "schema_version": "1.0.0",
   "segment_connections": [
     {
-      "connection_id": "connection-6238f539f1e73e98",
+      "connection_id": "connection-ca34a4c8226b59cd",
       "cross_segment_transport": {
         "amount_max_cny": null,
         "amount_min_cny": null,
-        "included_in_trip_id": "trip-61f6f9be103aff7a",
+        "included_in_trip_id": "trip-340ff80bd26a58fd",
         "leg_id": "leg-rail-fallback-03178f234e57",
         "price_type": "unknown",
         "reason": "price amount is not verified and cannot be compared with the trip budget",
         "status": "included_in_next_trip"
       },
       "from_end_date": "2026-10-05",
-      "from_trip_id": "trip-1aae22afc56a7f64",
+      "from_trip_id": "trip-c5eba1b26542ed43",
       "lodging_continuity": {
         "from_lodging_id": "lodging-j16-shanghai-central",
         "overnight_date": "2026-10-05",
@@ -100,21 +100,21 @@
         "to_lodging_id": "lodging-j16-hangzhou-central"
       },
       "to_start_date": "2026-10-06",
-      "to_trip_id": "trip-61f6f9be103aff7a"
+      "to_trip_id": "trip-340ff80bd26a58fd"
     },
     {
-      "connection_id": "connection-b6c0dfd37b816bbd",
+      "connection_id": "connection-ef686f4e7b229a10",
       "cross_segment_transport": {
         "amount_max_cny": null,
         "amount_min_cny": null,
-        "included_in_trip_id": "trip-67bb8740dc5834ab",
+        "included_in_trip_id": "trip-9a8586b503e3f574",
         "leg_id": "leg-rail-fallback-b66b4e0b7f99",
         "price_type": "unknown",
         "reason": "price amount is not verified and cannot be compared with the trip budget",
         "status": "included_in_next_trip"
       },
       "from_end_date": "2026-10-10",
-      "from_trip_id": "trip-61f6f9be103aff7a",
+      "from_trip_id": "trip-340ff80bd26a58fd",
       "lodging_continuity": {
         "from_lodging_id": "lodging-j16-hangzhou-central",
         "overnight_date": "2026-10-10",
@@ -123,9 +123,22 @@
         "to_lodging_id": "lodging-j16-suzhou-central"
       },
       "to_start_date": "2026-10-11",
-      "to_trip_id": "trip-67bb8740dc5834ab"
+      "to_trip_id": "trip-9a8586b503e3f574"
     }
   ],
+  "segmentation": {
+    "actual_segment_days": [
+      5,
+      5,
+      6
+    ],
+    "assumptions": [
+      "JOURNEY_SEGMENTATION expected_days=none actual_days=5,5,6; Trip count is minimized under maximum_days=7 and cuts prefer lodging-city changes"
+    ],
+    "expected_segment_days": null,
+    "maximum_segment_days": 7,
+    "strategy": "minimum_segments"
+  },
   "start_date": "2026-10-01",
   "travelers": 2,
   "trips": [
@@ -1261,7 +1274,8 @@
       ],
       "request": {
         "assumptions": [
-          "synthetic 16-day Journey acceptance input"
+          "synthetic 16-day Journey acceptance input",
+          "JOURNEY_SEGMENTATION expected_days=none actual_days=5,5,6; Trip count is minimized under maximum_days=7 and cuts prefer lodging-city changes"
         ],
         "budget_cny": 20000,
         "constraints": [
@@ -1329,7 +1343,7 @@
           "travel_mode": "rail"
         }
       ],
-      "trip_id": "trip-1aae22afc56a7f64",
+      "trip_id": "trip-c5eba1b26542ed43",
       "unknowns": [
         {
           "claim_id": "claim-j16-shanghai-hours",
@@ -2615,7 +2629,8 @@
       ],
       "request": {
         "assumptions": [
-          "synthetic 16-day Journey acceptance input"
+          "synthetic 16-day Journey acceptance input",
+          "JOURNEY_SEGMENTATION expected_days=none actual_days=5,5,6; Trip count is minimized under maximum_days=7 and cuts prefer lodging-city changes"
         ],
         "budget_cny": 20000,
         "constraints": [
@@ -2683,7 +2698,7 @@
           "travel_mode": "rail"
         }
       ],
-      "trip_id": "trip-61f6f9be103aff7a",
+      "trip_id": "trip-340ff80bd26a58fd",
       "unknowns": [
         {
           "claim_id": "claim-j16-hangzhou-hours",
@@ -4135,7 +4150,8 @@
       ],
       "request": {
         "assumptions": [
-          "synthetic 16-day Journey acceptance input"
+          "synthetic 16-day Journey acceptance input",
+          "JOURNEY_SEGMENTATION expected_days=none actual_days=5,5,6; Trip count is minimized under maximum_days=7 and cuts prefer lodging-city changes"
         ],
         "budget_cny": 20000,
         "constraints": [
@@ -4203,7 +4219,7 @@
           "travel_mode": "rail"
         }
       ],
-      "trip_id": "trip-67bb8740dc5834ab",
+      "trip_id": "trip-9a8586b503e3f574",
       "unknowns": [
         {
           "claim_id": "claim-j16-suzhou-hours",
