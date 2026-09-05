@@ -2587,3 +2587,12 @@ FAILED (failures=1)
 - 最终 `/usr/bin/python3 -m unittest tests.test_candidates -v`（exit 0）：`Ran 22 tests in 1.047s`、`OK`、skipped 0。
 - 最终 `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 375 file(s)`。
 - 当前验收轮次 12/12；完成条件全部满足，按止损规则停止新增工作，只提交本段最终记录。
+
+## 书 23 提交后版本字面复核与收尾（12/12）
+
+- 书 23 实现提交为 `4c59da2`（`Cover provider entity result combinations`），恰含 8 个白名单路径；随后书 22 线性追加 `81cf219`、`9c6cdec`，未改书 23 实现。
+- 提交后审计发现预提交 `git diff` 不含当时 untracked fixture，故漏看新合成 MCP fixture 内重复写死的 provider fingerprint 数字；插件版本始终未变，但为满足“任何版本号 diff 为空”的字面要求，fixture 改为读取既有 adapter `provider_version`、tool fingerprint 与 protocol 常量。
+- 调整后两条真实 stdio 精准用例（exit 0）：`Ran 2 tests in 0.448s`、`OK`；完整 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）：`Ran 456 tests in 30.083s`、`OK`、skipped 0。
+- `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 375 file(s)`；`git diff --check` exit 0。
+- 最终端点相对开工树的新增长版本数字搜索 exit 1、无输出；相对稳定 HEAD `9c6cdec` 的全部禁碰路径 diff exit 0、无输出。没有 amend 或重写书 22 提交，收尾提交只含本 fixture 去重与本进度记录。
+- 书 23 达到 12/12，停止新增工作；6 格结论、两项已修真 bug、1 项禁碰上层 bug 与 18 个上限外覆盖空格均已有可复现记录。

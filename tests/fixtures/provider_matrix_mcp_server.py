@@ -6,29 +6,15 @@ from __future__ import annotations
 import json
 import os
 import sys
+from pathlib import Path
 
 
-RAIL_TOOLS = [
-    "get-current-date",
-    "get-stations-code-in-city",
-    "get-station-code-of-citys",
-    "get-station-code-by-names",
-    "get-station-by-telecode",
-    "get-tickets",
-    "get-interline-tickets",
-    "get-train-route-stations",
-]
-VARIFLIGHT_TOOLS = [
-    "searchFlightsByDepArr",
-    "searchFlightsByNumber",
-    "getFlightTransferInfo",
-    "flightHappinessIndex",
-    "getRealtimeLocationByAnum",
-    "getTodayDate",
-    "getFutureWeatherByAirport",
-    "searchFlightItineraries",
-    "getFlightPriceByCities",
-]
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "plugins" / "china-trip-weaver" / "src"))
+
+from china_trip_weaver.providers.mcp_stdio import EXPECTED_12306_TOOLS
+from china_trip_weaver.providers.rail12306 import MCP_PROTOCOL_VERSION, Rail12306Adapter
+from china_trip_weaver.providers.variflight import EXPECTED_TOOLS, VariFlightAdapter
 
 
 def emit(identifier, result):
@@ -68,11 +54,17 @@ def flight(date, dep_city, arr_city):
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else ""
     if mode == "rail-station-rate-limit":
-        tools = RAIL_TOOLS
-        server = {"name": "12306-mcp", "version": "0.3.10"}
+        tools = EXPECTED_12306_TOOLS
+        server = {
+            "name": Rail12306Adapter.provider,
+            "version": Rail12306Adapter.provider_version,
+        }
     elif mode == "variflight-comfort-network":
-        tools = VARIFLIGHT_TOOLS
-        server = {"name": "variflight-mcp", "version": "1.0.3"}
+        tools = EXPECTED_TOOLS
+        server = {
+            "name": VariFlightAdapter.provider + "-mcp",
+            "version": VariFlightAdapter.provider_version,
+        }
         secret = os.environ.get("VARIFLIGHT_API_KEY") or os.environ.get("X_VARIFLIGHT_KEY")
         if secret:
             print("api_key=" + secret, file=sys.stderr, flush=True)
@@ -86,7 +78,7 @@ def main():
             continue
         if method == "initialize":
             emit(message["id"], {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": MCP_PROTOCOL_VERSION,
                 "capabilities": {"tools": {}},
                 "serverInfo": server,
             })
