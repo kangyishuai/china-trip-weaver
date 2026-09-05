@@ -2890,3 +2890,96 @@ _normalized_name_BYTE_EQUAL True SHA256 c461fcf9f25c4911fdaef57da4324e841ebfd743
 - coast 段 11 条坐标 unknown 里有 6 条的 reason 是 `poi_admin_mismatch` 而非名字歧义，且全部形如：用户写「平潭」，高德返回 `福州市/平潭县`，`_city_matches` 判为冲突。平潭县本就隶属福州市，这是县/县级市与地级市的行政层级匹配缺陷，不是数据错误。
 - 该缺陷占本次全部坐标 unknown 的 6/23（约 26%），是单一最大来源，且名字歧义修好后也绕不开它——「龙王头海洋公园」fix-names 已判可自动确认，坐标却仍因 admin mismatch 停在 unknown。
 - 优先级判断：高于「组合表剩余空格」。下一份任务书应优先处理行政层级匹配。
+
+## 书 26 VariFlight 部分失败健康状态：开工理解（2026-09-05，≤10 行）
+1. 目标：只改 VariFlight health 聚合；任一 error 均不得 `ready`，`contract_mismatch` 仍优先于 `degraded`。
+2. claims 只决定 live/static mode；航班、claims、warning 与 reason 字段/格式全部冻结。
+3. 只写 `variflight_enrichment.py`、`tests/test_variflight_live.py` 和本书在两份状态文档中的记录。
+4. 不碰并行书 27 的 `mobility.py`，不改 providers、planning、schema、版本、CI，也不安装 Codex。
+5. 任务 0 原脚本 exit 0：`status=ready`、`errors=network`、`flights=1`、`claims=3`。
+6. 原 warning 为 `network:leg-vf-ae710e3412b6:service=XX1001;date=2026-09-10;action=comfort`。
+7. 下一步先新增上层回归并取得旧实现红态，再做一行最小实现与正反验收。
+
+## 书 26 新增回归红→绿（完成）
+
+- 新增两条上层回归：network 部分失败必须保留 1 个航班、3 条 claims、warning/reason 并报 `degraded`；部分成功中若 error 为 `contract_mismatch`，状态仍须优先报 `contract_mismatch`。
+- 旧实现首跑（exit 1）原始输出：
+
+```text
+test_partial_comfort_network_failure_degrades_without_dropping_search_output (tests.test_variflight_live.VariFlightLiveTests) ... FAIL
+test_partial_contract_mismatch_keeps_claims_and_has_status_priority (tests.test_variflight_live.VariFlightLiveTests) ... FAIL
+
+======================================================================
+FAIL: test_partial_comfort_network_failure_degrades_without_dropping_search_output (tests.test_variflight_live.VariFlightLiveTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_variflight_live.py", line 204, in test_partial_comfort_network_failure_degrades_without_dropping_search_output
+    self.assertEqual("degraded", result.health["status"])
+AssertionError: 'degraded' != 'ready'
+- degraded
++ ready
+
+======================================================================
+FAIL: test_partial_contract_mismatch_keeps_claims_and_has_status_priority (tests.test_variflight_live.VariFlightLiveTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_variflight_live.py", line 272, in test_partial_contract_mismatch_keeps_claims_and_has_status_priority
+    self.assertEqual("contract_mismatch", result.health["status"])
+AssertionError: 'contract_mismatch' != 'ready'
+- contract_mismatch
++ ready
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.429s
+
+FAILED (failures=2)
+```
+
+- 实现只改一行 status 聚合：`contract_mismatch` 若存在则优先，否则有任意 errors 为 `degraded`，无 errors 才为 `ready`；claims 仍只决定 mode。
+- 改后同两条回归（exit 0）原始输出：
+
+```text
+test_partial_comfort_network_failure_degrades_without_dropping_search_output (tests.test_variflight_live.VariFlightLiveTests) ... ok
+test_partial_contract_mismatch_keeps_claims_and_has_status_priority (tests.test_variflight_live.VariFlightLiveTests) ... ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.425s
+
+OK
+```
+
+## 书 26 任务 0 与反向验证（完成）
+
+- 改后原任务 0 脚本（exit 0）原始输出，航班、claims、reason 与 warning 均未改：
+
+```text
+{"claims": 3, "flights": 1, "reason": "tools=9; business_calls=2; candidates=1; status_claims=1; comfort_claims=0; errors=network", "status": "degraded", "warnings": ["network:leg-vf-ae710e3412b6:service=XX1001;date=2026-09-10;action=comfort"]}
+```
+
+- 既有全成功用例（exit 0）原始输出，仍为 `ready`：
+
+```text
+test_independent_search_emits_price_less_verify_on_click_candidate (tests.test_variflight_live.VariFlightLiveTests) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.112s
+
+OK
+```
+
+- 临时在聚合前执行 `errors.clear()` 后重跑任务 0（exit 0）原始输出；相同网络 warning 仍在，但 status 回到 `ready`，证明判据确为 errors：
+
+```text
+{"claims": 3, "flights": 1, "reason": "tools=9; business_calls=2; candidates=1; status_claims=1; comfort_claims=0; errors=none", "status": "ready", "warnings": ["network:leg-vf-ae710e3412b6:service=XX1001;date=2026-09-10;action=comfort"]}
+```
+
+- 临时 `errors.clear()` 已精确移除；实现提交后 `git diff --exit-code -- plugins/china-trip-weaver/src/china_trip_weaver/variflight_enrichment.py` exit 0、无输出，`rg -n 'errors\.clear'` exit 1、无输出。
+
+## 书 26 全量、销账与实现提交（完成）
+
+- 完整 `tests.test_variflight_live`（exit 0）：`Ran 8 tests in 1.576s`、`OK`，其中既有成功与 adapter 网络分类均通过。
+- 与并行书 27 当前树合并后的 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）：`Ran 469 tests in 32.091s`、`OK`、skipped 0，达到本书至少 465。
+- `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 376 file(s)`。
+- 实现提交 `229530fb7e39068d7eb72cbb27ba2442859dfe76`（`Fix VariFlight partial-failure health`）恰含 `variflight_enrichment.py` 与 `tests/test_variflight_live.py`；未含并行书 27 的 mobility/test/progress 改动。
+- `BLOCKED.md` 保留书 23 原缺陷与旧输出，状态改为已关闭，并写入实现提交号与合成 MCP 回归命令；18 个无关 coverage debt 原样保持 open。
+- 本书未改 claims 产出、providers、planning、mobility、candidates、schema、版本、CI；未跑实网、未安装 Codex、未 push。

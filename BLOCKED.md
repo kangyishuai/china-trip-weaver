@@ -323,7 +323,7 @@ PY
 
 ### 书 23 已确认但因禁碰文件未修：VariFlight 部分成功掩盖 comfort 网络失败
 
-- 状态：open product bug。最小合成流程是 `VariFlightBackend("auto", configured_credentials, transport).enrich([], [北京→上海 route], clock)`；transport 使用 `tests/fixtures/provider_matrix_mcp_server.py variflight-comfort-network`，search 返回一条航班，随后的 `flightHappinessIndex` 在响应前退出。
+- 状态：已关闭（书 26，实现提交 `229530fb7e39068d7eb72cbb27ba2442859dfe76`）。最小合成流程是 `VariFlightBackend("auto", configured_credentials, transport).enrich([], [北京→上海 route], clock)`；transport 使用 `tests/fixtures/provider_matrix_mcp_server.py variflight-comfort-network`，search 返回一条航班，随后的 `flightHappinessIndex` 在响应前退出。
 - 仓库根实际运行该输入（exit 0）的原始输出：
 
 ```text
@@ -332,10 +332,12 @@ PY
 
 - 判定：reason 与实体 warning 已承认 `network`，但 health 仍为 `ready`；search 航班与 claims 应保留，health 应为 `degraded`。需要改包根 `plugins/china-trip-weaver/src/china_trip_weaver/variflight_enrichment.py` 的 status 聚合，该文件不在书 23 只允许的 `mobility.py`、`planning.py`、`providers/` 范围内。
 - 边界处理：曾用于验证根因的 6 行临时改动已精确收回，未绕到 `planning.py` 做补偿，也没有留下失败/skip 测试。允许范围内保留 `test_comfort_network_failure_is_classified_without_partial_output`，只证明 transport + adapter 能正确给出 `network/degraded`；它不关闭本条上层 bug。
+- 关闭实现：书 26 只让 status 聚合读取 `errors`；任一 error 均不再 `ready`，且 `contract_mismatch` 仍优先于 `degraded`。search 航班、3 条 claims、warning、mode 与 reason 格式均保持原样。
+- 关闭复现命令（仓库根）：`/usr/bin/python3 -m unittest tests.test_variflight_live.VariFlightLiveTests.test_partial_comfort_network_failure_degrades_without_dropping_search_output -v`。该测试真实启动上述合成 MCP，断言 `flights=1`、`claims=3`、原 warning 和 `health_status=degraded`。
 
 ### 书 23 交付标记
 
-- 上述 18 个上限外覆盖空格与 1 个已确认的 VariFlight 上层 health bug 均保持 open；本轮没有把未修项写成“无”，也没有用越界代码、skip 或弱断言掩盖。
+- 上述 18 个上限外覆盖空格仍保持 open；已确认的 VariFlight 上层 health bug 后由书 26 的 `229530fb7e39068d7eb72cbb27ba2442859dfe76` 关闭。书 23 当时没有把未修项写成“无”，也没有用越界代码、skip 或弱断言掩盖。
 
 ## 书 22 候选名回填（2026-09-05）
 
