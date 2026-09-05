@@ -79,6 +79,15 @@ OK：china-trip-weaver@china-trip-weaver-local 0.5.0 已安装且缓存与源码
 - README 最终审阅把遗留的“每次 plan 最多 80 次”纠正为“每个 Trip 最多 80 次，Journey 服从上述总额度分配”，避免与新参数说明自相矛盾；中英文 `rg` 均同时返回三个参数和两项能力。
 - 当前验收轮次 8/12；所有完成条件已绿，下一步只做精确暂存、cached 白名单复核、交付提交和提交后只读核验。
 
+## 0.5.0 提交后核验（完成）
+
+- 交付提交 `f1daf9036ad79fc66aebb43d4d3ad0be49ab97e6`（`Release China Trip Weaver 0.5.0`）恰含 17 个白名单文件，`163 insertions/50 deletions`；`BLOCKED.md` 与全部实现、文档、demo 和版本断言已随提交进入历史。
+- 提交前 cached 门为 `CACHED_ALLOWLIST_OK files=17`；cached `diff --check`、docs/schema、以及排除两个允许版本点后的其余 src diff 全部 exit 0、无输出，未暂存 diff 为空。
+- 已提交树全量 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）：`Ran 438 tests in 31.065s`、`OK`；无 skipped 汇总，故 skipped 0。
+- 已提交树 secret scan（exit 0）：`secret scan: 0 finding(s) across 372 file(s)`；真实安装 `--check`（exit 0）仍为 `installed, enabled 0.5.0` 且缓存与源码一致。
+- 独立目标行仍为 `china-trip-weaver@china-trip-weaver-local  installed, enabled  0.5.0    /Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/plugins/china-trip-weaver`。
+- 实现提交后工作树 clean，`main...origin/main [ahead 1]`；本任务没有要求 push，故未改远端。当前验收轮次 9/12，0.5.0 完成条件全部满足。
+
 ## 书 14 车站距离信号开工理解（2026-09-05，≤10 行）
 1. 目标：保留 12306 多站候选全集，用既有高德 geocode 城市中心与逐站 POI 坐标补充可信的 `distance_meters`，不替用户选站。
 2. 顺序：核对基线 → 独立车站坐标富化模块 → 接入铁路多站 fallback → 完整性/排序/降级测试 → 红绿反向验证 → 全门禁与提交。
