@@ -119,7 +119,7 @@ class SkillPackagingTests(unittest.TestCase):
     def test_manifest_uses_repository_website_without_invented_legal_urls(self):
         manifest = json.loads((PLUGIN / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
         interface = manifest["interface"]
-        self.assertEqual("0.5.1", manifest["version"])
+        self.assertEqual("0.6.0", manifest["version"])
         self.assertEqual("https://github.com/kangyishuai/china-trip-weaver", interface["websiteURL"])
         self.assertNotIn("privacyPolicyURL", interface)
         self.assertNotIn("termsOfServiceURL", interface)

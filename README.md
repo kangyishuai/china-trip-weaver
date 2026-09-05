@@ -16,6 +16,8 @@ AMap calls in a Journey are budgeted per resulting Trip. The default Journey-wid
 
 When AMap actually attempts to locate a POI but cannot resolve its identity or coordinates, the Trip keeps an actionable coordinate record in `unknowns`, including sanitized reasons and name suggestions when available. Turning mobility off or lacking an AMap key does not manufacture these records.
 
+POI search and geocoding use the same administrative-area rule: a researched city or district may match either the provider's city or its district. A district/county name on one side and its enclosing prefecture-level city on the other therefore do not create a false location mismatch, while unrelated administrative areas still fail closed.
+
 Traveler input has two mutually exclusive forms: the existing `origin + travelers` form, or `traveler_groups[] + meeting_anchor`. Every group supplies a stable `group_id`, its own traveler count and origin, plus an optional mobility profile. The meeting anchor supplies a location and `meet_by`; `buffer_minutes` defaults to 60, and any group that cannot arrive with that much buffer produces a structured conflict. Mixed input is rejected and the emitted Trip preserves only the selected representation. Validation, rendering, and inventory lookup consume the grouped form directly. Grouped transport legs carry explicit `group_refs`; `transport_pricing` exposes each group's total and the whole party's transport total separately.
 
 `pace=slow` first uses the strict slow profile. If that schedule has no solution, the planner cumulatively tries a smaller daily POI cap, 70% POI/meal durations, and finally the balanced 21:30 day end. It stops at the first feasible result and appends every applied step to `request.assumptions`; hard conflicts that none of those steps can change keep their original structured conflict and report all attempted relaxations.
@@ -77,7 +79,7 @@ CODEX_HOME=/path/to/an/isolated/codex-home \
   plugin list
 ```
 
-The expected result is `china-trip-weaver@china-trip-weaver-local`, version `0.5.1`, status `installed, enabled`. Use a fresh Codex task after installing or updating so its nine Skills and MCP configuration are reloaded.
+The expected result is `china-trip-weaver@china-trip-weaver-local`, version `0.6.0`, status `installed, enabled`. Use a fresh Codex task after installing or updating so its nine Skills and MCP configuration are reloaded.
 
 For Codex Desktop UI installation, add this repository as a local marketplace, ensure `china-travel-assistant` is disabled, install China Trip Weaver Local, restart, and create a new task. The two plugins must not be enabled together because both expose `plan-china-trip`.
 
@@ -137,6 +139,8 @@ plugins/china-trip-weaver/scripts/ctw journey validate-html demo/journey-16d/jou
 ```
 
 Railway/network/provider failure never becomes fake success. Each capability preserves its own health and either uses a labeled fallback or stops at a typed unknown. AMap is capped at 80 calls per Trip and no more than 2 QPS; a Journey follows the total allocation described above. FlyAI masked prices such as `¥4xx` are always `verify-on-click`; only exact numeric prices are `live`. FlyAI coordinates remain `provider-unknown` and are never converted or mapped.
+
+VariFlight partial enrichment is reported truthfully. If flight search or status data succeeds but a later comfort query fails, the usable flights and status claims are retained while VariFlight health becomes `degraded`; it is never shown as fully healthy.
 
 When 12306 returns multiple possible stations and AMap is available, the plugin uses the city center and exact-match railway-station POIs to attach straight-line distance signals. It preserves every station candidate, orders known distances nearest-first and unknown distances last, and never chooses a station for the user; failure to obtain a distance does not degrade an otherwise successful railway result.
 

@@ -201,7 +201,7 @@ class CredentialTests(unittest.TestCase):
         payload = json.loads(stdout.getvalue())
         self.assertEqual(probe_report, payload["probes"])
         self.assertTrue(payload["schema_exists"])
-        self.assertEqual("0.5.1", payload["plugin_version"])
+        self.assertEqual("0.6.0", payload["plugin_version"])
         self.assertNotIn(amap, stdout.getvalue())
         self.assertNotIn(flyai, stdout.getvalue())
         self.assertEqual(1, probe.call_count)

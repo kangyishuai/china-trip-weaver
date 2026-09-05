@@ -140,7 +140,7 @@ class MCPStdioClient:
             {
                 "protocolVersion": MCP_PROTOCOL_VERSION,
                 "capabilities": {},
-                "clientInfo": {"name": "china-trip-weaver", "version": "0.5.1"},
+                "clientInfo": {"name": "china-trip-weaver", "version": "0.6.0"},
             },
         )
         result = _result_object(response, "initialize")
