@@ -2047,3 +2047,10 @@ OK
 - `.codex-plugin/plugin.json`、packaged Schema、`planning.py`、`replan.py` 工作树 diff 均 exit 0 且无输出；未跑实网、未安装 Codex、版本保持 0.4.0。
 - 实现提交 `ba26cac`（`Make POI identity conflicts actionable`）恰含 `mobility.py`、`cli.py`、mobility Skill 与两份规定测试，`442 insertions/7 deletions`；没有暂存并行书 19 的 Journey 文件。`BLOCKED.md` 已写“本轮新增阻塞：无”。当前验收轮次 5/12，待共享进度收尾提交。
 - 实现提交后再次跑全量（exit 0）：`Ran 434 tests in 30.696s`、`OK`、skipped 0；当前代码内容与提交前最终门一致。当前验收轮次 6/12。
+
+## 书 18 提交区间与收尾（完成）
+
+- 共享记录提交 `9ea58d0`（`Record candidate identity feedback verification`）只含 `PROGRESS.md`、`BLOCKED.md`；书 18 的“新增阻塞：无”已随交付进入提交历史。
+- 开工基线 `f1b8d48..9ea58d0` 的 `git diff --stat` 恰含 7 个书 18 白名单路径：两份共享记录、`mobility.py`、`cli.py`、mobility Skill、`tests/test_amap_live.py`、`tests/test_candidates.py`；`654 insertions/18 deletions`。
+- 同区间对 `replan.py`、`journey.py`、`planning.py`、packaged Schema 与 manifest 的 diff exit 0、无输出；`git diff --check` exit 0。当前未提交的 `journey.py`、`tests/test_journey.py` 明确属于并行书 19，书 18 从未暂存或提交。
+- 书 18 当前验收轮次 7/12，全部完成条件已满足；未跑实网、未 push、未发布、未安装 Codex。
