@@ -2219,3 +2219,63 @@ OK
 - 契约抽取输出 `EVENT_FIELDS_EQUAL True delta_minutes,reason,replacement_slot,reverify_claim_ids,subject_ref,type` 与 `EVENT_TYPES_EQUAL True closure,weather,delay,user_delete`。
 - 禁改核验输出 `REPLAN_FIXTURE_DIFF_EMPTY`、`FORBIDDEN_IMPLEMENTATION_DIFF_EMPTY`、`VERSION_CARRIER_DIFF_EMPTY`；`git diff --check` exit 0、无输出。
 - 当前验收轮次 8/8；所有完成条件已满足，停止新增实现，只做精确暂存、提交与提交状态读回。
+
+## 坐标定位失败 unknown 开工理解（2026-09-05，≤10 行）
+1. 目标：AMap 真正尝试定位但失败的 POI/住宿必须留下坐标 unknown，并把既有运行时原因与 suggested_names 原样送到用户可见 Journey。
+2. 生成边界：只认实体级 AMap 运行时 warning；mobility=off 或缺 Key 没跑 provider 时零新增。
+3. 固定顺序：先覆盖候选已有 unknown 的 reason，再按运行时失败补缺，最后清理已拿到坐标的 unknown。
+4. 成功、失败、已有 unknown 与无 unknown 必须能混在同一次完整 plan 中且互不抵消、不重复。
+5. 直接复用 mobility.poi_identity_feedback 已写入的 warning 投影，不改身份判定、相似度阈值或 Schema。
+6. 最大风险：把 capability/裸 warning 错当成实体已执行证据，给未运行或未触达实体制造大量噪音。
+7. 验收以至少 5 条严格回归、两次故意错误顺序/边界红态、全量 ≥444 且 skipped 0 为准。
+8. 边界：只写本轮白名单；版本保持 0.5.0，不跑实网/demo、不安装 Codex。
+
+## 坐标定位失败 unknown 任务 0：基线与离线复现（完成）
+
+- Git 根为本目录；开工 `HEAD` 与 `origin/main` 同为 `d86a9f15108fcfe3c35c433270ede17cb2198dfd`，工作树干净。
+- `/usr/bin/python3 -m unittest discover -s tests`（exit 0）：`Ran 439 tests in 30.792s`、`OK`、skipped 0。
+- `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 372 file(s)`。
+- 用现有全合成 `g3_identity_conflict.json`、假凭据和内存 AMap transport 跑完整 plan（exit 0）：`mobility_mode=live`、`provider_calls=1`、`business_calls=[amap.poi:poi-g3-corridor]`。
+- 同次输出：POI `poi-g3-corridor` 的 `coordinates=null`；runtime warning 为 `identity_conflict:poi-g3-corridor:ambiguous_name_margin`，JSON 内含 `suggested_names=[海岛生态廊道甲区,海岛生态廊道乙区]`。
+- 缺陷精确复现：`coordinate_unknowns=[]`、`trip_suggested_names_count=0`；完整阶段仍走到 `VALIDATED`、`RENDERED`。当前验收轮次 1/12。
+
+## 坐标定位失败 unknown 任务 1：运行过才补记录（完成）
+
+- `planning.py` 在运行时 reason 覆盖后按实体级 AMap warning 补坐标 unknown；新增项固定 `provider=amap`、`claim_id=null`。只有同一实体出现在 `amap.poi|geocode` business call 中才可补，off、缺 Key、预算在调用前耗尽均不会制造记录。
+- `mobility.py` 的 POI 空结果、地址不完整、geocode 合同错误/空结果也直接复用既有 `poi_identity_feedback`；identity conflict 原有候选名与行政区投影不另写一套，身份判断和阈值未改。
+- 新增五条精准回归首次执行：live POI、off、缺 Key、live 住宿、混合三实体依次为 `FAIL/ok/ok/FAIL/FAIL`；`Ran 5 tests in 0.073s`、`FAILED (failures=3)`，失败均为缺少预期 coordinate unknown。
+- 实现后同五条（exit 0）：全部 `ok`，`Ran 5 tests in 0.073s`、`OK`。
+- 反向验证临时移除实际调用/warning 门槛并给未查询实体补伪原因；off 单测（exit 1）：`AssertionError: True is not false`、`Ran 1 test in 0.013s`、`FAILED (failures=1)`。
+- 原样恢复门槛后 `/usr/bin/python3 -m unittest tests.test_amap_live tests.test_keyless_e2e -v`（exit 0）：`Ran 63 tests in 4.542s`、`OK`、skipped 0。临时伪原因未保留。当前验收轮次 2/12。
+
+## 坐标定位失败 unknown 任务 2：覆盖、补缺、清理顺序（完成）
+
+- 混合 full plan 同时包含：已有坐标 unknown 的定位失败 POI、没有 unknown 的定位失败 POI、已有 unknown 且带 business warning 的定位成功 POI。
+- 正确顺序结果只含 `/pois/0/coordinates` 与 `/pois/1/coordinates`，路径不重复；前者旧 reason 被运行时 identity conflict 覆盖，后者以 `claim_id=null` 补入，两者均含 `suggested_names`；成功的 `/pois/2/coordinates` 有坐标且无 unknown。
+- 反向验证临时把清理提到补缺之前；混合单测（exit 1）多出 `/pois/2/coordinates`，原始差异为期望 `[0,1]`、实际 `[0,1,2]`；`Ran 1 test in 0.024s`、`FAILED (failures=1)`。
+- 恢复“覆盖 → 补缺 → 清理”后 `/usr/bin/python3 -m unittest tests.test_keyless_e2e tests.test_journey -v`（exit 0）：`Ran 81 tests in 9.130s`、`OK`、skipped 0。临时错误顺序未保留。当前验收轮次 3/12。
+
+## 坐标定位失败 unknown 三态输出与全量核心门（完成）
+
+- 同一全合成 full-plan 脚本（exit 0）失败态原始摘要：`LIVE_FAILURE {"coordinates_resolved":false,"mobility_mode":"live","provider_calls":1}`；唯一 `/pois/0/coordinates` unknown 为 `provider=amap,claim_id=null`，reason 原样含 `ambiguous_name_margin`、两个候选行政区/名称和 `suggested_names`。
+- 成功态原始输出：`LIVE_SUCCESS {"coordinate_unknowns":[],"coordinates_resolved":true,"mobility_mode":"live","provider_calls":2}`；即使实体带真实 business conflict warning 且候选曾有坐标 unknown，最终清理仍保证零坐标 unknown。
+- 未运行态原始输出：`MOBILITY_OFF {"coordinate_unknowns":[],"coordinates_resolved":false,"mobility_mode":"off","provider_calls":0,"runtime_warnings":[]}`。
+- `/usr/bin/python3 -m unittest discover -s tests`（exit 0）：`Ran 444 tests in 30.767s`、`OK`、skipped 0；恰为基线 439 + 五条严格回归。
+- `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 372 file(s)`。当前验收轮次 4/12。
+
+## 坐标定位失败 unknown 最终代码态门禁（完成）
+
+- 收紧同实体多 warning 选择：若 business conflict 后又发生 geocode 定位失败，覆盖与补缺均优先采用含既有 `suggested_names` 投影的后者；混合回归现真实覆盖“先 business warning、后 admin mismatch”。
+- 测试侧只使用仓库既有 `AMapScenarioTransport` 与标准 `MobilityBackend`；未替换既有 mock、未改 fixture/golden、断言、阈值或验收脚本。
+- 收紧后的顺序反向验证仍红：清理提前时实际多出 `/pois/2/coordinates`；`Ran 1 test in 0.025s`、`FAILED (failures=1)`，随后原样恢复。
+- 最终 `/usr/bin/python3 -m unittest tests.test_amap_live tests.test_keyless_e2e -v`（exit 0）：`Ran 63 tests in 4.079s`、`OK`、skipped 0。
+- 最终 `/usr/bin/python3 -m unittest tests.test_keyless_e2e tests.test_journey -v`（exit 0）：`Ran 81 tests in 9.096s`、`OK`、skipped 0。
+- 最终 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）：`Ran 444 tests in 28.889s`、`OK`、skipped 0。
+- 最终 `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 372 file(s)`。当前验收轮次 5/12。
+
+## 坐标定位失败 unknown 最终范围审计（完成）
+
+- `ALLOWLIST_OK True`、`CHANGED_FILES 6`：仅 `BLOCKED.md`、`PROGRESS.md`、`mobility.py`、`planning.py`、`tests/test_amap_live.py`、`tests/test_keyless_e2e.py`；`git diff --stat` 为 453 insertions/18 deletions。
+- 相对 `HEAD` 逐 AST 源片段字节比较：`POI_NAME_SIMILARITY_MARGIN`、`_poi_identity_conflicts`、`_name_similarity`、`_normalized_name`、`_city_matches` 全部 `BYTE_EQUAL True`，`IDENTITY_DIFF_LINES 0`。
+- schema/、demo/、render/、journey.py、cli.py、manifest 与全部非文档版本载体的组合 `git diff --exit-code` 为 exit 0、无输出；当前 manifest/package/MCP clientInfo 读回均为 `0.5.0`。
+- `git diff --check` exit 0、无输出；未跑实网/demo、未安装 Codex、未改依赖/权限/版本。`BLOCKED.md` 已记录本轮新增阻塞为“无”。当前验收轮次 6/12。

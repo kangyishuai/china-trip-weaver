@@ -25,7 +25,7 @@ from china_trip_weaver.flyai_inventory import (
     FlyAIBackend,
     _lodging_parameters_from_trip,
 )
-from china_trip_weaver.mobility import MobilityResult
+from china_trip_weaver.mobility import MobilityBackend, MobilityResult
 from china_trip_weaver.planning import (
     RailBackend,
     RouteSpec,
@@ -41,6 +41,7 @@ from china_trip_weaver.providers.variflight_mcp import VariFlightMCPTransport
 from china_trip_weaver.render import render_trip, validate_html
 from china_trip_weaver.validate_trip import validate_trip
 from china_trip_weaver.variflight_enrichment import VariFlightBackend
+from tests.test_providers import AMAP_SCENARIOS, AMapScenarioTransport, amap_scenario_candidates
 
 
 E2E = ROOT / "tests" / "fixtures" / "e2e"
@@ -644,6 +645,101 @@ class KeylessE2ETests(unittest.TestCase):
         self.assertIn("static estimates", health["amap"]["reason"])
         self.assertIn("no business call was made", health["variflight"]["reason"])
         self.assertIn("no auto-registration or business call was made", health["anysearch"]["reason"])
+
+    def test_runtime_coordinate_unknown_pipeline_overwrites_adds_and_drops_in_order(self):
+        existing_conflict = copy.deepcopy(
+            load(AMAP_SCENARIOS / "g3_identity_conflict.json")["entities"][0]
+        )
+        business_fixture = load(AMAP_SCENARIOS / "g4_business_conflict.json")
+        missing_conflict = copy.deepcopy(business_fixture["entities"][0])
+        missing_conflict["ref_id"] = "poi-runtime-missing-unknown"
+        missing_conflict["poi_results"][0]["id"] = "SYNTHETIC-RUNTIME-MISSING"
+        missing_conflict["geocode"].update({
+            "city": "另一座城",
+            "formatted_address": "另一座城同名合成点",
+        })
+        resolved_with_warning = copy.deepcopy(business_fixture["entities"][0])
+        scenario = {
+            "entities": [existing_conflict, missing_conflict, resolved_with_warning],
+        }
+        candidates = amap_scenario_candidates(scenario)
+        stale_reason = "AMap was not run while candidates were researched"
+        candidates["unknowns"] = [{
+            "claim_id": candidates["claims"][0]["claim_id"],
+            "field_path": "/pois/0/coordinates",
+            "provider": "amap",
+            "reason": stale_reason,
+        }, {
+            "claim_id": candidates["claims"][2]["claim_id"],
+            "field_path": "/pois/2/coordinates",
+            "provider": "amap",
+            "reason": stale_reason,
+        }]
+        request_value = {
+            "origin": None,
+            "destinations": [{"ref_id": "city-zhuhai", "name": "珠海", "city": "珠海"}],
+            "start_date": "2026-09-10",
+            "end_date": "2026-09-10",
+            "travelers": 1,
+            "budget_cny": 5000,
+            "interests": ["synthetic-test-place"],
+            "pace": "balanced",
+            "constraints": [],
+            "assumptions": ["synthetic mixed coordinate unknown pipeline"],
+            "locale": "zh-CN",
+            "pasted_notes": None,
+        }
+        transport = AMapScenarioTransport(scenario)
+        mobility = MobilityBackend(
+            "live",
+            resolve_credentials(
+                {"AMAP_WEBSERVICE_KEY": "ctw-canary-mixed-unknown-not-real"},
+                ROOT / ".tmp" / "mixed-unknown-no-amap-file",
+            ),
+            transport,
+        )
+        result = plan_trip(
+            request_value,
+            candidates,
+            FixedClock.from_iso(FIXED_NOW),
+            RailBackend.from_spec("off", ROOT),
+            mobility,
+        )
+
+        coordinate_unknowns = [
+            item for item in result.trip["unknowns"]
+            if item["field_path"].endswith("/coordinates")
+        ]
+        by_path = {item["field_path"]: item for item in coordinate_unknowns}
+        self.assertEqual(5, transport.calls)
+        self.assertEqual(
+            ["/pois/0/coordinates", "/pois/1/coordinates"],
+            [item["field_path"] for item in coordinate_unknowns],
+        )
+        self.assertEqual(len(coordinate_unknowns), len(by_path))
+        self.assertNotEqual(stale_reason, by_path["/pois/0/coordinates"]["reason"])
+        self.assertIn("identity_conflict:poi-g3-corridor", by_path["/pois/0/coordinates"]["reason"])
+        self.assertIn("suggested_names", by_path["/pois/0/coordinates"]["reason"])
+        self.assertIsNone(by_path["/pois/1/coordinates"]["claim_id"])
+        self.assertIn(
+            "identity_conflict:poi-runtime-missing-unknown",
+            by_path["/pois/1/coordinates"]["reason"],
+        )
+        self.assertNotIn(
+            "business_conflict:poi-runtime-missing-unknown",
+            by_path["/pois/1/coordinates"]["reason"],
+        )
+        self.assertIn("suggested_names", by_path["/pois/1/coordinates"]["reason"])
+        self.assertIsNone(result.trip["pois"][0]["coordinates"])
+        self.assertIsNone(result.trip["pois"][1]["coordinates"])
+        self.assertIsNotNone(result.trip["pois"][2]["coordinates"])
+        self.assertNotIn("/pois/2/coordinates", by_path)
+        amap_health = next(
+            item for item in result.trip["provider_health"]
+            if item["provider"] == "amap"
+        )
+        self.assertIn("business_conflict", amap_health["reason"])
+        self.assertIn("identity_conflict", amap_health["reason"])
 
     def test_rail_runtime_presale_reason_replaces_each_fallback_unknown(self):
         folder = E2E / "beijing-shanghai-3d"

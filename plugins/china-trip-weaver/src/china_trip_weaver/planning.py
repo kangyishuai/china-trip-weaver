@@ -316,6 +316,12 @@ def plan_trip(
             "variflight": enrichment.warnings,
         },
     )
+    unknowns = _add_runtime_coordinate_unknowns(
+        unknowns,
+        entities,
+        mobility.warnings,
+        mobility.business_calls,
+    )
     unknowns = _drop_resolved_coordinate_unknowns(unknowns, pois, lodgings)
     transport_pricing = _transport_pricing(
         normalized_request, days, transport_legs,
@@ -898,6 +904,75 @@ def _drop_resolved_coordinate_unknowns(
     return [item for item in unknowns if item.get("field_path") not in resolved]
 
 
+def _add_runtime_coordinate_unknowns(
+    unknowns: Sequence[Mapping[str, Any]],
+    entities: Mapping[str, Sequence[Mapping[str, Any]]],
+    warnings: Sequence[str],
+    business_calls: Sequence[str],
+) -> List[Mapping[str, Any]]:
+    """Add an AMap coordinate unknown only for an entity actually queried.
+
+    Entity-scoped warnings carry the provider's runtime failure detail and, for
+    identity checks, the bounded ``poi_identity_feedback`` JSON projection.
+    Business-call evidence prevents off, missing-key, and exhausted-before-call
+    runs from manufacturing unknowns for untouched entities.  Resolved entities
+    are deliberately left to the final coordinate sweep, which keeps the
+    overwrite -> add -> sweep ordering observable and safe.
+    """
+
+    result = [copy.deepcopy(dict(item)) for item in unknowns]
+    existing_paths = {
+        item.get("field_path") for item in result
+        if isinstance(item.get("field_path"), str)
+    }
+    attempted_refs = {
+        item.split(":", 1)[1]
+        for item in business_calls
+        if isinstance(item, str)
+        and item.startswith(("amap.poi:", "amap.geocode:"))
+        and ":" in item
+        and item.split(":", 1)[1]
+    }
+    parsed_warnings = [
+        (warning, warning.split(":", 2))
+        for warning in warnings
+        if isinstance(warning, str) and len(warning.split(":", 2)) == 3
+    ]
+    specifications = (
+        ("pois", "poi_id", "poi"),
+        ("lodgings", "lodging_id", "lodging"),
+    )
+    for group, id_key, kind in specifications:
+        for index, entity in enumerate(entities.get(group, ())):
+            target = _runtime_entity_target(
+                entity, group, (id_key, kind), None,
+            )
+            if target is None:
+                continue
+            _, aliases, _ = target
+            if attempted_refs.isdisjoint(aliases):
+                continue
+            matches = [
+                warning for warning, parts in parsed_warnings
+                if all(parts) and parts[1] in aliases
+            ]
+            runtime_reason = next((
+                warning for warning in matches
+                if '"suggested_names":' in warning
+            ), matches[0] if matches else None)
+            field_path = "/%s/%d/coordinates" % (group, index)
+            if runtime_reason is None or field_path in existing_paths:
+                continue
+            result.append({
+                "field_path": field_path,
+                "reason": runtime_reason,
+                "provider": "amap",
+                "claim_id": None,
+            })
+            existing_paths.add(field_path)
+    return result
+
+
 def _apply_runtime_unknown_reasons(
     unknowns: Sequence[Mapping[str, Any]],
     entities: Mapping[str, Sequence[Mapping[str, Any]]],
@@ -932,10 +1007,14 @@ def _apply_runtime_unknown_reasons(
                 for warning in provider_warnings
                 if isinstance(warning, str) and len(warning.split(":", 2)) == 3
             ]
-            exact = next((
+            exact_matches = [
                 warning for warning, parts in parsed
                 if all(parts) and parts[1] in aliases
-            ), None)
+            ]
+            exact = next((
+                warning for warning in exact_matches
+                if str(provider) == "amap" and '"suggested_names":' in warning
+            ), exact_matches[0] if exact_matches else None)
             scoped = next((
                 "%s:%s:%s" % (parts[0], identifier, parts[2])
                 for _, parts in parsed

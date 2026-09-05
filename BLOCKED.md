@@ -276,3 +276,7 @@ should mean pending work. They live where they are enforced:
 ## 0.5.0 本机发布（2026-09-05）
 
 - 本轮新增阻塞：无。
+
+## 坐标定位失败 unknown（2026-09-05）
+
+- 本轮新增阻塞：无。

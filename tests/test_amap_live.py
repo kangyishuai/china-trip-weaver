@@ -533,16 +533,17 @@ class AMapMobilityTests(unittest.TestCase):
         self.assertEqual((), result.locations)
         self.assertIsNone(pois[0]["coordinates"])
 
-    def _identity_conflict_plan(self, mobility):
+    def _identity_conflict_plan(self, mobility, *, include_candidate_unknown=True):
         scenario = load(AMAP_SCENARIOS / "g3_identity_conflict.json")
         candidates = amap_scenario_candidates(scenario)
         stale_reason = "AMap is not configured; coordinates remain unverified"
-        candidates["unknowns"] = [{
-            "claim_id": candidates["claims"][0]["claim_id"],
-            "field_path": "/pois/0/coordinates",
-            "provider": "amap",
-            "reason": stale_reason,
-        }]
+        if include_candidate_unknown:
+            candidates["unknowns"] = [{
+                "claim_id": candidates["claims"][0]["claim_id"],
+                "field_path": "/pois/0/coordinates",
+                "provider": "amap",
+                "reason": stale_reason,
+            }]
         request_value = {
             "origin": None,
             "destinations": [{"ref_id": "city-zhuhai", "name": "珠海", "city": "珠海"}],
@@ -600,6 +601,182 @@ class AMapMobilityTests(unittest.TestCase):
         )
         self.assertEqual(0, transport.calls)
         self.assertEqual(stale_reason, unknown["reason"])
+
+    def test_full_plan_adds_missing_coordinate_unknown_for_live_identity_conflict(self):
+        scenario = load(AMAP_SCENARIOS / "g3_identity_conflict.json")
+        transport = AMapScenarioTransport(scenario)
+        result, _ = self._identity_conflict_plan(
+            MobilityBackend("live", credentials(), transport),
+            include_candidate_unknown=False,
+        )
+
+        unknowns = [
+            item for item in result.trip["unknowns"]
+            if item["field_path"] == "/pois/0/coordinates"
+        ]
+        self.assertEqual(1, transport.calls)
+        self.assertIsNone(result.trip["pois"][0]["coordinates"])
+        self.assertEqual(1, len(unknowns))
+        self.assertEqual("amap", unknowns[0]["provider"])
+        self.assertIsNone(unknowns[0]["claim_id"])
+        self.assertEqual(
+            "identity_conflict:poi-g3-corridor:ambiguous_name_margin:"
+            '{"candidates":[{"administrative_area":"珠海市/香洲区",'
+            '"name":"海岛生态廊道甲区"},{"administrative_area":"珠海市/香洲区",'
+            '"name":"海岛生态廊道乙区"}],"suggested_names":'
+            '["海岛生态廊道甲区","海岛生态廊道乙区"]}',
+            unknowns[0]["reason"],
+        )
+
+    def test_full_plan_mobility_off_does_not_invent_coordinate_unknown(self):
+        transport = ScriptedAmapTransport()
+        result, _ = self._identity_conflict_plan(
+            MobilityBackend("off", credentials(), transport),
+            include_candidate_unknown=False,
+        )
+
+        self.assertEqual(0, transport.calls)
+        self.assertIsNone(result.trip["pois"][0]["coordinates"])
+        self.assertFalse(any(
+            item["field_path"] == "/pois/0/coordinates"
+            for item in result.trip["unknowns"]
+        ))
+
+    def test_full_plan_missing_amap_key_does_not_invent_coordinate_unknown(self):
+        scenario = load(AMAP_SCENARIOS / "g3_identity_conflict.json")
+        transport = AMapScenarioTransport(scenario)
+        result, _ = self._identity_conflict_plan(
+            MobilityBackend("live", credentials(False), transport),
+            include_candidate_unknown=False,
+        )
+
+        self.assertEqual(0, transport.calls)
+        self.assertIsNone(result.trip["pois"][0]["coordinates"])
+        self.assertFalse(any(
+            item["field_path"] == "/pois/0/coordinates"
+            for item in result.trip["unknowns"]
+        ))
+
+    def test_full_plan_adds_lodging_coordinate_unknown_with_runtime_feedback(self):
+        settled = {
+            "source_crs": "GCJ02",
+            "native": {"lng": 113.57, "lat": 22.27},
+            "gcj02": {"lng": 113.57, "lat": 22.27},
+            "wgs84": {"lng": 113.5647, "lat": 22.2727},
+            "conversion": {
+                "status": "converted",
+                "method": "gcj02-to-wgs84",
+                "version": "ctw-1",
+                "derived_fields": ["wgs84"],
+                "converted_at": FIXED_NOW,
+                "accuracy_m": 10,
+            },
+        }
+        candidates = {
+            "candidates_version": "1.0.0",
+            "pois": [{
+                "poi_id": "poi-lodging-plan-anchor",
+                "name": "合成已定位景点",
+                "city": "珠海",
+                "category": "sight",
+                "coordinates": settled,
+                "recommended_duration_minutes": 60,
+                "opening_windows": [],
+                "price": None,
+                "deep_links": ["https://example.invalid/poi-lodging-plan-anchor"],
+                "claim_ids": ["claim-lodging-plan-anchor"],
+            }],
+            "lodgings": [{
+                "lodging_id": "lodging-runtime-mismatch",
+                "name": "合成住宿候选",
+                "city": "珠海",
+                "area": "合成片区",
+                "check_in": "2026-09-10",
+                "check_out": "2026-09-11",
+                "coordinates": None,
+                "locked": False,
+                "price": None,
+                "deep_links": ["https://example.invalid/lodging-runtime-mismatch"],
+                "claim_ids": ["claim-lodging-runtime-mismatch"],
+            }],
+            "claims": [{
+                "claim_id": "claim-lodging-plan-anchor",
+                "subject_ref": "poi-lodging-plan-anchor",
+                "field_path": "/name",
+                "value": "合成已定位景点",
+                "source_url": "https://example.invalid/poi-lodging-plan-anchor",
+                "provider": "official-web",
+                "queried_at": FIXED_NOW,
+                "status": "verified",
+                "confidence": 0.9,
+                "mode": "static",
+                "as_of": None,
+                "raw_ref": None,
+                "response_hash": None,
+                "json_path": None,
+            }, {
+                "claim_id": "claim-lodging-runtime-mismatch",
+                "subject_ref": "lodging-runtime-mismatch",
+                "field_path": "/name",
+                "value": "合成住宿候选",
+                "source_url": "https://example.invalid/lodging-runtime-mismatch",
+                "provider": "official-web",
+                "queried_at": FIXED_NOW,
+                "status": "verified",
+                "confidence": 0.9,
+                "mode": "static",
+                "as_of": None,
+                "raw_ref": None,
+                "response_hash": None,
+                "json_path": None,
+            }],
+            "unknowns": [],
+        }
+        scenario = {"entities": [{
+            "ref_id": "lodging-runtime-mismatch",
+            "poi_results": [],
+            "geocode": {
+                "location": "119.300000,26.080000",
+                "formatted_address": "另一座城合成住宿",
+                "city": "另一座城",
+            },
+        }]}
+        request_value = {
+            "origin": None,
+            "destinations": [{"ref_id": "city-zhuhai", "name": "珠海", "city": "珠海"}],
+            "start_date": "2026-09-10",
+            "end_date": "2026-09-11",
+            "travelers": 1,
+            "budget_cny": 2000,
+            "interests": ["sight"],
+            "pace": "balanced",
+            "constraints": [],
+            "assumptions": ["synthetic lodging coordinate failure"],
+            "locale": "zh-CN",
+            "pasted_notes": None,
+        }
+        transport = AMapScenarioTransport(scenario)
+        result = plan_trip(
+            request_value,
+            candidates,
+            self.clock,
+            RailBackend.from_spec("off", ROOT),
+            MobilityBackend("live", credentials(), transport),
+        )
+
+        unknowns = [
+            item for item in result.trip["unknowns"]
+            if item["field_path"] == "/lodgings/0/coordinates"
+        ]
+        self.assertEqual(1, transport.calls)
+        self.assertEqual(["geocode"], transport.capabilities)
+        self.assertIsNone(result.trip["lodgings"][0]["coordinates"])
+        self.assertEqual(1, len(unknowns))
+        self.assertEqual("amap", unknowns[0]["provider"])
+        self.assertIsNone(unknowns[0]["claim_id"])
+        self.assertIn("geocode_admin_mismatch", unknowns[0]["reason"])
+        self.assertIn('"actual_administrative_area":"另一座城"', unknowns[0]["reason"])
+        self.assertIn('"suggested_names":[]', unknowns[0]["reason"])
 
     def test_demo_candidates_produce_bounded_two_mode_live_matrix(self):
         transport = ScriptedAmapTransport()

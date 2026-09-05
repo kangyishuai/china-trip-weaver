@@ -162,6 +162,8 @@ class MobilityBackend:
                 )
                 continue
             identity_claims: List[Mapping[str, Any]] = []
+            identity_candidates: Sequence[Mapping[str, Any]] = ()
+            identity_candidate_claims: Sequence[Mapping[str, Any]] = ()
             selected: Optional[Mapping[str, Any]] = None
             provider_name: Optional[str] = None
             geocode_address = "%s%s" % (entity["city"], entity["name"])
@@ -185,11 +187,19 @@ class MobilityBackend:
                 poi_result = adapter.query(poi_request, context)
                 if _transport_calls(self.transport) > calls_before:
                     calls.append("amap.poi:%s" % entity["ref_id"])
+                identity_candidates = poi_result.normalized_items
+                identity_candidate_claims = poi_result.claims
                 if not poi_result.normalized_items:
                     error = poi_result.error_class or "no_results"
                     errors.append(error)
                     warnings.append(
-                        "%s:%s:poi_identity_lookup" % (error, entity["ref_id"])
+                        "%s:%s:poi_identity_lookup:%s" % (
+                            error,
+                            entity["ref_id"],
+                            poi_identity_feedback(
+                                identity_candidates, identity_candidate_claims,
+                            ),
+                        )
                     )
                     if error in FATAL_ERRORS:
                         fatal_status = poi_result.health["status"]
@@ -201,8 +211,8 @@ class MobilityBackend:
                     claims.extend(_claims_with_status(poi_result.claims, "conflict"))
                     errors.append("identity_conflict")
                     feedback = poi_identity_feedback(
-                        poi_result.normalized_items,
-                        poi_result.claims,
+                        identity_candidates,
+                        identity_candidate_claims,
                     )
                     warnings.extend(("identity_conflict",) + tuple(
                         "identity_conflict:%s:%s:%s" % (
@@ -226,7 +236,12 @@ class MobilityBackend:
                     warnings.extend((
                         "incomplete_address",
                         "incomplete_address:%s" % entity["ref_id"],
-                        "incomplete_address:%s:poi_address_missing_admin_detail" % entity["ref_id"],
+                        "incomplete_address:%s:poi_address_missing_admin_detail:%s" % (
+                            entity["ref_id"],
+                            poi_identity_feedback(
+                                identity_candidates, identity_candidate_claims,
+                            ),
+                        ),
                     ))
                     continue
                 if _business_conflict(entity, candidates, identity_claims):
@@ -262,7 +277,12 @@ class MobilityBackend:
                 if coordinate_claim is None or not isinstance(coordinate_claim.get("value"), dict):
                     errors.append("contract_mismatch")
                     warnings.append(
-                        "contract_mismatch:%s:geocode_coordinates" % entity["ref_id"]
+                        "contract_mismatch:%s:geocode_coordinates:%s" % (
+                            entity["ref_id"],
+                            poi_identity_feedback(
+                                identity_candidates, identity_candidate_claims,
+                            ),
+                        )
                     )
                     fatal_status = "contract_mismatch"
                     break
@@ -274,8 +294,8 @@ class MobilityBackend:
                         "identity_conflict:%s:geocode_admin_mismatch:%s" % (
                             entity["ref_id"],
                             poi_identity_feedback(
-                                () if selected is None else (selected,),
-                                identity_claims,
+                                identity_candidates,
+                                identity_candidate_claims,
                                 actual_administrative_area=provider_place.get("city"),
                             ),
                         ),
@@ -295,7 +315,13 @@ class MobilityBackend:
                 error = result.error_class or "no_results"
                 errors.append(error)
                 warnings.append(
-                    "%s:%s:geocode_lookup" % (error, entity["ref_id"])
+                    "%s:%s:geocode_lookup:%s" % (
+                        error,
+                        entity["ref_id"],
+                        poi_identity_feedback(
+                            identity_candidates, identity_candidate_claims,
+                        ),
+                    )
                 )
                 if error in FATAL_ERRORS:
                     fatal_status = result.health["status"]
