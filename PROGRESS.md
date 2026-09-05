@@ -8448,3 +8448,251 @@ OK
 ### 本轮发现（记账，不阻塞）
 
 - `poi-confucian` 那条 unknown 的 reason 显示的是 `nearby_name_candidates`，而真正拦住它的是 `poi_address_missing_admin_detail`。`nearby_name_candidates` 本意是「名字没定，但坐标可用」的参考信息，却被 unknown 的 reason 选取逻辑当成了首要原因，掩盖了真实原因。用户按这条 reason 去改名字是白费力气。属信息质量问题，值得单开一轮。
+
+## 书 34 任务 0：两个后果复现（2026-09-06）
+
+`grep -n 'suggested_names' plugins/china-trip-weaver/src/china_trip_weaver/planning.py`（exit 0）原始输出：
+
+```text
+961:                if '"suggested_names":' in warning
+1016:                if str(provider) == "amap" and '"suggested_names":' in warning
+```
+
+`grep -n 'coordinates' plugins/china-trip-weaver/src/china_trip_weaver/candidates.py | head`（exit 0）原始输出：
+
+```text
+530:        or pointer_parts[3] != "coordinates"
+936:        claims, unknowns, poi_id, "/coordinates", "/pois/%d/coordinates" % index,
+937:        source, provider_name, "coordinates are not verified yet", clock,
+953:        "coordinates": None,
+1032:        claims, unknowns, lodging_id, "/coordinates",
+1033:        "/lodgings/%d/coordinates" % index, source, provider_name,
+1034:        "coordinates are not verified yet", clock,
+1044:        "coordinates": None,
+```
+
+离线合成 100 米双候选命令先调用 `MobilityBackend.resolve`，再用新 transport 走完整 `plan_trip`（exit 0）原始输出：
+
+```text
+RESOLVE {"calls": ["poi", "geocode"], "coordinates_known": true, "warnings": ["identity_conflict:poi-synthetic-book34-cluster:nearby_name_candidates:{\"candidates\":[{\"administrative_area\":\"合成星港市/合成中心区\",\"name\":\"合成星庭东入口\"},{\"administrative_area\":\"合成星港市/合成中心区\",\"name\":\"合成星庭西入口\"}],\"suggested_names\":[\"合成星庭东入口\",\"合成星庭西入口\"]}"]}
+PLAN {"calls": ["poi", "geocode"], "coordinates_known": true, "name_unknown_count": 0, "poi_unknowns": []}
+```
+
+三条均与任务书相符：参考 warning 被生成、坐标已 known，但完整 Trip 没有 `/pois/0/name` unknown，故不触碰 `BLOCKED.md`。
+
+## 书 34 开工回执（2026-09-06，≤10 行）
+1. 目标：让坐标 unknown 只呈现真实阻断原因，并让“坐标已拿到、名字未定”拥有独立 name unknown。
+2. reason 选择只排除 `nearby_name_candidates`；其它含 `suggested_names` 的 warning 优先级保持原样。
+3. 仅在坐标已解析时生成 `/<group>/<index>/name`；同一实体不同时出现坐标与名字 unknown。
+4. `fix-names` 只扩展可读 field-path 后缀，名称歧义判定四处冻结逻辑不动，回填仍只写 `name`。
+5. 新增合成 100 米、100 米加地址缺失、800 米三组上层回归，先红后绿并逐字守住人工导出/应用格式。
+6. 必做两次反向验证：撤掉 reason 排除、收回 name 读取范围，各自必须命中指定红态并完整恢复。
+7. 边界仅为任务书六个白名单文件；不升版本、不装 Codex、不碰既有职责顺序与禁改路径。
+8. 开工 `HEAD=origin/main=7369dc7`、工作树原先 clean；任务 0 三项全部复现，继续施工。
+
+## 书 34 新增五条回归红态（实现前原始输出）
+
+`/usr/bin/python3 -m unittest -v` 精确运行新增的 100 米、地址不完整、800 米、name unknown 人工流与住宿同理五条测试（exit 1）：
+
+```text
+test_full_plan_nearby_name_candidates_become_one_name_unknown_and_fix_names_manual (tests.test_amap_live.AMapMobilityTests) ... FAIL
+test_full_plan_nearby_name_candidates_never_mask_incomplete_address (tests.test_amap_live.AMapMobilityTests) ... test_full_plan_distant_name_candidates_keep_coordinate_unknown_only (tests.test_amap_live.AMapMobilityTests) ... ok
+test_fix_names_name_unknown_keeps_manual_export_and_name_only_apply_contract (tests.test_candidates.CandidateContractTests) ... FAIL
+test_runtime_name_unknown_supports_resolved_lodging_without_coordinate_duplicate (tests.test_keyless_e2e.KeylessE2ETests) ... ERROR
+
+======================================================================
+ERROR: test_runtime_name_unknown_supports_resolved_lodging_without_coordinate_duplicate (tests.test_keyless_e2e.KeylessE2ETests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_keyless_e2e.py", line 760, in test_runtime_name_unknown_supports_resolved_lodging_without_coordinate_duplicate
+    actual = planning_module._add_runtime_name_unknowns(
+AttributeError: module 'china_trip_weaver.planning' has no attribute '_add_runtime_name_unknowns'
+
+======================================================================
+FAIL: test_full_plan_nearby_name_candidates_become_one_name_unknown_and_fix_names_manual (tests.test_amap_live.AMapMobilityTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_amap_live.py", line 649, in test_full_plan_nearby_name_candidates_become_one_name_unknown_and_fix_names_manual
+    self.assertEqual(1, len(relevant))
+AssertionError: 1 != 0
+
+======================================================================
+FAIL: test_full_plan_nearby_name_candidates_never_mask_incomplete_address (tests.test_amap_live.AMapMobilityTests) (include_candidate_unknown=False)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_amap_live.py", line 705, in test_full_plan_nearby_name_candidates_never_mask_incomplete_address
+    self.assertTrue(relevant[0]["reason"].startswith(
+AssertionError: False is not true
+
+======================================================================
+FAIL: test_full_plan_nearby_name_candidates_never_mask_incomplete_address (tests.test_amap_live.AMapMobilityTests) (include_candidate_unknown=True)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_amap_live.py", line 705, in test_full_plan_nearby_name_candidates_never_mask_incomplete_address
+    self.assertTrue(relevant[0]["reason"].startswith(
+AssertionError: False is not true
+
+======================================================================
+FAIL: test_fix_names_name_unknown_keeps_manual_export_and_name_only_apply_contract (tests.test_candidates.CandidateContractTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_candidates.py", line 555, in test_fix_names_name_unknown_keeps_manual_export_and_name_only_apply_contract
+    self.assertEqual(1, len(review_payload))
+AssertionError: 1 != 0
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.268s
+
+FAILED (failures=4, errors=1)
+```
+
+800 米控制组已单独为 `ok`；其余四类恰按任务书所述失败，没有以测试错误迁就实现。
+
+## 书 34 实现与定向绿态
+
+- `planning.py` 对坐标 unknown 的 exact matches 只过滤精确的 `identity_conflict:<ref>:nearby_name_candidates:<feedback>`；其它 warning 的 `suggested_names` 优先级与 fallback 顺序不变。
+- 原有 `_apply_runtime_unknown_reasons → _add_runtime_coordinate_unknowns → _drop_resolved_coordinate_unknowns` 顺序与职责原样保留；坐标 sweep 后新增 `_add_runtime_name_unknowns`，只为实际调用过且已有坐标的 POI/住宿添加 `/<group>/<index>/name`，并拒绝与同实体坐标 unknown 重复。
+- `candidates.py` 仅把可读 field-path 末段从单一 `coordinates` 扩成 `coordinates|name`；名称判定与回填逻辑没有改动。
+
+新增五条精确测试同命令（exit 0）原始输出：
+
+```text
+test_full_plan_nearby_name_candidates_become_one_name_unknown_and_fix_names_manual (tests.test_amap_live.AMapMobilityTests) ... ok
+test_full_plan_nearby_name_candidates_never_mask_incomplete_address (tests.test_amap_live.AMapMobilityTests) ... ok
+test_full_plan_distant_name_candidates_keep_coordinate_unknown_only (tests.test_amap_live.AMapMobilityTests) ... ok
+test_fix_names_name_unknown_keeps_manual_export_and_name_only_apply_contract (tests.test_candidates.CandidateContractTests) ... ok
+test_runtime_name_unknown_supports_resolved_lodging_without_coordinate_duplicate (tests.test_keyless_e2e.KeylessE2ETests) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.348s
+
+OK
+```
+
+三份相关模块组合门 `/usr/bin/python3 -m unittest -v tests.test_amap_live tests.test_candidates tests.test_keyless_e2e`（exit 0）原始摘要：
+
+```text
+----------------------------------------------------------------------
+Ran 125 tests in 10.644s
+
+OK
+```
+
+## 书 34 三组离线合成验收（原始输出）
+
+同一条内联 Python 验收命令用测试内合成 transport 走完整 `plan_trip`，并对第 1、3 组真实调用 `ctw candidates fix-names`（exit 0）：
+
+```text
+CASE_1_100M {"calls": ["poi", "geocode"], "coordinates_known": true, "unknowns": [{"claim_id": null, "field_path": "/pois/0/name", "provider": "amap", "reason": "identity_conflict:poi-synthetic-coordinate-cluster:nearby_name_candidates:{\"candidates\":[{\"administrative_area\":\"合成星港市/合成中心区\",\"name\":\"合成星庭东入口\"},{\"administrative_area\":\"合成星港市/合成中心区\",\"name\":\"合成星庭西入口\"}],\"suggested_names\":[\"合成星庭东入口\",\"合成星庭西入口\"]}"}]}
+CANDIDATE_NAME_MANUAL {"action":"unchanged","administrative_areas":["合成星港市/合成中心区","合成星港市/合成中心区"],"original_name":"合成星庭入口","reason":"ambiguous_suggestions","ref_id":"poi-synthetic-coordinate-cluster","source_field_path":"/pois/0/name","suggested_name":null,"suggested_names":["合成星庭东入口","合成星庭西入口"]}
+CANDIDATE_NAME_FIX_SUMMARY {"applied":0,"automatic":0,"manual":1,"mode":"report"}
+CASE_2_100M_INCOMPLETE_ADDRESS {"calls": ["poi"], "coordinates_known": false, "unknowns": [{"claim_id": "claim-6be1ff6ac3e383f2", "field_path": "/pois/0/coordinates", "provider": "amap", "reason": "incomplete_address:poi-synthetic-coordinate-cluster:poi_address_missing_admin_detail:{\"candidates\":[{\"administrative_area\":\"合成星港市\",\"name\":\"合成星庭东入口\"},{\"administrative_area\":\"合成星港市/合成中心区\",\"name\":\"合成星庭西入口\"}],\"suggested_names\":[\"合成星庭东入口\",\"合成星庭西入口\"]}"}]}
+CASE_3_800M {"calls": ["poi"], "coordinates_known": false, "unknowns": [{"claim_id": "claim-6be1ff6ac3e383f2", "field_path": "/pois/0/coordinates", "provider": "amap", "reason": "identity_conflict:poi-synthetic-coordinate-cluster:ambiguous_name_margin:{\"candidates\":[{\"administrative_area\":\"合成星港市/合成中心区\",\"name\":\"合成星庭东入口\"},{\"administrative_area\":\"合成星港市/合成中心区\",\"name\":\"合成星庭西入口\"}],\"suggested_names\":[\"合成星庭东入口\",\"合成星庭西入口\"]}"}]}
+CANDIDATE_NAME_MANUAL {"action":"unchanged","administrative_areas":["合成星港市/合成中心区","合成星港市/合成中心区"],"original_name":"合成星庭入口","reason":"ambiguous_suggestions","ref_id":"poi-synthetic-coordinate-cluster","source_field_path":"/pois/0/coordinates","suggested_name":null,"suggested_names":["合成星庭东入口","合成星庭西入口"]}
+CANDIDATE_NAME_FIX_SUMMARY {"applied":0,"automatic":0,"manual":1,"mode":"report"}
+```
+
+## 书 34 两次必做反向验证（原始红态）
+
+1. 临时把 `_add_runtime_coordinate_unknowns` 改回直接使用全部 matches，并移除 `_apply_runtime_unknown_reasons` 对坐标项的同类过滤；地址不完整测试（exit 1）：
+
+```text
+test_full_plan_nearby_name_candidates_never_mask_incomplete_address (tests.test_amap_live.AMapMobilityTests) ...
+======================================================================
+FAIL: test_full_plan_nearby_name_candidates_never_mask_incomplete_address (tests.test_amap_live.AMapMobilityTests) (include_candidate_unknown=False)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_amap_live.py", line 705, in test_full_plan_nearby_name_candidates_never_mask_incomplete_address
+    self.assertTrue(relevant[0]["reason"].startswith(
+AssertionError: False is not true
+
+======================================================================
+FAIL: test_full_plan_nearby_name_candidates_never_mask_incomplete_address (tests.test_amap_live.AMapMobilityTests) (include_candidate_unknown=True)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_amap_live.py", line 705, in test_full_plan_nearby_name_candidates_never_mask_incomplete_address
+    self.assertTrue(relevant[0]["reason"].startswith(
+AssertionError: False is not true
+
+----------------------------------------------------------------------
+Ran 1 test in 0.026s
+
+FAILED (failures=2)
+```
+
+恢复后，以反证前当前实现写入临时 Git index 为基准运行 `GIT_INDEX_FILE=... git diff --exit-code -- plugins/china-trip-weaver/src/china_trip_weaver/planning.py`（exit 0），原始输出为空。
+
+2. 临时把 `fix-names` field-path 判定改回只认 `coordinates`；100 米验收测试（exit 1）：
+
+```text
+test_full_plan_nearby_name_candidates_become_one_name_unknown_and_fix_names_manual (tests.test_amap_live.AMapMobilityTests) ... FAIL
+
+======================================================================
+FAIL: test_full_plan_nearby_name_candidates_become_one_name_unknown_and_fix_names_manual (tests.test_amap_live.AMapMobilityTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_amap_live.py", line 681, in test_full_plan_nearby_name_candidates_become_one_name_unknown_and_fix_names_manual
+    self.assertIn("CANDIDATE_NAME_MANUAL", fix_names.stdout)
+AssertionError: 'CANDIDATE_NAME_MANUAL' not found in 'CANDIDATE_NAME_FIX_SUMMARY {"applied":0,"automatic":0,"manual":0,"mode":"report"}\\n'
+
+----------------------------------------------------------------------
+Ran 1 test in 0.078s
+
+FAILED (failures=1)
+```
+
+恢复后同一临时 index 基准运行 `git diff --exit-code` 同时检查 `planning.py`、`candidates.py`（exit 0），原始输出为空；临时 index 随即精确删除。
+
+## 书 34 最终门禁与边界
+
+- 两次反证恢复后，新增五条精确测试再跑（exit 0）：`Ran 5 tests in 0.334s`、`OK`。
+- 完整仓库 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）原始摘要：
+
+```text
+----------------------------------------------------------------------
+Ran 508 tests in 34.307s
+
+OK
+```
+
+- 输出无 skipped 汇总，故 skipped 0；相对书 32/33 的 503 基线，本轮恰新增 5 条。
+- `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）原始输出：
+
+```text
+secret scan: 0 finding(s) across 376 file(s)
+```
+
+- `git diff --check`（exit 0）无输出；`git status --short` 与 `git diff --name-only` 均只列本轮六个白名单文件：`PROGRESS.md`、`planning.py`、`candidates.py`、`tests/test_amap_live.py`、`tests/test_candidates.py`、`tests/test_keyless_e2e.py`。
+- `git diff --exit-code -- plugins/china-trip-weaver/src/china_trip_weaver/mobility.py plugins/china-trip-weaver/schema`（exit 0）无输出，因此 `_poi_name_is_ambiguous`、`POI_NAME_SIMILARITY_MARGIN`、`_name_similarity` 与整个 Schema 均未改。
+- plugin manifest 与 package `__init__.py` 的版本面组合 diff（exit 0）无输出；本轮未升版本、未安装 Codex。
+- 调用顺序只读核验仍为第 308 行 `_apply_runtime_unknown_reasons`、319 行 `_add_runtime_coordinate_unknowns`、325 行 `_drop_resolved_coordinate_unknowns`，新增 name unknown 步骤位于其后第 326 行，没有调换既有三步。
+
+## 书 34 领导验收（2026-09-06，Claude 亲自复跑）
+
+- 明卷：`Ran 508 tests`、`OK`、skipped 0；`secret scan: 0 finding(s) across 376 file(s)`。
+- 完成条件二属实：`mobility.py`、`schema/` diff 为空；`_poi_name_is_ambiguous`、`POI_NAME_SIMILARITY_MARGIN`、`_name_similarity` 未动。
+- 实现比要求更稳：`_is_nearby_name_candidates_warning` 用四段精确解析而不是子串匹配；`_add_runtime_name_unknowns` 只对 `entity.get("coordinates")` 为真的实体生成，且当同一实体已有坐标 unknown 时跳过，杜绝重复。排除逻辑在 `_add_runtime_coordinate_unknowns` 与 `_apply_runtime_unknown_reasons` 两处都加了，后者还限定只作用于 `/coordinates` 结尾的条目。
+- 领导侧独立反向验证：去掉 reason 排除 → 全量 `FAILED (failures=1)`；把 `fix-names` 的读取范围改回只认 `coordinates` → `FAILED (failures=2)`。两次恢复后全量仍 508 OK。
+
+### 关键指标：同一份福建实网数据，书 33 vs 书 34
+
+```text
+坐标 unknown：15 -> 15（未变多）
+名字 unknown： 0 ->  4
+同一地点重复报两条：无
+坐标 unknown 原因分布：
+  ambiguous_name_margin              12 -> 12
+  geocode_ambiguous                   1 ->  1
+  nearby_name_candidates              1 ->  0
+  poi_address_missing_admin_detail    1 ->  2
+```
+
+- `nearby_name_candidates` 不再占据坐标 unknown 的 reason；`poi-confucian` 的真实原因（地址不完整）浮出水面，与验收前的最小复现结论一致。
+- 新增的四条名字 unknown 正是书 33 放行的那四条，`fix-names` 全部正确判为 MANUAL（`ambiguous_suggestions`）。
+
+### 一个我预估错的数字，以及它牵出的既有盲区
+
+- 我在发书时预告「MANUAL 会从 14 回到 18」，实测是 **17**。逐条比对后查清：新增 4 条没错，但原有 14 条里 `poi-confucian` 掉了出去。
+- 原因是 `candidates.py` 的 `_candidate_name_observation` 只认 `identity_conflict:` 前缀的 reason，`incomplete_address:` 前缀直接返回 `None`。书 34 把 confucian 的 reason 修准确后，它就落进了这个**既有盲区**。
+- 这不是书 34 引入的：`poi-luoyang-bridge` 的 reason 一直是 `incomplete_address:` 前缀，在 0.6.0、书 33、书 34 三个版本的 `fix-names` 输出里**一次都没出现过**（各 0 次）。
+- 实网影响 2 条（洛阳桥、泉州府文庙），它们的 reason 都带着完整的 `suggested_names`，却被整个忽略。已列为书 35 的目标之一。

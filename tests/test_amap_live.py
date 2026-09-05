@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -466,6 +467,19 @@ class AMapMobilityTests(unittest.TestCase):
         return pois[0], result, transport
 
     def _resolve_synthetic_ambiguous_cluster(self, distance_meters=None):
+        ref_id, scenario, candidates = self._synthetic_ambiguous_cluster(
+            distance_meters,
+        )
+        transport = AMapScenarioTransport(scenario)
+        result = MobilityBackend("live", credentials(), transport).resolve(
+            candidates, self.clock, ("walking",),
+        )
+        pois, _ = apply_locations(candidates["pois"], (), result)
+        return ref_id, pois[0], result, transport
+
+    def _synthetic_ambiguous_cluster(
+        self, distance_meters, *, complete_address=True,
+    ):
         ref_id = "poi-synthetic-coordinate-cluster"
         city = "合成星港"
         expected_name = "合成星庭入口"
@@ -480,7 +494,7 @@ class AMapMobilityTests(unittest.TestCase):
             "name": "合成星庭东入口",
             "pname": "合成省",
             "cityname": city + "市",
-            "adname": "合成中心区",
+            "adname": "合成中心区" if complete_address else "",
             "address": "合成路一号",
             "adcode": "990300",
             "type": "合成测试地点",
@@ -515,12 +529,53 @@ class AMapMobilityTests(unittest.TestCase):
             },
         }]}
         candidates = amap_scenario_candidates(scenario)
-        transport = AMapScenarioTransport(scenario)
-        result = MobilityBackend("live", credentials(), transport).resolve(
-            candidates, self.clock, ("walking",),
+        return ref_id, scenario, candidates
+
+    def _plan_synthetic_ambiguous_cluster(
+        self,
+        distance_meters,
+        *,
+        complete_address=True,
+        include_candidate_coordinate_unknown=False,
+    ):
+        ref_id, scenario, candidates = self._synthetic_ambiguous_cluster(
+            distance_meters,
+            complete_address=complete_address,
         )
-        pois, _ = apply_locations(candidates["pois"], (), result)
-        return ref_id, pois[0], result, transport
+        if include_candidate_coordinate_unknown:
+            candidates["unknowns"] = [{
+                "claim_id": candidates["claims"][0]["claim_id"],
+                "field_path": "/pois/0/coordinates",
+                "provider": "amap",
+                "reason": "synthetic research-time coordinate reason",
+            }]
+        request_value = {
+            "origin": None,
+            "destinations": [{
+                "ref_id": "city-synthetic-star-harbor",
+                "name": "合成星港",
+                "city": "合成星港",
+            }],
+            "start_date": "2026-09-10",
+            "end_date": "2026-09-10",
+            "travelers": 1,
+            "budget_cny": 2000,
+            "interests": ["synthetic-test-place"],
+            "pace": "balanced",
+            "constraints": [],
+            "assumptions": ["synthetic nearby-name acceptance"],
+            "locale": "zh-CN",
+            "pasted_notes": None,
+        }
+        transport = AMapScenarioTransport(scenario)
+        result = plan_trip(
+            request_value,
+            candidates,
+            self.clock,
+            RailBackend.from_spec("off", ROOT),
+            MobilityBackend("live", credentials(), transport),
+        )
+        return ref_id, candidates, result, transport
 
     def _assert_nearby_name_warning(self, ref_id, result):
         warnings = [
@@ -578,6 +633,125 @@ class AMapMobilityTests(unittest.TestCase):
             )
             for warning in result.warnings
         ), result.warnings)
+
+    def test_full_plan_nearby_name_candidates_become_one_name_unknown_and_fix_names_manual(self):
+        ref_id, candidates, result, transport = self._plan_synthetic_ambiguous_cluster(
+            100,
+            include_candidate_coordinate_unknown=True,
+        )
+
+        relevant = [
+            item for item in result.trip["unknowns"]
+            if item["field_path"].startswith("/pois/0/")
+        ]
+        self.assertEqual(["poi", "geocode"], transport.capabilities)
+        self.assertIsNotNone(result.trip["pois"][0]["coordinates"])
+        self.assertEqual(1, len(relevant))
+        self.assertEqual("/pois/0/name", relevant[0]["field_path"])
+        self.assertTrue(relevant[0]["reason"].startswith(
+            "identity_conflict:%s:nearby_name_candidates:" % ref_id
+        ))
+        self.assertNotIn("/pois/0/coordinates", {
+            item["field_path"] for item in result.trip["unknowns"]
+        })
+
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            candidates_path = Path(temporary) / "candidates.json"
+            trip_path = Path(temporary) / "trip.json"
+            candidates_path.write_text(
+                json.dumps(candidates, ensure_ascii=False), encoding="utf-8",
+            )
+            trip_path.write_text(
+                json.dumps(result.trip, ensure_ascii=False), encoding="utf-8",
+            )
+            before = candidates_path.read_bytes()
+            fix_names = subprocess.run(
+                [
+                    str(ROOT / "plugins" / "china-trip-weaver" / "scripts" / "ctw"),
+                    "candidates", "fix-names", str(candidates_path),
+                    "--trip", str(trip_path),
+                ],
+                text=True,
+                capture_output=True,
+            )
+            after = candidates_path.read_bytes()
+
+        self.assertEqual(0, fix_names.returncode, fix_names.stdout + fix_names.stderr)
+        self.assertEqual(before, after)
+        self.assertIn("CANDIDATE_NAME_MANUAL", fix_names.stdout)
+        self.assertIn('"source_field_path":"/pois/0/name"', fix_names.stdout)
+        self.assertIn(
+            '"suggested_names":["合成星庭东入口","合成星庭西入口"]',
+            fix_names.stdout,
+        )
+
+    def test_full_plan_nearby_name_candidates_never_mask_incomplete_address(self):
+        for include_candidate_unknown in (False, True):
+            with self.subTest(include_candidate_unknown=include_candidate_unknown):
+                ref_id, _, result, transport = self._plan_synthetic_ambiguous_cluster(
+                    100,
+                    complete_address=False,
+                    include_candidate_coordinate_unknown=include_candidate_unknown,
+                )
+                relevant = [
+                    item for item in result.trip["unknowns"]
+                    if item["field_path"].startswith("/pois/0/")
+                ]
+
+                self.assertEqual(["poi"], transport.capabilities)
+                self.assertIsNone(result.trip["pois"][0]["coordinates"])
+                self.assertEqual(1, len(relevant))
+                self.assertEqual("/pois/0/coordinates", relevant[0]["field_path"])
+                self.assertTrue(relevant[0]["reason"].startswith(
+                    "incomplete_address:%s:poi_address_missing_admin_detail:" % ref_id
+                ))
+                self.assertNotIn("nearby_name_candidates", relevant[0]["reason"])
+
+    def test_full_plan_distant_name_candidates_keep_coordinate_unknown_only(self):
+        ref_id, candidates, result, transport = self._plan_synthetic_ambiguous_cluster(
+            800,
+            include_candidate_coordinate_unknown=True,
+        )
+        relevant = [
+            item for item in result.trip["unknowns"]
+            if item["field_path"].startswith("/pois/0/")
+        ]
+
+        self.assertEqual(["poi"], transport.capabilities)
+        self.assertIsNone(result.trip["pois"][0]["coordinates"])
+        self.assertEqual(1, len(relevant))
+        self.assertEqual("/pois/0/coordinates", relevant[0]["field_path"])
+        self.assertTrue(relevant[0]["reason"].startswith(
+            "identity_conflict:%s:ambiguous_name_margin:" % ref_id
+        ))
+        self.assertNotIn("/pois/0/name", {
+            item["field_path"] for item in result.trip["unknowns"]
+        })
+
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            candidates_path = Path(temporary) / "candidates.json"
+            trip_path = Path(temporary) / "trip.json"
+            candidates_path.write_text(
+                json.dumps(candidates, ensure_ascii=False), encoding="utf-8",
+            )
+            trip_path.write_text(
+                json.dumps(result.trip, ensure_ascii=False), encoding="utf-8",
+            )
+            fix_names = subprocess.run(
+                [
+                    str(ROOT / "plugins" / "china-trip-weaver" / "scripts" / "ctw"),
+                    "candidates", "fix-names", str(candidates_path),
+                    "--trip", str(trip_path),
+                ],
+                text=True,
+                capture_output=True,
+            )
+
+        self.assertEqual(0, fix_names.returncode, fix_names.stdout + fix_names.stderr)
+        self.assertIn("CANDIDATE_NAME_MANUAL", fix_names.stdout)
+        self.assertIn(
+            '"source_field_path":"/pois/0/coordinates"', fix_names.stdout,
+        )
 
     def _resolve_poi_admin_case(self, case_name, expected_city, provider_city, district):
         ref_id = "poi-admin-" + case_name

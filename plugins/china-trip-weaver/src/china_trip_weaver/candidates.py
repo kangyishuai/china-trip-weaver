@@ -527,7 +527,7 @@ def _candidate_name_observation(unknown: Any) -> Optional[_CandidateNameObservat
         or pointer_parts[0] != ""
         or pointer_parts[1] not in ("pois", "lodgings")
         or not pointer_parts[2].isdigit()
-        or pointer_parts[3] != "coordinates"
+        or pointer_parts[3] not in ("coordinates", "name")
     ):
         return None
     reason = unknown.get("reason")

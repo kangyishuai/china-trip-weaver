@@ -503,6 +503,84 @@ class CandidateContractTests(unittest.TestCase):
             result.stdout,
         )
 
+    def test_fix_names_name_unknown_keeps_manual_export_and_name_only_apply_contract(self):
+        trip = load(NAME_FIX / "trip.json")
+        manual_unknown = next(
+            item for item in trip["unknowns"]
+            if "poi-fix-ambiguous" in item["reason"]
+        )
+        self.assertEqual("/pois/0/coordinates", manual_unknown["field_path"])
+        manual_unknown["field_path"] = "/pois/0/name"
+
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            candidates_path = Path(temporary) / "candidates.json"
+            trip_path = Path(temporary) / "trip.json"
+            review_path = Path(temporary) / "manual-name-review.json"
+            candidates_path.write_bytes((NAME_FIX / "candidates.json").read_bytes())
+            trip_path.write_text(
+                json.dumps(trip, ensure_ascii=False), encoding="utf-8",
+            )
+            before_bytes = candidates_path.read_bytes()
+            before = load(candidates_path)
+            export = subprocess.run(
+                [
+                    str(CTW), "candidates", "fix-names", str(candidates_path),
+                    "--trip", str(trip_path), "--export-manual", str(review_path),
+                ],
+                text=True,
+                capture_output=True,
+            )
+            review_bytes = review_path.read_bytes() if review_path.exists() else b""
+            review = load(review_path) if review_path.exists() else []
+            if review:
+                review[0]["chosen"] = "合成云廊西门"
+                review_path.write_text(
+                    json.dumps(review, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+            applied = subprocess.run(
+                [
+                    str(CTW), "candidates", "fix-names", str(candidates_path),
+                    "--trip", str(trip_path), "--apply-manual", str(review_path),
+                ],
+                text=True,
+                capture_output=True,
+            )
+            after_bytes = candidates_path.read_bytes()
+            after = load(candidates_path)
+
+        self.assertEqual(0, export.returncode, export.stdout + export.stderr)
+        self.assertEqual("", export.stderr)
+        review_payload = json.loads(review_bytes.decode("utf-8"))
+        self.assertEqual(1, len(review_payload))
+        self.assertEqual({
+            "administrative_areas": ["合成丙市/合成东区", "合成丙市/合成西区"],
+            "chosen": "",
+            "original_name": "合成云廊",
+            "ref_id": "poi-fix-ambiguous",
+            "suggested_names": ["合成云廊东门", "合成云廊西门"],
+        }, review_payload[0])
+        self.assertIn('"entries":1', export.stdout)
+        self.assertEqual(0, applied.returncode, applied.stdout + applied.stderr)
+        self.assertEqual("", applied.stderr)
+        expected = copy.deepcopy(before)
+        expected["pois"][2]["name"] = "合成云廊西门"
+        self.assertEqual(expected, after)
+        self.assertEqual(
+            before["pois"][2]["coordinates"],
+            after["pois"][2]["coordinates"],
+        )
+        self.assertEqual(
+            before_bytes.replace(
+                '"name": "合成云廊"'.encode("utf-8"),
+                '"name": "合成云廊西门"'.encode("utf-8"),
+                1,
+            ),
+            after_bytes,
+        )
+        self.assertIn('"applied":1', applied.stdout)
+        self.assertIn('"skipped":0', applied.stdout)
+
     def test_fix_names_apply_manual_review_writes_exact_suggestion_and_validates(self):
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
             candidates_path = Path(temporary) / "candidates.json"

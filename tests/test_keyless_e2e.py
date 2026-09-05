@@ -17,6 +17,7 @@ PLUGIN = ROOT / "plugins" / "china-trip-weaver"
 SRC = PLUGIN / "src"
 sys.path.insert(0, str(SRC))
 
+import china_trip_weaver.planning as planning_module
 from china_trip_weaver.clock import FixedClock
 from china_trip_weaver.contracts import canonical_json
 from china_trip_weaver.credentials import resolve_credentials
@@ -740,6 +741,45 @@ class KeylessE2ETests(unittest.TestCase):
         )
         self.assertIn("business_conflict", amap_health["reason"])
         self.assertIn("identity_conflict", amap_health["reason"])
+
+    def test_runtime_name_unknown_supports_resolved_lodging_without_coordinate_duplicate(self):
+        ref_id = "lodging-synthetic-nearby-name"
+        reason = (
+            "identity_conflict:%s:nearby_name_candidates:" % ref_id
+            + '{"candidates":[{"administrative_area":"合成甲城/合成东区",'
+              '"name":"合成旅舍东楼"},{"administrative_area":"合成甲城/合成西区",'
+              '"name":"合成旅舍西楼"}],"suggested_names":'
+              '["合成旅舍东楼","合成旅舍西楼"]}'
+        )
+        lodging = {
+            "lodging_id": ref_id,
+            "name": "合成旅舍",
+            "coordinates": {"gcj02": {"lng": 0.1, "lat": 0.1}},
+        }
+
+        actual = planning_module._add_runtime_name_unknowns(
+            (),
+            {"pois": (), "lodgings": (lodging,)},
+            (reason,),
+            ("amap.geocode:%s" % ref_id,),
+        )
+        unresolved = planning_module._add_runtime_name_unknowns(
+            (),
+            {"pois": (), "lodgings": (dict(lodging, coordinates=None),)},
+            (reason,),
+            ("amap.geocode:%s" % ref_id,),
+        )
+
+        self.assertEqual([{
+            "field_path": "/lodgings/0/name",
+            "reason": reason,
+            "provider": "amap",
+            "claim_id": None,
+        }], actual)
+        self.assertEqual([], unresolved)
+        self.assertFalse(any(
+            item["field_path"].endswith("/coordinates") for item in actual
+        ))
 
     def test_rail_runtime_presale_reason_replaces_each_fallback_unknown(self):
         folder = E2E / "beijing-shanghai-3d"

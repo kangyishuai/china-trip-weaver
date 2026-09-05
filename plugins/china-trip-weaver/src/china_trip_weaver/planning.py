@@ -323,6 +323,12 @@ def plan_trip(
         mobility.business_calls,
     )
     unknowns = _drop_resolved_coordinate_unknowns(unknowns, pois, lodgings)
+    unknowns = _add_runtime_name_unknowns(
+        unknowns,
+        entities,
+        mobility.warnings,
+        mobility.business_calls,
+    )
     transport_pricing = _transport_pricing(
         normalized_request, days, transport_legs,
     )
@@ -956,10 +962,14 @@ def _add_runtime_coordinate_unknowns(
                 warning for warning, parts in parsed_warnings
                 if all(parts) and parts[1] in aliases
             ]
-            runtime_reason = next((
+            blocking_matches = [
                 warning for warning in matches
+                if not _is_nearby_name_candidates_warning(warning)
+            ]
+            runtime_reason = next((
+                warning for warning in blocking_matches
                 if '"suggested_names":' in warning
-            ), matches[0] if matches else None)
+            ), blocking_matches[0] if blocking_matches else None)
             field_path = "/%s/%d/coordinates" % (group, index)
             if runtime_reason is None or field_path in existing_paths:
                 continue
@@ -971,6 +981,80 @@ def _add_runtime_coordinate_unknowns(
             })
             existing_paths.add(field_path)
     return result
+
+
+def _add_runtime_name_unknowns(
+    unknowns: Sequence[Mapping[str, Any]],
+    entities: Mapping[str, Sequence[Mapping[str, Any]]],
+    warnings: Sequence[str],
+    business_calls: Sequence[str],
+) -> List[Mapping[str, Any]]:
+    """Give a resolved entity's nearby-name warning its own unknown field."""
+
+    result = [copy.deepcopy(dict(item)) for item in unknowns]
+    existing_paths = {
+        item.get("field_path") for item in result
+        if isinstance(item.get("field_path"), str)
+    }
+    attempted_refs = {
+        item.split(":", 1)[1]
+        for item in business_calls
+        if isinstance(item, str)
+        and item.startswith(("amap.poi:", "amap.geocode:"))
+        and ":" in item
+        and item.split(":", 1)[1]
+    }
+    parsed_warnings = [
+        (warning, warning.split(":", 2))
+        for warning in warnings
+        if isinstance(warning, str)
+        and _is_nearby_name_candidates_warning(warning)
+    ]
+    specifications = (
+        ("pois", "poi_id", "poi"),
+        ("lodgings", "lodging_id", "lodging"),
+    )
+    for group, id_key, kind in specifications:
+        for index, entity in enumerate(entities.get(group, ())):
+            if not entity.get("coordinates"):
+                continue
+            target = _runtime_entity_target(
+                entity, group, (id_key, kind), None,
+            )
+            if target is None:
+                continue
+            _, aliases, _ = target
+            if attempted_refs.isdisjoint(aliases):
+                continue
+            runtime_reason = next((
+                warning for warning, parts in parsed_warnings
+                if all(parts) and parts[1] in aliases
+            ), None)
+            field_path = "/%s/%d/name" % (group, index)
+            coordinate_path = "/%s/%d/coordinates" % (group, index)
+            if (
+                runtime_reason is None
+                or field_path in existing_paths
+                or coordinate_path in existing_paths
+            ):
+                continue
+            result.append({
+                "field_path": field_path,
+                "reason": runtime_reason,
+                "provider": "amap",
+                "claim_id": None,
+            })
+            existing_paths.add(field_path)
+    return result
+
+
+def _is_nearby_name_candidates_warning(warning: str) -> bool:
+    parts = warning.split(":", 3)
+    return (
+        len(parts) == 4
+        and parts[0] == "identity_conflict"
+        and parts[2] == "nearby_name_candidates"
+    )
 
 
 def _apply_runtime_unknown_reasons(
@@ -1011,6 +1095,14 @@ def _apply_runtime_unknown_reasons(
                 warning for warning, parts in parsed
                 if all(parts) and parts[1] in aliases
             ]
+            if (
+                str(provider) == "amap"
+                and str(selected.get("field_path", "")).endswith("/coordinates")
+            ):
+                exact_matches = [
+                    warning for warning in exact_matches
+                    if not _is_nearby_name_candidates_warning(warning)
+                ]
             exact = next((
                 warning for warning in exact_matches
                 if str(provider) == "amap" and '"suggested_names":' in warning
