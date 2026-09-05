@@ -1790,3 +1790,11 @@ BUSINESS_CALL_ATTEMPTS ["amap.geocode:lodging-j16-shanghai-central", "amap.poi:p
 - 机器白名单审计原始输出 `ALLOWLIST_OK files=9`；仅 `BLOCKED.md`、`PROGRESS.md`、5 个允许源文件与 2 个允许测试。`git diff --check` exit 0。
 - schema/、demo/、render/、station_distance、candidates、FlyAI、VariFlight、scheduler、Trip validator、plugin manifest、docs 与 secret scanner 的组合 `git diff --exit-code` exit 0、无输出；README/manifest/`__init__.py` 等版本承载文件 diff 亦为空，版本保持 0.4.0。
 - `BLOCKED.md` 已随交付记录“无新增阻塞”；未跑实网/demo、未安装 Codex、未发布、未写 provider 响应到磁盘。当前验收轮次 4/12，下一步仅最终文档态门禁、暂存复核与提交。
+
+## 书 16 提交后核验（完成）
+
+- 实现与验收提交 `38ef00472954be9633afc6affc72b7fbcc5a404e`（`Scope AMap calls per Journey segment`）包含恰好上述 9 个白名单文件，`867 insertions/27 deletions`；`BLOCKED.md` 已在同一提交中。
+- 提交后首次并发全量只因工具 30 秒 yield 边界返回进度点、没有退出码，未冒充成功或失败；单独重跑同一命令（exit 0）完整输出 `Ran 422 tests in 29.532s`、`OK`、skipped 0。
+- 提交后 secret scan（exit 0）仍为 `0 finding(s) across 372 file(s)`；禁碰路径的 `HEAD^..HEAD` diff exit 0、无输出。
+- 实现提交后 `git status --short --branch` 为 `main...origin/main [ahead 1]` 且无文件项；本地 HEAD 为 `38ef004...`，`origin/main` 仍为开工的 `03fced1...`，确认未 push/未发布。
+- 本段记录随后作为仅 `PROGRESS.md` 的收尾提交交付；当前验收轮次 5/12，书 16 完成。
