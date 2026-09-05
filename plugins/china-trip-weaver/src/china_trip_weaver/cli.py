@@ -94,6 +94,10 @@ def _parser() -> argparse.ArgumentParser:
     )
     add_poi.add_argument("--price", dest="price_amount", type=float, default=None)
     add_poi.add_argument("--queried-at", default=None)
+    add_poi.add_argument(
+        "--verify-name", action="store_true",
+        help="check the POI name with AMap before writing; failure never blocks the write",
+    )
 
     add_lodging = candidate_commands.add_parser("add-lodging", help="append one researched lodging candidate")
     add_lodging.add_argument("path", type=Path)
@@ -248,7 +252,46 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Optional[Sequence[str]] = None, *, credential_path: Optional[Path] = None) -> int:
+def _check_candidate_poi_name(
+    name: str,
+    city: str,
+    clock: Any,
+    credential_path: Optional[Path],
+    transport: Optional[Any],
+) -> Any:
+    from .credentials import resolve_credentials
+    from .errors import CTWError
+    from .mobility import POINameCheck, check_poi_name_identity
+    from .providers.amap_http import AMapCallBudget, AMapHTTPTransport, MAX_QPS
+
+    try:
+        credentials = resolve_credentials(credential_path=credential_path)
+    except CTWError:
+        return POINameCheck("unavailable", ("credential_error",))
+    active_transport = transport
+    if credentials.get("AMAP_WEBSERVICE_KEY") and active_transport is None:
+        active_transport = AMapHTTPTransport(
+            credentials,
+            budget=AMapCallBudget(max_calls=2, qps=MAX_QPS),
+        )
+    try:
+        return check_poi_name_identity(
+            name,
+            city,
+            clock,
+            credentials,
+            active_transport,
+        )
+    except Exception:
+        return POINameCheck("unavailable", ("check_failed",))
+
+
+def main(
+    argv: Optional[Sequence[str]] = None,
+    *,
+    credential_path: Optional[Path] = None,
+    poi_name_transport: Optional[Any] = None,
+) -> int:
     args = _parser().parse_args(argv)
     progress = _NDJSONProgress(getattr(args, "progress", None))
     if args.command == "validate":
@@ -271,6 +314,15 @@ def main(argv: Optional[Sequence[str]] = None, *, credential_path: Optional[Path
                 return 0
             clock = FixedClock.from_iso(args.queried_at) if args.queried_at else SystemClock()
             if args.candidate_command == "add-poi":
+                name_check = None
+                if args.verify_name:
+                    name_check = _check_candidate_poi_name(
+                        args.name,
+                        args.city,
+                        clock,
+                        credential_path,
+                        poi_name_transport,
+                    )
                 entity = add_poi_candidate(
                     args.path,
                     name=args.name,
@@ -286,6 +338,8 @@ def main(argv: Optional[Sequence[str]] = None, *, credential_path: Optional[Path
                     opening_status=args.opening_status,
                     price_amount=args.price_amount,
                 )
+                if name_check is not None:
+                    print(name_check.render())
                 print("CANDIDATE_POI_ADDED %s id=%s" % (args.path, entity["poi_id"]))
                 return 0
             entity = add_lodging_candidate(

@@ -11,13 +11,13 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
 from .candidates import validate_candidates
 from .clock import Clock, isoformat_seconds
-from .contracts import ProviderRequest
+from .contracts import ProviderRequest, canonical_json
 from .credentials import CredentialResolution, resolve_credentials
 from .evidence import make_claim
 from .matrix import RouteCell, bounded_query_plan, haversine_meters
 from .providers.amap import AMapAdapter
 from .providers.amap_http import AMapCallBudget, AMapHTTPTransport, MAX_CALLS_PER_RUN, MAX_QPS
-from .providers.base import ProviderContext, ProviderTransport, stable_id
+from .providers.base import ProviderContext, ProviderTransport, sanitize_text, stable_id
 
 
 MODE_ALIASES = {
@@ -72,6 +72,20 @@ class MobilityResult:
             "business_calls": list(self.business_calls),
             "warnings": list(self.warnings),
         }
+
+
+@dataclass(frozen=True)
+class POINameCheck:
+    status: str
+    reasons: Tuple[str, ...]
+    feedback: Optional[str] = None
+
+    def render(self) -> str:
+        reason = ",".join(self.reasons) if self.reasons else "none"
+        detail = " details=%s" % self.feedback if self.feedback is not None else ""
+        return "POI_NAME_CHECK status=%s reason=%s%s" % (
+            self.status, reason, detail,
+        )
 
 
 class MobilityBackend:
@@ -185,8 +199,14 @@ class MobilityBackend:
                 if conflict_reasons:
                     claims.extend(_claims_with_status(poi_result.claims, "conflict"))
                     errors.append("identity_conflict")
+                    feedback = poi_identity_feedback(
+                        poi_result.normalized_items,
+                        poi_result.claims,
+                    )
                     warnings.extend(("identity_conflict",) + tuple(
-                        "identity_conflict:%s:%s" % (entity["ref_id"], reason)
+                        "identity_conflict:%s:%s:%s" % (
+                            entity["ref_id"], reason, feedback,
+                        )
                         for reason in conflict_reasons
                     ))
                     continue
@@ -250,7 +270,14 @@ class MobilityBackend:
                     errors.append("identity_conflict")
                     warnings.extend((
                         "identity_conflict",
-                        "identity_conflict:%s:geocode_admin_mismatch" % entity["ref_id"],
+                        "identity_conflict:%s:geocode_admin_mismatch:%s" % (
+                            entity["ref_id"],
+                            poi_identity_feedback(
+                                (selected,),
+                                identity_claims,
+                                actual_administrative_area=provider_place.get("city"),
+                            ),
+                        ),
                     ))
                     continue
                 claims.extend(identity_claims)
@@ -401,6 +428,69 @@ class MobilityBackend:
         )
 
 
+def check_poi_name_identity(
+    name: str,
+    city: str,
+    clock: Clock,
+    credentials: CredentialResolution,
+    transport: Optional[ProviderTransport],
+    *,
+    deadline_seconds: float = 8.0,
+) -> POINameCheck:
+    """Check one prospective POI name without writing coordinates or candidates."""
+
+    if not credentials.get("AMAP_WEBSERVICE_KEY"):
+        return POINameCheck("unavailable", ("credential_missing",))
+    if transport is None:
+        return POINameCheck("unavailable", ("transport_unavailable",))
+    if deadline_seconds <= 0:
+        return POINameCheck("unavailable", ("invalid_deadline",))
+    entity = {
+        "ref_id": stable_id("poi-name-check", city, name),
+        "name": name,
+        "city": city,
+    }
+    request = ProviderRequest(
+        request_id=stable_id("amap-poi-name-check", name, city),
+        capability="poi",
+        parameters={
+            "subject_ref": entity["ref_id"],
+            "keywords": name,
+            "city": city,
+            "page_size": 3,
+            "page_num": 1,
+        },
+        deadline_ms=int(min(deadline_seconds, 8.0) * 1000),
+        as_of=isoformat_seconds(clock)[:10],
+        cache_policy="bypass",
+        trace={"stage": "candidate-poi-name-check"},
+    )
+    result = AMapAdapter().query(
+        request,
+        ProviderContext(clock=clock, credentials=credentials, transport=transport),
+    )
+    if not result.normalized_items:
+        reason = result.error_class or "no_results"
+        status = "ambiguous" if reason == "no_results" else "unavailable"
+        feedback = poi_identity_feedback((), ()) if status == "ambiguous" else None
+        return POINameCheck(status, (reason,), feedback)
+    feedback = poi_identity_feedback(result.normalized_items, result.claims)
+    conflicts = _poi_identity_conflicts(entity, result.normalized_items)
+    if conflicts:
+        return POINameCheck("ambiguous", conflicts, feedback)
+    selected_ids = set(result.normalized_items[0].get("claim_ids", ()))
+    identity = next((
+        claim.get("value") for claim in result.claims
+        if claim.get("claim_id") in selected_ids
+        and claim.get("field_path") == "/provider_identity"
+    ), None)
+    if not _complete_poi_address(identity):
+        return POINameCheck(
+            "ambiguous", ("poi_address_missing_admin_detail",), feedback,
+        )
+    return POINameCheck("unique", (), feedback)
+
+
 def normalize_modes(modes: Sequence[str]) -> Tuple[str, ...]:
     normalized = []
     for raw in modes:
@@ -429,6 +519,60 @@ def _poi_identity_conflicts(
         if first_score - second_score < POI_NAME_SIMILARITY_MARGIN:
             reasons.append("ambiguous_name_margin")
     return tuple(reasons)
+
+
+def poi_identity_feedback(
+    candidates: Sequence[Mapping[str, Any]],
+    claims: Sequence[Mapping[str, Any]],
+    *,
+    limit: int = 3,
+    actual_administrative_area: Optional[Any] = None,
+) -> str:
+    """Render a bounded, sanitized projection of provider identity candidates."""
+
+    if limit < 1:
+        raise ValueError("POI identity feedback limit must be positive")
+    claims_by_id = {
+        claim.get("claim_id"): claim
+        for claim in claims
+        if isinstance(claim, Mapping) and isinstance(claim.get("claim_id"), str)
+    }
+    projected = []
+    for candidate in candidates[:limit]:
+        claim_ids = candidate.get("claim_ids", ())
+        identity = next((
+            claims_by_id[claim_id].get("value")
+            for claim_id in claim_ids
+            if claim_id in claims_by_id
+            and claims_by_id[claim_id].get("field_path") == "/provider_identity"
+            and isinstance(claims_by_id[claim_id].get("value"), dict)
+        ), {}) if isinstance(claim_ids, (list, tuple)) else {}
+        name = _feedback_text(candidate.get("name"), 160, "unknown")
+        city = _feedback_text(candidate.get("city"), 80, "unknown")
+        district = _feedback_text(identity.get("district"), 80, "")
+        admin_parts = [city]
+        if district and district not in admin_parts:
+            admin_parts.append(district)
+        projected.append({
+            "administrative_area": "/".join(admin_parts),
+            "name": name,
+        })
+    feedback: Dict[str, Any] = {
+        "candidates": projected,
+        "suggested_names": [item["name"] for item in projected],
+    }
+    if actual_administrative_area is not None:
+        feedback["actual_administrative_area"] = _feedback_text(
+            actual_administrative_area, 80, "unknown",
+        )
+    return canonical_json(feedback)
+
+
+def _feedback_text(value: Any, max_length: int, fallback: str) -> str:
+    if not isinstance(value, str):
+        return fallback
+    clean = sanitize_text(value, max_length)
+    return clean or fallback
 
 
 def _name_similarity(expected: Any, actual: Any) -> float:

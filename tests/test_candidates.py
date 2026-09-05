@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import contextlib
 import hashlib
+import io
 import json
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,6 +26,9 @@ from china_trip_weaver.candidates import (
     validate_candidates,
 )
 from china_trip_weaver.clock import FixedClock
+from china_trip_weaver.cli import main as cli_main
+from china_trip_weaver.providers.base import ProviderTimeout, stable_id
+from tests.test_providers import AMAP_SCENARIOS, AMapScenarioTransport
 
 
 E2E = ROOT / "tests" / "fixtures" / "e2e"
@@ -35,6 +42,37 @@ def load(path: Path):
 
 
 class CandidateContractTests(unittest.TestCase):
+    def _run_verified_poi_add(self, path, credential_path, transport):
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        arguments = [
+            "candidates", "add-poi", str(path),
+            "--name", "海岛生态廊道", "--city", "珠海",
+            "--category", "synthetic-test-place",
+            "--source-url", "https://example.invalid/poi-name-check",
+            "--queried-at", "2026-09-04T12:00:00+08:00",
+            "--verify-name",
+        ]
+        with mock.patch.dict(os.environ, {}, clear=True):
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                return_code = cli_main(
+                    arguments,
+                    credential_path=credential_path,
+                    poi_name_transport=transport,
+                )
+        return return_code, stdout.getvalue(), stderr.getvalue()
+
+    @staticmethod
+    def _configured_amap_file(directory):
+        credential_path = Path(directory) / "credentials.env"
+        key_name = "AMAP_" + "WEBSERVICE_KEY"
+        credential_path.write_text(
+            key_name + "=ctw-canary-candidate-name-check-not-real\n",
+            encoding="utf-8",
+        )
+        credential_path.chmod(0o600)
+        return credential_path
+
     def test_schema_reuses_frozen_trip_definitions(self):
         schema = load_candidates_schema()
         refs = {
@@ -244,6 +282,113 @@ class CandidateContractTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 add_poi_candidate(path, **arguments)
             self.assertEqual(populated, path.read_bytes())
+
+    def test_cli_add_poi_name_check_reports_unique_and_writes_candidate(self):
+        scenario = load(AMAP_SCENARIOS / "g3_identity_conflict.json")
+        scenario["entities"][0]["ref_id"] = stable_id(
+            "poi-name-check", "珠海", "海岛生态廊道",
+        )
+        scenario["entities"][0]["poi_results"] = [
+            scenario["entities"][0]["poi_results"][0]
+        ]
+        transport = AMapScenarioTransport(scenario)
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            path = Path(temporary) / "candidates.json"
+            initialize_candidates(path)
+            credential_path = self._configured_amap_file(temporary)
+            return_code, stdout, stderr = self._run_verified_poi_add(
+                path, credential_path, transport,
+            )
+            value = load(path)
+
+        self.assertEqual(0, return_code, stdout + stderr)
+        self.assertEqual("", stderr)
+        self.assertEqual(1, transport.calls)
+        self.assertEqual(["poi"], transport.capabilities)
+        self.assertIn("POI_NAME_CHECK status=unique reason=none", stdout)
+        self.assertIn('"administrative_area":"珠海市/香洲区"', stdout)
+        self.assertIn('"suggested_names":["海岛生态廊道甲区"]', stdout)
+        self.assertIn("CANDIDATE_POI_ADDED", stdout)
+        self.assertIsNone(value["pois"][0]["coordinates"])
+        self.assertTrue(validate_candidates(value).ok)
+
+    def test_cli_add_poi_name_check_reports_ambiguous_and_still_writes(self):
+        scenario = load(AMAP_SCENARIOS / "g3_identity_conflict.json")
+        scenario["entities"][0]["ref_id"] = stable_id(
+            "poi-name-check", "珠海", "海岛生态廊道",
+        )
+        transport = AMapScenarioTransport(scenario)
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            path = Path(temporary) / "candidates.json"
+            initialize_candidates(path)
+            credential_path = self._configured_amap_file(temporary)
+            return_code, stdout, stderr = self._run_verified_poi_add(
+                path, credential_path, transport,
+            )
+            value = load(path)
+
+        self.assertEqual(0, return_code, stdout + stderr)
+        self.assertEqual("", stderr)
+        self.assertEqual(1, transport.calls)
+        self.assertIn(
+            "POI_NAME_CHECK status=ambiguous reason=ambiguous_name_margin",
+            stdout,
+        )
+        self.assertIn("海岛生态廊道甲区", stdout)
+        self.assertIn("海岛生态廊道乙区", stdout)
+        self.assertIn("CANDIDATE_POI_ADDED", stdout)
+        self.assertIsNone(value["pois"][0]["coordinates"])
+        self.assertTrue(validate_candidates(value).ok)
+
+    def test_cli_add_poi_name_check_missing_key_is_non_blocking(self):
+        scenario = load(AMAP_SCENARIOS / "g3_identity_conflict.json")
+        transport = AMapScenarioTransport(scenario)
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            path = Path(temporary) / "candidates.json"
+            initialize_candidates(path)
+            return_code, stdout, stderr = self._run_verified_poi_add(
+                path, Path(temporary) / "missing.env", transport,
+            )
+            value = load(path)
+
+        self.assertEqual(0, return_code, stdout + stderr)
+        self.assertEqual("", stderr)
+        self.assertEqual(0, transport.calls)
+        self.assertIn(
+            "POI_NAME_CHECK status=unavailable reason=credential_missing",
+            stdout,
+        )
+        self.assertIn("CANDIDATE_POI_ADDED", stdout)
+        self.assertIsNone(value["pois"][0]["coordinates"])
+        self.assertTrue(validate_candidates(value).ok)
+
+    def test_cli_add_poi_name_check_provider_failure_is_non_blocking(self):
+        class TimeoutTransport:
+            def __init__(self):
+                self.calls = 0
+
+            def execute(self, provider, request):
+                del provider, request
+                self.calls += 1
+                raise ProviderTimeout("synthetic candidate-name timeout")
+
+        transport = TimeoutTransport()
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            path = Path(temporary) / "candidates.json"
+            initialize_candidates(path)
+            credential_path = self._configured_amap_file(temporary)
+            return_code, stdout, stderr = self._run_verified_poi_add(
+                path, credential_path, transport,
+            )
+            value = load(path)
+
+        self.assertEqual(0, return_code, stdout + stderr)
+        self.assertEqual("", stderr)
+        self.assertEqual(2, transport.calls)
+        self.assertIn("POI_NAME_CHECK status=unavailable reason=timeout", stdout)
+        self.assertIn("CANDIDATE_POI_ADDED", stdout)
+        self.assertIsNone(value["pois"][0]["coordinates"])
+        self.assertTrue(validate_candidates(value).ok)
 
 
 if __name__ == "__main__":

@@ -428,6 +428,16 @@ class AMapMobilityTests(unittest.TestCase):
         wrong_pois, _ = apply_locations(wrong_admin_candidates["pois"], (), wrong_admin)
         self.assertIsNone(wrong_pois[0]["coordinates"])
         self.assertNotIn("verified", {claim["status"] for claim in wrong_admin.claims})
+        geocode_warning = next(
+            item for item in wrong_admin.warnings
+            if item.startswith("identity_conflict:poi-g3-corridor:geocode_admin_mismatch:")
+        )
+        geocode_feedback = json.loads(geocode_warning.split(":", 3)[3])
+        self.assertEqual("北京市", geocode_feedback["actual_administrative_area"])
+        self.assertEqual([{
+            "administrative_area": "珠海市/香洲区",
+            "name": "海岛生态廊道甲区",
+        }], geocode_feedback["candidates"])
 
         provider_answer_scenario = copy.deepcopy(wrong_admin_scenario)
         provider_answer_scenario["entities"][0]["geocode"].update({
@@ -446,6 +456,82 @@ class AMapMobilityTests(unittest.TestCase):
         self.assertEqual(1, len(provider_answer.locations))
         self.assertEqual("珠海市", provider_answer.locations[0].city)
         self.assertEqual("海岛生态廊道甲区", provider_answer.locations[0].name)
+
+    def test_identity_conflict_feedback_limits_and_sanitizes_provider_candidates(self):
+        scenario = load(AMAP_SCENARIOS / "g3_identity_conflict.json")
+        first = scenario["entities"][0]["poi_results"][0]
+        third = copy.deepcopy(first)
+        third.update({
+            "id": "SYNTHETIC-G3-C",
+            "name": "海岛生态廊道丙区 <b>展示</b> authorization: Bearer synthetic-hidden",
+            "address": "海滨路104号",
+            "location": "113.590000,22.290000",
+        })
+        fourth = copy.deepcopy(first)
+        fourth.update({
+            "id": "SYNTHETIC-G3-D",
+            "name": "海岛生态廊道丁区",
+            "address": "海滨路106号",
+            "location": "113.600000,22.300000",
+        })
+        scenario["entities"][0]["poi_results"].extend((third, fourth))
+        candidates = amap_scenario_candidates(scenario)
+        result = MobilityBackend(
+            "live", credentials(), AMapScenarioTransport(scenario),
+        ).resolve(candidates, self.clock, ("walking",))
+
+        warning = next(
+            item for item in result.warnings
+            if item.startswith("identity_conflict:poi-g3-corridor:ambiguous_name_margin:")
+        )
+        feedback = json.loads(warning.split(":", 3)[3])
+        self.assertEqual(3, len(feedback["candidates"]))
+        self.assertEqual([
+            "海岛生态廊道甲区",
+            "海岛生态廊道乙区",
+            "海岛生态廊道丙区 展示 [REDACTED]",
+        ], feedback["suggested_names"])
+        self.assertEqual(
+            ["珠海市/香洲区"] * 3,
+            [item["administrative_area"] for item in feedback["candidates"]],
+        )
+        self.assertNotIn("海岛生态廊道丁区", warning)
+        self.assertNotIn("synthetic-hidden", warning)
+        self.assertNotIn("海滨路", warning)
+        self.assertNotIn("provider_poi_id", warning)
+        pois, _ = apply_locations(candidates["pois"], (), result)
+        self.assertEqual((), result.locations)
+        self.assertIsNone(pois[0]["coordinates"])
+
+    def test_poi_admin_mismatch_feedback_includes_actual_admin_and_keeps_unknown(self):
+        scenario = load(AMAP_SCENARIOS / "g3_identity_conflict.json")
+        scenario["entities"][0]["poi_results"] = [
+            scenario["entities"][0]["poi_results"][0]
+        ]
+        scenario["entities"][0]["poi_results"][0].update({
+            "pname": "北京市",
+            "cityname": "北京市",
+            "adname": "朝阳区",
+            "adcode": "110000",
+        })
+        candidates = amap_scenario_candidates(scenario)
+        result = MobilityBackend(
+            "live", credentials(), AMapScenarioTransport(scenario),
+        ).resolve(candidates, self.clock, ("walking",))
+
+        warning = next(
+            item for item in result.warnings
+            if item.startswith("identity_conflict:poi-g3-corridor:poi_admin_mismatch:")
+        )
+        feedback = json.loads(warning.split(":", 3)[3])
+        self.assertEqual([{
+            "administrative_area": "北京市/朝阳区",
+            "name": "海岛生态廊道甲区",
+        }], feedback["candidates"])
+        self.assertEqual(["海岛生态廊道甲区"], feedback["suggested_names"])
+        pois, _ = apply_locations(candidates["pois"], (), result)
+        self.assertEqual((), result.locations)
+        self.assertIsNone(pois[0]["coordinates"])
 
     def _identity_conflict_plan(self, mobility):
         scenario = load(AMAP_SCENARIOS / "g3_identity_conflict.json")
@@ -494,7 +580,11 @@ class AMapMobilityTests(unittest.TestCase):
         self.assertEqual(1, transport.calls)
         self.assertNotEqual(stale_reason, unknown["reason"])
         self.assertEqual(
-            "identity_conflict:poi-g3-corridor:ambiguous_name_margin",
+            "identity_conflict:poi-g3-corridor:ambiguous_name_margin:"
+            '{"candidates":[{"administrative_area":"珠海市/香洲区",'
+            '"name":"海岛生态廊道甲区"},{"administrative_area":"珠海市/香洲区",'
+            '"name":"海岛生态廊道乙区"}],"suggested_names":'
+            '["海岛生态廊道甲区","海岛生态廊道乙区"]}',
             unknown["reason"],
         )
 
