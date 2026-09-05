@@ -426,6 +426,36 @@ class AMapMobilityTests(unittest.TestCase):
             self.assertIsNotNone(item["coordinates"]["gcj02"])
             self.assertIsNotNone(item["coordinates"]["wgs84"])
 
+    def test_resolved_coordinates_drop_their_candidate_unknown(self):
+        """A coordinate the provider resolved must not still be listed as unknown."""
+
+        rail = RailBackend.from_spec("fixture:" + str(E2E / "rail.json"), ROOT)
+        mobility = MobilityBackend("live", credentials(), ScriptedAmapTransport())
+        candidates = load(E2E / "candidates.json")
+        pending = {
+            item["field_path"]
+            for item in candidates["unknowns"]
+            if item.get("field_path", "").endswith("/coordinates")
+        }
+        self.assertTrue(pending, "fixture must start with pending coordinate unknowns")
+
+        result = plan_trip(
+            load(E2E / "request.json"), candidates, self.clock, rail, mobility,
+        )
+
+        for group in ("pois", "lodgings"):
+            for index, item in enumerate(result.trip[group]):
+                path = "/%s/%d/coordinates" % (group, index)
+                resolved = item["coordinates"] is not None
+                still_unknown = any(
+                    entry.get("field_path") == path for entry in result.trip["unknowns"]
+                )
+                self.assertNotEqual(
+                    (resolved, still_unknown),
+                    (True, True),
+                    "%s has coordinates but is still reported unknown" % path,
+                )
+
     def test_live_lodging_replacement_drops_obsolete_mobility_claim_subject(self):
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
             folder = Path(temporary)

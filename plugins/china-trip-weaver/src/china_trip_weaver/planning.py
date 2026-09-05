@@ -316,6 +316,7 @@ def plan_trip(
             "variflight": enrichment.warnings,
         },
     )
+    unknowns = _drop_resolved_coordinate_unknowns(unknowns, pois, lodgings)
     transport_pricing = _transport_pricing(
         normalized_request, days, transport_legs,
     )
@@ -873,6 +874,28 @@ def _selected_candidate_unknowns(
                 selected["claim_id"] = selection["claim_id_map"].get(claim_id, claim_id)
             result.append(selected)
     return result
+
+
+def _drop_resolved_coordinate_unknowns(
+    unknowns: Sequence[Mapping[str, Any]],
+    pois: Sequence[Mapping[str, Any]],
+    lodgings: Sequence[Mapping[str, Any]],
+) -> List[Mapping[str, Any]]:
+    """A coordinate a provider actually resolved is no longer unknown.
+
+    Only coordinates are swept. Their semantics are binary — the entity either
+    carries a point or it does not — so a resolved one cannot still be pending.
+    Other field paths keep their unknown even when the field holds a value,
+    because a present value can still be unverified.
+    """
+
+    resolved = {
+        "/%s/%d/coordinates" % (group, index)
+        for group, items in (("pois", pois), ("lodgings", lodgings))
+        for index, item in enumerate(items)
+        if item.get("coordinates")
+    }
+    return [item for item in unknowns if item.get("field_path") not in resolved]
 
 
 def _apply_runtime_unknown_reasons(
