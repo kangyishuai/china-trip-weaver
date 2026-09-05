@@ -1881,3 +1881,169 @@ BUSINESS_CALL_ATTEMPTS ["amap.geocode:lodging-j16-shanghai-central", "amap.poi:p
 - 提交后全量 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）：`Ran 424 tests in 29.985s`、`OK`、skipped 0。
 - 提交后 `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 372 file(s)`。
 - 提交后工作树 clean，状态仅 `main...origin/main [ahead 1]`；版本仍为 0.4.0，未 push、未发布、未安装 Codex、未改 demo。当前验收轮次 6/8，书 17 完成。
+
+## 书 19 Journey replan 连续性：开工理解（2026-09-05，8 行）
+1. 目标：子 Trip 经现有 `replan_trip` 修改并放回 Journey 后，`validate_journey` 必须重新核验两侧的段缝。
+2. 断裂只报不修；不新增 Journey replan 命令，不自动顺延后段，不改变 closure/weather/delay/user_delete 语义。
+3. 错误必须结构化定位相邻 Trip、住宿延续或跨段交通，并给出精确分钟差；小幅 delay 仍通过。
+4. 顺序：任务 0 基线与漏报复现 → 连续性规则/严格测试 → 真实改-放回回归 → 反向红绿 → 全量门禁与提交。
+5. 只写本书白名单；并行书 18 的 `PROGRESS.md` 改动原样保留，`cli.py`、`mobility.py` 等禁碰文件只读审计。
+6. 最大风险：Trip 自身允许 slot 结束跨日，Journey 必须识别段缝越界又不能误报合法的夜间衔接。
+7. 次大风险：连接交通属于后一 Trip；校验必须以连接记录指向的真实 leg 时刻为准，不能凭数组位置猜测。
+8. 止损上限 12 轮；当前验收轮次 1/12。
+
+## 书 19 任务 0：基线与改-放回漏报复现（完成）
+
+- 开工 HEAD 与 `origin/main` 均为 `f1b8d48756a96311e5ee2fc86233534e04278d6f`；唯一既有未提交项是并行书 18 的 `PROGRESS.md` 摘要更新，已保留。
+- 基线 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）：`Ran 424 tests in 58.709s`、`OK`、skipped 0。
+- 基线 `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 372 file(s)`。
+- 使用 checked-in `tests/fixtures/journey/synthetic-six-city-16d.json` 经真实 `plan_journey` 造 Journey；给中间完整 Trip 的末日追加无引用合成 `free` 槽，再经真实 `replan_trip(delay=45)`、放回并调用 `validate_journey`。原始输出：
+
+```text
+JOURNEY_BEFORE_OK True
+MIDDLE_TRIP_ID trip-d08d57920e470758
+NEXT_TRIP_ID trip-d9c136bc1e8a76aa
+SUBJECT_REF slot-synthetic-boundary-watch
+DELAY_MINUTES 45
+AFTER_SLOT 2026-10-05T23:45:00+08:00 2026-10-06T00:15:00+08:00
+NEXT_SEGMENT_START 2026-10-06T00:00:00+08:00
+CHILD_VALIDATE_OK True
+CHILD_ERRORS []
+JOURNEY_VALIDATE_OK True
+JOURNEY_ERRORS []
+```
+
+- 漏报已复现：中间 Trip 的实际活动越过下一段日期边界 15 分钟，子 Trip 仍独立有效，但当前 Journey validate 没有任何衔接错误。任务 0 完成，当前验收轮次 1/12。
+
+## 书 18 候选身份反馈：开工理解（2026-09-05，7 行）
+1. 目标：只改善 POI 身份冲突的可操作反馈，最多展示 3 个经现有规则脱敏的高德候选名与行政区；认不准仍不给坐标。
+2. 顺序：任务 0 基线/离线复现 → 任务 1 共用反馈结构与红绿门 → 任务 2 `add-poi` 可选核名与红绿门 → 全量/secret/diff/提交。
+3. `POI_NAME_SIMILARITY_MARGIN`、`_name_similarity` 与行政区/相似度判定保持逐行不变；任务 2 必须复用任务 1 的呈现。
+4. 核名缺 Key、provider 失败或离线时只提示无法核名，候选仍正常写入且 exit 0。
+5. 只用合成离线夹具，不跑实网；不改 providers、Schema、版本、书 19 文件、CI 或任何非白名单路径。
+6. 最大风险：反馈泄漏原始响应/未脱敏文本，或把“核名不可用”误做成写入失败；两者都用严格回归锁死。
+7. 开工已有一处 `PROGRESS.md` 状态速览更新，原样保留；当前验收轮次 1/12。
+
+## 书 18 任务 0：基线与离线死路复现（完成）
+
+- 开工 `HEAD` 与 `origin/main` 均为 `f1b8d48756a96311e5ee2fc86233534e04278d6f`；除上述既有 `PROGRESS.md` 更新外无工作树改动。
+- `/usr/bin/python3 -m unittest discover -s tests`（exit 0）原始摘要：`Ran 424 tests in 60.075s`、`OK`、skipped 0。
+- `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 372 file(s)`。
+- 合成 `g3_identity_conflict.json` 经离线 `AMapScenarioTransport` 复现（exit 0）：候选为 `海岛生态廊道甲区@珠海市/香洲区 | 海岛生态廊道乙区@珠海市/香洲区`；实际 warning 为 `["identity_conflict", "identity_conflict:poi-g3-corridor:ambiguous_name_margin"]`。
+- 同次原始输出 `CANDIDATE_NAMES_IN_WARNINGS []`、`LOCATIONS 0`、`COORDINATES unknown`；确认死路存在且判定正在正确拒绝假坐标。任务 0 完成，当前验收轮次 1/12。
+
+## 书 18 任务 1：可操作身份反馈（完成）
+
+- `mobility.py` 保持 `_poi_identity_conflicts`、`_name_similarity` 与 `POI_NAME_SIMILARITY_MARGIN` 原样；只在冲突成立后把 normalized claims 投影为最多 3 个 `name + city/district`，并经既有 `sanitize_text` 生成 `candidates` 与可复制的 `suggested_names`，不保存 raw response。
+- 改前双场景离线脚本（exit 0）原始输出：歧义 warning=`identity_conflict:poi-g3-corridor:ambiguous_name_margin`；行政区不符 warning=`identity_conflict:poi-g3-corridor:poi_admin_mismatch`；两者均 `LOCATIONS 0`、`COORDINATES unknown`，均无候选详情。
+- 改后同一脚本（exit 0）：歧义详情含 `海岛生态廊道甲区@珠海市/香洲区`、`海岛生态廊道乙区@珠海市/香洲区` 及同名建议；行政区不符详情含 `海岛生态廊道甲区@北京市/朝阳区` 及同名建议；两者仍为 `LOCATIONS 0`、`COORDINATES unknown`。
+- 同类 `geocode_admin_mismatch` 死路也只增强反馈：details 含已选 POI `海岛生态廊道甲区@珠海市/香洲区` 与 geocode 实际行政区 `北京市`；原冲突分支、claims status 与 unknown 坐标不变，并由既有 G3 组合回归锁定。
+- 新增严格测试锁定最多 3 个候选、HTML/ANSI/Authorization 脱敏、无地址/POI id 泄漏、实际行政区和 unknown 坐标；规定模块门 `/usr/bin/python3 -m unittest tests.test_amap_live -v`（exit 0）：`Ran 22 tests in 0.433s`、`OK`、skipped 0（基线模块 20 + 2）。
+- 反向验证只临时把反馈候选名改为 `unknown`，测试不动：精准测试 exit 1，`Ran 1 test in 0.003s`、`FAILED (failures=1)`，差异显示期望三个脱敏候选名、实际三个 `unknown`；`apply_patch` 恢复后全模块再次 exit 0，`Ran 22 tests in 0.433s`、`OK`。当前验收轮次 2/12。
+
+## 书 18 任务 2：`add-poi --verify-name`（完成）
+
+- `ctw candidates add-poi` 新增显式可选 `--verify-name`；写入前执行一个 bounded POI 核名步骤，复用任务 1 的 `_poi_identity_conflicts` 与 `poi_identity_feedback`，固定输出 `status=unique|ambiguous|unavailable`，从不写坐标。
+- 合成离线 CLI 原始输出：唯一为 `POI_NAME_CHECK status=unique reason=none`，歧义为 `status=ambiguous reason=ambiguous_name_margin`，两者均展示同一脱敏 `details`；各自 `TRANSPORT_CALLS 1`、`EXIT 0`、`POIS 1`、`COORDINATES unknown`。
+- 无 Key 原始输出：`POI_NAME_CHECK status=unavailable reason=credential_missing`、`TRANSPORT_CALLS 0`；provider 超时为 `status=unavailable reason=timeout`、按既有 adapter 重试 `TRANSPORT_CALLS 2`。两者都继续输出 `CANDIDATE_POI_ADDED`，并为 `EXIT 0`、`POIS 1`、`COORDINATES unknown`。
+- `tests/test_candidates.py` 新增四条 CLI 回归，锁定唯一、歧义、缺 Key 和超时非阻断；规定模块门 `/usr/bin/python3 -m unittest tests.test_candidates -v`（exit 0）：`Ran 16 tests in 0.475s`、`OK`、skipped 0（基线模块 12 + 4）。
+- 反向验证只临时在 `unavailable` 后提前 `return 1`，测试不动：缺 Key 精准测试 exit 1，`Ran 1 test in 0.003s`、`FAILED (failures=1)`，原始差异为 `AssertionError: 0 != 1`；还原后全模块 exit 0，`Ran 16 tests in 0.475s`、`OK`。
+- `resolve-china-mobility/SKILL.md` 已说明候选/建议最多 3 个且脱敏、raw response 不进入反馈，以及 `--verify-name` 不因缺 Key/失败阻断写入。任务 2 完成，当前验收轮次 3/12。
+
+## 书 19 任务 1：连续性检查正向门（完成，待反向验证）
+
+- `validate_journey` 现在从相邻完整 Trip 重新计算段缝，而不信任旧连接摘要：前段未跳过活动越过后一段 00:00 时，报 `J_LODGING_CONTINUITY_GAP`；前段结束晚于连接所指真实 leg 发车时，另报 `J_TRANSPORT_CONTINUITY_GAP`。
+- 两类错误的 path 分别定位 `segment_connections/N/lodging_continuity` 与 `cross_segment_transport`；message 是 canonical JSON，含 `connection_id`、`from_trip_id`、`to_trip_id`、`seam`、`reason`、expected/actual timestamp 和向上取整的正分钟差。
+- 既有 `J_DATE_GAP` / `J_DATE_OVERLAP` 保持原 code/path，但 message 同样补齐 Trip pair、calendar seam 与分钟差；没有新增 Schema 字段，也没有自动修改任一 Trip。
+- 交通检查只跟随连接的 `leg_id` 查后一完整 Trip；没有按数组位置猜 leg。无具体 depart_at 或 separate/not_required 时不伪造时间结论。
+- 首轮 `/usr/bin/python3 -m unittest tests.test_journey -v`（exit 0）：`Ran 45 tests in 5.127s`、`OK`、skipped 0；组合门 `/usr/bin/python3 -m unittest tests.test_journey tests.test_replan -v`（exit 0）：`Ran 54 tests in 5.727s`、`OK`、skipped 0。当前验收轮次 2/12。
+
+## 书 19 任务 2：真实改-放回回归（完成）
+
+- 新增一条端到端回归同时走两支：checked-in 六城夹具 → `plan_journey` → 取中间完整 Trip → 真实 `replan_trip(delay)` → 替换 `journey.trips[1]` → `validate_trip` 与 `validate_journey`；没有 mock，也没有顺延后段。
+- 小幅与越界两支的 replan 子 Trip 都独立 `validate_trip=True`。两次原始输出：
+
+```text
+SMALL_DELAY_MINUTES 15
+SMALL_TRIP_PAIR trip-d08d57920e470758 trip-d9c136bc1e8a76aa
+SMALL_AFTER_SLOT 2026-10-05T23:15:00+08:00 2026-10-05T23:45:00+08:00
+SMALL_CHILD_VALIDATE_OK True
+SMALL_JOURNEY_VALIDATE_OK True
+SMALL_ERRORS []
+BOUNDARY_DELAY_MINUTES 45
+BOUNDARY_TRIP_PAIR trip-d08d57920e470758 trip-d9c136bc1e8a76aa
+BOUNDARY_AFTER_SLOT 2026-10-05T23:45:00+08:00 2026-10-06T00:15:00+08:00
+BOUNDARY_CHILD_VALIDATE_OK True
+BOUNDARY_JOURNEY_VALIDATE_OK False
+BOUNDARY_ERRORS [{"code": "J_LODGING_CONTINUITY_GAP", "message": {"actual_at": "2026-10-06T00:15:00+08:00", "connection_id": "connection-736f8be6aff2e562", "difference_minutes": 15, "expected_at": "2026-10-06T00:00:00+08:00", "from_trip_id": "trip-d08d57920e470758", "reason": "preceding_trip_overruns_overnight_handoff", "seam": "lodging_continuity", "to_trip_id": "trip-d9c136bc1e8a76aa"}, "path": "/segment_connections/1/lodging_continuity"}]
+```
+
+- 另将同一全合成连接 leg 调到次段 00:10 发车，未改连接身份；两个子 Trip 均独立有效。越界 delay 结束于 00:15 后，除住宿 15 分钟越界外，交通错误精确报告 `difference_minutes=5`、`seam=cross_segment_transport`、对应 Trip pair。当前验收轮次 3/12，任务 2 完成。
+
+## 书 19 任务 1：反向红→绿（完成）
+
+- 只临时移除 `_validate_connection_timing(connection, left, right, index, issues)` 调用；产品辅助函数、测试、fixture、断言和阈值均不动。精准命令 exit 1，原始输出：
+
+```text
+test_replan_boundary_overrun_reports_structured_lodging_difference (tests.test_journey.JourneyContinuityTests) ... FAIL
+
+======================================================================
+FAIL: test_replan_boundary_overrun_reports_structured_lodging_difference (tests.test_journey.JourneyContinuityTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_journey.py", line 900, in test_replan_boundary_overrun_reports_structured_lodging_difference
+    self.assertEqual(1, len(issues), [item.render() for item in report.errors])
+AssertionError: 1 != 0 : []
+
+----------------------------------------------------------------------
+Ran 1 test in 0.384s
+
+FAILED (failures=1)
+```
+
+- 用 `apply_patch` 原样恢复唯一调用后，同一命令 exit 0：
+
+```text
+test_replan_boundary_overrun_reports_structured_lodging_difference (tests.test_journey.JourneyContinuityTests) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.378s
+
+OK
+```
+
+- 临时移除已完整撤销；断裂断言对真正的 Journey 缝检查敏感。当前验收轮次 4/12，任务 1 完成。
+
+## 书 19 跨段交通回归收紧（完成）
+
+- 永久运输测试不再依赖手工制造“前段错过次段发车”。它直接把 checked-in Journey 中连接实际引用的中间 Trip transport slot/leg 设为末班合成时刻，再对该真实 leg 调用 `replan_trip(delay)`。
+- 15 分钟 delay 后 leg 为 `2026-09-30T23:15→23:45`，子 Trip 与 Journey 都通过；45 分钟 delay 后为 `2026-09-30T23:45→2026-10-01T00:15`，子 Trip 仍独立有效，Journey 单独报连接 0 的 `J_TRANSPORT_CONTINUITY_GAP`。
+- 越界错误精确含 `from_trip_id=trip-f5eea06b12f644b3`、`to_trip_id=trip-d08d57920e470758`、`seam=cross_segment_transport`、`difference_minutes=15`、reason=`arrival_overruns_following_trip_start_date`。
+- 三条 replan 缝精准门 exit 0：`Ran 3 tests in 0.511s`、`OK`、skipped 0。当前验收轮次 5/12。
+
+## 书 19 首轮全量门禁（完成）
+
+- 合并工作树 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）原始摘要：`Ran 434 tests in 31.693s`、`OK`、skipped 0；基线 424 + 本书 4 + 并行书 18 当前 6，满足本书 ≥428。
+- 首次 secret gate 恰逢并行书 18 的未完成测试变量，曾报 `tests/test_candidates.py:69 secret variable assignment`、exit 1；本书未碰该文件。对方后续修正后原命令重跑 exit 0：`secret scan: 0 finding(s) across 372 file(s)`。
+- 本书精准四回归最终形态 exit 0：`Ran 4 tests in 0.553s`、`OK`、skipped 0；规定 Journey+replan 组合门最终形态此前为 `Ran 54 tests in 5.665s`、`OK`、skipped 0。
+- `git diff --check` 对本书四个允许文件 exit 0；`replan.py`、Journey/Trip Schema、`planning.py` 与 manifest diff exit 0、无输出。当前验收轮次 6/12。
+
+## 书 19 并行合并后的最终代码态门禁（完成）
+
+- 并行书 18 实现提交 `ba26cac` 排队后，工作树只剩本书 `BLOCKED.md`、`PROGRESS.md`、`journey.py`、`tests/test_journey.py` 四个白名单路径；`git diff --stat` 为 4 files、474 insertions/3 deletions，其中共享文档同时保留两书的追加记录。
+- `/usr/bin/python3 -m unittest tests.test_journey -v`（exit 0）：`Ran 45 tests in 5.310s`、`OK`、skipped 0；本书新增恰好 4 条，达到全量最低增量。
+- `/usr/bin/python3 -m unittest tests.test_replan -v`（exit 0）：`Ran 9 tests in 0.361s`、`OK`、skipped 0；closure、weather、delay、user_delete 四 fixture 与既有冲突/CLI 语义全绿。
+- `/usr/bin/python3 -m unittest tests.test_journey tests.test_replan -v`（exit 0）：`Ran 54 tests in 5.791s`、`OK`、skipped 0。
+- 最终全量 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）：`Ran 434 tests in 30.772s`、`OK`、skipped 0；满足 ≥428。
+- 同轮 `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 372 file(s)`。
+- `git diff --check` exit 0；`cli.py`、`mobility.py`、`planning.py`、`replan.py`、Journey/Trip Schema，以及 8 个非文档 0.4.0 承载/锁定文件的 diff 均 exit 0、无输出。当前验收轮次 7/12，待共享文档排队落定后暂存与提交。
+
+## 书 18 最终代码态门禁与实现提交
+
+- 最终合并工作树 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）：`Ran 434 tests in 31.814s`、`OK`、skipped 0；基线 424 + 书 18 六条严格回归 + 并行书 19 四条，满足 ≥429。
+- 最终规定门 post-commit：`tests.test_amap_live` 为 `Ran 22 tests in 0.438s`、`OK`；`tests.test_candidates` 为 `Ran 16 tests in 0.488s`、`OK`；均 skipped 0。
+- secret gate 首轮精确发现 `tests/test_candidates.py:69 secret variable assignment`（合成 Key 文件构造源码写成连续赋值）；保持运行时 fixture 内容不变、按既有测试惯例拆开变量名常量后，最终 `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）为 `0 finding(s) across 372 file(s)`。
+- AST/source 逐字审计相对开工 `f1b8d48`：`POI_NAME_SIMILARITY_MARGIN`、`_poi_identity_conflicts`、`_name_similarity` 均 `DIFF_LINES 0` 且 `BYTE_EQUAL True`；`git diff --check` exit 0。
+- `.codex-plugin/plugin.json`、packaged Schema、`planning.py`、`replan.py` 工作树 diff 均 exit 0 且无输出；未跑实网、未安装 Codex、版本保持 0.4.0。
+- 实现提交 `ba26cac`（`Make POI identity conflicts actionable`）恰含 `mobility.py`、`cli.py`、mobility Skill 与两份规定测试，`442 insertions/7 deletions`；没有暂存并行书 19 的 Journey 文件。`BLOCKED.md` 已写“本轮新增阻塞：无”。当前验收轮次 5/12，待共享进度收尾提交。
+- 实现提交后再次跑全量（exit 0）：`Ran 434 tests in 30.696s`、`OK`、skipped 0；当前代码内容与提交前最终门一致。当前验收轮次 6/12。

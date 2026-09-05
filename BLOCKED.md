@@ -259,3 +259,12 @@ should mean pending work. They live where they are enforced:
 ## 书 17 Journey provider health 重复原因计数（2026-09-05）
 
 - 本轮新增阻塞：无。
+
+## 书 19 Journey replan 连续性（2026-09-05）
+
+- 本轮新增阻塞：无。
+- 中间完整 Trip 的 delay 可由现有 `replan_trip` 完成；改后放回 Journey 的住宿、交通与日期段缝均有本书白名单内的实现和合成离线回归，不需要新增命令、自动顺延后段或修改四种事件语义。
+
+## 书 18 候选身份反馈（2026-09-05）
+
+- 本轮新增阻塞：无。
