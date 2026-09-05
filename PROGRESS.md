@@ -3327,3 +3327,592 @@ test_poi_admin_empty_district_preserves_city_only_conflict: assertions git diff 
 - 这与书 5、书 8、书 13 是同一类错误：我限死了必须一起改的文件。按惯例由我自己补。
 - 补法：给 `plugins/china-trip-weaver/schema/trip.schema.json` 与 `docs/design/schema/trip.schema.json` 的 `placeRef` 加一个可选 `district`（`{"type": ["string", "null"]}`，不进 `required`），两份仍字节相同；随后撤掉 `test_providers.py` 里的临时补丁，改回 `SchemaSubsetValidator(load_schema())`。
 - 加的是可选属性，属纯放宽，现有 Trip/Journey 数据全部仍合法，`schema_version` 保持 `1.0.0`。撤掉补丁后全量仍 `Ran 473 tests`、`OK`，证明 schema 才是正解、测试补丁只是绕路。
+
+## 书 29 开工理解（2026-09-05，≤10 行）
+1. 目标：只降低人工处理名称歧义的操作成本；不改歧义判定、相似度阈值或自动改名行为。
+2. 流程固定为“导出待选 JSON → 用户填写 `chosen` → 原子应用”；不做交互式问答。
+3. `chosen` 只接受该条建议中的逐字精确值；空值跳过，未知 `ref_id` 或越界名字整次失败且候选文件字节不变。
+4. 写回前在内存完成全清单校验，写回后重新校验候选文件；失败必须回滚。
+5. 只改书 29 白名单六个文件；`PROGRESS.md` 仅追加本节，不碰并行书 30 的段落或 CI。
+6. 任务 0 已逐字通过：MANUAL=`poi-fix-ambiguous`（2 建议）、AUTO=`poi-fix-unique`、SUMMARY=`{"applied":0,"automatic":1,"manual":1,"mode":"report"}`，exit 0。
+
+## 书 30 任务 0：18 格覆盖债核查（2026-09-05）
+
+- 核查范围为 `BLOCKED.md` 书 23 表的 18 个原子失败组合；结论基于当前 `HEAD=1760a7f` 的上层测试方法体，不把 adapter 夹具或相邻失败类算作覆盖。
+- 书 25 的 `test_prefix_and_different_candidate_names_remain_unknown`、书 27/28 的 POI/geocode 行政区测试均走成功 provider 信封；书 26 的 `test_partial_comfort_network_failure_degrades_without_dropping_search_output` 只覆盖 VariFlight comfort，不关闭下表任何 search 格。
+
+| # | 原子覆盖格 | 核查结论 | 当前最接近但不足的测试 |
+|---:|---|---|---|
+| 1 | POI × AMap × 无结果 | 仍开着 | `test_lodging_geocode_no_results_degrades_without_crashing` 是住宿/geocode，不是 POI |
+| 2 | POI × AMap × 限流 | 仍开着 | `test_lodging_geocode_rate_limit_is_not_hidden` 是住宿/geocode |
+| 3 | POI × AMap × 契约漂移 | 仍开着 | `test_fixture_amap_wrong_shape` 只走 adapter |
+| 4 | POI × AMap × 网络失败 | 仍开着 | `test_same_run_timeout_is_replayed_without_a_second_http_call` 是 transport timeout，不是实体 network |
+| 5 | 住宿 × AMap × 契约漂移 | 仍开着 | `test_item_list_shape_drift_is_contract_mismatch` 属 FlyAI，AMap 住宿上层没有对应测试 |
+| 6 | 住宿 × AMap × 网络失败 | 仍开着 | 书 23 仅有手工复现，没有 unittest |
+| 7 | 车站 × 12306 station × 网络失败 | 仍开着 | `test_station_capability_rate_limit_is_not_misclassified_as_no_results` 是限流，不是进程网络失败 |
+| 8 | 车站 × AMap enrichment × 歧义 | 仍开着 | `test_multiple_city_stations_are_returned_sorted_and_classified_ambiguous` 的歧义来自 12306 多站，AMap 坐标响应本身唯一 |
+| 9 | 车站 × AMap enrichment × 限流 | 仍开着 | `test_amap_network_failure_keeps_all_candidates_and_rail_health_ready` 是 network，不是限流 |
+| 10 | 车站 × AMap enrichment × 契约漂移 | 仍开着 | `test_station_response_shape_drift_is_still_contract_mismatch` 漂移来自 12306，不是 AMap |
+| 11 | 住宿 × FlyAI × 无结果 | 仍开着 | `test_fixture_flyai_empty` 使用 flight capability 的 adapter 夹具 |
+| 12 | 住宿 × FlyAI × 网络失败 | 仍开着 | `test_a_failing_flyai_still_produces_a_valid_trip` 使用 timeout，不是 network |
+| 13 | 航班 × FlyAI × 无结果 | 仍开着 | `test_fixture_flyai_empty` 只走 adapter |
+| 14 | 航班 × FlyAI × 限流 | 仍开着 | `test_rate_limited_live_run_replaces_stale_lodging_unknown_reason` 只断言住宿实体 |
+| 15 | 航班 × FlyAI × 契约漂移 | 仍开着 | `test_item_list_shape_drift_is_contract_mismatch` 只走 adapter |
+| 16 | 航班 × FlyAI × 网络失败 | 仍开着 | 现有完整失败链使用 timeout；`stderr_error` 只在 adapter corpus |
+| 17 | 航班 × VariFlight search × 无结果 | 仍开着 | `test_partial_comfort_network_failure_degrades_without_dropping_search_output` 的 search 成功 |
+| 18 | 航班 × VariFlight search × 限流 | 仍开着 | provider corpus 有 rate-limit 夹具，上层 `VariFlightBackend.enrich` 无对应测试 |
+
+### 书 30 开工回执（≤10 行）
+
+1. 本轮认领上限 12 格；先做 POI × AMap 四格，直接钉住最常走的坐标实体降级。
+2. 接着做住宿 × AMap 的契约漂移与 network 两格，补齐书 23 已手工复现但未固化的路径。
+3. 再做车站 × AMap enrichment 的歧义、限流、契约漂移三格，要求始终保留全部 12306 候选与 rail health。
+4. 最后三格认领住宿 × FlyAI 的无结果、network，以及 VariFlight search 无结果，覆盖两个独立 inventory backend。
+5. 车站 × 12306 network、FlyAI 航班四格和 VariFlight search 限流因 12 格上限保留 open，并逐格写回 `BLOCKED.md`。
+6. 每格只走离线合成 transport 与既有 backend 入口；每条至少断言 warning/health/实体降级三者中的两项。
+7. 不改任何实现；三次反向验证在临时仓库副本中破坏分支，工作区 `src/` 全程保持 diff 为空。
+
+## 书 29 新增回归红→绿（完成）
+
+- 先新增 7 条合成回归，覆盖导出只读、精确应用、越界名字、未知 ref_id、空值/缺失值跳过、不裁剪空格、写后校验失败回滚。
+- 旧实现精准命令（exit 1）原始输出：
+
+~~~text
+test_fix_names_export_manual_review_is_read_only_and_complete (tests.test_candidates.CandidateContractTests) ... FAIL
+test_fix_names_apply_manual_review_writes_exact_suggestion_and_validates (tests.test_candidates.CandidateContractTests) ... FAIL
+test_fix_names_apply_manual_review_rejects_unlisted_choice_atomically (tests.test_candidates.CandidateContractTests) ... FAIL
+test_fix_names_apply_manual_review_rejects_unknown_ref_even_when_empty (tests.test_candidates.CandidateContractTests) ... FAIL
+test_fix_names_apply_manual_review_skips_empty_or_missing_choice (tests.test_candidates.CandidateContractTests) ... test_fix_names_apply_manual_review_does_not_trim_chosen (tests.test_candidates.CandidateContractTests) ... FAIL
+test_fix_names_apply_manual_review_rolls_back_failed_post_write_validation (tests.test_candidates.CandidateContractTests) ... FAIL
+
+======================================================================
+FAIL: test_fix_names_export_manual_review_is_read_only_and_complete (tests.test_candidates.CandidateContractTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_candidates.py", line 484, in test_fix_names_export_manual_review_is_read_only_and_complete
+    result, review = self._export_manual_name_review(
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_candidates.py", line 103, in _export_manual_name_review
+    self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+AssertionError: 0 != 2 : usage: ctw [-h] [--version] [--progress {ndjson}]
+           {validate,validate-candidates,candidates,canonicalize,doctor,plan,journey,replan,rail,mobility,lodging,air,render,validate-html}
+           ...
+ctw: error: unrecognized arguments: --export-manual /Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/.tmp/tmpw0br2h_o/manual-name-review.json
+
+
+======================================================================
+FAIL: test_fix_names_apply_manual_review_writes_exact_suggestion_and_validates (tests.test_candidates.CandidateContractTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_candidates.py", line 514, in test_fix_names_apply_manual_review_writes_exact_suggestion_and_validates
+    _, review = self._export_manual_name_review(candidates_path, review_path)
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_candidates.py", line 103, in _export_manual_name_review
+    self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+AssertionError: 0 != 2 : usage: ctw [-h] [--version] [--progress {ndjson}]
+           {validate,validate-candidates,candidates,canonicalize,doctor,plan,journey,replan,rail,mobility,lodging,air,render,validate-html}
+           ...
+ctw: error: unrecognized arguments: --export-manual /Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/.tmp/tmpx2ivqux8/manual-name-review.json
+
+
+======================================================================
+FAIL: test_fix_names_apply_manual_review_rejects_unlisted_choice_atomically (tests.test_candidates.CandidateContractTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_candidates.py", line 566, in test_fix_names_apply_manual_review_rejects_unlisted_choice_atomically
+    _, review = self._export_manual_name_review(candidates_path, review_path)
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_candidates.py", line 103, in _export_manual_name_review
+    self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+AssertionError: 0 != 2 : usage: ctw [-h] [--version] [--progress {ndjson}]
+           {validate,validate-candidates,candidates,canonicalize,doctor,plan,journey,replan,rail,mobility,lodging,air,render,validate-html}
+           ...
+ctw: error: unrecognized arguments: --export-manual /Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/.tmp/tmp5l4k3wc_/manual-name-review.json
+
+
+======================================================================
+FAIL: test_fix_names_apply_manual_review_rejects_unknown_ref_even_when_empty (tests.test_candidates.CandidateContractTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_candidates.py", line 594, in test_fix_names_apply_manual_review_rejects_unknown_ref_even_when_empty
+    _, review = self._export_manual_name_review(candidates_path, review_path)
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_candidates.py", line 103, in _export_manual_name_review
+    self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+AssertionError: 0 != 2 : usage: ctw [-h] [--version] [--progress {ndjson}]
+           {validate,validate-candidates,candidates,canonicalize,doctor,plan,journey,replan,rail,mobility,lodging,air,render,validate-html}
+           ...
+ctw: error: unrecognized arguments: --export-manual /Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/.tmp/tmpfw9599ph/manual-name-review.json
+
+
+======================================================================
+FAIL: test_fix_names_apply_manual_review_skips_empty_or_missing_choice (tests.test_candidates.CandidateContractTests) (chosen_state='empty')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_candidates.py", line 626, in test_fix_names_apply_manual_review_skips_empty_or_missing_choice
+    _, review = self._export_manual_name_review(candidates_path, review_path)
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_candidates.py", line 103, in _export_manual_name_review
+    self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+AssertionError: 0 != 2 : usage: ctw [-h] [--version] [--progress {ndjson}]
+           {validate,validate-candidates,candidates,canonicalize,doctor,plan,journey,replan,rail,mobility,lodging,air,render,validate-html}
+           ...
+ctw: error: unrecognized arguments: --export-manual /Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/.tmp/tmp4u3cw97_/manual-name-review.json
+
+
+======================================================================
+FAIL: test_fix_names_apply_manual_review_skips_empty_or_missing_choice (tests.test_candidates.CandidateContractTests) (chosen_state='missing')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_candidates.py", line 626, in test_fix_names_apply_manual_review_skips_empty_or_missing_choice
+    _, review = self._export_manual_name_review(candidates_path, review_path)
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_candidates.py", line 103, in _export_manual_name_review
+    self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+AssertionError: 0 != 2 : usage: ctw [-h] [--version] [--progress {ndjson}]
+           {validate,validate-candidates,candidates,canonicalize,doctor,plan,journey,replan,rail,mobility,lodging,air,render,validate-html}
+           ...
+ctw: error: unrecognized arguments: --export-manual /Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/.tmp/tmpg_0fec2m/manual-name-review.json
+
+
+======================================================================
+FAIL: test_fix_names_apply_manual_review_does_not_trim_chosen (tests.test_candidates.CandidateContractTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_candidates.py", line 655, in test_fix_names_apply_manual_review_does_not_trim_chosen
+    _, review = self._export_manual_name_review(candidates_path, review_path)
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_candidates.py", line 103, in _export_manual_name_review
+    self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+AssertionError: 0 != 2 : usage: ctw [-h] [--version] [--progress {ndjson}]
+           {validate,validate-candidates,candidates,canonicalize,doctor,plan,journey,replan,rail,mobility,lodging,air,render,validate-html}
+           ...
+ctw: error: unrecognized arguments: --export-manual /Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/.tmp/tmphdwju5f4/manual-name-review.json
+
+
+======================================================================
+FAIL: test_fix_names_apply_manual_review_rolls_back_failed_post_write_validation (tests.test_candidates.CandidateContractTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_candidates.py", line 682, in test_fix_names_apply_manual_review_rolls_back_failed_post_write_validation
+    _, review = self._export_manual_name_review(candidates_path, review_path)
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_candidates.py", line 103, in _export_manual_name_review
+    self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+AssertionError: 0 != 2 : usage: ctw [-h] [--version] [--progress {ndjson}]
+           {validate,validate-candidates,candidates,canonicalize,doctor,plan,journey,replan,rail,mobility,lodging,air,render,validate-html}
+           ...
+ctw: error: unrecognized arguments: --export-manual /Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/.tmp/tmp_uqo73m0/manual-name-review.json
+
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.367s
+
+FAILED (failures=8)
+~~~
+
+- 实现后同一组 7 条（exit 0）原始输出：
+
+~~~text
+test_fix_names_export_manual_review_is_read_only_and_complete (tests.test_candidates.CandidateContractTests) ... ok
+test_fix_names_apply_manual_review_writes_exact_suggestion_and_validates (tests.test_candidates.CandidateContractTests) ... ok
+test_fix_names_apply_manual_review_rejects_unlisted_choice_atomically (tests.test_candidates.CandidateContractTests) ... ok
+test_fix_names_apply_manual_review_rejects_unknown_ref_even_when_empty (tests.test_candidates.CandidateContractTests) ... ok
+test_fix_names_apply_manual_review_skips_empty_or_missing_choice (tests.test_candidates.CandidateContractTests) ... ok
+test_fix_names_apply_manual_review_does_not_trim_chosen (tests.test_candidates.CandidateContractTests) ... ok
+test_fix_names_apply_manual_review_rolls_back_failed_post_write_validation (tests.test_candidates.CandidateContractTests) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 1.063s
+
+OK
+~~~
+
+## 书 29 三步验收（完成）
+
+- 步骤 1 导出（exit 0）原始输出；两次 SHA-256 完全相同：
+
+~~~text
+af27cf163f0492b5eda3832aa534b90b5cc5024b3ab03010b300f172dd3fbab6  /tmp/c.json
+CANDIDATE_NAME_MANUAL {"action":"unchanged","administrative_areas":["合成丙市/合成东区","合成丙市/合成西区"],"original_name":"合成云廊","reason":"ambiguous_suggestions","ref_id":"poi-fix-ambiguous","source_field_path":"/pois/0/coordinates","suggested_name":null,"suggested_names":["合成云廊东门","合成云廊西门"]}
+CANDIDATE_NAME_AUTO {"action":"would_apply","administrative_areas":["合成甲市/合成一区"],"original_name":"合成星塔旧称","reason":"unique_suggestion","ref_id":"poi-fix-unique","source_field_path":"/pois/1/coordinates","suggested_name":"合成星塔","suggested_names":["合成星塔"]}
+CANDIDATE_NAME_FIX_SUMMARY {"applied":0,"automatic":1,"manual":1,"mode":"report"}
+CANDIDATE_NAME_MANUAL_EXPORTED {"entries":1,"path":"/tmp/name-review.json"}
+entries=1
+ref_id=poi-fix-ambiguous
+original_name=合成云廊
+suggested_names=["合成云廊东门","合成云廊西门"]
+chosen=''
+af27cf163f0492b5eda3832aa534b90b5cc5024b3ab03010b300f172dd3fbab6  /tmp/c.json
+~~~
+
+- 步骤 2 填入 合成云廊东门 并应用（所有命令 exit 0）原始输出：
+
+~~~text
+CANDIDATE_NAME_MANUAL {"action":"unchanged","administrative_areas":["合成丙市/合成东区","合成丙市/合成西区"],"original_name":"合成云廊","reason":"ambiguous_suggestions","ref_id":"poi-fix-ambiguous","source_field_path":"/pois/0/coordinates","suggested_name":null,"suggested_names":["合成云廊东门","合成云廊西门"]}
+CANDIDATE_NAME_AUTO {"action":"would_apply","administrative_areas":["合成甲市/合成一区"],"original_name":"合成星塔旧称","reason":"unique_suggestion","ref_id":"poi-fix-unique","source_field_path":"/pois/1/coordinates","suggested_name":"合成星塔","suggested_names":["合成星塔"]}
+CANDIDATE_NAME_FIX_SUMMARY {"applied":0,"automatic":1,"manual":1,"mode":"report"}
+CANDIDATE_NAME_MANUAL_APPLIED {"applied":1,"entries":1,"path":"/tmp/name-review.json","skipped":0}
+合成云廊东门
+CANDIDATES VALID /tmp/c.json
+3a16886f80a59bd05ea09e93bb3efa1f1f66b1b7593b6fcd5f0b241a2fd9c8e1  /tmp/c.json
+~~~
+
+- 步骤 3 改成建议外的 合成云廊北门（应用 exit 1，两个哈希命令 exit 0）原始输出；失败前后 SHA-256 完全相同：
+
+~~~text
+3a16886f80a59bd05ea09e93bb3efa1f1f66b1b7593b6fcd5f0b241a2fd9c8e1  /tmp/c.json
+CANDIDATES_FAILED manual name review chosen for ref_id 'poi-fix-ambiguous' must exactly match one of suggested_names
+3a16886f80a59bd05ea09e93bb3efa1f1f66b1b7593b6fcd5f0b241a2fd9c8e1  /tmp/c.json
+合成云廊东门
+~~~
+
+## 书 29 白名单反向验证（完成）
+
+- 用独立临时 Git index 暂存正确 candidates.py，不触碰共享 index；临时删除 chosen 的逐字成员校验后，控制测试（exit 1）原始输出：
+
+~~~text
+test_fix_names_apply_manual_review_rejects_unlisted_choice_atomically (tests.test_candidates.CandidateContractTests) ... FAIL
+
+======================================================================
+FAIL: test_fix_names_apply_manual_review_rejects_unlisted_choice_atomically (tests.test_candidates.CandidateContractTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_candidates.py", line 582, in test_fix_names_apply_manual_review_rejects_unlisted_choice_atomically
+    self.assertNotEqual(0, result.returncode, result.stdout + result.stderr)
+AssertionError: 0 == 0 : CANDIDATE_NAME_MANUAL {"action":"unchanged","administrative_areas":["合成丙市/合成东区","合成丙市/合成西区"],"original_name":"合成云廊","reason":"ambiguous_suggestions","ref_id":"poi-fix-ambiguous","source_field_path":"/pois/0/coordinates","suggested_name":null,"suggested_names":["合成云廊东门","合成云廊西门"]}
+CANDIDATE_NAME_AUTO {"action":"would_apply","administrative_areas":["合成甲市/合成一区"],"original_name":"合成星塔旧称","reason":"unique_suggestion","ref_id":"poi-fix-unique","source_field_path":"/pois/1/coordinates","suggested_name":"合成星塔","suggested_names":["合成星塔"]}
+CANDIDATE_NAME_FIX_SUMMARY {"applied":0,"automatic":1,"manual":1,"mode":"report"}
+CANDIDATE_NAME_MANUAL_APPLIED {"applied":1,"entries":1,"path":"/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/.tmp/tmpmme1c9o3/manual-name-review.json","skipped":0}
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.145s
+
+FAILED (failures=1)
+~~~
+
+- 精确恢复后，独立 index 下 git diff --exit-code 对 candidates.py 为 exit 0、无输出；同一控制测试恢复为 Ran 1 test ... OK。临时 index 及目录已删除。
+
+## 书 30：12 格上层失败组合回归（完成）
+
+- 新增恰好 12 条测试：6 条走 `MobilityBackend.resolve`，3 条走 12306 station fallback 查询并实际进入 `AMapStationDistanceEnricher`，2 条走 `FlyAIBackend.resolve`，1 条走 `VariFlightBackend.enrich`；没有新增 adapter-only 测试。
+- 每条均逐字断言实体降级结果与 health，AMap/FlyAI/VariFlight 另逐字断言 warning；新增测试 diff 中 `skip` 与 `assertIn(` 均为 0，未以子串或“非空”凑绿。
+- 所有新增输入使用“合成”城市/实体/响应和远离真实行程的假坐标。车站夹具新增独立 `station-ambiguous-synthetic` 模式，不复用真实城市作为新测试输入。
+- 首轮住宿 contract 测试错误假设 fatal 前已收录后置锚点，按真实顺序改为断言 locations 为空；这是测试预期修正，不是产品 bug。
+- 三条车站测试前两轮因合成终点以“站”结尾而被 exact-query 归一化剥掉后缀、没有进入富化；第三轮改用无该后缀的独立合成查询后 3/3 绿，没有达到“同格连败 3 次”换格条件。
+- 四个相关模块门（exit 0）：`Ran 102 tests in 5.494s`、`OK`，skipped 0。
+
+## 书 30：12 格逐条单跑原始输出
+
+1. POI × AMap × 无结果：
+
+```text
+$ /usr/bin/python3 -m unittest -v tests.test_amap_live.AMapMobilityTests.test_poi_no_results_degrades_entity_with_exact_warning_and_health
+test_poi_no_results_degrades_entity_with_exact_warning_and_health (tests.test_amap_live.AMapMobilityTests) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.002s
+
+OK
+```
+
+2. POI × AMap × 限流：
+
+```text
+$ /usr/bin/python3 -m unittest -v tests.test_amap_live.AMapMobilityTests.test_poi_rate_limit_stops_entity_with_exact_warning_and_health
+test_poi_rate_limit_stops_entity_with_exact_warning_and_health (tests.test_amap_live.AMapMobilityTests) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.002s
+
+OK
+```
+
+3. POI × AMap × 契约漂移：
+
+```text
+$ /usr/bin/python3 -m unittest -v tests.test_amap_live.AMapMobilityTests.test_poi_contract_drift_stops_entity_with_exact_warning_and_health
+test_poi_contract_drift_stops_entity_with_exact_warning_and_health (tests.test_amap_live.AMapMobilityTests) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.002s
+
+OK
+```
+
+4. POI × AMap × 网络失败：
+
+```text
+$ /usr/bin/python3 -m unittest -v tests.test_amap_live.AMapMobilityTests.test_poi_network_failure_retries_then_degrades_exact_entity
+test_poi_network_failure_retries_then_degrades_exact_entity (tests.test_amap_live.AMapMobilityTests) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.002s
+
+OK
+```
+
+5. 住宿 × AMap × 契约漂移：
+
+```text
+$ /usr/bin/python3 -m unittest -v tests.test_amap_live.AMapMobilityTests.test_lodging_geocode_contract_drift_stops_with_exact_entity_state
+test_lodging_geocode_contract_drift_stops_with_exact_entity_state (tests.test_amap_live.AMapMobilityTests) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.003s
+
+OK
+```
+
+6. 住宿 × AMap × 网络失败：
+
+```text
+$ /usr/bin/python3 -m unittest -v tests.test_amap_live.AMapMobilityTests.test_lodging_geocode_network_failure_retries_and_preserves_anchor
+test_lodging_geocode_network_failure_retries_and_preserves_anchor (tests.test_amap_live.AMapMobilityTests) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.003s
+
+OK
+```
+
+7. 车站 × AMap enrichment × 歧义：
+
+```text
+$ /usr/bin/python3 -m unittest -v tests.test_rail_station_fallback.RailStationFallbackTests.test_amap_ambiguous_centre_keeps_all_stations_and_rail_health_ready
+test_amap_ambiguous_centre_keeps_all_stations_and_rail_health_ready (tests.test_rail_station_fallback.RailStationFallbackTests) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.065s
+
+OK
+```
+
+8. 车站 × AMap enrichment × 限流：
+
+```text
+$ /usr/bin/python3 -m unittest -v tests.test_rail_station_fallback.RailStationFallbackTests.test_amap_poi_rate_limit_keeps_all_stations_and_rail_health_ready
+test_amap_poi_rate_limit_keeps_all_stations_and_rail_health_ready (tests.test_rail_station_fallback.RailStationFallbackTests) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.063s
+
+OK
+```
+
+9. 车站 × AMap enrichment × 契约漂移：
+
+```text
+$ /usr/bin/python3 -m unittest -v tests.test_rail_station_fallback.RailStationFallbackTests.test_amap_poi_contract_drift_keeps_all_stations_and_rail_health_ready
+test_amap_poi_contract_drift_keeps_all_stations_and_rail_health_ready (tests.test_rail_station_fallback.RailStationFallbackTests) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.063s
+
+OK
+```
+
+10. 住宿 × FlyAI × 无结果：
+
+```text
+$ /usr/bin/python3 -m unittest -v tests.test_flyai_live.FlyAIBackendEntityFailureTests.test_lodging_no_results_keeps_empty_inventory_with_ready_health_warning
+test_lodging_no_results_keeps_empty_inventory_with_ready_health_warning (tests.test_flyai_live.FlyAIBackendEntityFailureTests) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK
+```
+
+11. 住宿 × FlyAI × 网络失败：
+
+```text
+$ /usr/bin/python3 -m unittest -v tests.test_flyai_live.FlyAIBackendEntityFailureTests.test_lodging_network_failure_retries_then_degrades_exact_entity
+test_lodging_network_failure_retries_then_degrades_exact_entity (tests.test_flyai_live.FlyAIBackendEntityFailureTests) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK
+```
+
+12. 航班 × VariFlight search × 无结果：
+
+```text
+$ /usr/bin/python3 -m unittest -v tests.test_variflight_live.VariFlightLiveTests.test_search_no_results_keeps_empty_candidates_with_exact_warning_and_health
+test_search_no_results_keeps_empty_candidates_with_exact_warning_and_health (tests.test_variflight_live.VariFlightLiveTests) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK
+```
+
+## 书 30：三格反向验证（临时副本）
+
+- 反向验证只在 `/tmp/ctw-book30-reverse.*` 的完整临时副本中改实现；工作区实现未写入。每次恢复后临时源码与工作区对应文件 `cmp` exit 0，最终两个临时目录及本轮专属 Python bytecode cache 均精确删除并验证不存在。
+- 第一次恢复 network 分类时，macOS 系统 Python 曾因同秒且同尺寸改写复用外置 `.pyc`，导致源码已恢复但一次进程仍读到红态；切换到每次唯一的 `PYTHONPYCACHEPREFIX` 后恢复测试转绿，对应外置缓存也已精确清理。下列红态均来自实际破坏，最终恢复绿态来自隔离缓存。
+
+反向 1：把 `ProviderNetworkError` 的返回分类从 `network` 临时改为 `timeout`（exit 1）：
+
+```text
+test_poi_network_failure_retries_then_degrades_exact_entity (tests.test_amap_live.AMapMobilityTests) ... FAIL
+
+======================================================================
+FAIL: test_poi_network_failure_retries_then_degrades_exact_entity (tests.test_amap_live.AMapMobilityTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/ctw-book30-reverse.IaOyj0/repo/tests/test_amap_live.py", line 781, in test_poi_network_failure_retries_then_degrades_exact_entity
+    self.assertEqual(
+AssertionError: 'calls=2/80 qps<=2; live_cells=0; locations=0; errors=network; warnings=network' != 'calls=2/80 qps<=2; live_cells=0; locations=0; errors=timeout; warnings=timeout'
+- calls=2/80 qps<=2; live_cells=0; locations=0; errors=network; warnings=network
+?                                                      ^  ----           ^  ----
++ calls=2/80 qps<=2; live_cells=0; locations=0; errors=timeout; warnings=timeout
+?                                                      ^^^ ++            ^^^ ++
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.002s
+
+FAILED (failures=1)
+```
+
+反向 2：把 station distance best-effort 的 `except Exception: return original` 临时改为重新抛出（exit 1）：
+
+```text
+test_amap_poi_contract_drift_keeps_all_stations_and_rail_health_ready (tests.test_rail_station_fallback.RailStationFallbackTests) ... ERROR
+
+======================================================================
+ERROR: test_amap_poi_contract_drift_keeps_all_stations_and_rail_health_ready (tests.test_rail_station_fallback.RailStationFallbackTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/ctw-book30-reverse-final.nyUZfW/repo/tests/test_rail_station_fallback.py", line 431, in test_amap_poi_contract_drift_keeps_all_stations_and_rail_health_ready
+    result, diagnostics = self._query(
+  File "/private/tmp/ctw-book30-reverse-final.nyUZfW/repo/tests/test_rail_station_fallback.py", line 203, in _query
+    result = Rail12306Adapter().query(request, context)
+  File "/private/tmp/ctw-book30-reverse-final.nyUZfW/repo/plugins/china-trip-weaver/src/china_trip_weaver/providers/rail12306.py", line 48, in query
+    result = super().query(request, context)
+  File "/private/tmp/ctw-book30-reverse-final.nyUZfW/repo/plugins/china-trip-weaver/src/china_trip_weaver/providers/base.py", line 196, in query
+    envelope = context.transport.execute(self.provider, request)
+  File "/private/tmp/ctw-book30-reverse-final.nyUZfW/repo/plugins/china-trip-weaver/src/china_trip_weaver/providers/mcp_stdio.py", line 392, in execute
+    body["station_resolution"] = self._best_effort_station_distances(
+  File "/private/tmp/ctw-book30-reverse-final.nyUZfW/repo/plugins/china-trip-weaver/src/china_trip_weaver/providers/mcp_stdio.py", line 427, in _best_effort_station_distances
+    return enricher.enrich(copy.deepcopy(original), request)
+  File "/private/tmp/ctw-book30-reverse-final.nyUZfW/repo/plugins/china-trip-weaver/src/china_trip_weaver/station_distance.py", line 116, in enrich
+    station_cache[lookup_key] = self._station_point(city_key, station_name.strip(), request)
+  File "/private/tmp/ctw-book30-reverse-final.nyUZfW/repo/plugins/china-trip-weaver/src/china_trip_weaver/station_distance.py", line 163, in _station_point
+    result, body = self._query(request)
+  File "/private/tmp/ctw-book30-reverse-final.nyUZfW/repo/plugins/china-trip-weaver/src/china_trip_weaver/station_distance.py", line 218, in _query
+    raise StationDistanceEnrichmentError("AMap %s failed: %s" % (request.capability, result.error_class))
+china_trip_weaver.station_distance.StationDistanceEnrichmentError: AMap poi failed: contract_mismatch
+
+----------------------------------------------------------------------
+Ran 1 test in 0.056s
+
+FAILED (errors=1)
+```
+
+反向 3：从 FlyAI health 聚合临时移除 `no_results` 仍为 ready 的分支（exit 1）：
+
+```text
+test_lodging_no_results_keeps_empty_inventory_with_ready_health_warning (tests.test_flyai_live.FlyAIBackendEntityFailureTests) ... FAIL
+
+======================================================================
+FAIL: test_lodging_no_results_keeps_empty_inventory_with_ready_health_warning (tests.test_flyai_live.FlyAIBackendEntityFailureTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/private/tmp/ctw-book30-reverse.IaOyj0/repo/tests/test_flyai_live.py", line 463, in test_lodging_no_results_keeps_empty_inventory_with_ready_health_warning
+    self.assertEqual("ready", result.health["status"])
+AssertionError: 'ready' != 'degraded'
+- ready
++ degraded
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+FAILED (failures=1)
+```
+
+三处分支恢复后的逐条原始输出：
+
+```text
+test_poi_network_failure_retries_then_degrades_exact_entity (tests.test_amap_live.AMapMobilityTests) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.002s
+
+OK
+test_amap_poi_contract_drift_keeps_all_stations_and_rail_health_ready (tests.test_rail_station_fallback.RailStationFallbackTests) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.054s
+
+OK
+test_lodging_no_results_keeps_empty_inventory_with_ready_health_warning (tests.test_flyai_live.FlyAIBackendEntityFailureTests) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK
+```
+
+## 书 30：最终门禁与边界
+
+- 最终全量（exit 0）原始摘要：
+
+```text
+----------------------------------------------------------------------
+Ran 492 tests in 33.244s
+
+OK
+```
+
+- 无 skipped 汇总，故 skipped 0；相对共同基线 473 共增加 19 条，其中书 30 diff 枚举恰好 12 条，另 7 条来自并行书 29。书 30 自身即使单独计数也是 485，满足 ≥481。
+- 上述是更新两份账本后的最后一次全量；`/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 376 file(s)`；`git diff --check` exit 0。
+- `git diff --name-only` 对书 30 实际被测的 `mobility.py`、`flyai_inventory.py`、`variflight_enrichment.py`、`station_distance.py` 与整个 `providers/` 为无输出；没有一行实现改动，也没有发现需要标为 `KNOWN DEFECT` 的现状错误。
+- 全 `src/` 的当前工作树 diff 只有用户已声明归书 29 的 `candidates.py`、`cli.py` 两项并行改动；书 30 未碰、未暂存、未回滚。书 30 自身修改路径严格为四份允许的测试、一个允许的合成 fixture、`BLOCKED.md` 与本节 `PROGRESS.md`。
+- `BLOCKED.md` 的原 18 格已逐格结算：12 格写入具名测试，6 格继续明确 open 且逐条说明因本轮 12 格上限未做；文件顶部同步为 6 个 coverage-only open，不再错误声称全清零。
+
+## 书 29 最终代码态门禁（完成）
+
+- 最终共享全量 /usr/bin/python3 -m unittest discover -s tests（exit 0）原始摘要：
+
+~~~text
+----------------------------------------------------------------------
+Ran 492 tests in 48.138s
+
+OK
+~~~
+
+- 输出无 skipped 汇总，故 skipped 0；相对 473 基线，书 29 新增 7 条，当前共享工作树还包含并行书 30 的 12 条。
+- /usr/bin/python3 scripts/scan_secrets.py（exit 0）原始输出：
+
+~~~text
+secret scan: 0 finding(s) across 376 file(s)
+~~~
+
+- 默认 fix-names 再跑仍逐字只有原三行，SUMMARY 保持 {"applied":0,"automatic":1,"manual":1,"mode":"report"}；AUTO 行格式和 --apply 路径未改。
+- git diff -G 分别检查 _poi_name_is_ambiguous、POI_NAME_SIMILARITY_MARGIN、_name_similarity，三次均 exit 0、无输出；mobility.py 整文件 diff 为空。
+- git diff --check exit 0；书 29 只改 candidates.py、cli.py、tests/test_candidates.py、README.md、README.zh-CN.md 并在 PROGRESS.md 追加自己的小节。共享状态里的 BLOCKED.md、provider/live tests 与 mcp_stdio_server.py 变更均属并行书 30，未触碰。
+- 未改版本号、Schema、判定口径、其他源码/测试或 CI；未安装 Codex。
+
+## 书 29 / 30 领导验收（2026-09-05，Claude 亲自复跑）
+
+两份并行交付，验收时都还在同一个工作树里未提交，由领导侧分开核对后分两次提交。合并后全量 `Ran 492 tests`、`OK`、skipped 0；`secret scan: 0 finding(s) across 376 file(s)`。
+
+### 书 29（fix-names 人工清单）：通过
+
+- 地界干净：`src/` 只有 `candidates.py`（+259）与 `cli.py`（+54）；`_poi_name_is_ambiguous`、`POI_NAME_SIMILARITY_MARGIN`、`_name_similarity` diff 全空；版本号与 `schema/` 未动。
+- 三步验收逐条复跑通过：
+  1. `--export-manual` 导出清单恰好 1 条（`poi-fix-ambiguous`，两个建议），候选文件 sha256 不变；旧的 `CANDIDATE_NAME_MANUAL`/`AUTO`/`FIX_SUMMARY` 三行逐字保留，新增独立的 `CANDIDATE_NAME_MANUAL_EXPORTED` 行。
+  2. 填 `合成云廊东门` 后 `--apply-manual`：该 POI 的 `name` 由「合成云廊」变为「合成云廊东门」，另两个 POI 一字未动，`validate-candidates` 仍通过。
+  3. 填 `合成云廊北门`（不在建议里）：exit 1，报 `chosen for ref_id 'poi-fix-ambiguous' must exactly match one of suggested_names`，候选文件字节不变。
+- 领导侧独立防后门抽查——四种「接近但不逐字」的变体全部被明确拒绝（exit 1 且文件未变），没有静默跳过、没有归一化后门：尾部半角空格、首部半角空格、繁体「東門」、尾部全角空格。
+- 部分失败不留半改文件：清单里前一条合法（`合成云廊西门`）、后一条 `ref_id` 不存在，整次调用失败且候选文件字节不变——不是只回滚后一条。
+- 双语 README 都写了两个参数各 3 处，并说明想用自定义名字请直接编辑候选文件；`git diff --check` exit 0。
+
+### 书 30（12 格上层失败组合回归）：通过
+
+- 硬门属实：`git diff` 对 `plugins/china-trip-weaver/src/` 完全为空，一行实现都没改。
+- 12 条新测试全部走上层 backend（`MobilityBackend.resolve` ×5、`FlyAIBackend` ×2、`VariFlightBackend.enrich` ×1、station fallback `_query` ×3），没有一条是只调 adapter 凑数。
+- 领导侧独立反向验证（不看执行者的三格，另选五条自己破坏）：
+  - 强制覆盖 mobility 的 POI 分支 error class → POI 那四条测试**全部**变红。
+  - 去掉 FlyAI `resolve` 的 `no_results` 豁免（`flyai_inventory.py` 第 214 行）→ **恰好**只有 `test_lodging_no_results_keeps_empty_inventory_with_ready_health_warning` 变红，精确且不恒真。
+  - 两次恢复后 `git diff` 均为空。
+  - 附一条方法教训：第一次破坏我选错了行（改了 `or "no_results"` 的兜底值，而 provider 层已给出 error_class；以及改了 353 行那个 `resolve` 根本不走的分支），两次都误得绿。破坏点必须选在被测路径真正读取的那一行，否则"绿"证明不了任何事。
+- 账本诚实：`BLOCKED.md` 那张表 18 格逐格有结论，12 格写明覆盖它的具名测试，6 格明确标「仍 open」并写清是因为触及 12 格上限——没有把未做项写成「无」，也没有含糊带过。表里点名的 12 条测试我逐条核实真实存在，且全部是本轮新写。
+- 新增夹具与测试无任何真实行程地名。

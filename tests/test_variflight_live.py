@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,7 +22,7 @@ from china_trip_weaver.providers.base import ContractMismatch, ProviderContext, 
 from china_trip_weaver.providers.flyai_cli import FlyAISubprocessTransport
 from china_trip_weaver.providers.variflight import EXPECTED_TOOLS, VariFlightAdapter
 from china_trip_weaver.providers.variflight_mcp import VariFlightMCPTransport
-from china_trip_weaver.variflight_enrichment import VariFlightBackend
+from china_trip_weaver.variflight_enrichment import CITY_IATA, VariFlightBackend
 
 
 SERVER = ROOT / "tests" / "fixtures" / "variflight_mcp_server.py"
@@ -136,6 +137,73 @@ class VariFlightLiveTests(unittest.TestCase):
         self.assertEqual("ready", result.health["status"])
         self.assertIn("candidates=1", result.health["reason"])
         self.assertEqual(2, transport.business_calls)
+
+    def test_search_no_results_keeps_empty_candidates_with_exact_warning_and_health(self):
+        class EmptySearchTransport(VariFlightMCPTransport):
+            def __init__(self, resolved):
+                self.credentials = resolved
+                self.business_calls = 0
+
+            def execute(self, provider, provider_request):
+                if provider != "variflight" or provider_request.parameters["action"] != "search":
+                    raise AssertionError("synthetic transport only serves VariFlight search")
+                self.business_calls += 1
+                payload = {
+                    "code": 200,
+                    "message": "Success",
+                    "data": [],
+                    "request_id": "synthetic-empty-search",
+                    "timestamp": 0,
+                }
+                return ProviderEnvelope(
+                    status_code=200,
+                    body={
+                        "tools": list(EXPECTED_TOOLS),
+                        "tool": "searchFlightsByDepArr",
+                        "content": [{
+                            "type": "text",
+                            "text": json.dumps(payload, ensure_ascii=False),
+                        }],
+                        "isError": False,
+                    },
+                    headers={},
+                    raw_ref="synthetic-empty-search",
+                )
+
+        resolved = credentials(True)
+        transport = EmptySearchTransport(resolved)
+        route = SimpleNamespace(
+            from_place={"name": "合成出发城", "ref_id": "city-synthetic-origin"},
+            to_place={"name": "合成到达城", "ref_id": "city-synthetic-destination"},
+            travel_date="2026-09-10",
+        )
+        with mock.patch.dict(
+            CITY_IATA,
+            {"合成出发城": "SYN", "合成到达城": "DST"},
+            clear=False,
+        ):
+            result = VariFlightBackend("auto", resolved, transport).enrich(
+                (), (route,), CLOCK,
+            )
+
+        self.assertEqual((), result.flights)
+        self.assertEqual("degraded", result.health["status"])
+        self.assertEqual(
+            "tools=9; business_calls=1; candidates=0; status_claims=0; "
+            "comfort_claims=0; errors=no_results",
+            result.health["reason"],
+        )
+        self.assertEqual(
+            ("no_results:flight@city-synthetic-origin->city-synthetic-destination:"
+             "route=city-synthetic-origin->city-synthetic-destination;"
+             "date=2026-09-10;action=search",),
+            result.warnings,
+        )
+        self.assertEqual(
+            ("variflight.search:2026-09-10:SYN:DST",),
+            result.business_calls,
+        )
+        self.assertEqual(1, transport.business_calls)
 
     def test_comfort_network_failure_is_classified_without_partial_output(self):
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:

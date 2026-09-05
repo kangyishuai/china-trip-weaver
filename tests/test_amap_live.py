@@ -29,6 +29,7 @@ from china_trip_weaver.providers.amap_http import (
 from china_trip_weaver.providers.base import (
     ProviderContext,
     ProviderEnvelope,
+    ProviderNetworkError,
     ProviderRateLimited,
     ProviderTimeout,
 )
@@ -69,6 +70,26 @@ def lodging_geocode_candidates():
             if item["field_path"].startswith("/lodgings/")
         ],
     }
+
+
+def synthetic_lodging_geocode_candidates():
+    candidates = lodging_geocode_candidates()
+    poi = candidates["pois"][0]
+    poi["name"] = "合成坐标锚点"
+    poi["city"] = "合成云港"
+    poi["category"] = "合成测试地点"
+    poi["deep_links"] = ["https://example.invalid/synthetic-anchor"]
+    poi["coordinates"] = coordinate_record(
+        "GCJ02", Point(0.12, 0.23), FixedClock.from_iso(FIXED_NOW), accuracy_m=50,
+    )
+    lodging = candidates["lodgings"][0]
+    lodging["name"] = "合成旅舍候选"
+    lodging["city"] = "合成云港"
+    lodging["area"] = "合成中心区"
+    lodging["deep_links"] = ["https://example.invalid/synthetic-lodging"]
+    for claim in candidates["claims"]:
+        claim["source_url"] = "https://example.invalid/synthetic-claim"
+    return candidates
 
 
 def credentials(configured=True):
@@ -197,6 +218,49 @@ class ScriptedAmapTransport:
                 body = {"api": api, "status": "1", "info": "OK", "route": {key: [path]}}
             return ProviderEnvelope(200, body, {})
         raise AssertionError(capability)
+
+
+class SyntheticAmapFailureTransport:
+    """One-capability synthetic failure used through ``MobilityBackend``."""
+
+    retry_rate_limits = False
+
+    def __init__(self, capability, outcome):
+        self.capability = capability
+        self.outcome = outcome
+        self.calls = 0
+        self.capabilities = []
+
+    def execute(self, provider, provider_request):
+        if provider != "amap" or provider_request.capability != self.capability:
+            raise AssertionError("synthetic failure transport received an unexpected request")
+        self.calls += 1
+        self.capabilities.append(provider_request.capability)
+        if self.outcome == "network":
+            raise ProviderNetworkError("synthetic AMap network failure")
+        if self.outcome == "rate_limited":
+            return ProviderEnvelope(
+                429, {"error": "synthetic quota"}, {"Retry-After": "30"},
+            )
+        if self.capability == "poi":
+            body = {
+                "status": "1",
+                "info": "OK",
+                "infocode": "10000",
+                "api": "poi-v5",
+                "page_num": provider_request.parameters["page_num"],
+                "page_size": provider_request.parameters["page_size"],
+                "pois": [] if self.outcome == "no_results" else {},
+            }
+        else:
+            body = {
+                "status": "1",
+                "info": "OK",
+                "infocode": "10000",
+                "api": "geocode-v3",
+                "geocodes": {},
+            }
+        return ProviderEnvelope(200, body, {})
 
 
 class AMapHTTPTransportTests(unittest.TestCase):
@@ -636,6 +700,135 @@ class AMapMobilityTests(unittest.TestCase):
         self.assertEqual(coordinates["native"], coordinates["gcj02"])
         self.assertIsNotNone(coordinates["wgs84"])
         self.assertEqual(["wgs84"], coordinates["conversion"]["derived_fields"])
+
+    def _resolve_poi_provider_failure(self, outcome):
+        scenario = {"entities": [{
+            "ref_id": "poi-synthetic-provider-failure",
+            "name": "合成极光馆",
+            "city": "合成云港",
+            "poi_results": [],
+            "geocode": {
+                "formatted_address": "合成省合成云港合成大道1号",
+                "province": "合成省",
+                "city": "合成云港",
+                "district": "合成中心区",
+                "adcode": "990001",
+                "location": "0.120000,0.230000",
+            },
+        }]}
+        transport = SyntheticAmapFailureTransport("poi", outcome)
+        result = MobilityBackend("live", credentials(), transport).resolve(
+            amap_scenario_candidates(scenario), self.clock, ("walking",),
+        )
+        return result, transport
+
+    def test_poi_no_results_degrades_entity_with_exact_warning_and_health(self):
+        result, transport = self._resolve_poi_provider_failure("no_results")
+
+        self.assertEqual((), result.locations)
+        self.assertEqual("degraded", result.health["status"])
+        self.assertEqual(
+            "calls=1/80 qps<=2; live_cells=0; locations=0; "
+            "errors=no_results; warnings=no_results",
+            result.health["reason"],
+        )
+        self.assertEqual(
+            ('no_results:poi-synthetic-provider-failure:poi_identity_lookup:'
+             '{"candidates":[],"suggested_names":[]}',),
+            result.warnings,
+        )
+        self.assertEqual(["poi"], transport.capabilities)
+
+    def test_poi_rate_limit_stops_entity_with_exact_warning_and_health(self):
+        result, transport = self._resolve_poi_provider_failure("rate_limited")
+
+        self.assertEqual((), result.locations)
+        self.assertEqual("rate_limited", result.health["status"])
+        self.assertEqual(
+            "calls=1/80 qps<=2; live_cells=0; locations=0; "
+            "errors=rate_limited; warnings=rate_limited",
+            result.health["reason"],
+        )
+        self.assertEqual(
+            ('rate_limited:poi-synthetic-provider-failure:poi_identity_lookup:'
+             '{"candidates":[],"suggested_names":[]}',),
+            result.warnings,
+        )
+        self.assertEqual(["poi"], transport.capabilities)
+
+    def test_poi_contract_drift_stops_entity_with_exact_warning_and_health(self):
+        result, transport = self._resolve_poi_provider_failure("contract_mismatch")
+
+        self.assertEqual((), result.locations)
+        self.assertEqual("contract_mismatch", result.health["status"])
+        self.assertEqual(
+            "calls=1/80 qps<=2; live_cells=0; locations=0; "
+            "errors=contract_mismatch; warnings=contract_mismatch",
+            result.health["reason"],
+        )
+        self.assertEqual(
+            ('contract_mismatch:poi-synthetic-provider-failure:poi_identity_lookup:'
+             '{"candidates":[],"suggested_names":[]}',),
+            result.warnings,
+        )
+        self.assertEqual(["poi"], transport.capabilities)
+
+    def test_poi_network_failure_retries_then_degrades_exact_entity(self):
+        result, transport = self._resolve_poi_provider_failure("network")
+
+        self.assertEqual((), result.locations)
+        self.assertEqual("degraded", result.health["status"])
+        self.assertEqual(
+            "calls=2/80 qps<=2; live_cells=0; locations=0; "
+            "errors=network; warnings=network",
+            result.health["reason"],
+        )
+        self.assertEqual(
+            ('network:poi-synthetic-provider-failure:poi_identity_lookup:'
+             '{"candidates":[],"suggested_names":[]}',),
+            result.warnings,
+        )
+        self.assertEqual(["poi", "poi"], transport.capabilities)
+
+    def test_lodging_geocode_contract_drift_stops_with_exact_entity_state(self):
+        transport = SyntheticAmapFailureTransport("geocode", "contract_mismatch")
+        result = MobilityBackend("live", credentials(), transport).resolve(
+            synthetic_lodging_geocode_candidates(), self.clock, ("walking",),
+        )
+
+        self.assertEqual((), result.locations)
+        self.assertEqual("contract_mismatch", result.health["status"])
+        self.assertEqual(
+            "calls=1/80 qps<=2; live_cells=0; locations=0; "
+            "errors=contract_mismatch; warnings=contract_mismatch",
+            result.health["reason"],
+        )
+        self.assertEqual(
+            ('contract_mismatch:lodging-bjs-central:geocode_lookup:'
+             '{"candidates":[],"suggested_names":[]}',),
+            result.warnings,
+        )
+        self.assertEqual(["geocode"], transport.capabilities)
+
+    def test_lodging_geocode_network_failure_retries_and_preserves_anchor(self):
+        transport = SyntheticAmapFailureTransport("geocode", "network")
+        result = MobilityBackend("live", credentials(), transport).resolve(
+            synthetic_lodging_geocode_candidates(), self.clock, ("walking",),
+        )
+
+        self.assertEqual(("poi-bjs-bund",), tuple(item.ref_id for item in result.locations))
+        self.assertEqual("degraded", result.health["status"])
+        self.assertEqual(
+            "calls=2/80 qps<=2; live_cells=0; locations=1; "
+            "errors=network; warnings=network",
+            result.health["reason"],
+        )
+        self.assertEqual(
+            ('network:lodging-bjs-central:geocode_lookup:'
+             '{"candidates":[],"suggested_names":[]}',),
+            result.warnings,
+        )
+        self.assertEqual(["geocode", "geocode"], transport.capabilities)
 
     def test_lodging_geocode_no_results_degrades_without_crashing(self):
         class EmptyGeocodeTransport:

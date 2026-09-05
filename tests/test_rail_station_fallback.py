@@ -113,6 +113,60 @@ class StationAMapFixtureTransport:
         return ProviderEnvelope(status_code=200, body=body, headers={})
 
 
+class StationAMapFailureTransport(StationAMapFixtureTransport):
+    """Inject one synthetic AMap failure after 12306 returns ambiguous stations."""
+
+    def __init__(self, outcome):
+        super().__init__()
+        self.outcome = outcome
+
+    def execute(self, provider, request):
+        if provider != "amap":
+            raise AssertionError("station fixture is restricted to amap")
+        if self.outcome == "ambiguous_centre" and request.capability == "geocode":
+            self.requests.append(request)
+            return ProviderEnvelope(200, {
+                "status": "1",
+                "info": "OK",
+                "infocode": "10000",
+                "count": "2",
+                "api": "geocode-v3",
+                "geocodes": [{
+                    "formatted_address": "合成多站城中心甲",
+                    "province": "合成省",
+                    "city": "多站城市",
+                    "district": "合成中心一区",
+                    "adcode": "990001",
+                    "location": "0.100000,0.200000",
+                }, {
+                    "formatted_address": "合成多站城中心乙",
+                    "province": "合成省",
+                    "city": "多站城市",
+                    "district": "合成中心二区",
+                    "adcode": "990002",
+                    "location": "0.300000,0.400000",
+                }],
+            }, {})
+        if request.capability == "poi" and self.outcome == "rate_limited_poi":
+            self.requests.append(request)
+            return ProviderEnvelope(
+                429, {"error": "synthetic station quota"}, {"Retry-After": "30"},
+            )
+        if request.capability == "poi" and self.outcome == "contract_drift_poi":
+            self.requests.append(request)
+            return ProviderEnvelope(200, {
+                "status": "1",
+                "info": "OK",
+                "infocode": "10000",
+                "count": "0",
+                "api": "poi-v5",
+                "page_size": request.parameters["page_size"],
+                "page_num": request.parameters["page_num"],
+                "pois": {},
+            }, {})
+        return super().execute(provider, request)
+
+
 class RailStationFallbackTests(unittest.TestCase):
     def _query(self, mode, from_name, to_name, station_distance_enricher=None):
         credentials = resolve_credentials({}, ROOT / ".tmp" / "rail-station-fallback-no-credentials")
@@ -323,6 +377,79 @@ class RailStationFallbackTests(unittest.TestCase):
         self.assertTrue(all("distance_meters" not in item for item in candidates))
         self.assertNotIn("get-tickets", self._calls(diagnostics))
         self.assertEqual(1, len(amap.requests))
+
+    def test_amap_ambiguous_centre_keeps_all_stations_and_rail_health_ready(self):
+        amap = StationAMapFailureTransport("ambiguous_centre")
+        result, diagnostics = self._query(
+            "station-ambiguous-synthetic", "多站城", "合成终点", self._amap_enricher(amap),
+        )
+
+        candidates = [
+            item for item in result.normalized_items
+            if item["resolution_for"] == "from"
+        ]
+        self.assertEqual("ready", result.health["status"])
+        self.assertEqual("ambiguous", result.error_class)
+        self.assertEqual(["CCX", "BBX", "AAX"], [
+            item["station_code"] for item in candidates
+        ])
+        self.assertEqual([False, False, False], [
+            "distance_meters" in item for item in candidates
+        ])
+        self.assertEqual(["geocode"], [request.capability for request in amap.requests])
+        self.assertEqual([], [
+            call for call in self._calls(diagnostics) if call == "get-tickets"
+        ])
+
+    def test_amap_poi_rate_limit_keeps_all_stations_and_rail_health_ready(self):
+        amap = StationAMapFailureTransport("rate_limited_poi")
+        result, diagnostics = self._query(
+            "station-ambiguous-synthetic", "多站城", "合成终点", self._amap_enricher(amap),
+        )
+
+        candidates = [
+            item for item in result.normalized_items
+            if item["resolution_for"] == "from"
+        ]
+        self.assertEqual("ready", result.health["status"])
+        self.assertEqual("ambiguous", result.error_class)
+        self.assertEqual(["CCX", "BBX", "AAX"], [
+            item["station_code"] for item in candidates
+        ])
+        self.assertEqual([False, False, False], [
+            "distance_meters" in item for item in candidates
+        ])
+        self.assertEqual(
+            ["geocode", "poi"], [request.capability for request in amap.requests],
+        )
+        self.assertEqual([], [
+            call for call in self._calls(diagnostics) if call == "get-tickets"
+        ])
+
+    def test_amap_poi_contract_drift_keeps_all_stations_and_rail_health_ready(self):
+        amap = StationAMapFailureTransport("contract_drift_poi")
+        result, diagnostics = self._query(
+            "station-ambiguous-synthetic", "多站城", "合成终点", self._amap_enricher(amap),
+        )
+
+        candidates = [
+            item for item in result.normalized_items
+            if item["resolution_for"] == "from"
+        ]
+        self.assertEqual("ready", result.health["status"])
+        self.assertEqual("ambiguous", result.error_class)
+        self.assertEqual(["CCX", "BBX", "AAX"], [
+            item["station_code"] for item in candidates
+        ])
+        self.assertEqual([False, False, False], [
+            "distance_meters" in item for item in candidates
+        ])
+        self.assertEqual(
+            ["geocode", "poi"], [request.capability for request in amap.requests],
+        )
+        self.assertEqual([], [
+            call for call in self._calls(diagnostics) if call == "get-tickets"
+        ])
 
     def test_missing_amap_key_makes_no_calls_and_keeps_unknown_distances(self):
         amap = StationAMapFixtureTransport()

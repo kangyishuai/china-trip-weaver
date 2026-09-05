@@ -1,7 +1,8 @@
 # Unresolved items
 
-Nothing is open. Everything on this page is closed and kept only for provenance;
-the per-round evidence lives in `PROGRESS.md`.
+Six coverage-only items remain open in the Book 23 combination table below; none is a
+confirmed product bug. Everything else on this page is closed and kept only for
+provenance; the per-round evidence lives in `PROGRESS.md`.
 
 ## Closed
 
@@ -271,27 +272,31 @@ should mean pending work. They live where they are enforced:
 
 ## 书 23 组合排查：达到 6 格上限后仍开放的覆盖空格（2026-09-05）
 
-- 状态：open coverage debt，不是已证明的产品 bug。本轮已按任务上限认领 6 格，以下实体编排组合没有新增第 7 条测试，也没有为它们改实现；开工矩阵中的 adapter-only 夹具不能证明上层按实体降级时没有分支状态问题。
+- 状态：书 30 已关闭其中 12 格，仍有 6 格 open coverage debt；它们不是已证明的产品 bug。书 30 严守 12 格认领上限，没有把未做项写成“无”，也没有为任何一格修改实现。
 - 共同复现入口均为离线合成输入：POI 用 `tests.test_providers.amap_scenario_candidates`，住宿 AMap 用 `tests.test_amap_live.lodging_geocode_candidates`，车站用 `tests.test_rail_station_fallback.RailStationFallbackTests._query`，FlyAI/VariFlight 用各自 backend 与 `tests/fixtures/e2e/beijing-shanghai-3d` route；不得访问实网。
 
-| 未认领实体分支 | 最小 provider 输入/失败 | 为什么仍开放 |
+| 实体分支 | 最小 provider 输入/失败 | 书 30 逐格结论 |
 |---|---|---|
-| POI × AMap × 无结果 | `poi-v5` + `page_num=1,page_size=2,pois=[]` | 只有 `amap/empty.json` adapter 夹具，没有 `MobilityBackend` 实体 warning/health 回归 |
-| POI × AMap × 限流 | POI 请求返回 HTTP 429 | 只有 `amap/rate_limit.json` adapter 夹具 |
-| POI × AMap × 契约漂移 | `poi-v5` 但 `pois={}` | 只有 adapter shape gate，没有 mobility 分支回归 |
-| POI × AMap × 网络失败 | transport 连续两次抛 `ProviderNetworkError` | timeout 与 network 是不同 error class，现无 POI network 分支回归 |
-| 住宿 × AMap × 契约漂移 | `geocode-v3` 但 `geocodes={}` | geocode adapter 可 fail closed，上层住宿分支仍未钉住 |
-| 住宿 × AMap × 网络失败 | transport 连续抛 `ProviderNetworkError` | 本轮只做了可读试跑，没有新增第 7 条回归 |
-| 车站 × 12306 station × 网络失败 | 合成 MCP 在 `get-stations-code-in-city` 回答前退出 | 当前 station tests 覆盖 no-results/rate-limit/shape drift，未覆盖进程网络失败 |
-| 车站 × AMap enrichment × 歧义 | city geocode 返回两个不同同城坐标，或一个站名返回两个不同精确站点坐标 | `_unique_point` 路径没有专门回归 |
-| 车站 × AMap enrichment × 限流 | geocode 或 POI 返回 HTTP 429 | best-effort 外层应保留站点，但未按此 error class 钉住 |
-| 车站 × AMap enrichment × 契约漂移 | geocode `geocodes={}` 或 POI `pois={}` | best-effort 外层应保留站点，但未按 shape drift 钉住 |
-| 住宿 × FlyAI × 无结果 | `status=0,data.itemList=[]` 的 lodging 请求 | `flyai/empty.json` 是 flight capability，不覆盖 lodging merge/fallback |
-| 住宿 × FlyAI × 网络失败 | lodging transport 连续抛 `ProviderNetworkError` | 现有完整 plan 失败链使用 `ProviderTimeout`，不是 network |
-| 航班 × FlyAI × 无结果/限流/契约漂移/网络失败 | 分别复用 `flyai/empty.json`、`rate_limit.json`、`wrong_shape.json`、`stderr_error.json` 的 transport body/kind | 这些只在 adapter corpus 运行，未钉住 `FlyAIBackend` 到 plan 的 comparison-leg/health 分支 |
-| 航班 × VariFlight search × 无结果/限流 | 分别复用 `variflight/empty.json`、`rate_limit.json`，通过 `VariFlightBackend.enrich` 而非直接 adapter | adapter 已测，search orchestration 的候选保留、warning 与 health 组合仍未专门回归 |
+| POI × AMap × 无结果 | `poi-v5` + `page_num=1,page_size=2,pois=[]` | 已覆盖：`AMapMobilityTests.test_poi_no_results_degrades_entity_with_exact_warning_and_health` |
+| POI × AMap × 限流 | POI 请求返回 HTTP 429 | 已覆盖：`AMapMobilityTests.test_poi_rate_limit_stops_entity_with_exact_warning_and_health` |
+| POI × AMap × 契约漂移 | `poi-v5` 但 `pois={}` | 已覆盖：`AMapMobilityTests.test_poi_contract_drift_stops_entity_with_exact_warning_and_health` |
+| POI × AMap × 网络失败 | transport 连续两次抛 `ProviderNetworkError` | 已覆盖：`AMapMobilityTests.test_poi_network_failure_retries_then_degrades_exact_entity` |
+| 住宿 × AMap × 契约漂移 | `geocode-v3` 但 `geocodes={}` | 已覆盖：`AMapMobilityTests.test_lodging_geocode_contract_drift_stops_with_exact_entity_state` |
+| 住宿 × AMap × 网络失败 | transport 连续抛 `ProviderNetworkError` | 已覆盖：`AMapMobilityTests.test_lodging_geocode_network_failure_retries_and_preserves_anchor` |
+| 车站 × 12306 station × 网络失败 | 合成 MCP 在 `get-stations-code-in-city` 回答前退出 | **仍 open**：书 30 的 12 格上限优先给了三条 AMap station enrichment 分支；本格未新增测试，不能沿用 rate-limit 代替 network |
+| 车站 × AMap enrichment × 歧义 | city geocode 返回两个不同同城坐标 | 已覆盖：`RailStationFallbackTests.test_amap_ambiguous_centre_keeps_all_stations_and_rail_health_ready` |
+| 车站 × AMap enrichment × 限流 | station POI 返回 HTTP 429 | 已覆盖：`RailStationFallbackTests.test_amap_poi_rate_limit_keeps_all_stations_and_rail_health_ready` |
+| 车站 × AMap enrichment × 契约漂移 | station POI 返回 `pois={}` | 已覆盖：`RailStationFallbackTests.test_amap_poi_contract_drift_keeps_all_stations_and_rail_health_ready` |
+| 住宿 × FlyAI × 无结果 | `status=0,data.itemList=[]` 的 lodging 请求 | 已覆盖：`FlyAIBackendEntityFailureTests.test_lodging_no_results_keeps_empty_inventory_with_ready_health_warning` |
+| 住宿 × FlyAI × 网络失败 | lodging transport 连续抛 `ProviderNetworkError` | 已覆盖：`FlyAIBackendEntityFailureTests.test_lodging_network_failure_retries_then_degrades_exact_entity` |
+| 航班 × FlyAI × 无结果 | `flyai/empty.json` 对应的 flight 空结果形状 | **仍 open**：达到书 30 的 12 格上限；adapter corpus 仍不能替代 `FlyAIBackend` comparison-leg/health 回归 |
+| 航班 × FlyAI × 限流 | `flyai/rate_limit.json` 的 HTTP 429 | **仍 open**：达到书 30 的 12 格上限；住宿 rate-limit 测试不证明 flight 实体 warning 与降级结果 |
+| 航班 × FlyAI × 契约漂移 | `flyai/wrong_shape.json` 的非 JSON body | **仍 open**：达到书 30 的 12 格上限；只有 adapter shape gate |
+| 航班 × FlyAI × 网络失败 | `flyai/stderr_error.json` 的 network transport | **仍 open**：达到书 30 的 12 格上限；现有完整失败链仍只使用 timeout |
+| 航班 × VariFlight search × 无结果 | `variflight/empty.json` 的空 search | 已覆盖：`VariFlightLiveTests.test_search_no_results_keeps_empty_candidates_with_exact_warning_and_health` |
+| 航班 × VariFlight search × 限流 | `variflight/rate_limit.json` 的 HTTP 429 | **仍 open**：达到书 30 的 12 格上限；adapter fixture 仍没有钉住 `VariFlightBackend.enrich` 的 warning/health/候选保留组合 |
 
-- 已实际验证其中一条可复现输入（exit 0），命令在仓库根运行；这证明当前住宿 network 行为是“可运行但未固化”，不是声称已有测试：
+- 以下是书 23 当时实际验证的住宿 network 可复现输入；书 30 现已把同一 error class 固化为上表具名 unittest，原记录保留作历史证据：
 
 ```text
 /usr/bin/python3 - <<'PY'
@@ -337,7 +342,7 @@ PY
 
 ### 书 23 交付标记
 
-- 上述 18 个上限外覆盖空格仍保持 open；已确认的 VariFlight 上层 health bug 后由书 26 的 `229530fb7e39068d7eb72cbb27ba2442859dfe76` 关闭。书 23 当时没有把未修项写成“无”，也没有用越界代码、skip 或弱断言掩盖。
+- 上述 18 个上限外覆盖空格中，书 30 已以 12 条上层回归关闭 12 格，余下 6 格继续逐格标为 open；已确认的 VariFlight comfort 上层 health bug 另由书 26 的 `229530fb7e39068d7eb72cbb27ba2442859dfe76` 关闭。书 23/30 都没有把未修项写成“无”，也没有用越界代码、skip 或弱断言掩盖。
 
 ## 书 22 候选名回填（2026-09-05）
 

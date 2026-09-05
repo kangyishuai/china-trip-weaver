@@ -422,6 +422,86 @@ class FlyAISubprocessTests(unittest.TestCase):
         self.assertEqual(3, len([item for item in result.business_calls if item.startswith("flyai.")]))
 
 
+class FlyAIBackendEntityFailureTests(unittest.TestCase):
+    @staticmethod
+    def synthetic_request():
+        return {
+            "start_date": "2026-09-10",
+            "end_date": "2026-09-11",
+            "destinations": [{"city": "合成云港"}],
+            "travelers": 2,
+        }
+
+    @staticmethod
+    def resolved_credentials():
+        return resolve_credentials(
+            {}, ROOT / ".tmp" / "flyai-book30-synthetic-no-file",
+        )
+
+    def test_lodging_no_results_keeps_empty_inventory_with_ready_health_warning(self):
+        transport = ReplayTransport({
+            "kind": "response",
+            "status_code": 200,
+            "headers": {},
+            "body": {
+                "cliVersion": "1.0.16",
+                "commands": ["search-hotel", "search-flight"],
+                "probe": {
+                    "command": "search-hotel",
+                    "flags": ["--dest-name", "--check-in-date", "--check-out-date"],
+                },
+                "status": 0,
+                "message": "success",
+                "data": {"itemList": []},
+            },
+        })
+        result = FlyAIBackend(
+            "live", self.resolved_credentials(), transport,
+        ).resolve(self.synthetic_request(), (), CLOCK)
+
+        self.assertEqual((), result.lodgings)
+        self.assertEqual("ready", result.health["status"])
+        self.assertEqual(
+            "calls=1; credential=keyless-trial; lodging_items=0; "
+            "flight_items=0; errors=no_results",
+            result.health["reason"],
+        )
+        self.assertEqual(
+            ("no_results:lodging@合成云港:city=合成云港;"
+             "check_in=2026-09-10;check_out=2026-09-11",),
+            result.warnings,
+        )
+        self.assertEqual(
+            ("flyai.lodging:合成云港:2026-09-10:2026-09-11",),
+            result.business_calls,
+        )
+        self.assertEqual(1, transport.calls)
+
+    def test_lodging_network_failure_retries_then_degrades_exact_entity(self):
+        transport = ReplayTransport({"kind": "network"})
+        result = FlyAIBackend(
+            "live", self.resolved_credentials(), transport,
+        ).resolve(self.synthetic_request(), (), CLOCK)
+
+        self.assertEqual((), result.lodgings)
+        self.assertEqual("degraded", result.health["status"])
+        self.assertEqual(
+            "calls=1; credential=keyless-trial; lodging_items=0; "
+            "flight_items=0; errors=network",
+            result.health["reason"],
+        )
+        self.assertEqual(
+            ("network:lodging@合成云港:city=合成云港;"
+             "check_in=2026-09-10;check_out=2026-09-11",),
+            result.warnings,
+        )
+        self.assertEqual(
+            ("flyai.lodging:合成云港:2026-09-10:2026-09-11",),
+            result.business_calls,
+        )
+        self.assertEqual(2, transport.calls)
+
+
 class FlyAIIsAnOptionalSourceTests(unittest.TestCase):
     """FlyAI is a third-party wrapper, so its failure must never block a plan."""
 

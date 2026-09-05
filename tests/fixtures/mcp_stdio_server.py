@@ -29,6 +29,7 @@ STATIONS = {
     "南平市": {"station_code": "NPX", "station_name": "南平市示例站"},
     "昆明南": {"station_code": "KMX", "station_name": "昆明南示例站"},
     "平潭": {"station_code": "PTX", "station_name": "平潭示例站"},
+    "合成终点": {"station_code": "ZZX", "station_name": "合成终点示例站"},
 }
 TRACE_MODES = {
     "g5-station-fallback",
@@ -37,6 +38,7 @@ TRACE_MODES = {
     "representative-fallback",
     "station-no-results",
     "station-ambiguous",
+    "station-ambiguous-synthetic",
     "station-shape-drift",
     "tool-fingerprint-drift",
 }
@@ -62,7 +64,12 @@ def exact_station_payload(mode, station_names):
     names = station_names.split("|")
     if mode == "station-shape-drift":
         return []
-    if mode in ("station-no-results", "station-ambiguous", "representative-fallback", "all-stations-fallback"):
+    if mode in ("station-no-results", "station-ambiguous", "station-ambiguous-synthetic", "representative-fallback", "all-stations-fallback"):
+        if mode == "station-ambiguous-synthetic":
+            return {
+                name: STATIONS[name] if name == "合成终点" else {"error": "未检索到城市。"}
+                for name in names
+            }
         if mode == "station-ambiguous":
             return {
                 name: STATIONS[name] if name == "昆明南" else {"error": "未检索到城市。"}
@@ -91,7 +98,7 @@ def representative_station_payload(mode, citys):
             name: STATIONS[name] if name in STATIONS else {"error": "未检索到城市。"}
             for name in citys.split("|")
         }
-    if mode in ("g5-station-fallback", "all-stations-fallback", "station-no-results", "station-ambiguous"):
+    if mode in ("g5-station-fallback", "all-stations-fallback", "station-no-results", "station-ambiguous", "station-ambiguous-synthetic"):
         return errors_for(citys)
     return {
         name: STATIONS[name] if name in STATIONS else {"error": "未检索到城市。"}
@@ -102,13 +109,13 @@ def representative_station_payload(mode, citys):
 def city_station_payload(mode, city):
     if mode == "all-stations-fallback" and city == "武夷山":
         return [{"station_code": "WYX", "station_name": "武夷山北示例站"}]
-    if mode == "station-ambiguous" and city == "多站城":
+    if mode in ("station-ambiguous", "station-ambiguous-synthetic") and city == "多站城":
         return [
             {"station_code": "AAX", "station_name": "多站城远站"},
             {"station_code": "BBX", "station_name": "多站城近站"},
             {"station_code": "CCX", "station_name": "多站城未知站"},
         ]
-    if mode == "station-no-results" or mode in ("g5-station-fallback", "all-stations-fallback", "station-ambiguous"):
+    if mode == "station-no-results" or mode in ("g5-station-fallback", "all-stations-fallback", "station-ambiguous", "station-ambiguous-synthetic"):
         return "Error: City not found. "
     if city == "北京":
         return [{"station_code": "BEX", "station_name": "北京示例站"}]
