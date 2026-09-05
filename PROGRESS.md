@@ -265,21 +265,47 @@ OK
 
 ## 当前状态速览（2026-09-05）
 
-接手先读这一节，下面 68 个章节是按轮次留存的实测证据，不必通读。
+接手先读这一节，下面一百多个章节是按轮次留存的实测证据，不必通读。
 
 - 版本 **0.4.0**，已装进本机 Codex（`plugin list: installed, enabled 0.4.0`，缓存与源码一致）。
-- 全量 `/usr/bin/python3 -m unittest discover -s tests` = **393 项 OK、skipped 0**；
-  `scripts/scan_secrets.py` = `0 finding(s) across 371 file(s)`。
+- 全量 `/usr/bin/python3 -m unittest discover -s tests` = **424 项 OK、skipped 0**；
+  `scripts/scan_secrets.py` = `0 finding(s) across 372 file(s)`。
 - demo 五组：`demo/` 根、`guangzhou-shenzhen/`、`multicity-5d/`、`grouped-departures/`、
   `journey-16d/`，各自 validate 与 HTML 校验全过。
-- 2026-09-04/05 完成真实行程 dogfood 审计的全部 12 条 finding，测试从 290 涨到 386。
-  按管理者—执行者模式跑了 11 份任务书：地点身份、12306 站名 fallback、跨城多目的地、
-  住宿硬约束与库存兜底、可读交付与工具口径、节奏预算、并发与 CLI 便利、旅客分组与
-  降配、0.3.0 发布、Journey 模型、0.4.0 Journey 总览与发布。
-- 仍开着的两条在 `BLOCKED.md` 顶部 Open 区：12306 车站候选无距离信号；公开分发的
-  privacy/terms URL 有意留空。
-- 真实 16 天行程实测发现的两项待办已在本轮修复：Journey 段边界/每日城市服从候选住宿链；
-  `validate-candidates` 会在入口拒绝 unknown 数组下标与 claim.subject_ref 实体错位。
+- `BLOCKED.md` 的 Open 区**已清零**。12306 车站距离信号已解决（高德 geocode 取城市中心、
+  POI 取站点坐标，未知距离仍排最后，绝不替用户选站）；公开分发的 privacy/terms URL 已
+  重新归类为 ADR-0013 的必然结果而非待办。
+
+### 这一轮做完了什么（2026-09-04/05，17 份任务书）
+
+真实行程 dogfood 审计的 12 条 finding 全部关闭：POI 身份校验、酒店房型与价格降级、
+跨城多目的地、预算与节奏餐休、12306 站名 fallback、旅客分组会合、长行程 Journey 与
+总览页、provider 并发重试与进度事件、renderer 说人话、候选生成器、doctor 分层探测、
+manifest 字段。测试从 290 涨到 424，版本 0.2.0 → 0.4.0。
+
+验收与实网另外挖出并修掉 6 个缺陷，都是离线夹具照不出来的：
+
+1. Journey 段边界无视候选住宿链，导致用户写好的住宿安排被推翻并报无解；
+2. `validate-candidates` 不校验 unknown 数组下标与 claim 实体是否一致，错位会放行到拆段才炸；
+3. unknown 的 reason 停留在候选阶段文案，实网跑完仍写「AMap is not configured」而其实已配置；
+4. 已解决的坐标 unknown 不被清除，Trip 里出现「坐标未验证」与该点已有坐标并存的自相矛盾；
+5. 高德调用预算按单 Trip 设计，Journey 多段共用导致最后一段 `rate_limited`、路线全退回静态估算；
+6. Journey 合并段内多个 atomic Trip 的 health 时对整条 reason 去重，三个 atomic 同时失败只显示一条。
+
+### 实网验证过什么
+
+- 北京→上海 3 天全实网：`errors=0`，FlyAI 零限流（并发闸门生效）、住宿价格如实降级为
+  `verify-on-click`、POI 身份校验真在拦假坐标、12306 预售期外正确降级。
+- 福建 16 天六城全实网跑过两次。书 16 之前：最后一段 `rate_limited`、三段 live_cells 为
+  12/0/0。书 16 之后：无段打满、live_cells 12/12/12、POI 坐标覆盖 40/67，代价是高德调用
+  从 83 升到 122（默认总预算已改为 `80 × 段数`，用 `--amap-total-max-calls` 可收紧）。
+
+### 已知短板（未排期）
+
+- POI 坐标覆盖率约六成。失败主因是候选里写的是「长江澳风车田日落」这类人写给人看的行程
+  条目而非可检索地名；身份校验拒绝它们是对的，但反馈只说 `ambiguous_name_margin`，没告诉
+  用户该改成什么。
+- `replan` 有 5 条测试和 4 个夹具，但 Journey 某段被改之后跨段衔接是否仍成立，从未验证。
 
 ## 书 3 开工理解（2026-09-04，≤10 行）
 1. 目标：补齐 planner 已承诺的 2–7 天有序多城市能力，不收回产品、Skill 或 Schema 合同。
