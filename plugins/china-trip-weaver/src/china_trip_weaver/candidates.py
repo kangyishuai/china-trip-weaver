@@ -406,7 +406,20 @@ def _candidate_name_options(
         options.append(CandidateNameOption(name, administrative_area))
     if [item.name for item in options] != suggestions:
         return tuple(options), "feedback_name_mismatch"
-    return tuple(options), None
+    return _deduplicate_name_options(options), None
+
+
+def _deduplicate_name_options(
+    options: Sequence[CandidateNameOption],
+) -> Tuple[CandidateNameOption, ...]:
+    deduplicated = []
+    seen_names = []
+    for option in options:
+        if option.name in seen_names:
+            continue
+        seen_names.append(option.name)
+        deduplicated.append(option)
+    return tuple(deduplicated)
 
 
 def _candidate_name_decision(
@@ -453,25 +466,23 @@ def _unique_candidate_name(
     original_name: str,
     options: Sequence[CandidateNameOption],
 ) -> Tuple[Optional[str], str]:
-    if not options:
+    deduplicated = _deduplicate_name_options(options)
+    if not deduplicated:
         return None, "no_suggested_name"
 
     # Import lazily because mobility imports validate_candidates from this module.
-    # Reusing these exact helpers keeps name selection aligned with the existing
-    # identity threshold without changing or copying that threshold here.
-    from .mobility import POI_NAME_SIMILARITY_MARGIN, _name_similarity, _normalized_name
+    # Reusing this exact decision keeps name selection aligned with mobility
+    # without changing or copying its similarity threshold here.
+    from .mobility import _poi_name_is_ambiguous
 
-    preferred = options[0].name
-    if _normalized_name(preferred) == _normalized_name(original_name):
-        return None, "suggestion_matches_original"
-    if len(options) > 1:
-        preferred_score = _name_similarity(original_name, preferred)
-        nearest_alternative = max(
-            _name_similarity(original_name, option.name)
-            for option in options[1:]
-        )
-        if preferred_score - nearest_alternative < POI_NAME_SIMILARITY_MARGIN:
-            return None, "ambiguous_suggestions"
+    preferred = deduplicated[0].name
+    if preferred == original_name:
+        return preferred, "exact_original_confirmed"
+    if _poi_name_is_ambiguous(
+        original_name,
+        tuple({"name": option.name} for option in deduplicated),
+    ):
+        return None, "ambiguous_suggestions"
     return preferred, "unique_suggestion"
 
 

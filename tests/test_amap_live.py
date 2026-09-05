@@ -39,6 +39,9 @@ from tests.test_providers import AMAP_SCENARIOS, AMapScenarioTransport, amap_sce
 FIXED_NOW = "2026-09-03T12:00:00+08:00"
 E2E = ROOT / "tests" / "fixtures" / "e2e" / "beijing-shanghai-3d"
 FLYAI_SERVER = ROOT / "tests" / "fixtures" / "flyai_cli_server.py"
+POI_IDENTITY_DECISIONS = (
+    ROOT / "tests" / "fixtures" / "poi-identity-decision" / "dead-corners.json"
+)
 
 
 def load(path: Path):
@@ -385,6 +388,69 @@ class AMapMobilityTests(unittest.TestCase):
     def setUp(self):
         self.clock = FixedClock.from_iso(FIXED_NOW)
         self.candidates = load(ROOT / "demo" / "candidates.json")
+
+    def _resolve_poi_identity_case(self, case_name):
+        fixture = load(POI_IDENTITY_DECISIONS)
+        selected = next(item for item in fixture["cases"] if item["case"] == case_name)
+        scenario = {"entities": [copy.deepcopy(selected["entity"])]}
+        candidates = amap_scenario_candidates(scenario)
+        transport = AMapScenarioTransport(scenario)
+        result = MobilityBackend("live", credentials(), transport).resolve(
+            candidates, self.clock, ("walking",),
+        )
+        pois, _ = apply_locations(candidates["pois"], (), result)
+        return pois[0], result, transport
+
+    def test_poi_identity_decision_fixture_is_synthetic_and_complete(self):
+        fixture = load(POI_IDENTITY_DECISIONS)
+        self.assertIn("locally generated synthetic", fixture["source"])
+        self.assertIn("no captured provider data", fixture["source"])
+        self.assertEqual({
+            "duplicate_names",
+            "exact_original_first",
+            "prefix_relation",
+            "different_places",
+        }, {item["case"] for item in fixture["cases"]})
+        for case in fixture["cases"]:
+            entity = case["entity"]
+            self.assertTrue(entity["city"].startswith("合成"))
+            self.assertTrue(entity["name"].startswith("合成"))
+            self.assertTrue(entity["ref_id"].startswith("poi-decision-"))
+            for item in entity["poi_results"]:
+                self.assertTrue(item["id"].startswith("SYNTHETIC-"))
+                longitude, latitude = (float(value) for value in item["location"].split(","))
+                self.assertLess(abs(longitude), 1.0)
+                self.assertLess(abs(latitude), 1.0)
+
+    def test_duplicate_candidate_names_resolve_coordinates(self):
+        poi, result, transport = self._resolve_poi_identity_case("duplicate_names")
+
+        self.assertEqual(["poi", "geocode"], transport.capabilities)
+        self.assertEqual(1, len(result.locations))
+        self.assertIsNotNone(poi["coordinates"])
+        self.assertNotIn("identity_conflict", result.warnings)
+
+    def test_exact_original_first_resolves_coordinates(self):
+        poi, result, transport = self._resolve_poi_identity_case("exact_original_first")
+
+        self.assertEqual(["poi", "geocode"], transport.capabilities)
+        self.assertEqual(1, len(result.locations))
+        self.assertIsNotNone(poi["coordinates"])
+        self.assertNotIn("identity_conflict", result.warnings)
+
+    def test_prefix_and_different_candidate_names_remain_unknown(self):
+        for case_name in ("prefix_relation", "different_places"):
+            with self.subTest(case=case_name):
+                poi, result, transport = self._resolve_poi_identity_case(case_name)
+                self.assertIsNone(poi["coordinates"])
+                self.assertEqual((), result.locations)
+                self.assertEqual(["poi"], transport.capabilities)
+                self.assertIn("identity_conflict", result.warnings)
+                self.assertTrue(any(
+                    warning.startswith("identity_conflict:")
+                    and ":ambiguous_name_margin:" in warning
+                    for warning in result.warnings
+                ))
 
     def test_geocode_preserves_gcj_native_and_derives_wgs84(self):
         transport = ScriptedAmapTransport()

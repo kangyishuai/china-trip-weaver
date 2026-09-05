@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import contextlib
 import hashlib
 import io
@@ -19,21 +20,33 @@ SRC = PLUGIN / "src"
 sys.path.insert(0, str(SRC))
 
 from china_trip_weaver.candidates import (
+    CandidateNameOption,
+    _unique_candidate_name,
     add_lodging_candidate,
     add_poi_candidate,
+    fix_candidate_names,
     initialize_candidates,
     load_candidates_schema,
     validate_candidates,
 )
 from china_trip_weaver.clock import FixedClock
 from china_trip_weaver.cli import main as cli_main
+from china_trip_weaver.credentials import resolve_credentials
 from china_trip_weaver.journey import assemble_journey, validate_journey
+from china_trip_weaver.mobility import MobilityBackend, apply_locations
 from china_trip_weaver.providers.base import ProviderTimeout, stable_id
-from tests.test_providers import AMAP_SCENARIOS, AMapScenarioTransport
+from tests.test_providers import (
+    AMAP_SCENARIOS,
+    AMapScenarioTransport,
+    amap_scenario_candidates,
+)
 
 
 E2E = ROOT / "tests" / "fixtures" / "e2e"
 NAME_FIX = ROOT / "tests" / "fixtures" / "candidate-name-fix"
+POI_IDENTITY_DECISIONS = (
+    ROOT / "tests" / "fixtures" / "poi-identity-decision" / "dead-corners.json"
+)
 CTW = PLUGIN / "scripts" / "ctw"
 VALID = sorted(E2E.glob("*/candidates.json"))
 INVALID = sorted((E2E / "candidates-invalid").glob("*.json"))
@@ -520,7 +533,45 @@ class CandidateContractTests(unittest.TestCase):
         self.assertIn('"automatic":1', result.stdout)
         self.assertIn('"manual":1', result.stdout)
 
-    def test_fix_names_same_normalized_suggestion_requires_manual_review(self):
+    def test_fix_names_duplicate_suggestions_are_one_automatic_choice(self):
+        trip = load(NAME_FIX / "trip.json")
+        unique = next(
+            item for item in trip["unknowns"]
+            if "poi-fix-unique" in item["reason"]
+        )
+        duplicate_feedback = {
+            "candidates": [{
+                "administrative_area": "合成甲市/合成一区",
+                "name": "合成星塔新称",
+            }, {
+                "administrative_area": "合成甲市/合成二区",
+                "name": "合成星塔新称",
+            }],
+            "suggested_names": ["合成星塔新称", "合成星塔新称"],
+        }
+        unique["reason"] = "identity_conflict:poi-fix-unique:ambiguous_name_margin:%s" % json.dumps(
+            duplicate_feedback, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        )
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            candidates_path = Path(temporary) / "candidates.json"
+            trip_path = Path(temporary) / "trip.json"
+            candidates_path.write_bytes((NAME_FIX / "candidates.json").read_bytes())
+            trip_path.write_text(json.dumps(trip, ensure_ascii=False), encoding="utf-8")
+            result = fix_candidate_names(candidates_path, trip_path, apply=True)
+            updated = load(candidates_path)
+
+        decision = next(item for item in result.decisions if item.ref_id == "poi-fix-unique")
+        self.assertTrue(decision.automatic)
+        self.assertEqual("unique_suggestion", decision.reason)
+        self.assertEqual("合成星塔新称", decision.replacement_name)
+        self.assertEqual(
+            (CandidateNameOption("合成星塔新称", "合成甲市/合成一区"),),
+            decision.options,
+        )
+        self.assertEqual(1, result.applied_count)
+        self.assertEqual("合成星塔新称", updated["pois"][0]["name"])
+
+    def test_fix_names_exact_original_first_is_automatic_confirmation(self):
         trip = load(NAME_FIX / "trip.json")
         unique = next(
             item for item in trip["unknowns"]
@@ -530,10 +581,13 @@ class CandidateContractTests(unittest.TestCase):
             "candidates": [{
                 "administrative_area": "合成甲市/合成一区",
                 "name": "合成星塔旧称",
+            }, {
+                "administrative_area": "合成甲市/合成二区",
+                "name": "合成星塔旧称停车",
             }],
-            "suggested_names": ["合成星塔旧称"],
+            "suggested_names": ["合成星塔旧称", "合成星塔旧称停车"],
         }
-        unique["reason"] = "identity_conflict:poi-fix-unique:poi_admin_mismatch:%s" % json.dumps(
+        unique["reason"] = "identity_conflict:poi-fix-unique:ambiguous_name_margin:%s" % json.dumps(
             feedback, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
         )
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
@@ -554,8 +608,65 @@ class CandidateContractTests(unittest.TestCase):
 
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
         self.assertEqual(before, after)
-        self.assertIn('"reason":"suggestion_matches_original"', result.stdout)
-        self.assertIn('"applied":0', result.stdout)
+        self.assertIn('"reason":"exact_original_confirmed"', result.stdout)
+        self.assertIn('"suggested_name":"合成星塔旧称"', result.stdout)
+        self.assertIn('"applied":1', result.stdout)
+        self.assertIn('"automatic":1', result.stdout)
+
+    def test_fix_names_and_mobility_share_poi_name_decisions(self):
+        fixture = load(POI_IDENTITY_DECISIONS)
+        expected_automatic = {
+            "duplicate_names": True,
+            "exact_original_first": True,
+            "prefix_relation": False,
+            "different_places": False,
+        }
+        candidate_credentials = resolve_credentials(
+            {"AMAP_WEBSERVICE_KEY": "ctw-canary-poi-decision-not-real"},
+            ROOT / ".tmp" / "poi-decision-no-file",
+        )
+        for case in fixture["cases"]:
+            with self.subTest(case=case["case"]):
+                entity = copy.deepcopy(case["entity"])
+                scenario = {"entities": [entity]}
+                candidates = amap_scenario_candidates(scenario)
+                mobility = MobilityBackend(
+                    "live", candidate_credentials, AMapScenarioTransport(scenario),
+                ).resolve(
+                    candidates,
+                    FixedClock.from_iso("2026-09-03T12:00:00+08:00"),
+                    ("walking",),
+                )
+                pois, _ = apply_locations(candidates["pois"], (), mobility)
+                mobility_automatic = pois[0]["coordinates"] is not None
+                options = tuple(
+                    CandidateNameOption(
+                        item["name"], "%s/%s" % (entity["city"], item["adname"]),
+                    )
+                    for item in entity["poi_results"]
+                )
+                replacement, _ = _unique_candidate_name(entity["name"], options)
+                fix_names_automatic = replacement is not None
+
+                self.assertEqual(expected_automatic[case["case"]], mobility_automatic)
+                self.assertEqual(mobility_automatic, fix_names_automatic)
+
+    def test_fix_names_prefix_and_different_candidates_require_manual_review(self):
+        fixture = load(POI_IDENTITY_DECISIONS)
+        cases = {item["case"]: item["entity"] for item in fixture["cases"]}
+        for case_name in ("prefix_relation", "different_places"):
+            with self.subTest(case=case_name):
+                entity = cases[case_name]
+                options = tuple(
+                    CandidateNameOption(
+                        item["name"], "%s/%s" % (entity["city"], item["adname"]),
+                    )
+                    for item in entity["poi_results"]
+                )
+                replacement, reason = _unique_candidate_name(entity["name"], options)
+
+                self.assertIsNone(replacement)
+                self.assertEqual("ambiguous_suggestions", reason)
 
     def test_fix_names_conflicting_journey_feedback_stays_unchanged(self):
         first_trip = load(NAME_FIX / "trip.json")

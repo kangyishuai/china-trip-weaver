@@ -2735,3 +2735,117 @@ OK：china-trip-weaver@china-trip-weaver-local 0.5.1 已安装且缓存与源码
 - `git diff --exit-code -- docs`、packaged `schema/` 与排除 `__init__.py`/`mcp_stdio.py` 后的其余 `src/` 均 exit 0、无输出；两个允许源码点的 unified=0 diff 各仅一行 `0.5.0`→`0.5.1`。
 - 对允许发布面搜索旧 `0.5.0` 为 exit 1、输出为空；当前 9 个版本承载文件内 `0.5.1` 恰 10 行。`BLOCKED.md` 已追加本轮“无新增阻塞”，既有开放事项原样保留。
 - 当前验收轮次 6/12；完成条件已满足。下一步只在追加本段后重跑最终门、精确暂存、cached 范围审计并提交，不再新增实现。
+
+## 书 25 开工理解（2026-09-05，≤10 行）
+1. 目标：只修 POI 候选“同名重复”和“首选逐字等于用户原名”两个歧义死角，让 mobility 与 fix-names 同判可确认。
+2. 顺序：基线 → 合成离线旧行为复现 → 两处最小实现 → 四类边界与一致性测试 → 反向红→绿 → 全量/范围门禁 → 提交。
+3. 只允许去重后唯一、或首选与原始字符串逐字相等通过；前缀、包含、近似名、不同地点仍必须 unknown/人工。
+4. `POI_NAME_SIMILARITY_MARGIN` 与 `_name_similarity` 算法冻结，版本保持 0.5.1，不跑实网/demo，不安装 Codex。
+5. 只写任务白名单；尤其不碰 providers/、planning.py、cli.py、schema/ 和其他 tests。
+6. 最大风险：去重口径不一致、把 normalized equality 误当逐字相等、或 exact-original 在 fix-names 中仍被计作人工。
+7. 质量顺序：不给假坐标 > 多认几个 > 速度；同一验收三连败换项，总验收最多 12 轮。
+
+## 书 25 任务 0：基线与两个旧死角（完成）
+
+- 开工 `HEAD=642f7aba7203f2b9fa45ce68ec877d65d02071d2`，与 `origin/main` 完全一致，工作树 clean。
+- `/usr/bin/python3 -m unittest discover -s tests`（exit 0）：`Ran 456 tests in 31.003s`、`OK`、skipped 0。
+- `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 375 file(s)`。
+- 新建 `tests/fixtures/poi-identity-decision/dead-corners.json`；只有合成城市、名称、响应与坐标，不含捕获数据。初版 exact 场景名称过短、未落入既有 0.15 margin；第 1 次未复现后改成长名称加停车点后缀，阈值/算法未动。
+- 旧 mobility 对两类夹具的原始输出（exit 0）：
+
+```text
+{"capabilities":["poi"],"case":"duplicate_names","coordinates":"unknown","locations":0,"warnings":["identity_conflict","identity_conflict:poi-decision-duplicate:ambiguous_name_margin:{\"candidates\":[{\"administrative_area\":\"合成甲市/合成一区\",\"name\":\"合成双塔新称\"},{\"administrative_area\":\"合成甲市/合成一区\",\"name\":\"合成双塔新称\"}],\"suggested_names\":[\"合成双塔新称\",\"合成双塔新称\"]}"]}
+{"capabilities":["poi"],"case":"exact_original_first","coordinates":"unknown","locations":0,"warnings":["identity_conflict","identity_conflict:poi-decision-exact:ambiguous_name_margin:{\"candidates\":[{\"administrative_area\":\"合成乙市/合成二区\",\"name\":\"合成云河历史文化街区\"},{\"administrative_area\":\"合成乙市/合成二区\",\"name\":\"合成云河历史文化街区停车点\"}],\"suggested_names\":[\"合成云河历史文化街区\",\"合成云河历史文化街区停车点\"]}"]}
+```
+
+- 旧 fix-names 判定对同一候选名的原始输出（exit 0）：
+
+```text
+{"automatic":false,"case":"duplicate_names","reason":"ambiguous_suggestions","replacement":null}
+{"automatic":false,"case":"exact_original_first","reason":"suggestion_matches_original","replacement":null}
+```
+
+- 判定：任务书描述的两个死角均已离线复现，坐标确为 unknown，fix-names 也都留给人工；任务 0 完成。当前验收轮次 1/12。
+
+## 书 25 任务 1：两个歧义死角（完成）
+
+- `mobility.py` 新增单一名称判定：先按候选名的 Python 精确字符串值去重；去重后首选与用户原名 `==` 时跳过 name-margin 冲突；行政区冲突仍独立生效。
+- 多候选的相似度仍调用原 `_name_similarity` 与冻结的 `POI_NAME_SIMILARITY_MARGIN=0.15`；共享判定取最相似的其余候选，沿用 fix-names 原有的保守口径，不增加假坐标风险。
+- `candidates.py` 在反馈校验后按精确名称保留首个选项，并复用 mobility 的同一 name-margin 判定；首选逐字相等返回自动确认 `exact_original_confirmed`，normalized/前缀/包含没有快捷通道。
+- 新增严格测试后的干净旧实现红态（exit 1）：`Ran 5 tests ... FAILED (failures=6)`；两条 mobility 断言均显示期望 `['poi','geocode']`、实际只有 `['poi']`，duplicate fix-names `automatic` 为 false，exact 仍返回 `suggestion_matches_original`，一致性测试的两个新类别均为 false。
+- 核心实现后 7 条测试（exit 0）：`Ran 7 tests in 0.090s`、`OK`；覆盖合成夹具门、两个新放行、两个控制类、两类 fix-names 及四类一致性。
+- `/usr/bin/python3 -m unittest tests.test_amap_live tests.test_candidates -v`（exit 0）：`Ran 59 tests in 1.495s`、`OK`、skipped 0。
+- 四类最终判定命令（exit 0）原始输出：
+
+```text
+{"case":"duplicate_names","fix_names":{"automatic":true,"reason":"unique_suggestion","replacement":"合成双塔新称"},"mobility":{"capabilities":["poi","geocode"],"coordinates":"known","identity_conflict":false,"locations":1}}
+{"case":"exact_original_first","fix_names":{"automatic":true,"reason":"exact_original_confirmed","replacement":"合成云河历史文化街区"},"mobility":{"capabilities":["poi","geocode"],"coordinates":"known","identity_conflict":false,"locations":1}}
+{"case":"prefix_relation","fix_names":{"automatic":false,"reason":"ambiguous_suggestions","replacement":null},"mobility":{"capabilities":["poi"],"coordinates":"unknown","identity_conflict":true,"locations":0}}
+{"case":"different_places","fix_names":{"automatic":false,"reason":"ambiguous_suggestions","replacement":null},"mobility":{"capabilities":["poi"],"coordinates":"unknown","identity_conflict":true,"locations":0}}
+```
+
+### 书 25 前缀放宽反向验证（红→绿）
+
+- 临时把共享判定错误放宽为 `candidate_names[0].startswith(expected)` 也不冲突；只跑两处控制断言（exit 1）的原始输出：
+
+```text
+test_prefix_and_different_candidate_names_remain_unknown (tests.test_amap_live.AMapMobilityTests) ... test_fix_names_prefix_and_different_candidates_require_manual_review (tests.test_candidates.CandidateContractTests) ...
+======================================================================
+FAIL: test_prefix_and_different_candidate_names_remain_unknown (tests.test_amap_live.AMapMobilityTests) (case='prefix_relation')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_amap_live.py", line 445, in test_prefix_and_different_candidate_names_remain_unknown
+    self.assertIsNone(poi["coordinates"])
+AssertionError: {'source_crs': 'GCJ02', 'native': {'lng': 0.3, 'lat': 0.3}, 'wgs84': {'lng': 0.3, 'lat': 0.3}, 'gcj02': {'lng': 0.3, 'lat': 0.3}, 'conversion': {'status': 'not-needed', 'method': 'identity-outside-mainland', 'version': 'ctw-1', 'derived_fields': [], 'converted_at': None, 'accuracy_m': 50}} is not None
+
+======================================================================
+FAIL: test_fix_names_prefix_and_different_candidates_require_manual_review (tests.test_candidates.CandidateContractTests) (case='prefix_relation')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_candidates.py", line 668, in test_fix_names_prefix_and_different_candidates_require_manual_review
+    self.assertIsNone(replacement)
+AssertionError: '合成溪竹筏漂流' is not None
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.004s
+
+FAILED (failures=2)
+```
+
+- 精确移除临时 `startswith` 分支后，同两条测试（exit 0）原始输出：
+
+```text
+test_prefix_and_different_candidate_names_remain_unknown (tests.test_amap_live.AMapMobilityTests) ... ok
+test_fix_names_prefix_and_different_candidates_require_manual_review (tests.test_candidates.CandidateContractTests) ... ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.004s
+
+OK
+```
+
+- 临时放宽已完全收回，未进入提交；任务 1 完成。当前验收轮次 3/12。
+
+## 书 25 任务 2：mobility 与 fix-names 一致（完成）
+
+- 新增 `test_fix_names_and_mobility_share_poi_name_decisions`：同一份四类候选输入分别跑真实离线 `MobilityBackend.resolve` 与 `_unique_candidate_name`，逐组断言坐标可确认值等于 fix-names 自动值。
+- 断言结果严格为 `{duplicate_names: true, exact_original_first: true, prefix_relation: false, different_places: false}`；完整 `tests.test_candidates` 已包含在上方 59-test 绿态中。
+- 一致性来自两处共同调用 `_poi_name_is_ambiguous`，不是复制阈值；任务 2 完成。当前验收轮次 4/12。
+
+## 书 25 最终代码态门禁（完成）
+
+- `/usr/bin/python3 -m unittest tests.test_candidates -v`（exit 0）：`Ran 25 tests in 1.016s`、`OK`、skipped 0。
+- 最终 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）：`Ran 463 tests in 32.112s`、`OK`、skipped 0；相对开工 456 新增 7 条测试，满足至少 461。
+- 最终 `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）：`secret scan: 0 finding(s) across 376 file(s)`。
+- 相对开工 HEAD 逐 AST 源片段字节比较（exit 0）：
+
+```text
+POI_NAME_SIMILARITY_MARGIN_BYTE_EQUAL True SHA256 cb053333216c8549f536cb6637aa8af3e6542b96903f8e4e57bd4712324e3103
+_name_similarity_BYTE_EQUAL True SHA256 abefaf87388683345e193c01af53fe14ff24da52a39c211c160224154fb81e79
+_normalized_name_BYTE_EQUAL True SHA256 c461fcf9f25c4911fdaef57da4324e841ebfd743e55dbbaa2cfc13c3bd7664b8
+```
+
+- `planning.py`、`journey.py`、`replan.py`、`station_distance.py`、providers/、`cli.py`、schema/、demo/render/scheduler/validator、manifest 与 docs 的组合 `git diff --exit-code HEAD -- ...` 为 exit 0、无输出。
+- README 双语、manifest、`__init__.py`、`mcp_stdio.py` 及四份版本锁定测试的组合 diff 为 exit 0、无输出；允许实现/测试/夹具 diff 新增长版本标识搜索为 exit 1、无输出，版本保持 0.5.1。
+- 新夹具去掉了非必要 `fixture_version` 字段，且门禁逐项断言所有城市/名称为 `合成*`、ID 为 `SYNTHETIC-*`、坐标绝对值小于 1；不含真实地名、真实坐标或捕获响应。
+- `git diff --check` exit 0；`BLOCKED.md` 已追加本轮新增阻塞为“无”，既有记录未改口。当前验收轮次 6/12，下一步仅做白名单暂存审计与交付提交。

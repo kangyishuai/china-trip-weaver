@@ -1,0 +1,189 @@
+{
+  "source": "locally generated synthetic AMap-shaped decision cases; contains no captured provider data or real-world coordinates",
+  "cases": [
+    {
+      "case": "duplicate_names",
+      "entity": {
+        "city": "合成甲市",
+        "geocode": {
+          "adcode": "000001",
+          "city": "合成甲市",
+          "district": "合成一区",
+          "formatted_address": "合成甲市合成一区虚构路一号",
+          "level": "兴趣点",
+          "location": "0.100000,0.100000",
+          "province": "合成省"
+        },
+        "name": "合成双塔旧称",
+        "opening_date": null,
+        "poi_results": [
+          {
+            "adcode": "000001",
+            "address": "虚构路一号",
+            "adname": "合成一区",
+            "business": {
+              "business_status": "开放",
+              "opentime_today": "09:00-17:00"
+            },
+            "cityname": "合成甲市",
+            "id": "SYNTHETIC-DUPLICATE-A",
+            "location": "0.100000,0.100000",
+            "name": "合成双塔新称",
+            "pname": "合成省",
+            "type": "合成分类"
+          },
+          {
+            "adcode": "000001",
+            "address": "虚构路二号",
+            "adname": "合成一区",
+            "business": {
+              "business_status": "开放",
+              "opentime_today": "09:00-17:00"
+            },
+            "cityname": "合成甲市",
+            "id": "SYNTHETIC-DUPLICATE-B",
+            "location": "0.110000,0.110000",
+            "name": "合成双塔新称",
+            "pname": "合成省",
+            "type": "合成分类"
+          }
+        ],
+        "ref_id": "poi-decision-duplicate"
+      }
+    },
+    {
+      "case": "exact_original_first",
+      "entity": {
+        "city": "合成乙市",
+        "geocode": {
+          "adcode": "000002",
+          "city": "合成乙市",
+          "district": "合成二区",
+          "formatted_address": "合成乙市合成二区虚构路三号",
+          "level": "兴趣点",
+          "location": "0.200000,0.200000",
+          "province": "合成省"
+        },
+        "name": "合成云河历史文化街区",
+        "opening_date": null,
+        "poi_results": [
+          {
+            "adcode": "000002",
+            "address": "虚构路三号",
+            "adname": "合成二区",
+            "business": {
+              "business_status": "开放",
+              "opentime_today": "09:00-17:00"
+            },
+            "cityname": "合成乙市",
+            "id": "SYNTHETIC-EXACT-A",
+            "location": "0.200000,0.200000",
+            "name": "合成云河历史文化街区",
+            "pname": "合成省",
+            "type": "合成分类"
+          },
+          {
+            "adcode": "000002",
+            "address": "虚构路四号",
+            "adname": "合成二区",
+            "business": {
+              "business_status": "开放",
+              "opentime_today": "09:00-17:00"
+            },
+            "cityname": "合成乙市",
+            "id": "SYNTHETIC-EXACT-B",
+            "location": "0.210000,0.210000",
+            "name": "合成云河历史文化街区停车点",
+            "pname": "合成省",
+            "type": "合成分类"
+          }
+        ],
+        "ref_id": "poi-decision-exact"
+      }
+    },
+    {
+      "case": "prefix_relation",
+      "entity": {
+        "city": "合成丙市",
+        "geocode": {
+          "adcode": "000003",
+          "city": "合成丙市",
+          "district": "合成三区",
+          "formatted_address": "合成丙市合成三区虚构路五号",
+          "level": "兴趣点",
+          "location": "0.300000,0.300000",
+          "province": "合成省"
+        },
+        "name": "合成溪竹筏",
+        "opening_date": null,
+        "poi_results": [
+          {
+            "adcode": "000003",
+            "address": "虚构路五号",
+            "adname": "合成三区",
+            "cityname": "合成丙市",
+            "id": "SYNTHETIC-PREFIX-A",
+            "location": "0.300000,0.300000",
+            "name": "合成溪竹筏漂流",
+            "pname": "合成省",
+            "type": "合成分类"
+          },
+          {
+            "adcode": "000003",
+            "address": "虚构路六号",
+            "adname": "合成三区",
+            "cityname": "合成丙市",
+            "id": "SYNTHETIC-PREFIX-B",
+            "location": "0.310000,0.310000",
+            "name": "合成溪竹筏漂流入口",
+            "pname": "合成省",
+            "type": "合成分类"
+          }
+        ],
+        "ref_id": "poi-decision-prefix"
+      }
+    },
+    {
+      "case": "different_places",
+      "entity": {
+        "city": "合成丁市",
+        "geocode": {
+          "adcode": "000004",
+          "city": "合成丁市",
+          "district": "合成四区",
+          "formatted_address": "合成丁市合成四区虚构路七号",
+          "level": "兴趣点",
+          "location": "0.400000,0.400000",
+          "province": "合成省"
+        },
+        "name": "合成云游峰",
+        "opening_date": null,
+        "poi_results": [
+          {
+            "adcode": "000004",
+            "address": "虚构路七号",
+            "adname": "合成四区",
+            "cityname": "合成丁市",
+            "id": "SYNTHETIC-DIFFERENT-A",
+            "location": "0.400000,0.400000",
+            "name": "合成云游景区",
+            "pname": "合成省",
+            "type": "合成分类"
+          },
+          {
+            "adcode": "000004",
+            "address": "虚构路八号",
+            "adname": "合成四区",
+            "cityname": "合成丁市",
+            "id": "SYNTHETIC-DIFFERENT-B",
+            "location": "0.410000,0.410000",
+            "name": "合成云游峡谷",
+            "pname": "合成省",
+            "type": "合成分类"
+          }
+        ],
+        "ref_id": "poi-decision-different"
+      }
+    }
+  ]
+}

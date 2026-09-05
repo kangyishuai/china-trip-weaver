@@ -555,12 +555,29 @@ def _poi_identity_conflicts(
     reasons = []
     if not _city_matches(entity["city"], first.get("city")):
         reasons.append("poi_admin_mismatch")
-    if len(candidates) > 1:
-        first_score = _name_similarity(entity["name"], first.get("name"))
-        second_score = _name_similarity(entity["name"], candidates[1].get("name"))
-        if first_score - second_score < POI_NAME_SIMILARITY_MARGIN:
-            reasons.append("ambiguous_name_margin")
+    if _poi_name_is_ambiguous(entity["name"], candidates):
+        reasons.append("ambiguous_name_margin")
     return tuple(reasons)
+
+
+def _poi_name_is_ambiguous(
+    expected: Any,
+    candidates: Sequence[Mapping[str, Any]],
+) -> bool:
+    candidate_names = []
+    for candidate in candidates:
+        name = candidate.get("name")
+        if name not in candidate_names:
+            candidate_names.append(name)
+    if not candidate_names or candidate_names[0] == expected:
+        return False
+    if len(candidate_names) == 1:
+        return False
+    first_score = _name_similarity(expected, candidate_names[0])
+    nearest_alternative = max(
+        _name_similarity(expected, name) for name in candidate_names[1:]
+    )
+    return first_score - nearest_alternative < POI_NAME_SIMILARITY_MARGIN
 
 
 def poi_identity_feedback(
