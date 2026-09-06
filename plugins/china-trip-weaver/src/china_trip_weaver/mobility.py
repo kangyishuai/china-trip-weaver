@@ -270,7 +270,8 @@ class MobilityBackend:
                         "business_conflict:%s:provider_identity_disagrees_with_candidate" % entity["ref_id"],
                     ))
                 provider_name = selected["name"]
-                geocode_address = identity["formatted_address"]
+                if str(identity.get("formatted_address") or "").strip():
+                    geocode_address = identity["formatted_address"]
 
             request = ProviderRequest(
                 request_id=stable_id("amap-geocode", entity["ref_id"], geocode_address, entity["city"]),
@@ -749,8 +750,6 @@ def _city_key(value: Any) -> str:
 def _complete_poi_address(identity: Any) -> bool:
     return bool(
         isinstance(identity, dict)
-        and isinstance(identity.get("formatted_address"), str)
-        and identity["formatted_address"].strip()
         and isinstance(identity.get("district"), str)
         and identity["district"].strip()
         and isinstance(identity.get("adcode"), str)

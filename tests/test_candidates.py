@@ -581,6 +581,88 @@ class CandidateContractTests(unittest.TestCase):
         self.assertIn('"applied":1', applied.stdout)
         self.assertIn('"skipped":0', applied.stdout)
 
+    def test_fix_names_incomplete_address_prefix_lists_manual_suggestions(self):
+        trip = load(NAME_FIX / "trip.json")
+        unknown = next(
+            item for item in trip["unknowns"]
+            if "poi-fix-ambiguous" in item["reason"]
+        )
+        unknown["reason"] = unknown["reason"].replace(
+            "identity_conflict:", "incomplete_address:", 1,
+        )
+        trip["unknowns"] = [unknown]
+
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            candidates_path = Path(temporary) / "candidates.json"
+            trip_path = Path(temporary) / "trip.json"
+            candidates_path.write_bytes((NAME_FIX / "candidates.json").read_bytes())
+            trip_path.write_text(
+                json.dumps(trip, ensure_ascii=False), encoding="utf-8",
+            )
+            before = candidates_path.read_bytes()
+            result = subprocess.run(
+                [
+                    str(CTW), "candidates", "fix-names", str(candidates_path),
+                    "--trip", str(trip_path),
+                ],
+                text=True,
+                capture_output=True,
+            )
+            after = candidates_path.read_bytes()
+
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual("", result.stderr)
+        self.assertEqual(before, after)
+        self.assertIn("CANDIDATE_NAME_MANUAL", result.stdout)
+        self.assertIn('"ref_id":"poi-fix-ambiguous"', result.stdout)
+        self.assertIn(
+            '"suggested_names":["合成云廊东门","合成云廊西门"]',
+            result.stdout,
+        )
+        self.assertIn(
+            'CANDIDATE_NAME_FIX_SUMMARY {"applied":0,"automatic":0,"manual":1,"mode":"report"}',
+            result.stdout,
+        )
+
+    def test_fix_names_ignores_unrecognized_reason_prefix(self):
+        trip = load(NAME_FIX / "trip.json")
+        unknown = next(
+            item for item in trip["unknowns"]
+            if "poi-fix-ambiguous" in item["reason"]
+        )
+        unknown["reason"] = unknown["reason"].replace(
+            "identity_conflict:", "whatever:", 1,
+        )
+        trip["unknowns"] = [unknown]
+
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            candidates_path = Path(temporary) / "candidates.json"
+            trip_path = Path(temporary) / "trip.json"
+            candidates_path.write_bytes((NAME_FIX / "candidates.json").read_bytes())
+            trip_path.write_text(
+                json.dumps(trip, ensure_ascii=False), encoding="utf-8",
+            )
+            before = candidates_path.read_bytes()
+            result = subprocess.run(
+                [
+                    str(CTW), "candidates", "fix-names", str(candidates_path),
+                    "--trip", str(trip_path),
+                ],
+                text=True,
+                capture_output=True,
+            )
+            after = candidates_path.read_bytes()
+
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual("", result.stderr)
+        self.assertEqual(before, after)
+        self.assertNotIn("CANDIDATE_NAME_AUTO", result.stdout)
+        self.assertNotIn("CANDIDATE_NAME_MANUAL", result.stdout)
+        self.assertEqual(
+            'CANDIDATE_NAME_FIX_SUMMARY {"applied":0,"automatic":0,"manual":0,"mode":"report"}\n',
+            result.stdout,
+        )
+
     def test_fix_names_apply_manual_review_writes_exact_suggestion_and_validates(self):
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
             candidates_path = Path(temporary) / "candidates.json"

@@ -19,7 +19,12 @@ from china_trip_weaver.contracts import ProviderRequest
 from china_trip_weaver.credentials import resolve_credentials
 from china_trip_weaver.flyai_inventory import FlyAIBackend
 from china_trip_weaver.geo import Point, coordinate_record
-from china_trip_weaver.mobility import MobilityBackend, apply_locations, normalize_modes
+from china_trip_weaver.mobility import (
+    MobilityBackend,
+    apply_locations,
+    check_poi_name_identity,
+    normalize_modes,
+)
 from china_trip_weaver.planning import RailBackend, _combined_amap_health, plan_trip
 from china_trip_weaver.providers.amap import AMapAdapter
 from china_trip_weaver.providers.amap_http import (
@@ -33,6 +38,7 @@ from china_trip_weaver.providers.base import (
     ProviderNetworkError,
     ProviderRateLimited,
     ProviderTimeout,
+    stable_id,
 )
 from china_trip_weaver.providers.flyai_cli import FlyAISubprocessTransport
 from tests.test_providers import AMAP_SCENARIOS, AMapScenarioTransport, amap_scenario_candidates
@@ -465,6 +471,238 @@ class AMapMobilityTests(unittest.TestCase):
         )
         pois, _ = apply_locations(candidates["pois"], (), result)
         return pois[0], result, transport
+
+    def _resolve_synthetic_poi_address_case(self, *, address, district, adcode):
+        ref_id = "poi-synthetic-book35-address"
+        name = "合成星庭"
+        city = "合成星港"
+
+        def scenario_for(subject_ref):
+            return {"entities": [{
+                "ref_id": subject_ref,
+                "name": name,
+                "city": city,
+                "poi_results": [{
+                    "id": "SYNTHETIC-BOOK35-ADDRESS",
+                    "name": name,
+                    "pname": "合成省",
+                    "cityname": city + "市",
+                    "adname": district,
+                    "address": address,
+                    "adcode": adcode,
+                    "type": "合成测试地点",
+                    "business": {},
+                    "location": "0.100000000,0.100000000",
+                }],
+                "geocode": {
+                    "formatted_address": "合成省合成星港市合成中心区",
+                    "province": "合成省",
+                    "city": city + "市",
+                    "district": "合成中心区",
+                    "adcode": "990300",
+                    "location": "0.100000000,0.100000000",
+                },
+            }]}
+
+        scenario = scenario_for(ref_id)
+        transport = AMapScenarioTransport(scenario)
+        result = MobilityBackend("live", credentials(), transport).resolve(
+            amap_scenario_candidates(scenario), self.clock, ("walking",),
+        )
+        check_scenario = scenario_for(stable_id("poi-name-check", city, name))
+        check_transport = AMapScenarioTransport(check_scenario)
+        name_check = check_poi_name_identity(
+            name, city, self.clock, credentials(), check_transport,
+        )
+        return ref_id, result, transport, name_check, check_transport
+
+    def _resolve_synthetic_http_poi_addresses(self, raw_addresses):
+        city = "合成星港"
+        prefix = "合成省合成星港市合成中心区"
+        entities = []
+        for index, raw_address in enumerate(raw_addresses):
+            entities.append({
+                "ref_id": "poi-synthetic-book35b-%02d" % index,
+                "name": "合成顺序景点%d" % (index + 1),
+                "city": city,
+                "address": raw_address,
+                "location": "%.9f,0.100000000" % (0.1 + index * 0.001),
+            })
+        scenario = {"entities": [{
+            "ref_id": item["ref_id"],
+            "name": item["name"],
+            "city": item["city"],
+            "poi_results": [],
+            "geocode": {},
+        } for item in entities]}
+        by_name = {item["name"]: item for item in entities}
+        by_geocode_query = {}
+        for item in entities:
+            clean_address = item["address"].strip()
+            query = prefix + clean_address if clean_address else city + item["name"]
+            by_geocode_query[query] = item
+        http_calls = []
+        geocode_queries = []
+
+        def opener(http_request, timeout):
+            del timeout
+            parsed = urllib.parse.urlsplit(http_request.full_url)
+            parameters = urllib.parse.parse_qs(parsed.query)
+            if parsed.path == "/v5/place/text":
+                name = parameters["keywords"][0]
+                item = by_name[name]
+                http_calls.append("poi:" + item["ref_id"])
+                return FakeResponse({
+                    "status": "1",
+                    "info": "OK",
+                    "pois": [{
+                        "id": "SYNTHETIC-" + item["ref_id"],
+                        "name": item["name"],
+                        "pname": "合成省",
+                        "cityname": city + "市",
+                        "adname": "合成中心区",
+                        "address": item["address"],
+                        "adcode": "990300",
+                        "type": "合成测试地点",
+                        "business": {},
+                        "location": item["location"],
+                    }],
+                }, http_request.full_url)
+            if parsed.path == "/v3/geocode/geo":
+                query = parameters["address"][0]
+                item = by_geocode_query[query]
+                geocode_queries.append(query)
+                http_calls.append("geocode:" + item["ref_id"])
+                return FakeResponse({
+                    "status": "1",
+                    "info": "OK",
+                    "geocodes": [{
+                        "formatted_address": query,
+                        "province": "合成省",
+                        "city": city + "市",
+                        "district": "合成中心区",
+                        "adcode": "990300",
+                        "location": item["location"],
+                    }],
+                }, http_request.full_url)
+            if parsed.path == "/v3/direction/walking":
+                http_calls.append("route:walking")
+                return FakeResponse({
+                    "status": "1",
+                    "info": "OK",
+                    "route": {"paths": [{"duration": "600", "distance": "800"}]},
+                }, http_request.full_url)
+            raise AssertionError("unexpected synthetic AMap path: " + parsed.path)
+
+        configured = credentials()
+        transport = AMapHTTPTransport(
+            configured,
+            budget=AMapCallBudget(max_calls=80, qps=1000000),
+            opener=opener,
+        )
+        result = MobilityBackend("live", configured, transport).resolve(
+            amap_scenario_candidates(scenario), self.clock, ("walking",),
+        )
+        return entities, result, http_calls, geocode_queries
+
+    def test_empty_poi_address_fallback_does_not_abort_following_pois(self):
+        entities, result, http_calls, geocode_queries = (
+            self._resolve_synthetic_http_poi_addresses((
+                "", "合成正一路1号", "合成正二路2号",
+            ))
+        )
+
+        self.assertNotEqual("contract_mismatch", result.health["status"])
+        self.assertEqual(
+            [item["ref_id"] for item in entities],
+            [item.ref_id for item in result.locations],
+        )
+        self.assertFalse(any(
+            warning.startswith("contract_mismatch:")
+            for warning in result.warnings
+        ), result.warnings)
+        self.assertEqual([
+            "合成星港合成顺序景点1",
+            "合成省合成星港市合成中心区合成正一路1号",
+            "合成省合成星港市合成中心区合成正二路2号",
+        ], geocode_queries)
+        self.assertEqual(3, sum(call.startswith("poi:") for call in http_calls))
+        self.assertEqual(3, sum(call.startswith("geocode:") for call in http_calls))
+
+    def test_whitespace_poi_address_uses_city_name_fallback(self):
+        entities, result, _, geocode_queries = (
+            self._resolve_synthetic_http_poi_addresses((" \t ",))
+        )
+
+        self.assertEqual([entities[0]["ref_id"]], [item.ref_id for item in result.locations])
+        self.assertEqual(["合成星港合成顺序景点1"], geocode_queries)
+        self.assertNotEqual("contract_mismatch", result.health["status"])
+
+    def test_nonempty_poi_address_keeps_exact_formatted_address_query(self):
+        entities, result, _, geocode_queries = (
+            self._resolve_synthetic_http_poi_addresses(("合成原址9号",))
+        )
+
+        self.assertEqual([entities[0]["ref_id"]], [item.ref_id for item in result.locations])
+        self.assertEqual([
+            "合成省合成星港市合成中心区合成原址9号",
+        ], geocode_queries)
+
+    def test_poi_address_allows_empty_formatted_address_with_admin_detail(self):
+        _, result, transport, name_check, check_transport = (
+            self._resolve_synthetic_poi_address_case(
+                address="", district="合成中心区", adcode="990300",
+            )
+        )
+
+        self.assertEqual(["poi", "geocode"], transport.capabilities)
+        self.assertEqual(1, len(result.locations))
+        self.assertNotIn("incomplete_address", result.warnings)
+        self.assertEqual("unique", name_check.status)
+        self.assertEqual((), name_check.reasons)
+        self.assertEqual(["poi"], check_transport.capabilities)
+
+    def test_poi_address_still_rejects_missing_district(self):
+        ref_id, result, transport, name_check, check_transport = (
+            self._resolve_synthetic_poi_address_case(
+                address="", district="", adcode="990300",
+            )
+        )
+
+        self.assertEqual(["poi"], transport.capabilities)
+        self.assertEqual((), result.locations)
+        self.assertIn("incomplete_address", result.warnings)
+        self.assertIn("errors=incomplete_address", result.health["reason"])
+        self.assertTrue(any(
+            warning.startswith(
+                "incomplete_address:%s:poi_address_missing_admin_detail:" % ref_id
+            )
+            for warning in result.warnings
+        ), result.warnings)
+        self.assertEqual("ambiguous", name_check.status)
+        self.assertEqual(("poi_address_missing_admin_detail",), name_check.reasons)
+        self.assertEqual(["poi"], check_transport.capabilities)
+
+    def test_poi_address_still_rejects_missing_adcode(self):
+        ref_id, result, transport, name_check, check_transport = (
+            self._resolve_synthetic_poi_address_case(
+                address="", district="合成中心区", adcode="",
+            )
+        )
+
+        self.assertEqual(["poi"], transport.capabilities)
+        self.assertEqual((), result.locations)
+        self.assertIn("incomplete_address", result.warnings)
+        self.assertIn("errors=incomplete_address", result.health["reason"])
+        self.assertTrue(any(
+            warning.startswith(
+                "incomplete_address:%s:poi_address_missing_admin_detail:" % ref_id
+            )
+            for warning in result.warnings
+        ), result.warnings)
+        self.assertEqual("ambiguous", name_check.status)
+        self.assertEqual(("poi_address_missing_admin_detail",), name_check.reasons)
+        self.assertEqual(["poi"], check_transport.capabilities)
 
     def _resolve_synthetic_ambiguous_cluster(self, distance_meters=None):
         ref_id, scenario, candidates = self._synthetic_ambiguous_cluster(

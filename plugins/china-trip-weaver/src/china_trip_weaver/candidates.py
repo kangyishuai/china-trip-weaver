@@ -534,7 +534,9 @@ def _candidate_name_observation(unknown: Any) -> Optional[_CandidateNameObservat
     if not isinstance(reason, str):
         return None
     parts = reason.split(":", 3)
-    if len(parts) != 4 or parts[0] != "identity_conflict":
+    if len(parts) != 4 or parts[0] not in (
+        "identity_conflict", "incomplete_address",
+    ):
         return None
     ref_id = parts[1].strip()
     identity_reason = parts[2].strip()

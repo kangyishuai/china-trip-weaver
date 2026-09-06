@@ -8696,3 +8696,424 @@ secret scan: 0 finding(s) across 376 file(s)
 - 原因是 `candidates.py` 的 `_candidate_name_observation` 只认 `identity_conflict:` 前缀的 reason，`incomplete_address:` 前缀直接返回 `None`。书 34 把 confucian 的 reason 修准确后，它就落进了这个**既有盲区**。
 - 这不是书 34 引入的：`poi-luoyang-bridge` 的 reason 一直是 `incomplete_address:` 前缀，在 0.6.0、书 33、书 34 三个版本的 `fix-names` 输出里**一次都没出现过**（各 0 次）。
 - 实网影响 2 条（洛阳桥、泉州府文庙），它们的 reason 都带着完整的 `suggested_names`，却被整个忽略。已列为书 35 的目标之一。
+
+## 书 35 任务 0：两个既有问题复现（2026-09-06）
+
+`grep -n 'def _complete_poi_address' -A 10 plugins/china-trip-weaver/src/china_trip_weaver/mobility.py`（exit 0）原始输出：
+
+```text
+749:def _complete_poi_address(identity: Any) -> bool:
+750-    return bool(
+751-        isinstance(identity, dict)
+752-        and isinstance(identity.get("formatted_address"), str)
+753-        and identity["formatted_address"].strip()
+754-        and isinstance(identity.get("district"), str)
+755-        and identity["district"].strip()
+756-        and isinstance(identity.get("adcode"), str)
+757-        and identity["adcode"].strip()
+758-    )
+759-
+```
+
+`grep -n 'identity_conflict' plugins/china-trip-weaver/src/china_trip_weaver/candidates.py`（exit 0）原始输出：
+
+```text
+537:    if len(parts) != 4 or parts[0] != "identity_conflict":
+```
+
+离线内联 Python 使用纯合成 POI：`address` 为空、`adname` 与 `adcode` 齐全；先走 `MobilityBackend.resolve`，再把详细 warning 原样交给 `_candidate_name_observation`（exit 0）原始输出：
+
+```text
+TASK0_RESOLVE {"adcode":"990300","address":"","adname":"合成中心区","calls":["poi"],"coordinates_known":false,"warning":"incomplete_address:poi-synthetic-book35-empty-address:poi_address_missing_admin_detail:{\"candidates\":[{\"administrative_area\":\"合成星港市/合成中心区\",\"name\":\"合成星庭\"}],\"suggested_names\":[\"合成星庭\"]}"}
+TASK0_FIX_NAMES_OBSERVATION None
+```
+
+三项均与任务书一致，不触碰 `BLOCKED.md`。
+
+## 书 35 开工回执（2026-09-06，≤10 行）
+1. 目标：地址完整性只要求真实行政层级 `district` 与 `adcode`，空街道门牌不再丢坐标。
+2. `MobilityBackend.resolve` 与 `check_poi_name_identity` 共用 `_complete_poi_address`，只改这一处以保持口径一致。
+3. `fix-names` 仅新增白名单前缀 `incomplete_address`；四个名称判定/提取函数均冻结。
+4. 新增五条纯合成验收：空 address 放行、district/adcode 各自拦截、双建议列 MANUAL、未知前缀忽略。
+5. 新测试先在当前实现上跑红，再做两次指定的实现回退反证，所有红绿原始输出写回本文件。
+6. 边界仅五个允许文件；不碰 provider/schema/planning/Journey/CLI、其它 tests、demo、版本与安装态。
+7. `geocode_ambiguous` 本轮不修，只记录实网不可稳定复现、需 adapter+schema 方案后置。
+8. 开工 `HEAD=origin/main=d51772f`、工作树原先 clean；任务 0 三项全部复现，继续施工。
+
+## 书 35 新增五条验收红态（实现前原始输出）
+
+精确运行空 address、缺 district、缺 adcode、`incomplete_address` 双建议与未知前缀五条新增测试（exit 1）：
+
+```text
+test_poi_address_allows_empty_formatted_address_with_admin_detail (tests.test_amap_live.AMapMobilityTests) ... FAIL
+test_poi_address_still_rejects_missing_district (tests.test_amap_live.AMapMobilityTests) ... ok
+test_poi_address_still_rejects_missing_adcode (tests.test_amap_live.AMapMobilityTests) ... ok
+test_fix_names_incomplete_address_prefix_lists_manual_suggestions (tests.test_candidates.CandidateContractTests) ... FAIL
+test_fix_names_ignores_unrecognized_reason_prefix (tests.test_candidates.CandidateContractTests) ... ok
+
+======================================================================
+FAIL: test_poi_address_allows_empty_formatted_address_with_admin_detail (tests.test_amap_live.AMapMobilityTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_amap_live.py", line 526, in test_poi_address_allows_empty_formatted_address_with_admin_detail
+    self.assertEqual(["poi", "geocode"], transport.capabilities)
+AssertionError: Lists differ: ['poi', 'geocode'] != ['poi']
+
+First list contains 1 additional elements.
+First extra element 1:
+'geocode'
+
+- ['poi', 'geocode']
++ ['poi']
+
+======================================================================
+FAIL: test_fix_names_incomplete_address_prefix_lists_manual_suggestions (tests.test_candidates.CandidateContractTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_candidates.py", line 616, in test_fix_names_incomplete_address_prefix_lists_manual_suggestions
+    self.assertIn("CANDIDATE_NAME_MANUAL", result.stdout)
+AssertionError: 'CANDIDATE_NAME_MANUAL' not found in 'CANDIDATE_NAME_FIX_SUMMARY {"applied":0,"automatic":0,"manual":0,"mode":"report"}\n'
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.140s
+
+FAILED (failures=2)
+```
+
+两条目标行为恰好为红；三条反向控制在旧实现上已经守住，没有通过弱化断言制造假红。
+
+## 书 35 实现与五条验收绿态
+
+- `_complete_poi_address` 只删除 `formatted_address` 的类型/非空要求，`district` 与 `adcode` 的原有类型、去空白检查逐字保留；`resolve` 与 `check_poi_name_identity` 仍调用同一函数。
+- `_candidate_name_observation` 只把前缀判断从单个 `identity_conflict` 扩为精确白名单 `identity_conflict|incomplete_address`；四段 split、ref_id/reason/feedback 解析及后续候选判定未动。
+
+同一五条新增测试（exit 0）原始输出：
+
+```text
+test_poi_address_allows_empty_formatted_address_with_admin_detail (tests.test_amap_live.AMapMobilityTests) ... ok
+test_poi_address_still_rejects_missing_district (tests.test_amap_live.AMapMobilityTests) ... ok
+test_poi_address_still_rejects_missing_adcode (tests.test_amap_live.AMapMobilityTests) ... ok
+test_fix_names_incomplete_address_prefix_lists_manual_suggestions (tests.test_candidates.CandidateContractTests) ... ok
+test_fix_names_ignores_unrecognized_reason_prefix (tests.test_candidates.CandidateContractTests) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.145s
+
+OK
+```
+
+首条同时断言完整 `MobilityBackend.resolve` 发生 `poi→geocode`、坐标 known，并用独立 transport 断言 `check_poi_name_identity` 为 `unique`；第二、三条均断言只调用 POI、坐标 unknown、reason 仍精确为 `poi_address_missing_admin_detail`，且核名仍为 ambiguous。
+
+## 书 35 两次必做反向验证（原始红态）
+
+先把正确的两个源码文件写入隔离临时 Git index；正常 index 未改。临时恢复“三字段都非空”后只跑第 1 条（exit 1）：
+
+```text
+test_poi_address_allows_empty_formatted_address_with_admin_detail (tests.test_amap_live.AMapMobilityTests) ... FAIL
+
+======================================================================
+FAIL: test_poi_address_allows_empty_formatted_address_with_admin_detail (tests.test_amap_live.AMapMobilityTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_amap_live.py", line 526, in test_poi_address_allows_empty_formatted_address_with_admin_detail
+    self.assertEqual(["poi", "geocode"], transport.capabilities)
+AssertionError: Lists differ: ['poi', 'geocode'] != ['poi']
+
+First list contains 1 additional elements.
+First extra element 1:
+'geocode'
+
+- ['poi', 'geocode']
++ ['poi']
+
+----------------------------------------------------------------------
+Ran 1 test in 0.003s
+
+FAILED (failures=1)
+```
+
+恢复正确地址判定后，`GIT_INDEX_FILE=<隔离 index> git diff --exit-code -- .../mobility.py` 为 exit 0，原始输出为空。
+
+再临时恢复“只认 `identity_conflict`”后只跑第 4 条（exit 1）：
+
+```text
+test_fix_names_incomplete_address_prefix_lists_manual_suggestions (tests.test_candidates.CandidateContractTests) ... FAIL
+
+======================================================================
+FAIL: test_fix_names_incomplete_address_prefix_lists_manual_suggestions (tests.test_candidates.CandidateContractTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_candidates.py", line 616, in test_fix_names_incomplete_address_prefix_lists_manual_suggestions
+    self.assertIn("CANDIDATE_NAME_MANUAL", result.stdout)
+AssertionError: 'CANDIDATE_NAME_MANUAL' not found in 'CANDIDATE_NAME_FIX_SUMMARY {"applied":0,"automatic":0,"manual":0,"mode":"report"}\n'
+
+----------------------------------------------------------------------
+Ran 1 test in 0.064s
+
+FAILED (failures=1)
+```
+
+恢复正确前缀白名单后，隔离 index 基准对 `mobility.py` 与 `candidates.py` 的组合 `git diff --exit-code` 为 exit 0，原始输出为空；随后精确删除临时 index/目录。
+
+## 书 35 五项离线合成验收（原始输出）
+
+内联 Python 复用新增的纯合成 transport/fixture，前三项真实走 `MobilityBackend.resolve` 与 `check_poi_name_identity`，后两项真实执行 `ctw candidates fix-names`（exit 0）：
+
+```text
+CASE_1_EMPTY_ADDRESS_ADMIN_COMPLETE {"adcode":"990300","address":"","calls":["poi","geocode"],"coordinates_known":true,"district":"合成中心区","name_check_status":"unique","reason":null}
+CASE_2_MISSING_DISTRICT {"adcode":"990300","address":"","calls":["poi"],"coordinates_known":false,"district":"","name_check_status":"ambiguous","reason":"incomplete_address:poi-synthetic-book35-address:poi_address_missing_admin_detail:{\"candidates\":[{\"administrative_area\":\"合成星港市\",\"name\":\"合成星庭\"}],\"suggested_names\":[\"合成星庭\"]}"}
+CASE_3_MISSING_ADCODE {"adcode":"","address":"","calls":["poi"],"coordinates_known":false,"district":"合成中心区","name_check_status":"ambiguous","reason":"incomplete_address:poi-synthetic-book35-address:poi_address_missing_admin_detail:{\"candidates\":[{\"administrative_area\":\"合成星港市/合成中心区\",\"name\":\"合成星庭\"}],\"suggested_names\":[\"合成星庭\"]}"}
+CASE_4_INCOMPLETE_ADDRESS
+CANDIDATE_NAME_MANUAL {"action":"unchanged","administrative_areas":["合成丙市/合成东区","合成丙市/合成西区"],"original_name":"合成云廊","reason":"ambiguous_suggestions","ref_id":"poi-fix-ambiguous","source_field_path":"/pois/0/coordinates","suggested_name":null,"suggested_names":["合成云廊东门","合成云廊西门"]}
+CANDIDATE_NAME_FIX_SUMMARY {"applied":0,"automatic":0,"manual":1,"mode":"report"}
+CASE_5_WHATEVER
+CANDIDATE_NAME_FIX_SUMMARY {"applied":0,"automatic":0,"manual":0,"mode":"report"}
+```
+
+本轮存疑但不施工：泉州海外交通史博物馆的 `geocode_ambiguous` 实网两候选无法稳定复现，近期三次只返回一条；修复又需同时改 adapter 与 schema，证据不足，后置到可稳定复现时再定方案。
+
+## 书 35 最终门禁与边界
+
+- 两个相关模块的完整定向门 `/usr/bin/python3 -m unittest -v tests.test_amap_live tests.test_candidates`（exit 0）为 `Ran 93 tests in 3.164s`、`OK`。
+- 完整仓库 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）原始摘要：
+
+```text
+----------------------------------------------------------------------
+Ran 513 tests in 34.561s
+
+OK
+```
+
+- 输出无 skipped 汇总，故 skipped 0；相对书 34 的 508 基线恰新增五条测试，没有删测、skip 或弱化既有断言。
+- `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）原始输出：
+
+```text
+secret scan: 0 finding(s) across 376 file(s)
+```
+
+- `ALLOWLIST_OK files=5`：仅 `PROGRESS.md`、`mobility.py`、`candidates.py`、`tests/test_amap_live.py`、`tests/test_candidates.py` 有 diff；正常 Git index 为空。
+- `git diff --exit-code` 对 `planning.py`、整个 `providers/`、整个 `schema/`、`journey.py`、`cli.py`、`demo/`、`BLOCKED.md` 均为 exit 0、原始输出为空；manifest/package 版本文件同样无 diff，本轮未升版本、未安装 Codex。
+- 对两个源码的 zero-context diff 搜索 `_poi_name_is_ambiguous|POI_NAME_SIMILARITY_MARGIN|_name_similarity|_unique_candidate_name|poi_admin_mismatch|ambiguous_name_margin|POI_COORDINATE_CLUSTER_MAX_METERS` 无命中；命令 exit 0，证明名称判定、行政匹配与坐标聚集口径未动。
+- `git diff --check` exit 0、原始输出为空；实现 diff 仅删除 `formatted_address` 两行并把一个前缀比较扩成两值白名单。
+
+## 书 35 第二版任务 0：空地址中断后续地点复现（2026-09-06）
+
+`grep -n 'geocode_address' plugins/china-trip-weaver/src/china_trip_weaver/mobility.py`（exit 0）原始输出恰为四处：
+
+```text
+170:            geocode_address = "%s%s" % (entity["city"], entity["name"])
+273:                geocode_address = identity["formatted_address"]
+276:                request_id=stable_id("amap-geocode", entity["ref_id"], geocode_address, entity["city"]),
+280:                    "address": geocode_address,
+```
+
+`grep -n 'def _required_text' -A 5 plugins/china-trip-weaver/src/china_trip_weaver/providers/amap_http.py`（exit 0）原始输出：
+
+```text
+423:def _required_text(values: Mapping[str, Any], name: str) -> str:
+424-    value = values.get(name)
+425-    if not isinstance(value, str) or not value.strip():
+426-        raise ContractMismatch("AMap request is missing %s" % name)
+427-    return value.strip()
+428-
+```
+
+离线内联 Python 使用真实 `AMapHTTPTransport` 与纯合成 opener；按 ref_id 排序让空地址 POI 后面仍有两个正常 POI（exit 0）原始输出：
+
+```text
+TASK0_THREE_POI_REPRO {"business_calls":["amap.poi:poi-synthetic-book35b-00-empty"],"contract_warning":"contract_mismatch:poi-synthetic-book35b-00-empty:geocode_lookup:{\"candidates\":[{\"administrative_area\":\"合成星港市/合成中心区\",\"name\":\"合成空址景点\"}],\"suggested_names\":[\"合成空址景点\"]}","health_status":"contract_mismatch","http_calls":["poi:合成空址景点"],"located_ref_ids":[],"missing_following_ref_ids":["poi-synthetic-book35b-10-normal","poi-synthetic-book35b-20-normal"]}
+```
+
+回归与第二版任务书完全一致，不触碰 `BLOCKED.md`。
+
+## 书 35 第二版开工回执（2026-09-06，≤10 行）
+1. 目标：保留上一版两项正确放宽，并让空/空白 `formatted_address` 保留既有 `城市+名称` geocode 查询词。
+2. 只在无条件覆盖点增加判断；第 170 行默认算法、有值地址的原样覆盖均冻结。
+3. 回归夹具真实经过 `AMapHTTPTransport`，首个问题 POI 后固定跟两个正常 POI，不能再由宽容 transport 漏测。
+4. 新增三条测试：三 POI 不中断、空白地址兜底、非空地址逐字覆盖；与上一版五条合计全保留。
+5. `FATAL_ERRORS` 与 `_required_text` 均只读，绝不降级 `contract_mismatch` 或放宽空参数门。
+6. 新测试先在当前工作树上跑红；实现后做移除兜底的反向红态，并用隔离 index 确认恢复无残留。
+7. 边界仍只有五个允许文件；不升版本、不装 Codex，不碰 planning/providers/schema/Journey/CLI/demo/BLOCKED。
+8. 开工 `HEAD=origin/main=d51772f`；承接上一版 513 项全绿工作树，任务 0 三项均已复现。
+
+## 书 35 第二版新增三条回归红态（实现前原始输出）
+
+三条测试均使用真实 `AMapHTTPTransport` 加纯合成 opener；第一条依次放空地址、正常甲、正常乙三个 POI，第二条覆盖纯空白，第三条守住非空地址原样覆盖（exit 1）：
+
+```text
+test_empty_poi_address_fallback_does_not_abort_following_pois (tests.test_amap_live.AMapMobilityTests) ... FAIL
+test_whitespace_poi_address_uses_city_name_fallback (tests.test_amap_live.AMapMobilityTests) ... FAIL
+test_nonempty_poi_address_keeps_exact_formatted_address_query (tests.test_amap_live.AMapMobilityTests) ... ok
+
+======================================================================
+FAIL: test_empty_poi_address_fallback_does_not_abort_following_pois (tests.test_amap_live.AMapMobilityTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_amap_live.py", line 615, in test_empty_poi_address_fallback_does_not_abort_following_pois
+    self.assertEqual(
+AssertionError: Lists differ: ['poi-synthetic-book35b-00', 'poi-syntheti[37 chars]-02'] != []
+
+First list contains 3 additional elements.
+First extra element 0:
+'poi-synthetic-book35b-00'
+
++ []
+- ['poi-synthetic-book35b-00',
+-  'poi-synthetic-book35b-01',
+-  'poi-synthetic-book35b-02']
+
+======================================================================
+FAIL: test_whitespace_poi_address_uses_city_name_fallback (tests.test_amap_live.AMapMobilityTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_amap_live.py", line 637, in test_whitespace_poi_address_uses_city_name_fallback
+    self.assertEqual([entities[0]["ref_id"]], [item.ref_id for item in result.locations])
+AssertionError: Lists differ: ['poi-synthetic-book35b-00'] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+'poi-synthetic-book35b-00'
+
+- ['poi-synthetic-book35b-00']
++ []
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.006s
+
+FAILED (failures=2)
+```
+
+两条目标行为恰好为红；非空地址控制已绿，证明测试没有通过改变既有有值语义制造假红。
+
+## 书 35 第二版实现、绿态与反向验证
+
+- `mobility.py` 只在原覆盖点加 `if identity["formatted_address"].strip():`；空/空白时保留第 170 行已有 `城市+名称`，非空时仍把 identity 原值直接赋给查询词，没有裁剪、拼接或重写。
+- `FATAL_ERRORS`、`providers/amap_http.py::_required_text`、上一版地址校验与 fix-names 前缀实现均未改。
+
+第二版三条新增测试首次实现后（exit 0）原始输出：
+
+```text
+test_empty_poi_address_fallback_does_not_abort_following_pois (tests.test_amap_live.AMapMobilityTests) ... ok
+test_whitespace_poi_address_uses_city_name_fallback (tests.test_amap_live.AMapMobilityTests) ... ok
+test_nonempty_poi_address_keeps_exact_formatted_address_query (tests.test_amap_live.AMapMobilityTests) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.007s
+
+OK
+```
+
+随后将 health 断言前移以让反向红态直接显示根因；第二版三条与上一版五条合跑（exit 0）原始输出：
+
+```text
+test_empty_poi_address_fallback_does_not_abort_following_pois (tests.test_amap_live.AMapMobilityTests) ... ok
+test_whitespace_poi_address_uses_city_name_fallback (tests.test_amap_live.AMapMobilityTests) ... ok
+test_nonempty_poi_address_keeps_exact_formatted_address_query (tests.test_amap_live.AMapMobilityTests) ... ok
+test_poi_address_allows_empty_formatted_address_with_admin_detail (tests.test_amap_live.AMapMobilityTests) ... ok
+test_poi_address_still_rejects_missing_district (tests.test_amap_live.AMapMobilityTests) ... ok
+test_poi_address_still_rejects_missing_adcode (tests.test_amap_live.AMapMobilityTests) ... ok
+test_fix_names_incomplete_address_prefix_lists_manual_suggestions (tests.test_candidates.CandidateContractTests) ... ok
+test_fix_names_ignores_unrecognized_reason_prefix (tests.test_candidates.CandidateContractTests) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.153s
+
+OK
+```
+
+必做反向验证：先把正确 `mobility.py` 写入隔离临时 Git index，再临时移除兜底、恢复无条件覆盖；三地点测试（exit 1）原始输出：
+
+```text
+test_empty_poi_address_fallback_does_not_abort_following_pois (tests.test_amap_live.AMapMobilityTests) ... FAIL
+
+======================================================================
+FAIL: test_empty_poi_address_fallback_does_not_abort_following_pois (tests.test_amap_live.AMapMobilityTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/china-trip-weaver/tests/test_amap_live.py", line 615, in test_empty_poi_address_fallback_does_not_abort_following_pois
+    self.assertNotEqual("contract_mismatch", result.health["status"])
+AssertionError: 'contract_mismatch' == 'contract_mismatch'
+
+----------------------------------------------------------------------
+Ran 1 test in 0.003s
+
+FAILED (failures=1)
+```
+
+恢复兜底后，`GIT_INDEX_FILE=<隔离 index> git diff --exit-code -- .../mobility.py` 为 exit 0、原始输出为空；临时 index 与目录随后精确删除。
+
+## 书 35 第二版四组离线合成验收（原始输出）
+
+内联 Python 的多地点组真实经过 `AMapHTTPTransport`；其余组复用上一版合成夹具并真实执行 `MobilityBackend.resolve`、`check_poi_name_identity` 与 `ctw candidates fix-names`（exit 0）：
+
+```text
+ACCEPT_1_THREE_POIS {"contract_warning_count":0,"geocode_queries":["合成星港合成顺序景点1","合成省合成星港市合成中心区合成正一路1号","合成省合成星港市合成中心区合成正二路2号"],"health_status":"ready","http_calls":["poi:poi-synthetic-book35b-00","geocode:poi-synthetic-book35b-00","poi:poi-synthetic-book35b-01","geocode:poi-synthetic-book35b-01","poi:poi-synthetic-book35b-02","geocode:poi-synthetic-book35b-02","route:walking","route:walking","route:walking","route:walking","route:walking","route:walking"],"located_ref_ids":["poi-synthetic-book35b-00","poi-synthetic-book35b-01","poi-synthetic-book35b-02"],"requested_ref_ids":["poi-synthetic-book35b-00","poi-synthetic-book35b-01","poi-synthetic-book35b-02"]}
+ACCEPT_2_EMPTY_ADDRESS {"calls":["poi","geocode"],"coordinates_known":true,"name_check_status":"unique"}
+ACCEPT_3_MISSING_DISTRICT {"calls":["poi"],"coordinates_known":false,"reason":"incomplete_address:poi-synthetic-book35-address:poi_address_missing_admin_detail:{\"candidates\":[{\"administrative_area\":\"合成星港市\",\"name\":\"合成星庭\"}],\"suggested_names\":[\"合成星庭\"]}"}
+ACCEPT_3_MISSING_ADCODE {"calls":["poi"],"coordinates_known":false,"reason":"incomplete_address:poi-synthetic-book35-address:poi_address_missing_admin_detail:{\"candidates\":[{\"administrative_area\":\"合成星港市/合成中心区\",\"name\":\"合成星庭\"}],\"suggested_names\":[\"合成星庭\"]}"}
+ACCEPT_4_INCOMPLETE_ADDRESS
+CANDIDATE_NAME_MANUAL {"action":"unchanged","administrative_areas":["合成丙市/合成东区","合成丙市/合成西区"],"original_name":"合成云廊","reason":"ambiguous_suggestions","ref_id":"poi-fix-ambiguous","source_field_path":"/pois/0/coordinates","suggested_name":null,"suggested_names":["合成云廊东门","合成云廊西门"]}
+CANDIDATE_NAME_FIX_SUMMARY {"applied":0,"automatic":0,"manual":1,"mode":"report"}
+ACCEPT_4_WHATEVER
+CANDIDATE_NAME_FIX_SUMMARY {"applied":0,"automatic":0,"manual":0,"mode":"report"}
+```
+
+首组明确证明 `contract_mismatch` 消失、三个请求实体与三个定位实体逐一相等；第一条 geocode 查询词是原有 `城市+名称`，后两条仍逐字使用非空 `formatted_address`。
+
+## 书 35 第二版最终门禁与边界
+
+- 两个允许测试模块的完整定向门 `/usr/bin/python3 -m unittest -v tests.test_amap_live tests.test_candidates`（exit 0）原始摘要：`Ran 96 tests in 3.206s`、`OK`。
+- 完整仓库 `/usr/bin/python3 -m unittest discover -s tests`（exit 0）原始摘要：
+
+```text
+----------------------------------------------------------------------
+Ran 516 tests in 38.259s
+
+OK
+```
+
+- 输出无 skipped 汇总，故 skipped 0；相对第二版开工 513 基线恰新增三条，上版五条全部保留并在八条组合门中逐条为 `ok`。
+- `/usr/bin/python3 scripts/scan_secrets.py`（exit 0）原始输出：
+
+```text
+secret scan: 0 finding(s) across 376 file(s)
+```
+
+- 最终白名单脚本输出 `ALLOWLIST_OK files=5`：仅 `PROGRESS.md`、`mobility.py`、`candidates.py`、`tests/test_amap_live.py`、`tests/test_candidates.py` 有 diff；正常 Git index 为空。
+- `git diff --exit-code` 对 `planning.py`、整个 `providers/`、整个 `schema/`、`journey.py`、`cli.py`、`demo/`、`BLOCKED.md` 均 exit 0、原始输出为空；manifest/package 版本文件也无 diff。
+- 两个源码的 zero-context diff 搜索 `_poi_name_is_ambiguous|POI_NAME_SIMILARITY_MARGIN|_name_similarity|_unique_candidate_name|FATAL_ERRORS|poi_admin_mismatch|ambiguous_name_margin|POI_COORDINATE_CLUSTER_MAX_METERS|geocode_address = "%s%s"` 无命中；因此七处完成条件、默认算法与额外冻结判定均未改。
+- 两个测试文件的新增 diff 搜索真实行程地名无命中；所有新增名称、地址、坐标、URL 与响应均为明显合成值。
+- `git diff --check` exit 0、原始输出为空；实现源码总 diff 仍只有上一版两项最小改动，加本版覆盖点两行兜底。未升版本、未安装 Codex。
+
+## 书 35 领导验收（2026-09-06，Claude 亲自复跑）
+
+第一版被领导判定不通过并重发；下面先记不通过的原因，再记第二版的验收。
+
+### 第一版为什么不通过：管理者判断错误导致的实网回归
+
+- 我在第一版任务书里断言 `_complete_poi_address` 检查 `formatted_address` 非空「名不副实」，只看了字段名与高德返回，**没有追它的下游用途**。
+- 真实链条：`mobility.py:170` 先把 geocode 查询词定为 `城市+名称`，POI 成功后 `:273` 覆盖为 `identity["formatted_address"]`；那个校验正是在保证这次覆盖有值。放宽后，`formatted_address` 为空的地点把空串当查询词发给 geocode，`amap_http._required_text` 对空串抛 `ContractMismatch`，而 `contract_mismatch` 属 `FATAL_ERRORS` → `break` 整个解析循环，后面所有地点一个都不再处理。
+- **表面指标全部"变好"**：全量 513 项绿、坐标 unknown 15→12、`poi_address_missing_admin_detail` 2→0，恰好符合我发书时写下的预期。是加跑了一次「旧代码 + 同一时刻实网数据」的对照才识破：unknown 变少不是改善，而是后面的地点根本没跑，连 unknown 都没生成。
+- 教训已写入验收习惯：**这类改动的首要指标是「定位成功总数」与 provider health，不是 unknown 条数**；中断会让 unknown 数反而变好看。
+
+### 第二版：通过
+
+- 明卷：`Ran 516 tests`、`OK`、skipped 0；`secret scan: 0 finding(s) across 376 file(s)`。完成条件二的七处（`planning.py`、`providers/`、`schema/`、`_poi_name_is_ambiguous`、`POI_NAME_SIMILARITY_MARGIN`、`_name_similarity`、`FATAL_ERRORS`）diff 全空。
+- 领导侧独立反向验证：去掉查询词兜底 → `FAILED (failures=2)`，命中 `test_empty_poi_address_fallback_does_not_abort_following_pois` 与 `test_whitespace_poi_address_uses_city_name_fallback`；前者正是任务书要求的「失败地点后面还排着正常地点」的夹具。恢复后 516 项全绿。
+
+### 首要指标：三方实网对照（同一份福建行程）
+
+```text
+                   地点 定位 坐标unk 名字unk  amap health
+ctl34 旧代码基线      78   57     15       4  三段 degraded
+b35 第一版(回归)      78   51     12       2  coast/south = contract_mismatch
+b35b 第二版          78   60     12       6  三段 degraded
+```
+
+- 定位成功数 **57 → 60**，高于领导设定的 ≥58 门槛；三段 amap health 全部回到 `degraded`，无 `contract_mismatch`。回归完全消除，且比旧基线多定位三个地点。
+- `poi_address_missing_admin_detail` 由 2 降到 0；名字 unknown 由 4 升到 6，正是洛阳桥与泉州府文庙定位成功后名字仍存疑——书 34 的机制按设计接住了它们。
+
+### 领导侧顺手收紧的一行
+
+- 交付实现写的是 `if identity["formatted_address"].strip():`，用下标硬取。但 `_complete_poi_address` 已不再保证该键存在——实测缺该键的 identity 能通过校验，下游即 `KeyError`。当前 AMap adapter 总会填这个键（可能为空串），所以实网不会触发，但这是契约漂移时的崩溃点，与 0.5.0 那次 `UnboundLocalError: selected` 同一类型。
+- 领导侧改为 `str(identity.get("formatted_address") or "").strip()`，改后 516 项仍全绿，随交付一并提交。
