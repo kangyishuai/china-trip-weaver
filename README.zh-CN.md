@@ -88,7 +88,7 @@ CODEX_HOME=/path/to/an/isolated/codex-home \
 
 `ctw candidates add-poi ... --verify-name` 会在写入前用高德核对 POI 名称。它只报告经过脱敏的 `unique`、`ambiguous` 或 `unavailable` 结果并最多给出三个候选名称建议，不会凭这次核名写入坐标；缺 Key 或 provider 核名失败都不会阻断候选写入。
 
-`ctw candidates fix-names` 读取 Trip 或 Journey 里的高德坐标 unknown，把可采用的规范名报告给对应的调研候选。它默认只报告；只有加 `--apply` 才会把唯一确定的名称写回候选文件。歧义、冲突、同名或格式异常的建议都留给人工确认，绝不自动修改。
+`ctw candidates fix-names` 读取 Trip 或 Journey 为某个地点记下的高德 unknown——既包括坐标没能定下来的，也包括坐标已经定了、但名字仍然存疑的——把可采用的规范名报告给对应的调研候选。它默认只报告；只有加 `--apply` 才会把唯一确定的名称写回候选文件。歧义、冲突、同名或格式异常的建议都留给人工确认，绝不自动修改。
 
 处理这些人工项时，`--export-manual NAME-REVIEW.json` 会导出一份可填写的 JSON 清单，绝不修改候选文件。给任意条目的 `chosen` 填值后，再用 `--apply-manual NAME-REVIEW.json` 应用；每个非空值都必须与该条当前 `suggested_names` 中的一个名字逐字相等，空值或缺失值会跳过。只要出现未知 `ref_id` 或建议外名字，整次应用就失败，候选文件字节不变。若要使用完全自定义的名字，请直接编辑候选文件，再运行 `validate-candidates`。
 
