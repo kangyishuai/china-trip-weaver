@@ -1,4 +1,6 @@
-## Open：GitHub CI 自 2026-09-05 起连续全红（2026-09-08 洁癖收尾发现，待领导裁决）
+## Closed：GitHub CI 自 2026-09-05 起连续全红（2026-09-08 洁癖收尾发现，同日经领导裁决修复）
+
+- **处置（2026-09-08）**：领导裁决按建议直接修。提交 `b160501`：`test_codex_skill_parser_smoke_runs_standalone` 改用插件自己的 `plugin_conflicts.codex_executable()` 判断本机有无 Codex，没有时 `skipTest`，与另两条 Codex 依赖测试同款；`actions/checkout@v7`、`actions/setup-python@v7`（node24）；CONTRIBUTING 与两份 README 改为「三项 Codex 依赖测试」。本机全量仍 `Ran 507 tests` OK 零跳过；模拟无 Codex（`CODEX_BIN=/nonexistent`）时 `OK (skipped=1)`。推送后 GitHub Actions run 34217843374 两条矩阵均通过：`Ran 507 tests`、`OK (skipped=3)`、`secret scan: 0 finding(s)`，Node 20 弃用告警消失。
 
 - 证据：`gh run list --limit 12` 显示 2026-09-05 `99b9468` 起到 2026-09-08 `d809ab1` 的 12 次 push 全部 `failure`；两条矩阵（Python 3.9 / 3.13）都是 `Ran 507 tests`、`FAILED (failures=1, skipped=2)`，唯一失败是
   `tests/test_skills.py::test_codex_skill_parser_smoke_runs_standalone`——它调用 `scripts/install_local_plugin.sh --skill-smoke`，runner 上没有 Codex，脚本退出 2：「找不到 codex 可执行文件；请设置 CODEX_BIN」。另两条 Codex 依赖测试（`test_all_skills_pass_bundled_validator`、`test_plugin_passes_bundled_validator`）在无 Codex 时 `skipTest`，所以是 skipped=2。

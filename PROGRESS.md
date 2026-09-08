@@ -56,7 +56,7 @@ fix-names` 会把它们列为人工项。
   `verify-on-click`，不给价格；FlyAI 本身是个人维护的第三方包装，可能停更。
 - **12306 无官方站点距离**：站点候选靠 AMap geocode/POI 事后算距离兜底，命中
   同城精确站名才生效，未内置或跨城场景仍是 unknown 距离。
-- **GitHub CI 自 2026-09-05 起连续全红**（2026-09-08 洁癖收尾发现）：`test_skills.py::test_codex_skill_parser_smoke_runs_standalone` 在没有 Codex 的 runner 上直接失败，本地全绿掩盖了它；处置建议与证据见 `BLOCKED.md` 顶部 Open 条目。
+- **CI 的跳过口径**：没装 Codex 的 GitHub runner 会跳过三项 Codex 依赖测试（`OK (skipped=3)`），装了 Codex 的本机必须零跳过。2026-09-05 到 09-08 CI 曾因 Skill 解析 smoke 不跳过而连红 12 次，已于 2026-09-08 修复（提交 `b160501`，run 34217843374 全绿），经过见 `BLOCKED.md` 顶部条目。每次 push 后看一眼 `gh run list --limit 3`。
 
 ## 历史索引
 
