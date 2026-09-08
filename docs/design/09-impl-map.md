@@ -174,7 +174,7 @@ tests/
 | `clock.py` | Asia/Shanghai clock 与 injectable test clock | datetime/zoneinfo | §06/§08 | 不使用 host local date；fixed clock deterministic |
 | `credentials.py` | env→0600 file allowlist resolver/最小注入/redaction | os/stat/pathlib | §05；[决策 18](../research/04-design-insights.md#18-不采用聊天cli-参数源码目录html-中保存-key) | permission/symlink/parser/isolation/canary tests 全过 |
 | `evidence.py` | claim creation、dedupe、conflict/freshness/raw refs | contracts/clock | §03.4、§04 | 每外部事实 claim 五字段；conflict 不覆盖 |
-| `cache.py` | 最小 normalized cache、TTL、mode 与 ToS disable | evidence/clock | §04.5–6 | context-complete keys；no secret/personal data；TTL tests |
+| `cache.py` | **已于 2026-09-08 删除**：按 `THIRD_PARTY_NOTICES.md` 不缓存任何服务商响应，该模块从未接入生产路径（原设计：最小 normalized cache、TTL、mode 与 ToS disable） | evidence/clock | §04.5–6 | context-complete keys；no secret/personal data；TTL tests |
 | `geo.py` | CRS 标记与单次 WGS84↔GCJ02 转换 | math only | §03.3；[决策 11](../research/04-design-insights.md#11-采用同时保存-provider-native-与规范化坐标不做无标记的单坐标) | known points/边界/unknown/double-conversion tests |
 | `matrix.py` | bounded route query plan、cell 合并与 coverage | geo/providers/evidence | §06.4；[决策 13](../research/04-design-insights.md#13-采用先真实-travel-time-matrix再排-time-windows不以直线连线冒充路线) | final hops covered；unreachable/estimate 不伪 live |
 | `pipeline.py` | P0–P6 状态机、checkpoint、取消与 stage invalidation | all core | §06.1–2 | resume/hash/version tests；失败不越 stage boundary |
@@ -198,7 +198,7 @@ tests/
 | 模块 | 一行职责 | 依赖 | 设计对应 | 完成定义 |
 |---|---|---|---|---|
 | `scheduler/light.py` | beam insertion + bounded local improvement | contracts/matrix | §06.5 | deterministic；20 golden/8 no-solution/property gates |
-| `scheduler/ortools_bridge.py` | 可选进程边界与统一结果验证 | optional configured runner | §06.5.3；[Q10](../research/05-open-questions.md#q10-轻量排程与-or-tools-的切换阈值是什么) | default import/install=0；flag/threshold/5s/fallback tests |
+| `scheduler/ortools_bridge.py` | **已于 2026-09-08 删除**（[ADR-0014](adr/0014-remove-ortools-bridge.md)；原设计：可选进程边界与统一结果验证） | optional configured runner | §06.5.3；[Q10](../research/05-open-questions.md#q10-轻量排程与-or-tools-的切换阈值是什么) | default import/install=0；flag/threshold/5s/fallback tests |
 | `replan.py` | 影响传播、白名单 patch、stability/reverify | scheduler/evidence/validator | §06.7；[决策 15](../research/04-design-insights.md#15-采用局部重排是-versioned-patch不是重跑全计划) | revision conflict、replay、locks、范围外 byte tests |
 | `render/template.py` | 固定安全 HTML skeleton/components | stdlib | §07.2–5 | 无 provider/clock/network；escape contexts tested |
 | `render/html.py` | Trip→deterministic single file | template/contracts | §07.1–6；[决策 16](../research/04-design-insights.md#16-采用v1-只做一个-deterministic-手机-html-renderer) | repeat hash same；embedded Trip exact；zero remote script |

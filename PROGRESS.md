@@ -56,6 +56,15 @@ fix-names` 会把它们列为人工项。
   `verify-on-click`，不给价格；FlyAI 本身是个人维护的第三方包装，可能停更。
 - **12306 无官方站点距离**：站点候选靠 AMap geocode/POI 事后算距离兜底，命中
   同城精确站名才生效，未内置或跨城场景仍是 unknown 距离。
+- **GitHub CI 自 2026-09-05 起连续全红**（2026-09-08 洁癖收尾发现）：`test_skills.py::test_codex_skill_parser_smoke_runs_standalone` 在没有 Codex 的 runner 上直接失败，本地全绿掩盖了它；处置建议与证据见 `BLOCKED.md` 顶部 Open 条目。
+
+## 历史索引
+
+- 2026-09-03 至 09-06 的完整逐轮任务书、实测证据与验收记录：
+  [docs/history/progress-2026-09-03-to-06.md](docs/history/progress-2026-09-03-to-06.md)
+  （原 `PROGRESS.md` 整体归档，一字未改，9119 行）。
+- 2026-09-03/04 越界事实的唯一记录：`BLOCKED.md`（面向公众的产品未决问题，
+  Open 区已于 2026-09-06 清零，现为存档）。
 
 ## 本轮记录（2026-09-08，shim 合一 + doctor 运行时目录 + 0.7.0 发版）
 
@@ -179,14 +188,6 @@ fix-names` 会把它们列为人工项。
   `_cmd_validate_candidates` 的形参 `args` 改名为 `args_renamed` 而不改函数体
   用法 → pyflakes 报 3 处 `undefined name 'args'`（红）→ 还原 → pyflakes 0
   行（绿）。`BLOCKED.md` 本轮追加「无待裁决项」记录（书 C 小节）。
-
-## 历史索引
-
-- 2026-09-03 至 09-06 的完整逐轮任务书、实测证据与验收记录：
-  [docs/history/progress-2026-09-03-to-06.md](docs/history/progress-2026-09-03-to-06.md)
-  （原 `PROGRESS.md` 整体归档，一字未改，9119 行）。
-- 2026-09-03/04 越界事实的唯一记录：`BLOCKED.md`（面向公众的产品未决问题，
-  Open 区已于 2026-09-06 清零，现为存档）。
 
 ## 本轮记录（2026-09-08，仓库瘦身第二轮）
 

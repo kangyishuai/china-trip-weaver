@@ -152,6 +152,8 @@ provider ToS 若禁止缓存，则对应 R1 禁用；不得用工程便利覆盖
 
 ## 6. Cache 与 evidence 保留边界
 
+> 现状注记（2026-09-08）：本节描述的归一化缓存层从未接入生产路径，且按 `THIRD_PARTY_NOTICES.md` 的条款结论**不缓存任何服务商响应**，`cache.py` 已于 2026-09-08 删除。`mode=cached` 仍是 schema 与校验器接受的合法值，但当前没有任何 provider 会产生它；`06-pipeline.md` 降级链里的「fresh cached cell」一档因此永不命中。以下条文保留为设计期约束，仅供将来条款允许时恢复。
+
 - 默认只缓存归一化所需最小字段、claims、response hash 和脱敏 fixture；不缓存 cookies、auth headers、用户账号、完整搜索文本或支付/订单页面。
 - cache key 包含 provider/version/capability/规范化参数/业务日期/party；不得让不同用户的登录态结果互相命中。
 - 动态 price/inventory cache 命中仍标 `cached` 并显示原 queried_at。

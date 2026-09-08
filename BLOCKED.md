@@ -1,3 +1,11 @@
+## Open：GitHub CI 自 2026-09-05 起连续全红（2026-09-08 洁癖收尾发现，待领导裁决）
+
+- 证据：`gh run list --limit 12` 显示 2026-09-05 `99b9468` 起到 2026-09-08 `d809ab1` 的 12 次 push 全部 `failure`；两条矩阵（Python 3.9 / 3.13）都是 `Ran 507 tests`、`FAILED (failures=1, skipped=2)`，唯一失败是
+  `tests/test_skills.py::test_codex_skill_parser_smoke_runs_standalone`——它调用 `scripts/install_local_plugin.sh --skill-smoke`，runner 上没有 Codex，脚本退出 2：「找不到 codex 可执行文件；请设置 CODEX_BIN」。另两条 Codex 依赖测试（`test_all_skills_pass_bundled_validator`、`test_plugin_passes_bundled_validator`）在无 Codex 时 `skipTest`，所以是 skipped=2。
+- 为什么一周没人发现：本地机器装了 Codex，全量 507 全绿；没有人看 GitHub Actions 的结果，CONTRIBUTING 也只说「有两项测试会跳过」。
+- 影响：远端 CI 对任何 PR/贡献者都是红的，等于没有门禁；README 的「suite has zero skips」只对装了 Codex 的机器成立。
+- 建议（未执行，属测试行为改动，需领导裁决）：给 `test_codex_skill_parser_smoke_runs_standalone` 加与另两条同款的环境守卫——`--skill-smoke` 因找不到 codex 而退出 2 时 `skipTest`，其他非零仍失败；CONTRIBUTING 两份改为「三项 Codex 依赖测试在无 Codex 的机器上跳过，装了就必须通过」；本地仍要求零跳过。顺带把 `.github/workflows/ci.yml` 的 `actions/checkout@v4`、`actions/setup-python@v5` 升到 Node 24 版本（GitHub 已发 Node 20 弃用告警）。
+
 ## 0.7.0 发版书 任务 4：「`git status --short` 为空」的口径裁决（2026-09-08，判断，非空白裁决）
 
 任务 4 验收原文:「删后再跑全量 507 OK;`git status --short` 为空」。字面上此刻
