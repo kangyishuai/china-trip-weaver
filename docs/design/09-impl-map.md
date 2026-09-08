@@ -2,7 +2,87 @@
 
 这是未来仓库/插件 package 的目录与完成定义，不是本阶段要创建的代码。核心使用系统 Python 3.9 标准库，Node 只承载固定版本 MCP/CLI；默认路径不依赖手动 venv。[依据：官方插件布局](../research/01-codex-spec.md#2-插件目录与-pluginjson)、[运行时研究取舍](../research/04-design-insights.md#14-采用or-tools-作为复杂日程可选引擎不作为无条件依赖)
 
-## 1. 未来目录树
+## 0. 实际目录树（2026-09-08）
+
+`git ls-files plugins/china-trip-weaver/src tests/test_*.py` 的真实结果，供对照
+§1「未来目录树」——那是写在实现之前的阶段三设计稿，模块名与今日代码已有出入
+（例如 `cache.py`、`scheduler/ortools_bridge.py` 已按 ADR-0014 删除，渲染相关
+模块拆分进了下方实际树里的 `render/` 目录），不代表当前状态：
+
+```text
+plugins/china-trip-weaver/src/china_trip_weaver/
+├── __init__.py
+├── candidates.py
+├── cli.py
+├── clock.py
+├── contracts.py
+├── credentials.py
+├── errors.py
+├── evidence.py
+├── flyai_inventory.py
+├── geo.py
+├── journey.py
+├── keyless.py
+├── matrix.py
+├── mobility.py
+├── pipeline.py
+├── planning.py
+├── plugin_conflicts.py
+├── providers/
+│   ├── __init__.py
+│   ├── amap.py
+│   ├── amap_http.py
+│   ├── anysearch.py
+│   ├── base.py
+│   ├── flyai.py
+│   ├── flyai_cli.py
+│   ├── flyai_home_shim.cjs
+│   ├── host_web.py
+│   ├── mcp_stdio.py
+│   ├── rail12306.py
+│   ├── rail_home_shim.cjs
+│   ├── variflight.py
+│   ├── variflight_home_shim.cjs
+│   └── variflight_mcp.py
+├── render/
+│   ├── __init__.py
+│   ├── html.py
+│   ├── journey_html.py
+│   ├── template.py
+│   ├── validate_html.py
+│   └── validate_journey_html.py
+├── replan.py
+├── scheduler/
+│   ├── __init__.py
+│   └── light.py
+├── station_distance.py
+├── validate_trip.py
+└── variflight_enrichment.py
+
+tests/
+├── test_amap_live.py
+├── test_candidates.py
+├── test_contracts.py
+├── test_credentials.py
+├── test_evidence.py
+├── test_flyai_live.py
+├── test_geo.py
+├── test_journey.py
+├── test_keyless_e2e.py
+├── test_mcp_stdio.py
+├── test_no_captured_provider_data.py
+├── test_packaging.py
+├── test_plugin_conflicts.py
+├── test_providers.py
+├── test_rail_station_fallback.py
+├── test_renderer.py
+├── test_replan.py
+├── test_scheduler.py
+├── test_skills.py
+└── test_variflight_live.py
+```
+
+## 1. 未来目录树（阶段三设计稿，实现前所写）
 
 ```text
 .
@@ -13,8 +93,8 @@
 │   ├── skills/
 │   │   ├── plan-china-trip/{SKILL.md,agents/openai.yaml}
 │   │   ├── research-china-destination/{SKILL.md,agents/openai.yaml}
-│   │   ├── search-china-trains/{SKILL.md,agents/openai.yaml}
-│   │   ├── search-china-flights/{SKILL.md,agents/openai.yaml}
+│   │   ├── search-china-rail/{SKILL.md,agents/openai.yaml}
+│   │   ├── search-china-air/{SKILL.md,agents/openai.yaml}
 │   │   ├── search-china-lodging/{SKILL.md,agents/openai.yaml}
 │   │   ├── resolve-china-mobility/{SKILL.md,agents/openai.yaml}
 │   │   ├── schedule-china-trip/{SKILL.md,agents/openai.yaml}
@@ -75,8 +155,8 @@
 | `.mcp.json` | 固定 12306/VariFlight stdio MCP | Node/npx/env names | §02.6；[规范 §5.2](../research/01-codex-spec.md#52-插件内mcpjson) | exact pins、tools probe、无 secret value |
 | `skills/plan-china-trip` | 唯一 implicit 编排入口与交易/互斥门 | 全部 explicit Skills、CLI | §02.3–5；[决策 3](../research/04-design-insights.md#3-采用主-skill-独占宽泛旅行意图子-skill-默认禁止隐式调用) | description 原文一致、implicit=true、三场景 routing tests 通过 |
 | `skills/research-china-destination` | 显式日期化内容研究 | host web/AnySearch adapter | §02.3、§06 P1；[决策 10](../research/04-design-insights.md#10-采用内容调研维度按用户城市动态生成不采用固定喜茶十大商场章节) | implicit=false；输出 candidates+claims，不生成 itinerary prose |
-| `skills/search-china-trains` | 显式铁路查询归一 | rail adapter/MCP | §02.3、§04.4.2；[决策 7](../research/04-design-insights.md#7-采用12306-mcp-为铁路主-provider不采用当前-12306-skill) | implicit=false；只读；fixture/error/degrade 全过 |
-| `skills/search-china-flights` | 显式航班主查/增强 | FlyAI/VariFlight | §02.3、§04.4.3；[决策 8](../research/04-design-insights.md#8-采用flyai-主查可售航班酒店variflight-只做航空增强) | implicit=false；identity/conflict/price tests 全过 |
+| `skills/search-china-rail` | 显式铁路查询归一 | rail adapter/MCP | §02.3、§04.4.2；[决策 7](../research/04-design-insights.md#7-采用12306-mcp-为铁路主-provider不采用当前-12306-skill) | implicit=false；只读；fixture/error/degrade 全过 |
+| `skills/search-china-air` | 显式航班主查/增强 | FlyAI/VariFlight | §02.3、§04.4.3；[决策 8](../research/04-design-insights.md#8-采用flyai-主查可售航班酒店variflight-只做航空增强) | implicit=false；identity/conflict/price tests 全过 |
 | `skills/search-china-lodging` | 显式住宿片区/候选/深链 | FlyAI/degrade | §02.3、§04.4.4；[决策 9](../research/04-design-insights.md#9-采用住宿交付片区-dated-deep-links-可核验条件不编造房价) | implicit=false；未知房价不编造；dated link 有 context |
 | `skills/resolve-china-mobility` | 显式 POI/geocode/route matrix | AMap/geo/matrix | §02.3、§06 P3；[决策 12](../research/04-design-insights.md#12-不采用amap-lbs-skill-的-travelplanner采用其底层-poiroute-provider-角色) | implicit=false；真实 route/CRS/estimate 分明 |
 | `skills/schedule-china-trip` | 显式 deterministic schedule/no-solution | scheduler/validator | §02.3、§06 P4；[决策 14](../research/04-design-insights.md#14-采用or-tools-作为复杂日程可选引擎不作为无条件依赖) | implicit=false；20 golden/8 no-solution/invariants 全过 |

@@ -100,7 +100,7 @@ class PackagingTests(unittest.TestCase):
         )
         for path in required:
             self.assertTrue(path.is_file(), path)
-        self.assertEqual((ROOT / "docs/design/schema/trip.schema.json").read_bytes(), (PLUGIN / "schema/trip.schema.json").read_bytes())
+        self.assertEqual(["check_schema.py"], sorted(p.name for p in (ROOT / "docs/design/schema").rglob("*") if p.is_file()))
 
     def test_no_forbidden_plugin_components_or_build_residue(self):
         self.assertFalse((PLUGIN / ".app.json").exists())

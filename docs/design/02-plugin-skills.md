@@ -15,8 +15,8 @@ marketplace-root/
     ├── skills/
     │   ├── plan-china-trip/
     │   ├── research-china-destination/
-    │   ├── search-china-trains/
-    │   ├── search-china-flights/
+    │   ├── search-china-rail/
+    │   ├── search-china-air/
     │   ├── search-china-lodging/
     │   ├── resolve-china-mobility/
     │   ├── schedule-china-trip/
@@ -91,11 +91,11 @@ marketplace-root/
 
 > Build date-bound destination and POI claims for a mainland-China city from authoritative web sources and user-pasted notes. Invoke explicitly from plan-china-trip when candidate places, current events, opening information, seasonal constraints, food, or local cautions are missing; do not create or render a full itinerary.
 
-`search-china-trains`
+`search-china-rail`
 
 > Normalize read-only China Railway station, schedule, seat, fare, direct, transfer, and route-stop results from the pinned 12306 MCP. Invoke explicitly from plan-china-trip for a dated rail leg or rail alternative; never log in, hold, purchase, pay, cancel, or change a ticket.
 
-`search-china-flights`
+`search-china-air`
 
 > Normalize dated mainland-China flight candidates and booking deep links from the pinned FlyAI CLI, with optional VariFlight status, comfort, weather, and price enrichment. Invoke explicitly from plan-china-trip for a flight leg or flight-versus-rail comparison; do not transact or present an untyped price.
 
@@ -134,13 +134,13 @@ policy:
 |---|---:|---|---|---|
 | `plan-china-trip` | **是** | 用户文本；可选现有 Trip/revision | schema-valid Trip、决策摘要、可选 HTML | `cli.py normalize/validate`；显式调用下面 Skills |
 | `research-china-destination` | 否 | city、dates、interests、pasted notes、query budget | candidates + claim ledger + conflicts | 宿主内置 web；可选 `providers/anysearch.py` |
-| `search-china-trains` | 否 | date、from/to、time/seat/direct filters | normalized transport offers、claims、health | MCP `china-rail`；`providers/rail12306.py` |
-| `search-china-flights` | 否 | dated city/airport pair、party、filters | normalized offers、deep links、claims、health | `providers/flyai.py` 调 CLI；可选 MCP `variflight` |
+| `search-china-rail` | 否 | date、from/to、time/seat/direct filters | normalized transport offers、claims、health | MCP `china-rail`；`providers/rail12306.py` |
+| `search-china-air` | 否 | dated city/airport pair、party、filters | normalized offers、deep links、claims、health | `providers/flyai.py` 调 CLI；可选 MCP `variflight` |
 | `search-china-lodging` | 否 | city/area、check-in/out、party、constraints | areas/properties、typed prices、conditions、deep links | `providers/flyai.py`；无 Key 时 deep-link builder |
-| `resolve-china-mobility` | 否 | places/endpoints、native coordinates、modes | resolved coordinates、matrix、claims、health | `providers/amap.py`；无 Key 时 `degrade.py` |
-| `schedule-china-trip` | 否 | Trip candidates、matrix、windows、locks | scheduled Trip 或 `no_solution` explanation | `scheduler/light.py`；可选 `scheduler/ortools.py` |
+| `resolve-china-mobility` | 否 | places/endpoints、native coordinates、modes | resolved coordinates、matrix、claims、health | `providers/amap.py`；无 Key 降级见 `mobility.py`/`planning.py` |
+| `schedule-china-trip` | 否 | Trip candidates、matrix、windows、locks | scheduled Trip 或 `no_solution` explanation | `scheduler/light.py`（OR-Tools 桥接已按 [ADR-0014](adr/0014-remove-ortools-bridge.md) 移除，不再可选） |
 | `replan-china-trip` | 否 | current Trip、event、locks、base revision | new Trip + patch + reverify set | `replan.py`、scheduler、受影响 provider adapters |
-| `render-china-trip` | 否 | **仅** schema-valid Trip | `.html` + validator report | `renderer.py`、`validate_html.py` |
+| `render-china-trip` | 否 | **仅** schema-valid Trip | `.html` + validator report | `render/html.py`、`render/validate_html.py` |
 
 脚本名是实现地图合同，不代表本阶段已有产品代码。所有 provider 输出先归一化再进入 Trip；renderer 不直连 provider。[依据：研究决策 4](../research/04-design-insights.md#4-采用一个版本化-itineraryjson-是所有层的唯一事实源)
 
@@ -249,7 +249,7 @@ policy:
 3. 将 local marketplace 条目加入专用测试用户的 personal marketplace；完全退出并重启 desktop。
 4. 从 `China Trip Weaver Local` 安装 `china-trip-weaver`，再新建任务。
 5. 显式运行 `$plan-china-trip` 的无 Key fixture；自然语言“帮我规划上海三天”只能命中主入口。
-6. 分别用“查北京到上海高铁”“把行程做成 HTML”等自然语言验证**不会**隐式命中子 Skill；再用 `$search-china-trains`、`$render-china-trip` 验证显式调用仍可用。
+6. 分别用“查北京到上海高铁”“把行程做成 HTML”等自然语言验证**不会**隐式命中子 Skill；再用 `$search-china-rail`、`$render-china-trip` 验证显式调用仍可用。
 7. 暂时同时启用旧插件，验证出现固定互斥提示且零 provider calls；随即恢复互斥状态。
 8. 重启一次并复测，确认安装缓存副本与 source 版本均为 `0.1.0`。
 

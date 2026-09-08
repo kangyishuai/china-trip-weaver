@@ -109,7 +109,7 @@ if [ "$INSTALLED_VERSION" != "$VERSION" ]; then echo "校验失败：已装版�
 if [ ! -d "$CACHE" ]; then echo "校验失败：缓存目录不存在 $CACHE" >&2; FAIL=1;
 elif ! diff -rq -x __pycache__ -x '*.pyc' "$PLUGIN_DIR" "$CACHE" >/dev/null; then
   echo "校验失败：缓存与源码不一致（先跑不带 --check 的本脚本刷新）" >&2
-  diff -rq -x __pycache__ -x '*.pyc' "$PLUGIN_DIR" "$CACHE" | head -5 >&2; FAIL=1
+  { echo "共 $(diff -rq -x __pycache__ -x '*.pyc' "$PLUGIN_DIR" "$CACHE" | wc -l | tr -d ' ') 处差异："; diff -rq -x __pycache__ -x '*.pyc' "$PLUGIN_DIR" "$CACHE"; } >&2; FAIL=1
 fi
 if [ "$FAIL" -ne 0 ]; then exit 1; fi
 echo "OK：$SELECTOR $VERSION 已安装且缓存与源码一致"

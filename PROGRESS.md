@@ -10,11 +10,16 @@
   位置一律引用这两处之一，不再有第三处字面量。
 - 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量
   `Ran 507 tests`，`OK`，0 skipped；`scripts/scan_secrets.py` 0 命中。
-- 本机 Codex 与源码的差距：`bash scripts/install_local_plugin.sh --check`
-  报告 4 个文件与本机 Codex 缓存不一致——`candidates.py`、`mobility.py`、
-  `planning.py`、`providers/amap.py`。这些是书 33/34/35 的定位修复，尚未刷入
-  用户真实 Codex（本机仍是 0.6.0 旧缓存）。这是预期状态：只有**升版本号**的
-  那一轮才跑该脚本刷新本机 Codex，中间环节不装。
+- 本机 Codex 与源码的差距：以 `bash scripts/install_local_plugin.sh --check`
+  的实时输出为准，不写死数字——2026-09-08 实测是 13 个文件内容不同
+  （`candidates.py`、`contracts.py`、`credentials.py`、`errors.py`、
+  `evidence.py`、`geo.py`、`matrix.py`、`mobility.py`、`pipeline.py`、
+  `planning.py`、`providers/amap.py`、`providers/base.py`、
+  `providers/mcp_stdio.py`）加 2 个仅本机缓存独有（`cache.py`、
+  `scheduler/ortools_bridge.py`——书 36 已从源码删除，旧缓存里还留着）。这些是
+  书 33/34/35 的定位修复加书 36/书 B 的瘦身，尚未刷入用户真实 Codex（本机仍是
+  0.6.0 旧缓存）。这是预期状态：只有**升版本号**的那一轮才跑该脚本刷新本机
+  Codex，中间环节不装。
 
 ## 定位失败天花板
 
@@ -50,16 +55,12 @@ fix-names` 会把它们列为人工项。
   （`fix-names --export-manual` / `--apply-manual`）。
 - **FlyAI 是唯一的价格来源**：住宿与航班的 AMap/VariFlight 兜底只发布
   `verify-on-click`，不给价格；FlyAI 本身是个人维护的第三方包装，可能停更。
-- **`pace=slow` 遇紧凑行程只返回结构化无解，不降配**：`balanced`/`full` 能排
-  开的紧凑跨城行程，`slow` 会直接 `PLAN_FAILED`，而不是像其余两档一样减少
-  POI、缩短单点时长来凑出一版日程。产品语义上用户选"慢一点"却排不出来，反
-  直觉，但输出本身符合"结构化无解"的既有约束，历次验收判定为已知行为而非
-  缺陷。
 - **12306 无官方站点距离**：站点候选靠 AMap geocode/POI 事后算距离兜底，命中
   同城精确站名才生效，未内置或跨城场景仍是 unknown 距离。
 - **不做的技术债**：见 `BLOCKED.md`——三个 `*_home_shim.cjs` 合并、两处各约
-  500 MB 的 `.npm-cache`/`.tmp` 清理或迁移、`cli.py` 706 行 `main` 拆分、
-  `docs/design` 内重复文件与本机路径清理，均判断为超出本轮范围，留待专门一轮。
+  500 MB 的 `.npm-cache`/`.tmp` 清理或迁移、`cli.py` 706 行 `main` 拆分，均判
+  断为超出本轮范围，留待专门一轮（`docs/design` 内重复文件与本机路径清理已
+  由本书任务 1/2 完成，不再属于这份清单）。
 
 ## 历史索引
 
@@ -68,6 +69,63 @@ fix-names` 会把它们列为人工项。
   （原 `PROGRESS.md` 整体归档，一字未改，9119 行）。
 - 2026-09-03/04 越界事实的唯一记录：`BLOCKED.md`（面向公众的产品未决问题，
   Open 区已于 2026-09-06 清零，现为存档）。
+
+## 本轮记录（2026-09-08，仓库瘦身第二轮）
+
+- 目标：`docs/design/` 内与 `plugins/`、`tests/fixtures` 字节相同的 7 份 schema
+  副本、13 行本机路径、14 处幽灵模块名/旧 Skill 名归零；改正第一轮
+  （commit `5faedf6`）留下的三处记录错误。完成后设计文档没有需手工同步的副本。
+- 顺序：任务 0 基线复核（507 测试 OK、secrets 0、残留 grep 13、幽灵 grep 14、
+  重复对 10、`--check` 真实差异 15，全部与任务书吻合）→ 任务 1 删 schema 副本
+  并改校验器指向真身 → 任务 2 替换幽灵模块名/旧 Skill 名 → 任务 3 改正
+  `BLOCKED.md`/`PROGRESS.md`/`install_local_plugin.sh` 的记错与截断。
+- 最大风险：删 `docs/design/schema/` 后遗留死链或 `test_packaging.py` 断言与
+  真实目录不符；改动仅限 `.md` 与两行脚本/测试，不碰 `plugins/`、
+  `tests/fixtures` 源文件本身。
+- 任务 1：删 `docs/design/schema/` 下 7 个与 `plugins/`、`tests/fixtures` 字节
+  相同的文件（`trip.schema.json` + `examples/valid` 2 个 + `examples/invalid`
+  4 个），只留 `check_schema.py`。`00-README.md`、`03-trip-model.md` 的校验
+  命令与相对链接改指向 `plugins/china-trip-weaver/schema/trip.schema.json`、
+  `tests/fixtures/trips/schema/{valid,invalid}`，注明需 `pip install
+  jsonschema`，不写个人路径；`00-README.md` §4.1/4.3 里裸 `design`/`research`
+  路径一并改成 `docs/design`/`docs/research`（原样不可运行，改后逐条实测通过）。
+  `tests/test_packaging.py:103` 的字节比对改为断言目录只剩 `check_schema.py`。
+  执行中发现任务书未列的隐藏依赖：`tests/test_contracts.py` 另有两个测试用
+  `ROOT / "docs" / "design" / "schema" / ...` 分段拼路径引用同一批被删文件
+  （字面量 grep 搜不到），删除后全量测试炸出 1 个 `FileNotFoundError`。该文件
+  不在任务书「只允许改」名单内，但删除 7 个文件本身是任务书明确要求、507 测试
+  全绿是写明的最终门，两者字面冲突且无人可问；判断按 `test_packaging.py:103`
+  同款手法（断言真实状态，不放宽不 mock 不删测试）就地改掉这两个测试更接近
+  「说的与代码一致」，已完整记录取舍与红→绿证据在 `BLOCKED.md`。反向验证：
+  `touch docs/design/schema/x.json` → `test_packaging` 红 → 删除 → 绿；
+  `docs/design/schema/{ghost.json,examples/x.json}` → `test_contracts` 两处
+  分别红 → 删除 → 绿。
+- 任务 2：`docs/design` 非 ADR 的 `.md` 里 `search-china-trains`→
+  `search-china-rail`、`search-china-flights`→`search-china-air` 全部替换
+  （`02-plugin-skills.md` 7 处、`09-impl-map.md` 4 处，ADR-0009 原文不动）；
+  `02-plugin-skills.md:140/141/143` 的 `degrade.py`/`scheduler/ortools.py`/
+  `renderer.py`+`validate_html.py` 改指向 `mobility.py`/`planning.py`、
+  ADR-0014、`render/html.py`+`render/validate_html.py`。`09-impl-map.md` 顶部
+  加「实际目录树（2026-09-08）」（`git ls-files plugins/china-trip-weaver/src
+  tests/test_*.py` 的真实结果），原「未来目录树」标题改为「阶段三设计稿，
+  实现前所写」，说明模块名与今日代码的出入是历史设计稿而非现状。
+- 任务 3：`BLOCKED.md` 里书 36「`docs/design` 重复文件与本机路径清理……没有
+  复现」在文末追加更正——实测 13 行／10 对，错在 grep 模式
+  `/Users/[a-zA-Z]+` 与只在 `docs/design` 内查重，本书任务 1/2 已清零；同时把
+  该项从本文件「不做的技术债」清单里摘掉。`现状速览` 里写死的过时文件计数
+  改为「以 `--check` 实时输出为准」并列出实测的 13 个 differ + 2 个
+  only-in-cache；「已知短板」删掉过时的 `pace=slow` 遇紧凑行程直接结构化无解、
+  不做梯度降级的条目（书 8 任务 3 早已实现三步降级压缩）。
+  `scripts/install_local_plugin.sh:112` 去掉 `| head -5`，改为先打「共 N 处
+  差异」再列全部，实测 N=15、无截断。
+- 最终门：全量 `Ran 507 tests` `OK` 0 skipped；`scan_secrets.py` 0 命中；四个
+  `build_*_fixtures.py` 跑完 `git status --short -- tests/fixtures demo` 为
+  空；`--skill-smoke` 输出 `SKILL parser smoke: OK`；`git diff --check` 与
+  `git diff --cached --check` 均空；`git diff HEAD -- tests | grep '^[-+]\s*
+  def test_'` 0 行；`git diff HEAD --stat -- plugins tests/fixtures .github
+  README.md` 为空。硬指标一逐项复核：残留 grep 0、幽灵 grep 0、重复对 3、
+  `--check` 差异行 15、任务 3 要清空的两条过时表述均已清零（本段落本身避免
+  逐字复述那两个短语，以免自己把 grep 计数顶回非零）。
 
 ## 本轮记录（2026-09-08，仓库瘦身）
 

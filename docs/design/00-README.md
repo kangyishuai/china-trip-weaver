@@ -9,7 +9,7 @@
 | 1 | [`01-product-scope.md`](01-product-scope.md) | 用户、三个必做场景、MVP/非目标、无 Key E2E 验收 |
 | 2 | [`02-plugin-skills.md`](02-plugin-skills.md) | manifest、9 Skills、唯一 implicit 路由、MCP/marketplace、安装与冲突 |
 | 3 | [`03-trip-model.md`](03-trip-model.md) | Trip 语义、坐标/claim/price/mode/revision/patch 合同 |
-| 4 | [`schema/trip.schema.json`](schema/trip.schema.json) | JSON Schema Draft 2020-12 权威机器形状 |
+| 4 | [`trip.schema.json`](../../plugins/china-trip-weaver/schema/trip.schema.json) | JSON Schema Draft 2020-12 权威机器形状（真身在 `plugins/china-trip-weaver/schema/`） |
 | 5 | [`04-providers.md`](04-providers.md) | Adapter、provider、timeout/probe/fixture、证据与五级降级 |
 | 6 | [`05-credentials.md`](05-credentials.md) | env→0600 file 优先级、最小注入、五条 secret 禁令 |
 | 7 | [`06-pipeline.md`](06-pipeline.md) | research→candidate→matrix→schedule→validate→render、replan |
@@ -21,8 +21,8 @@
 
 - [`evidence/task0-runtime.txt`](evidence/task0-runtime.txt)：阶段二前提核验原始输出。
 - [`evidence/task3-schema-validation.txt`](evidence/task3-schema-validation.txt)：Schema valid/invalid 双向实际输出。
-- [`schema/examples/valid/`](schema/examples/valid/)：2 个可通过 Trip。
-- [`schema/examples/invalid/`](schema/examples/invalid/)：4 个各只破坏一个约束的 Trip。
+- [`tests/fixtures/trips/schema/valid/`](../../tests/fixtures/trips/schema/valid/)：2 个可通过 Trip。
+- [`tests/fixtures/trips/schema/invalid/`](../../tests/fixtures/trips/schema/invalid/)：4 个各只破坏一个约束的 Trip。
 
 顶层 Markdown 正好 10 份（本索引 + 01–09），符合设计文档 ≤10；ADR 单独位于 `adr/`。
 
@@ -59,15 +59,15 @@
 ### 4.1 前提与 Schema 正向
 
 ```bash
-ls research/02-projects | wc -l
+ls docs/research/02-projects | wc -l
 python3 --version
 node --version
-~/miniconda3/bin/python3 -c 'import jsonschema;print(jsonschema.__version__)'
+python3 -c 'import jsonschema;print(jsonschema.__version__)'  # 需先 pip install jsonschema
 
-~/miniconda3/bin/python3 \
-  design/schema/check_schema.py \
-  design/schema/trip.schema.json \
-  design/schema/examples/valid
+python3 \
+  docs/design/schema/check_schema.py \
+  plugins/china-trip-weaver/schema/trip.schema.json \
+  tests/fixtures/trips/schema/valid
 ```
 
 期望：项目数 11；运行时与 [`evidence/task0-runtime.txt`](evidence/task0-runtime.txt) 一致；两个 valid 都打印 `PASS`，exit 0。
@@ -75,10 +75,10 @@ node --version
 ### 4.2 Schema 反向
 
 ```bash
-~/miniconda3/bin/python3 \
-  design/schema/check_schema.py \
-  design/schema/trip.schema.json \
-  design/schema/examples/invalid
+python3 \
+  docs/design/schema/check_schema.py \
+  plugins/china-trip-weaver/schema/trip.schema.json \
+  tests/fixtures/trips/schema/invalid
 test $? -eq 1
 ```
 
@@ -87,14 +87,14 @@ test $? -eq 1
 ### 4.3 数量、字段与代码边界
 
 ```bash
-test "$(find design -maxdepth 1 -type f -name '*.md' | wc -l | tr -d ' ')" -le 10
-test "$(find design/adr -maxdepth 1 -type f -name '*.md' | wc -l | tr -d ' ')" -ge 8
-test "$(wc -l < design/schema/check_schema.py | tr -d ' ')" -le 60
+test "$(find docs/design -maxdepth 1 -type f -name '*.md' | wc -l | tr -d ' ')" -le 10
+test "$(find docs/design/adr -maxdepth 1 -type f -name '*.md' | wc -l | tr -d ' ')" -ge 8
+test "$(wc -l < docs/design/schema/check_schema.py | tr -d ' ')" -le 60
 
-test "$(find design -type f \( -name '*.py' -o -name '*.js' -o -name '*.ts' \) \
-  ! -path 'design/schema/check_schema.py' | wc -l | tr -d ' ')" -eq 0
+test "$(find docs/design -type f \( -name '*.py' -o -name '*.js' -o -name '*.ts' \) \
+  ! -path 'docs/design/schema/check_schema.py' | wc -l | tr -d ' ')" -eq 0
 
-for f in design/adr/*.md; do
+for f in docs/design/adr/*.md; do
   rg -q '^[-] \*\*Status:\*\*' "$f" &&
   rg -q '^## Context$' "$f" &&
   rg -q '^## Decision$' "$f" &&

@@ -1,6 +1,6 @@
 # 统一 Trip 数据模型
 
-权威机器合同：[`schema/trip.schema.json`](schema/trip.schema.json)，JSON Schema Draft 2020-12。Trip 是调研、provider、排程、局部重排和 renderer 之间唯一事实源；阶段三不得再定义并行的 itinerary/page/provider 公共模型。[依据：研究决策 4](../research/04-design-insights.md#4-采用一个版本化-itineraryjson-是所有层的唯一事实源)
+权威机器合同：[`trip.schema.json`](../../plugins/china-trip-weaver/schema/trip.schema.json)，JSON Schema Draft 2020-12。Trip 是调研、provider、排程、局部重排和 renderer 之间唯一事实源；阶段三不得再定义并行的 itinerary/page/provider 公共模型。[依据：研究决策 4](../research/04-design-insights.md#4-采用一个版本化-itineraryjson-是所有层的唯一事实源)
 
 ## 1. 顶层对象
 
@@ -101,24 +101,27 @@ provider health 至少覆盖 `ready/missing/expired/forbidden/rate_limited/degra
 
 ## 7. 示例与设计期校验器
 
-目录：
+Schema 与校验样例的真身在源码目录；`docs/design/schema/` 只保留独立于产品运行时的校验脚本，不再放与源码字节相同的副本：
 
 ```text
-schema/
-├── trip.schema.json
-├── check_schema.py
-└── examples/
-    ├── valid/      # weekend-live.json、multicity-static.json
-    └── invalid/    # 各只破坏一个约束
+docs/design/schema/
+└── check_schema.py         # 设计期示例门禁，不属于产品运行时
+
+plugins/china-trip-weaver/schema/
+└── trip.schema.json        # Schema 真身
+
+tests/fixtures/trips/schema/
+├── valid/      # weekend-live.json、multicity-static.json
+└── invalid/    # 各只破坏一个约束
 ```
 
-`check_schema.py` 仅用于本阶段示例门禁，使用现有 Python 3.13 环境中的 `jsonschema.Draft202012Validator`，不属于产品运行时。它先校验 Schema 本身，再逐文件打印 PASS/FAIL；任一文件 FAIL 即 exit 1。
+`check_schema.py` 仅用于本阶段示例门禁，使用 `jsonschema.Draft202012Validator`（需先 `pip install jsonschema`），不属于产品运行时。它先校验 Schema 本身，再逐文件打印 PASS/FAIL；任一文件 FAIL 即 exit 1。
 
-验收命令：
+验收命令（项目根执行）：
 
 ```text
-~/miniconda3/bin/python3 design/schema/check_schema.py design/schema/trip.schema.json design/schema/examples/valid
-~/miniconda3/bin/python3 design/schema/check_schema.py design/schema/trip.schema.json design/schema/examples/invalid
+python3 docs/design/schema/check_schema.py plugins/china-trip-weaver/schema/trip.schema.json tests/fixtures/trips/schema/valid
+python3 docs/design/schema/check_schema.py plugins/china-trip-weaver/schema/trip.schema.json tests/fixtures/trips/schema/invalid
 ```
 
 invalid fixtures 分别且仅违反：坐标缺 `source_crs`、claim 缺 `source_url`、`mode=mock` 缺 `mock_notice`、price 缺 `price_type`。
