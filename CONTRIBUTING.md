@@ -24,9 +24,10 @@ python3 -m unittest discover -s tests -v
 python3 scripts/scan_secrets.py
 ```
 
-The suite must end with `OK` and zero failures. Two tests exercise the Codex
-bundled Skill and plugin validators; they skip when Codex is not installed on
-the machine and must pass when it is.
+The suite must end with `OK` and zero failures. Three tests depend on a local
+Codex install (the bundled Skill and plugin validators, and the Skill parser
+smoke through `scripts/install_local_plugin.sh --skill-smoke`); they skip when
+Codex is not installed on the machine and must pass when it is.
 
 ## What a change has to come with
 

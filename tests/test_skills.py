@@ -19,6 +19,7 @@ SRC = PLUGIN / "src"
 sys.path.insert(0, str(SRC))
 
 from china_trip_weaver import __version__
+from china_trip_weaver.plugin_conflicts import codex_executable
 
 DESCRIPTIONS = {
     "plan-china-trip": "Plan, compare, or locally replan a read-only trip or multi-Trip Journey within mainland China. Use when the user asks for a China itinerary of any length, a city weekend, cross-city transport and lodging choices, an executable day schedule, a disruption-aware revision, or a sourced mobile Trip or Journey overview. Orchestrate the plugin's explicit-only research, provider, scheduling, replanning, and rendering Skills; never book, log in, submit identity, pay, cancel, or change an order.",
@@ -129,6 +130,8 @@ class SkillPackagingTests(unittest.TestCase):
         self.assertNotIn("termsOfServiceURL", interface)
 
     def test_codex_skill_parser_smoke_runs_standalone(self):
+        if codex_executable() is None:
+            self.skipTest("Codex CLI is not installed on this machine")
         result = subprocess.run([str(INSTALLER), "--skill-smoke"], text=True, capture_output=True)
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
         self.assertIn("SKILL parser smoke: OK (9 SKILL.md via codex debug prompt-input)", result.stdout)

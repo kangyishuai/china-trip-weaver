@@ -18,7 +18,7 @@ python3 -m unittest discover -s tests -v
 python3 scripts/scan_secrets.py
 ```
 
-测试必须以 `OK` 结束、零失败。有两项测试会调用 Codex 自带的 Skill 与插件校验器：机器上没装 Codex 时它们跳过，装了就必须通过。
+测试必须以 `OK` 结束、零失败。有三项测试依赖本机的 Codex（自带的 Skill 与插件校验器，以及经 `scripts/install_local_plugin.sh --skill-smoke` 跑的 Skill 解析 smoke）：机器上没装 Codex 时它们跳过，装了就必须通过。
 
 ## 一个改动需要带上什么
 
