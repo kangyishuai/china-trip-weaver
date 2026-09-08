@@ -45,7 +45,7 @@ FlyAI 是可选的尽力而为来源。它是飞猪服务的非官方第三方�
 plugins/china-trip-weaver/scripts/ctw doctor
 ```
 
-实网路径使用 `AMAP_WEBSERVICE_KEY`、`FLYAI_API_KEY` 和 `VARIFLIGHT_API_KEY`（`X_VARIFLIGHT_KEY` 保留读取兼容）。本版本中 AnySearch 保持关闭。每个 Node 服务商都会拿到仓库内的 npm 缓存、独立的临时／配置／缓存目录，以及各自隔离的 `os.homedir()`。
+实网路径使用 `AMAP_WEBSERVICE_KEY`、`FLYAI_API_KEY` 和 `VARIFLIGHT_API_KEY`（`X_VARIFLIGHT_KEY` 保留读取兼容）。本版本中 AnySearch 保持关闭。每个 Node 服务商都有独立的临时／配置／缓存目录与各自隔离的 `os.homedir()`；这些目录与 npm 缓存都建在含 `plugins/` 的那一级目录下（本地市场安装后即已装插件所在的缓存目录），`ctw doctor` 以 `runtime_root` 字段报出该位置，可随时删除，下次实网调用会自动重建。
 
 ## 安装或刷新到本机 Codex（自动化）
 

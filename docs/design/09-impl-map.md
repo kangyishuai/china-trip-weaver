@@ -36,13 +36,11 @@ plugins/china-trip-weaver/src/china_trip_weaver/
 │   ├── base.py
 │   ├── flyai.py
 │   ├── flyai_cli.py
-│   ├── flyai_home_shim.cjs
+│   ├── home_shim.cjs
 │   ├── host_web.py
 │   ├── mcp_stdio.py
 │   ├── rail12306.py
-│   ├── rail_home_shim.cjs
 │   ├── variflight.py
-│   ├── variflight_home_shim.cjs
 │   └── variflight_mcp.py
 ├── render/
 │   ├── __init__.py

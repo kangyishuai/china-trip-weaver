@@ -4,22 +4,21 @@
 
 ## 现状速览（2026-09-08 实测）
 
-- 版本：`0.6.0`，唯一来源是
+- 版本：`0.7.0`，唯一来源是
   `plugins/china-trip-weaver/.codex-plugin/plugin.json` 与
   `src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
   位置一律引用这两处之一，不再有第三处字面量。
 - 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量
   `Ran 507 tests`，`OK`，0 skipped；`scripts/scan_secrets.py` 0 命中。
-- 本机 Codex 与源码的差距：以 `bash scripts/install_local_plugin.sh --check`
-  的实时输出为准，不写死数字——2026-09-08 实测是 13 个文件内容不同
-  （`candidates.py`、`contracts.py`、`credentials.py`、`errors.py`、
-  `evidence.py`、`geo.py`、`matrix.py`、`mobility.py`、`pipeline.py`、
-  `planning.py`、`providers/amap.py`、`providers/base.py`、
-  `providers/mcp_stdio.py`）加 2 个仅本机缓存独有（`cache.py`、
-  `scheduler/ortools_bridge.py`——书 36 已从源码删除，旧缓存里还留着）。这些是
-  书 33/34/35 的定位修复加书 36/书 B 的瘦身，尚未刷入用户真实 Codex（本机仍是
-  0.6.0 旧缓存）。这是预期状态：只有**升版本号**的那一轮才跑该脚本刷新本机
-  Codex，中间环节不装。
+- 本机 Codex 与源码的差距：已装 `0.7.0`，`bash scripts/install_local_plugin.sh
+  --check` exit 0、零差异(2026-09-08 实测)。三个 provider 的
+  `*_home_shim.cjs` 已合并为 `providers/home_shim.cjs`(环境变量统一
+  `CTW_ISOLATED_HOME`);`ctw doctor` 报告新增 `runtime_root` 字段
+  (`_repo_root()`,源码里是仓库根,本地市场安装后是
+  `~/.codex/plugins/cache/china-trip-weaver-local`);仓库 `.npm-cache`/
+  `.tmp` 与已装缓存的同名目录(合计约 1 GB)已清空,`.tmp/.gitkeep` 保留,
+  下次实网调用会自动重建。今后每次升版本号都跑该脚本刷新本机 Codex,中间
+  环节不装。
 
 ## 定位失败天花板
 
@@ -57,10 +56,71 @@ fix-names` 会把它们列为人工项。
   `verify-on-click`，不给价格；FlyAI 本身是个人维护的第三方包装，可能停更。
 - **12306 无官方站点距离**：站点候选靠 AMap geocode/POI 事后算距离兜底，命中
   同城精确站名才生效，未内置或跨城场景仍是 unknown 距离。
-- **不做的技术债**：见 `BLOCKED.md`——三个 `*_home_shim.cjs` 合并、两处各约
-  500 MB 的 `.npm-cache`/`.tmp` 清理或迁移、`cli.py` 706 行 `main` 拆分，均判
-  断为超出本轮范围，留待专门一轮（`docs/design` 内重复文件与本机路径清理已
-  由本书任务 1/2 完成，不再属于这份清单）。
+
+## 本轮记录（2026-09-08，shim 合一 + doctor 运行时目录 + 0.7.0 发版）
+
+- 目标：三个 provider 的 `*_home_shim.cjs` 合并为一个 `home_shim.cjs`（环境变量
+  统一改 `CTW_ISOLATED_HOME`）；`ctw doctor` 报告加 `runtime_root` 字段；版本号
+  升到 0.7.0 并跑 `install_local_plugin.sh` 刷进用户真实 Codex；清理仓库与
+  已装缓存内约 1 GB 的 `.npm-cache`/`.tmp` 旧缓存。
+- 顺序：任务 0 复核现状（已完成，逐条与任务书数字吻合）→ 任务 1 shim 合一 →
+  任务 2 doctor 加字段 → 任务 3 升版本号并装机 → 任务 4 装机后清缓存、全量复测。
+- 最大风险：三个 provider 目前各自硬编码不同的环境变量名与 shim 文件名，合并时
+  漏改一处不一定报错（子进程会静默退回真实 HOME 而不是抛异常），需要靠反向
+  验证（改错环境变量名跑测试应变红）而非只看正向全绿来确认；另外升版本号后
+  安装脚本会真的执行 `codex plugin add` 写用户真实 Codex 配置，必须放在
+  代码改完、测试全绿之后再做，避免把半成品刷进用户环境。
+- 任务 1（已完成）：新建 `providers/home_shim.cjs`（环境变量统一
+  `CTW_ISOLATED_HOME`），删除 `flyai_home_shim.cjs`/`rail_home_shim.cjs`/
+  `variflight_home_shim.cjs`；`flyai_cli.py`/`mcp_stdio.py`/`variflight_mcp.py`
+  各改两行（shim 文件名、环境变量名）；`tests/fixtures/{flyai_cli,mcp_stdio,
+  variflight_mcp}_server.py` 各改两行同步校验；`docs/design/09-impl-map.md`
+  的目录树三行合一行。验收：`git ls-files ".../providers/*.cjs"` 只剩
+  `home_shim.cjs`；`git grep -nE 'CTW_(RAIL|FLYAI|VARIFLIGHT)_HOME|(flyai|
+  rail|variflight)_home_shim' -- plugins tests docs/design` 0 行；全量
+  `Ran 507 tests` `OK` 0 skipped（本次耗时 116.8s，机器负载所致，非回归）。
+  反向验证：`mcp_stdio.py` 里 `CTW_ISOLATED_HOME` 临时改成
+  `CTW_ISOLATED_HOM` → `tests.test_mcp_stdio` 报
+  `test_rail_subprocess_receives_only_provider_environment` 失败（`'network'
+  is not None`，红）→ 用 `sed` 备份还原 → `git diff --stat` 确认只剩两行
+  预期改动 → 全绿（6/6 OK）。
+- 任务 2（已完成）：`_cmd_doctor` 的 `payload` 字典加
+  `"runtime_root": str(_repo_root())`（复用既有辅助函数，未新增计算逻辑）；
+  `test_packaging.py:86` 后加 `self.assertEqual(str(ROOT), payload
+  ["runtime_root"])`；两份 README 第 48 行原「仓库内 npm 缓存」的表述改为
+  npm 缓存与隔离家目录建在含 `plugins/` 的那一级目录下（本地市场安装后即
+  已装插件的缓存目录），`ctw doctor` 以 `runtime_root` 报出、可随时删除。
+  验收：仓库根跑 `plugins/china-trip-weaver/scripts/ctw doctor | ... 
+  payload["runtime_root"]` 输出等于 `pwd`（仓库根绝对路径）；全量
+  `Ran 507 tests` `OK` 0 skipped；pyflakes 0 行；`git diff HEAD -- tests |
+  grep '^[-+]\s*def test_'` 0 行（只在既有测试内加了一条断言，未增减测试
+  函数）。
+- 任务 3（已完成）：`__init__.py:3` 与 `plugin.json:3` 的版本号
+  `0.6.0` → `0.7.0`。验收：`git grep -n '0\.7\.0' -- ':!PROGRESS.md'
+  ':!BLOCKED.md' ':!docs/history'` 恰 2 行，同一 grep 搜 `0\.6\.0` 0 行；
+  全量 `Ran 507 tests` `OK` 0 skipped。不设 `CODEX_HOME` 跑 `bash scripts/
+  install_local_plugin.sh`，输出含 `已执行 plugin add china-trip-weaver@
+  china-trip-weaver-local`、`plugin list: installed, enabled 0.7.0`、
+  `OK：china-trip-weaver@china-trip-weaver-local 0.7.0 已安装且缓存与源码
+  一致`；`codex plugin list | grep china-trip-weaver` 含 `installed,
+  enabled  0.7.0`；已装副本 `$C/china-trip-weaver/0.7.0/scripts/ctw doctor`
+  的 `runtime_root` 等于 `$C`（`/Users/kangyishuai/.codex/plugins/cache/
+  china-trip-weaver-local`）；随后 `install_local_plugin.sh --check`
+  exit 0、零差异（硬指标一之一提前达成）。
+- 任务 4（已完成）：`du -sh` 实测仓库 `.npm-cache` 428M、`.tmp` 76M、已装缓存
+  同名目录 429M/75M（合计约 1 GB）；`rm -rf .npm-cache .tmp/* $C/.npm-cache
+  $C/.tmp` 保留 `.tmp/.gitkeep`。验收：`test -f .tmp/.gitkeep && test !
+  -e .npm-cache && test ! -e $C/.npm-cache` 输出 `CLEANED`；全量
+  `Ran 507 tests` `OK` 0 skipped。「`git status --short` 为空」这条验收在
+  任务 4 自身执行时刻不可能字面成立（任务 1/2/3 的源码改动尚未提交），判断
+  与裁决记在 `BLOCKED.md`；本轮提交信息以 `Release 0.7.0` 开头、未 push
+  后复查，`git status --short` 确已为空，字面要求最终也满足。
+- 终验（提交后复核）：`codex plugin list` 含 `installed, enabled  0.7.0`；
+  `install_local_plugin.sh --check` exit 0、`OK：...已安装且缓存与源码一致`；
+  `CLEANED`；全量 `Ran 507 tests` `OK` 0 skipped；pyflakes 0 行；
+  `git diff b1577b7 HEAD -- tests | grep '^[-+]\s*def test_'` 0 行（与任务书
+  基线提交比较，测试函数数量不变）；shim grep 0 行；版本 grep `0.7.0` 恰 2、
+  `0.6.0` 0 行。四项任务与硬指标一、二全部达成，任务书结束，无遗留阻塞项。
 
 ## 本轮记录（2026-09-08，书 C：cli.py 的 main 拆分）
 

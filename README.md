@@ -45,7 +45,7 @@ Credentials come from the launching environment first, then from `~/.config/chin
 plugins/china-trip-weaver/scripts/ctw doctor
 ```
 
-The live path uses `AMAP_WEBSERVICE_KEY`, `FLYAI_API_KEY`, and `VARIFLIGHT_API_KEY` (`X_VARIFLIGHT_KEY` remains read compatibility). AnySearch stays disabled in this release. Every Node provider gets a repository-local npm cache, temp/config/cache directories, and provider-specific isolated `os.homedir()`.
+The live path uses `AMAP_WEBSERVICE_KEY`, `FLYAI_API_KEY`, and `VARIFLIGHT_API_KEY` (`X_VARIFLIGHT_KEY` remains read compatibility). AnySearch stays disabled in this release. Every Node provider gets its own temp/config/cache directories and an isolated `os.homedir()`; those and the npm cache live under the directory that contains `plugins/` (the installed plugin's cache directory when installed from the local marketplace). `ctw doctor` reports that location as `runtime_root`; it can be deleted at any time and is rebuilt automatically on the next live call.
 
 ## Install or refresh into the local Codex (automated)
 

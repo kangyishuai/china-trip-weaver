@@ -148,12 +148,12 @@ class FlyAISubprocessTransport:
         home = self.temp_root / "home"
         for path in (temp, config, cache, home):
             path.mkdir(parents=True, exist_ok=True)
-        home_shim = Path(__file__).with_name("flyai_home_shim.cjs")
+        home_shim = Path(__file__).with_name("home_shim.cjs")
         if not home_shim.is_file():
             raise ValueError("FlyAI isolated-home shim is missing")
         environment = provider_environment("flyai", self.credentials)
         environment.update({
-            "CTW_FLYAI_HOME": str(home.resolve()),
+            "CTW_ISOLATED_HOME": str(home.resolve()),
             "NODE_OPTIONS": "--require=" + str(home_shim.resolve()),
             "TMPDIR": str(temp.resolve()),
             "XDG_CONFIG_HOME": str(config.resolve()),

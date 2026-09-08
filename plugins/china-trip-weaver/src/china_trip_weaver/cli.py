@@ -616,6 +616,7 @@ def _cmd_doctor(
         "plugin_version": __version__,
         "providers": dict(provider_credential_status(credentials)),
         "python": platform.python_version(),
+        "runtime_root": str(_repo_root()),
         "schema_exists": default_schema_path().is_file(),
         "schema_version": SCHEMA_VERSION,
         "skill_conflicts": conflicts,

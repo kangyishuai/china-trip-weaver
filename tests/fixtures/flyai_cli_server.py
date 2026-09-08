@@ -74,9 +74,9 @@ def main():
         raise SystemExit("forbidden environment reached FlyAI")
     if mode == "require-key" and "FLYAI_API_KEY" not in os.environ:
         raise SystemExit("expected FlyAI key is missing")
-    if not os.path.isabs(os.environ.get("CTW_FLYAI_HOME", "")):
+    if not os.path.isabs(os.environ.get("CTW_ISOLATED_HOME", "")):
         raise SystemExit("isolated FlyAI home is missing")
-    if "flyai_home_shim.cjs" not in os.environ.get("NODE_OPTIONS", ""):
+    if "home_shim.cjs" not in os.environ.get("NODE_OPTIONS", ""):
         raise SystemExit("FlyAI home preload is missing")
     if os.environ.get("FLYAI_API_KEY"):
         print("api_key=" + os.environ["FLYAI_API_KEY"], file=sys.stderr)

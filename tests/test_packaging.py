@@ -84,6 +84,7 @@ class PackagingTests(unittest.TestCase):
         result = subprocess.run([str(entry), "doctor"], cwd="/", text=True, capture_output=True)
         self.assertEqual(0, result.returncode, result.stderr)
         payload = json.loads(result.stdout)
+        self.assertEqual(str(ROOT), payload["runtime_root"])
         self.assertEqual(__version__, payload["plugin_version"])
         self.assertTrue(payload["schema_exists"])
 

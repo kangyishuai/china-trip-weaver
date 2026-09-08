@@ -75,9 +75,9 @@ def main():
         raise SystemExit("expected VariFlight key is missing")
     if mode == "no-key" and has_key:
         raise SystemExit("keyless probe received a key")
-    if not os.path.isabs(os.environ.get("CTW_VARIFLIGHT_HOME", "")):
+    if not os.path.isabs(os.environ.get("CTW_ISOLATED_HOME", "")):
         raise SystemExit("isolated VariFlight home is missing")
-    if "variflight_home_shim.cjs" not in os.environ.get("NODE_OPTIONS", ""):
+    if "home_shim.cjs" not in os.environ.get("NODE_OPTIONS", ""):
         raise SystemExit("VariFlight home preload is missing")
     secret = os.environ.get("VARIFLIGHT_API_KEY") or os.environ.get("X_VARIFLIGHT_KEY")
     if secret:

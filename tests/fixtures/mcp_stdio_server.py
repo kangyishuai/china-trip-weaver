@@ -163,9 +163,9 @@ def main():
         }
         if forbidden.intersection(os.environ):
             raise SystemExit("provider subprocess received a forbidden environment variable")
-        if not os.path.isabs(os.environ.get("CTW_RAIL_HOME", "")):
+        if not os.path.isabs(os.environ.get("CTW_ISOLATED_HOME", "")):
             raise SystemExit("isolated rail home is missing")
-        if "rail_home_shim.cjs" not in os.environ.get("NODE_OPTIONS", ""):
+        if "home_shim.cjs" not in os.environ.get("NODE_OPTIONS", ""):
             raise SystemExit("rail home preload is missing")
     print("api" + "_key=" + "ctw-stdio-canary", file=sys.stderr, flush=True)
     for line in sys.stdin:

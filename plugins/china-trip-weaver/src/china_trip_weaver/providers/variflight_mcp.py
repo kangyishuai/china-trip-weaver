@@ -121,12 +121,12 @@ class VariFlightMCPTransport:
         home = self.temp_root / "home"
         for path in (self.cache_dir, temp, config, cache, home):
             path.mkdir(parents=True, exist_ok=True)
-        shim = Path(__file__).with_name("variflight_home_shim.cjs")
+        shim = Path(__file__).with_name("home_shim.cjs")
         if not shim.is_file():
             raise ValueError("VariFlight isolated-home shim is missing")
         environment = provider_environment("variflight", self.credentials)
         environment.update({
-            "CTW_VARIFLIGHT_HOME": str(home.resolve()),
+            "CTW_ISOLATED_HOME": str(home.resolve()),
             "NODE_OPTIONS": "--require=" + str(shim.resolve()),
             "TMPDIR": str(temp.resolve()),
             "XDG_CONFIG_HOME": str(config.resolve()),

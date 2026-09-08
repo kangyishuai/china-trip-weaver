@@ -318,11 +318,11 @@ class RailMCPStdioTransport:
         home = self.temp_root / "home"
         for path in (temp, config, cache, home):
             path.mkdir(parents=True, exist_ok=True)
-        shim = Path(__file__).with_name("rail_home_shim.cjs")
+        shim = Path(__file__).with_name("home_shim.cjs")
         if not shim.is_file():
             raise ContractMismatch("rail isolated-home shim is missing")
         environment = provider_environment("rail12306", self.credentials)
-        environment["CTW_RAIL_HOME"] = str(home.resolve())
+        environment["CTW_ISOLATED_HOME"] = str(home.resolve())
         environment["NODE_OPTIONS"] = "--require=" + str(shim.resolve())
         environment["TMPDIR"] = str(temp.resolve())
         environment["XDG_CONFIG_HOME"] = str(config.resolve())
