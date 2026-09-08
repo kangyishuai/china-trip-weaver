@@ -451,3 +451,14 @@ grep 模式 `/Users/[a-zA-Z]+|/home/[a-zA-Z]+` 只找字面量 `/Users/`、`/hom
 均已在本书任务 1 清零：7 个字节重复文件已删，校验器与两处文档的命令改指向
 `plugins/`、`tests/fixtures` 的真身，`docs/design/*.md` 里不再出现
 `design/schema/`、`miniconda`、`/Users/kangyishuai`。
+
+## 书 C：cli.py 的 main/_parser 拆分（2026-09-08，无）
+
+本轮（`main` 706 行拆成分发表 + 13 组 `_cmd_*`，`_parser` 235 行拆成 14 个
+`_add_*_parser`）没有遇到需要裁决的越界或含糊之处：界限（只改
+`cli.py`/`PROGRESS.md`/`BLOCKED.md`）与验收口径（金样字节相同、pyflakes
+0、507 测试 OK、`main`/`_parser`/`_probe_layers`/`_doctor_probe_report` 四个
+名字与签名不变）全程没有冲突。任务书标注为「建议」而非硬性要求的一项——把 6
+处重复的 `repo_root = Path(__file__).resolve().parents[4]` 合并成
+`_repo_root()`——已采纳并执行，不算待裁决，取舍记录见 `PROGRESS.md` 本轮
+小节。

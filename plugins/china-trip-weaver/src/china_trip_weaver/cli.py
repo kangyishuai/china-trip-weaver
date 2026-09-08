@@ -63,14 +63,36 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--progress", choices=("ndjson",), default=None)
     commands = parser.add_subparsers(dest="command", required=True)
 
+    _add_validate_parser(commands)
+    _add_validate_candidates_parser(commands)
+    _add_candidates_parser(commands)
+    _add_canonicalize_parser(commands)
+    _add_doctor_parser(commands)
+    _add_plan_parser(commands)
+    _add_journey_parser(commands)
+    _add_replan_parser(commands)
+    _add_rail_parser(commands)
+    _add_mobility_parser(commands)
+    _add_lodging_parser(commands)
+    _add_air_parser(commands)
+    _add_render_parser(commands)
+    _add_validate_html_parser(commands)
+    return parser
+
+
+def _add_validate_parser(commands: Any) -> None:
     validate = commands.add_parser("validate", help="validate a Trip JSON document")
     validate.add_argument("trip", type=Path)
     validate.add_argument("--schema", type=Path, default=None)
     validate.add_argument("--schema-only", action="store_true")
 
+
+def _add_validate_candidates_parser(commands: Any) -> None:
     validate_candidates = commands.add_parser("validate-candidates", help="validate a researched candidates JSON document")
     validate_candidates.add_argument("candidates", type=Path)
 
+
+def _add_candidates_parser(commands: Any) -> None:
     candidates = commands.add_parser("candidates", help="initialize or append to a researched candidates file")
     candidate_commands = candidates.add_subparsers(dest="candidate_command", required=True)
     candidates_init = candidate_commands.add_parser("init", help="create an empty five-key candidate skeleton")
@@ -147,15 +169,22 @@ def _parser() -> argparse.ArgumentParser:
         help="write filled exact suggestions from a manual review JSON list",
     )
 
+
+def _add_canonicalize_parser(commands: Any) -> None:
     canonicalize = commands.add_parser("canonicalize", help="print canonical JSON")
     canonicalize.add_argument("trip", type=Path)
 
+
+def _add_doctor_parser(commands: Any) -> None:
     doctor = commands.add_parser("doctor", help="show local runtime and schema status")
     _add_progress_argument(doctor)
     doctor.add_argument(
         "--probe", action="store_true",
         help="run bounded read-only provider contract, network, and business probes",
     )
+
+
+def _add_plan_parser(commands: Any) -> None:
     plan = commands.add_parser("plan", help="build a candidate-file driven read-only Trip and HTML")
     _add_progress_argument(plan)
     plan.add_argument("--request", type=Path, required=True)
@@ -173,6 +202,8 @@ def _parser() -> argparse.ArgumentParser:
     plan.add_argument("--flyai-deadline", type=float, default=25.0)
     plan.add_argument("--variflight-deadline", type=float, default=15.0)
 
+
+def _add_journey_parser(commands: Any) -> None:
     journey = commands.add_parser("journey", help="plan or validate a multi-Trip Journey")
     journey_commands = journey.add_subparsers(dest="journey_command", required=True)
     journey_plan = journey_commands.add_parser(
@@ -220,6 +251,8 @@ def _parser() -> argparse.ArgumentParser:
     journey_validate_html.add_argument("html", type=Path)
     journey_validate_html.add_argument("journey", type=Path)
 
+
+def _add_replan_parser(commands: Any) -> None:
     replan = commands.add_parser("replan", help="apply a versioned local replan event and render the result")
     replan.add_argument("--trip", type=Path, required=True)
     replan.add_argument(
@@ -239,6 +272,8 @@ def _parser() -> argparse.ArgumentParser:
     replan.add_argument("--fixed-clock", default=None)
     replan.add_argument("--locked-ref", action="append", default=[])
 
+
+def _add_rail_parser(commands: Any) -> None:
     rail = commands.add_parser("rail", help="query read-only live 12306 inventory through the pinned MCP")
     _add_progress_argument(rail)
     rail.add_argument("--date", required=True)
@@ -251,6 +286,8 @@ def _parser() -> argparse.ArgumentParser:
     rail.add_argument("--fixed-clock", default=None)
     rail.add_argument("--output-json", type=Path, default=None)
 
+
+def _add_mobility_parser(commands: Any) -> None:
     mobility = commands.add_parser("mobility", help="build a bounded live AMap route matrix for candidates")
     _add_progress_argument(mobility)
     mobility.add_argument("--candidates", type=Path, required=True)
@@ -258,6 +295,8 @@ def _parser() -> argparse.ArgumentParser:
     mobility.add_argument("--deadline", type=float, default=12.0)
     mobility.add_argument("--output-json", type=Path, default=None)
 
+
+def _add_lodging_parser(commands: Any) -> None:
     lodging = commands.add_parser("lodging", help="query FlyAI lodging inventory without booking")
     _add_progress_argument(lodging)
     lodging.add_argument("--city", required=True)
@@ -273,6 +312,8 @@ def _parser() -> argparse.ArgumentParser:
     lodging.add_argument("--keyless-trial", action="store_true")
     lodging.add_argument("--output-json", type=Path, default=None)
 
+
+def _add_air_parser(commands: Any) -> None:
     air = commands.add_parser("air", help="query FlyAI flight comparisons without booking")
     _add_progress_argument(air)
     air.add_argument("--origin", required=True)
@@ -282,14 +323,17 @@ def _parser() -> argparse.ArgumentParser:
     air.add_argument("--keyless-trial", action="store_true")
     air.add_argument("--output-json", type=Path, default=None)
 
+
+def _add_render_parser(commands: Any) -> None:
     render = commands.add_parser("render", help="render a validated Trip as deterministic HTML")
     render.add_argument("trip", type=Path)
     render.add_argument("--output", "-o", type=Path, default=None)
 
+
+def _add_validate_html_parser(commands: Any) -> None:
     validate_html_command = commands.add_parser("validate-html", help="validate rendered HTML against its Trip")
     validate_html_command.add_argument("html", type=Path)
     validate_html_command.add_argument("trip", type=Path)
-    return parser
 
 
 def _check_candidate_poi_name(
@@ -326,6 +370,10 @@ def _check_candidate_poi_name(
         return POINameCheck("unavailable", ("check_failed",))
 
 
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[4]
+
+
 def main(
     argv: Optional[Sequence[str]] = None,
     *,
@@ -334,704 +382,796 @@ def main(
 ) -> int:
     args = _parser().parse_args(argv)
     progress = _NDJSONProgress(getattr(args, "progress", None))
-    if args.command == "validate":
-        report = validate_file(args.trip, schema_path=args.schema, semantic=not args.schema_only)
-        if report.ok:
-            print("VALID %s" % args.trip)
-            return 0
-        for issue in report.errors:
-            print(issue.render(), file=sys.stderr)
-        print("INVALID %s (%d error%s)" % (args.trip, len(report.errors), "" if len(report.errors) == 1 else "s"), file=sys.stderr)
-        return 1
-    if args.command == "candidates":
-        from .candidates import (
-            add_lodging_candidate,
-            add_poi_candidate,
-            apply_candidate_name_review,
-            export_candidate_name_review,
-            fix_candidate_names,
-            initialize_candidates,
-        )
-        from .clock import FixedClock, SystemClock
+    handlers = {
+        "validate": lambda: _cmd_validate(args),
+        "candidates": lambda: _cmd_candidates(args, credential_path, poi_name_transport),
+        "canonicalize": lambda: _cmd_canonicalize(args),
+        "validate-candidates": lambda: _cmd_validate_candidates(args),
+        "doctor": lambda: _cmd_doctor(args, credential_path, progress),
+        "journey": lambda: _cmd_journey(args, progress),
+        "plan": lambda: _cmd_plan(args, progress),
+        "mobility": lambda: _cmd_mobility(args, progress),
+        "lodging": lambda: _cmd_lodging_air(args, progress),
+        "air": lambda: _cmd_lodging_air(args, progress),
+        "rail": lambda: _cmd_rail(args, progress),
+        "replan": lambda: _cmd_replan(args),
+        "render": lambda: _cmd_render(args),
+        "validate-html": lambda: _cmd_validate_html(args),
+    }
+    handler = handlers.get(args.command)
+    if handler is None:
+        print("%s is not available until its implementation milestone" % args.command, file=sys.stderr)
+        return 3
+    return handler()
 
-        try:
-            if args.candidate_command == "init":
-                initialize_candidates(args.path, overwrite=args.force)
-                print("CANDIDATES_INITIALIZED %s" % args.path)
-                return 0
-            if args.candidate_command == "fix-names":
-                manual_event = None
-                if args.export_manual is not None:
-                    result, entry_count = export_candidate_name_review(
-                        args.path,
-                        args.trip,
-                        args.export_manual,
-                    )
-                    manual_event = (
-                        "CANDIDATE_NAME_MANUAL_EXPORTED",
-                        {
-                            "entries": entry_count,
-                            "path": str(args.export_manual),
-                        },
-                    )
-                elif args.apply_manual is not None:
-                    result, manual_result = apply_candidate_name_review(
-                        args.path,
-                        args.trip,
-                        args.apply_manual,
-                    )
-                    manual_event = (
-                        "CANDIDATE_NAME_MANUAL_APPLIED",
-                        {
-                            "applied": manual_result.applied_count,
-                            "entries": manual_result.entry_count,
-                            "path": str(args.apply_manual),
-                            "skipped": manual_result.skipped_count,
-                        },
-                    )
-                else:
-                    result = fix_candidate_names(args.path, args.trip, apply=args.apply)
-                for decision in result.decisions:
-                    kind = "AUTO" if decision.automatic else "MANUAL"
-                    print(
-                        "CANDIDATE_NAME_%s %s" % (
-                            kind,
-                            canonical_json(decision.as_dict(apply=args.apply)),
-                        )
-                    )
-                print("CANDIDATE_NAME_FIX_SUMMARY %s" % canonical_json({
-                    "applied": result.applied_count,
-                    "automatic": result.automatic_count,
-                    "manual": result.manual_count,
-                    "mode": "apply" if args.apply else "report",
-                }))
-                if manual_event is not None:
-                    print("%s %s" % (
-                        manual_event[0],
-                        canonical_json(manual_event[1]),
-                    ))
-                return 0
-            clock = FixedClock.from_iso(args.queried_at) if args.queried_at else SystemClock()
-            if args.candidate_command == "add-poi":
-                name_check = None
-                if args.verify_name:
-                    name_check = _check_candidate_poi_name(
-                        args.name,
-                        args.city,
-                        clock,
-                        credential_path,
-                        poi_name_transport,
-                    )
-                entity = add_poi_candidate(
-                    args.path,
-                    name=args.name,
-                    city=args.city,
-                    category=args.category,
-                    source_url=args.source_url,
-                    provider=args.provider,
-                    clock=clock,
-                    confidence=args.confidence,
-                    duration_minutes=args.duration_minutes,
-                    opens_at=args.opens_at,
-                    closes_at=args.closes_at,
-                    opening_status=args.opening_status,
-                    price_amount=args.price_amount,
-                )
-                if name_check is not None:
-                    print(name_check.render())
-                print("CANDIDATE_POI_ADDED %s id=%s" % (args.path, entity["poi_id"]))
-                return 0
-            entity = add_lodging_candidate(
-                args.path,
-                name=args.name,
-                city=args.city,
-                area=args.area,
-                check_in=args.check_in,
-                check_out=args.check_out,
-                source_url=args.source_url,
-                provider=args.provider,
-                clock=clock,
-                confidence=args.confidence,
-                nightly_price=args.nightly_price,
-                includes_taxes=args.includes_taxes,
-                locked=args.locked,
-            )
-            print("CANDIDATE_LODGING_ADDED %s id=%s" % (args.path, entity["lodging_id"]))
-            return 0
-        except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
-            print("CANDIDATES_FAILED %s" % exc, file=sys.stderr)
-            return 1
-    if args.command == "canonicalize":
-        try:
-            print(canonical_json(read_json(args.trip)))
-        except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
-            print("J_INVALID / %s" % exc, file=sys.stderr)
-            return 1
+
+def _cmd_validate(args: argparse.Namespace) -> int:
+    report = validate_file(args.trip, schema_path=args.schema, semantic=not args.schema_only)
+    if report.ok:
+        print("VALID %s" % args.trip)
         return 0
-    if args.command == "validate-candidates":
-        from .candidates import validate_candidates_file
+    for issue in report.errors:
+        print(issue.render(), file=sys.stderr)
+    print("INVALID %s (%d error%s)" % (args.trip, len(report.errors), "" if len(report.errors) == 1 else "s"), file=sys.stderr)
+    return 1
 
-        report = validate_candidates_file(args.candidates)
-        if report.ok:
-            print("CANDIDATES VALID %s" % args.candidates)
-            return 0
-        for issue in report.errors:
-            print(issue.render(), file=sys.stderr)
-        print("CANDIDATES INVALID %s (%d error%s)" % (
-            args.candidates,
+
+def _cmd_candidates(
+    args: argparse.Namespace,
+    credential_path: Optional[Path],
+    poi_name_transport: Optional[Any],
+) -> int:
+    from .clock import FixedClock, SystemClock
+
+    try:
+        if args.candidate_command == "init":
+            return _cmd_candidates_init(args)
+        if args.candidate_command == "fix-names":
+            return _cmd_candidates_fix_names(args)
+        clock = FixedClock.from_iso(args.queried_at) if args.queried_at else SystemClock()
+        if args.candidate_command == "add-poi":
+            return _cmd_candidates_add_poi(args, clock, credential_path, poi_name_transport)
+        return _cmd_candidates_add_lodging(args, clock)
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        print("CANDIDATES_FAILED %s" % exc, file=sys.stderr)
+        return 1
+
+
+def _cmd_candidates_init(args: argparse.Namespace) -> int:
+    from .candidates import initialize_candidates
+
+    initialize_candidates(args.path, overwrite=args.force)
+    print("CANDIDATES_INITIALIZED %s" % args.path)
+    return 0
+
+
+def _cmd_candidates_fix_names(args: argparse.Namespace) -> int:
+    from .candidates import (
+        apply_candidate_name_review,
+        export_candidate_name_review,
+        fix_candidate_names,
+    )
+
+    manual_event = None
+    if args.export_manual is not None:
+        result, entry_count = export_candidate_name_review(
+            args.path,
+            args.trip,
+            args.export_manual,
+        )
+        manual_event = (
+            "CANDIDATE_NAME_MANUAL_EXPORTED",
+            {
+                "entries": entry_count,
+                "path": str(args.export_manual),
+            },
+        )
+    elif args.apply_manual is not None:
+        result, manual_result = apply_candidate_name_review(
+            args.path,
+            args.trip,
+            args.apply_manual,
+        )
+        manual_event = (
+            "CANDIDATE_NAME_MANUAL_APPLIED",
+            {
+                "applied": manual_result.applied_count,
+                "entries": manual_result.entry_count,
+                "path": str(args.apply_manual),
+                "skipped": manual_result.skipped_count,
+            },
+        )
+    else:
+        result = fix_candidate_names(args.path, args.trip, apply=args.apply)
+    for decision in result.decisions:
+        kind = "AUTO" if decision.automatic else "MANUAL"
+        print(
+            "CANDIDATE_NAME_%s %s" % (
+                kind,
+                canonical_json(decision.as_dict(apply=args.apply)),
+            )
+        )
+    print("CANDIDATE_NAME_FIX_SUMMARY %s" % canonical_json({
+        "applied": result.applied_count,
+        "automatic": result.automatic_count,
+        "manual": result.manual_count,
+        "mode": "apply" if args.apply else "report",
+    }))
+    if manual_event is not None:
+        print("%s %s" % (
+            manual_event[0],
+            canonical_json(manual_event[1]),
+        ))
+    return 0
+
+
+def _cmd_candidates_add_poi(
+    args: argparse.Namespace,
+    clock: Any,
+    credential_path: Optional[Path],
+    poi_name_transport: Optional[Any],
+) -> int:
+    from .candidates import add_poi_candidate
+
+    name_check = None
+    if args.verify_name:
+        name_check = _check_candidate_poi_name(
+            args.name,
+            args.city,
+            clock,
+            credential_path,
+            poi_name_transport,
+        )
+    entity = add_poi_candidate(
+        args.path,
+        name=args.name,
+        city=args.city,
+        category=args.category,
+        source_url=args.source_url,
+        provider=args.provider,
+        clock=clock,
+        confidence=args.confidence,
+        duration_minutes=args.duration_minutes,
+        opens_at=args.opens_at,
+        closes_at=args.closes_at,
+        opening_status=args.opening_status,
+        price_amount=args.price_amount,
+    )
+    if name_check is not None:
+        print(name_check.render())
+    print("CANDIDATE_POI_ADDED %s id=%s" % (args.path, entity["poi_id"]))
+    return 0
+
+
+def _cmd_candidates_add_lodging(args: argparse.Namespace, clock: Any) -> int:
+    from .candidates import add_lodging_candidate
+
+    entity = add_lodging_candidate(
+        args.path,
+        name=args.name,
+        city=args.city,
+        area=args.area,
+        check_in=args.check_in,
+        check_out=args.check_out,
+        source_url=args.source_url,
+        provider=args.provider,
+        clock=clock,
+        confidence=args.confidence,
+        nightly_price=args.nightly_price,
+        includes_taxes=args.includes_taxes,
+        locked=args.locked,
+    )
+    print("CANDIDATE_LODGING_ADDED %s id=%s" % (args.path, entity["lodging_id"]))
+    return 0
+
+
+def _cmd_canonicalize(args: argparse.Namespace) -> int:
+    try:
+        print(canonical_json(read_json(args.trip)))
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        print("J_INVALID / %s" % exc, file=sys.stderr)
+        return 1
+    return 0
+
+
+def _cmd_validate_candidates(args: argparse.Namespace) -> int:
+    from .candidates import validate_candidates_file
+
+    report = validate_candidates_file(args.candidates)
+    if report.ok:
+        print("CANDIDATES VALID %s" % args.candidates)
+        return 0
+    for issue in report.errors:
+        print(issue.render(), file=sys.stderr)
+    print("CANDIDATES INVALID %s (%d error%s)" % (
+        args.candidates,
+        len(report.errors),
+        "" if len(report.errors) == 1 else "s",
+    ), file=sys.stderr)
+    return 1
+
+
+def _cmd_doctor(
+    args: argparse.Namespace,
+    credential_path: Optional[Path],
+    progress: "_NDJSONProgress",
+) -> int:
+    from .credentials import provider_credential_status, resolve_credentials
+    from .errors import CTWError
+
+    try:
+        credentials = resolve_credentials(credential_path=credential_path)
+    except CTWError as exc:
+        print(canonical_json({
+            "credential_error": {
+                "code": exc.code,
+                "status": exc.error_class,
+            },
+        }), file=sys.stderr)
+        return 1
+    from .plugin_conflicts import conflict_report
+
+    conflicts = conflict_report()
+    payload = {
+        "plugin_version": __version__,
+        "providers": dict(provider_credential_status(credentials)),
+        "python": platform.python_version(),
+        "schema_exists": default_schema_path().is_file(),
+        "schema_version": SCHEMA_VERSION,
+        "skill_conflicts": conflicts,
+    }
+    if args.probe:
+        repo_root = _repo_root()
+        payload["probes"] = _doctor_probe_report(credentials, repo_root, progress)
+        progress.emit({"event": "completion", "command": "doctor", "status": "ok"})
+    print(canonical_json(payload))
+    return 1 if conflicts["status"] == "conflict" else 0
+
+
+def _cmd_journey(args: argparse.Namespace, progress: "_NDJSONProgress") -> int:
+    if args.journey_command == "validate":
+        return _cmd_journey_validate(args)
+    if args.journey_command == "render":
+        return _cmd_journey_render(args)
+    if args.journey_command == "validate-html":
+        return _cmd_journey_validate_html(args)
+    return _cmd_journey_plan(args, progress)
+
+
+def _cmd_journey_validate(args: argparse.Namespace) -> int:
+    from .journey import validate_journey_file
+
+    report = validate_journey_file(args.journey, schema_path=args.schema)
+    if report.ok:
+        value = read_json(args.journey)
+        print("JOURNEY VALID %s trips=%d" % (args.journey, len(value["trips"])))
+        return 0
+    for issue in report.errors:
+        print(issue.render(), file=sys.stderr)
+    print("JOURNEY INVALID %s (%d error%s)" % (
+        args.journey,
+        len(report.errors),
+        "" if len(report.errors) == 1 else "s",
+    ), file=sys.stderr)
+    return 1
+
+
+def _cmd_journey_render(args: argparse.Namespace) -> int:
+    import hashlib
+
+    from .render import (
+        RendererError,
+        render_journey,
+        safe_output_name,
+        validate_journey_html,
+    )
+
+    try:
+        journey_value = read_json(args.journey)
+        rendered = render_journey(journey_value)
+        report = validate_journey_html(rendered, journey_value)
+        if not report.ok:
+            for issue in report.errors:
+                print(issue.render(), file=sys.stderr)
+            return 1
+        output = args.output or Path.cwd() / safe_output_name(
+            journey_value["journey_id"]
+        )
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(rendered, encoding="utf-8")
+        digest = hashlib.sha256(rendered.encode("utf-8")).hexdigest()
+        print("JOURNEY_RENDERED %s sha256=%s errors=0" % (output, digest))
+        return 0
+    except (
+        OSError,
+        UnicodeError,
+        ValueError,
+        json.JSONDecodeError,
+        RendererError,
+    ) as exc:
+        print("JOURNEY_RENDER_FAILED %s" % exc, file=sys.stderr)
+        return 1
+
+
+def _cmd_journey_validate_html(args: argparse.Namespace) -> int:
+    from .render import validate_journey_html
+
+    try:
+        journey_value = read_json(args.journey)
+        rendered = args.html.read_text(encoding="utf-8")
+        report = validate_journey_html(rendered, journey_value)
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        print("JOURNEY_HTML_INVALID %s" % exc, file=sys.stderr)
+        return 1
+    if report.ok:
+        print("JOURNEY HTML VALID %s errors=0" % args.html)
+        return 0
+    for issue in report.errors:
+        print(issue.render(), file=sys.stderr)
+    print(
+        "JOURNEY HTML INVALID %s errors=%d" % (
+            args.html,
             len(report.errors),
-            "" if len(report.errors) == 1 else "s",
-        ), file=sys.stderr)
-        return 1
-    if args.command == "doctor":
-        from .credentials import provider_credential_status, resolve_credentials
-        from .errors import CTWError
+        ),
+        file=sys.stderr,
+    )
+    return 1
 
-        try:
-            credentials = resolve_credentials(credential_path=credential_path)
-        except CTWError as exc:
-            print(canonical_json({
-                "credential_error": {
-                    "code": exc.code,
-                    "status": exc.error_class,
-                },
-            }), file=sys.stderr)
-            return 1
-        from .plugin_conflicts import conflict_report
 
-        conflicts = conflict_report()
-        payload = {
-            "plugin_version": __version__,
-            "providers": dict(provider_credential_status(credentials)),
-            "python": platform.python_version(),
-            "schema_exists": default_schema_path().is_file(),
-            "schema_version": SCHEMA_VERSION,
-            "skill_conflicts": conflicts,
-        }
-        if args.probe:
-            repo_root = Path(__file__).resolve().parents[4]
-            payload["probes"] = _doctor_probe_report(credentials, repo_root, progress)
-            progress.emit({"event": "completion", "command": "doctor", "status": "ok"})
-        print(canonical_json(payload))
-        return 1 if conflicts["status"] == "conflict" else 0
-    if args.command == "journey":
-        from .journey import plan_journey, validate_journey_file
+def _cmd_journey_plan(args: argparse.Namespace, progress: "_NDJSONProgress") -> int:
+    from .clock import FixedClock, SystemClock
+    from .flyai_inventory import AMapLodgingBackend, FlyAIBackend
+    from .journey import plan_journey
+    from .mobility import MobilityBackend
+    from .planning import RailBackend
+    from .variflight_enrichment import VariFlightBackend
 
-        if args.journey_command == "validate":
-            report = validate_journey_file(args.journey, schema_path=args.schema)
-            if report.ok:
-                value = read_json(args.journey)
-                print("JOURNEY VALID %s trips=%d" % (args.journey, len(value["trips"])))
-                return 0
-            for issue in report.errors:
-                print(issue.render(), file=sys.stderr)
-            print("JOURNEY INVALID %s (%d error%s)" % (
-                args.journey,
-                len(report.errors),
-                "" if len(report.errors) == 1 else "s",
-            ), file=sys.stderr)
-            return 1
-
-        if args.journey_command == "render":
-            import hashlib
-
-            from .render import (
-                RendererError,
-                render_journey,
-                safe_output_name,
-                validate_journey_html,
-            )
-
-            try:
-                journey_value = read_json(args.journey)
-                rendered = render_journey(journey_value)
-                report = validate_journey_html(rendered, journey_value)
-                if not report.ok:
-                    for issue in report.errors:
-                        print(issue.render(), file=sys.stderr)
-                    return 1
-                output = args.output or Path.cwd() / safe_output_name(
-                    journey_value["journey_id"]
-                )
-                output.parent.mkdir(parents=True, exist_ok=True)
-                output.write_text(rendered, encoding="utf-8")
-                digest = hashlib.sha256(rendered.encode("utf-8")).hexdigest()
-                print("JOURNEY_RENDERED %s sha256=%s errors=0" % (output, digest))
-                return 0
-            except (
-                OSError,
-                UnicodeError,
-                ValueError,
-                json.JSONDecodeError,
-                RendererError,
-            ) as exc:
-                print("JOURNEY_RENDER_FAILED %s" % exc, file=sys.stderr)
-                return 1
-
-        if args.journey_command == "validate-html":
-            from .render import validate_journey_html
-
-            try:
-                journey_value = read_json(args.journey)
-                rendered = args.html.read_text(encoding="utf-8")
-                report = validate_journey_html(rendered, journey_value)
-            except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
-                print("JOURNEY_HTML_INVALID %s" % exc, file=sys.stderr)
-                return 1
-            if report.ok:
-                print("JOURNEY HTML VALID %s errors=0" % args.html)
-                return 0
-            for issue in report.errors:
-                print(issue.render(), file=sys.stderr)
-            print(
-                "JOURNEY HTML INVALID %s errors=%d" % (
-                    args.html,
-                    len(report.errors),
-                ),
-                file=sys.stderr,
-            )
-            return 1
-
-        from .clock import FixedClock, SystemClock
-        from .flyai_inventory import AMapLodgingBackend, FlyAIBackend
-        from .mobility import MobilityBackend
-        from .planning import RailBackend
-        from .variflight_enrichment import VariFlightBackend
-
-        try:
-            request_value = read_json(args.request)
-            candidates_value = read_json(args.candidates)
-            if args.fixed_clock and not args.offline_fixture:
-                raise ValueError("--fixed-clock is allowed only with --offline-fixture")
-            if args.offline_fixture and args.rail == "live":
-                raise ValueError("--offline-fixture requires --rail off or fixture:<file>")
-            if args.offline_fixture and args.mobility != "off":
-                raise ValueError("--offline-fixture requires --mobility off")
-            if args.offline_fixture and args.lodging != "off":
-                raise ValueError("--offline-fixture requires --lodging off")
-            clock = FixedClock.from_iso(args.fixed_clock) if args.fixed_clock else SystemClock()
-            repo_root = Path(__file__).resolve().parents[4]
-            rail_backend = RailBackend.from_spec(
-                args.rail, repo_root, deadline_seconds=args.rail_deadline,
-            )
-            mobility_backend = MobilityBackend.from_spec(
-                args.mobility, repo_root, deadline_seconds=args.mobility_deadline,
-            )
-            flyai_backend = FlyAIBackend.from_spec(
-                args.lodging, repo_root, deadline_seconds=args.flyai_deadline,
-            )
-            amap_lodging_backend = AMapLodgingBackend.from_spec(
-                "auto" if args.lodging == "live" else "off",
-                repo_root,
-                deadline_seconds=args.mobility_deadline,
-            )
-            aviation_mode = "off" if args.offline_fixture else args.aviation
-            variflight_backend = VariFlightBackend.from_spec(
-                aviation_mode, repo_root, deadline_seconds=args.variflight_deadline,
-            )
-            for backend in (
-                rail_backend, mobility_backend, flyai_backend,
-                amap_lodging_backend, variflight_backend,
-            ):
-                _attach_progress(backend, progress)
-            result = plan_journey(
-                request_value,
-                candidates_value,
-                clock,
-                rail_backend,
-                mobility_backend,
-                flyai_backend,
-                variflight_backend,
-                amap_lodging_backend,
-                expected_segment_days=args.expected_segment_days,
-                amap_total_max_calls=args.amap_total_max_calls,
-            )
-            args.output_json.parent.mkdir(parents=True, exist_ok=True)
-            write_canonical_json(args.output_json, result.journey)
-            trip_days = [len(item["days"]) for item in result.journey["trips"]]
-            print(
-                "JOURNEY_PLAN_COMPLETE json=%s trips=%d days=%d max_trip_days=%d calls=%s journey_sha256=%s errors=0"
-                % (
-                    args.output_json,
-                    len(trip_days),
-                    sum(trip_days),
-                    max(trip_days),
-                    ",".join(result.business_calls),
-                    result.journey_sha256,
-                )
-            )
-            progress.emit({
-                "event": "completion", "command": "journey-plan", "status": "ok",
-                "items": len(trip_days),
-            })
-            return 0
-        except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
-            _progress_failed(progress, "journey-plan")
-            print("JOURNEY_PLAN_FAILED %s" % exc, file=sys.stderr)
-            return 1
-    if args.command == "plan":
-        from .clock import FixedClock, SystemClock
-        from .flyai_inventory import AMapLodgingBackend, FlyAIBackend
-        from .mobility import MobilityBackend
-        from .planning import RailBackend, plan_trip
-        from .variflight_enrichment import VariFlightBackend
-
-        try:
-            request_value = read_json(args.request)
-            candidates_value = read_json(args.candidates)
-            if args.fixed_clock and not args.offline_fixture:
-                raise ValueError("--fixed-clock is allowed only with --offline-fixture")
-            if args.offline_fixture and args.rail == "live":
-                raise ValueError("--offline-fixture requires --rail off or fixture:<file>")
-            if args.offline_fixture and args.mobility != "off":
-                raise ValueError("--offline-fixture requires --mobility off")
-            if args.offline_fixture and args.lodging != "off":
-                raise ValueError("--offline-fixture requires --lodging off")
-            clock = FixedClock.from_iso(args.fixed_clock) if args.fixed_clock else SystemClock()
-            repo_root = Path(__file__).resolve().parents[4]
-            rail_backend = RailBackend.from_spec(args.rail, repo_root, deadline_seconds=args.rail_deadline)
-            mobility_backend = MobilityBackend.from_spec(
-                args.mobility, repo_root, deadline_seconds=args.mobility_deadline,
-            )
-            flyai_backend = FlyAIBackend.from_spec(
-                args.lodging, repo_root, deadline_seconds=args.flyai_deadline,
-            )
-            amap_lodging_backend = AMapLodgingBackend.from_spec(
-                "auto" if args.lodging == "live" else "off",
-                repo_root,
-                deadline_seconds=args.mobility_deadline,
-            )
-            aviation_mode = "off" if args.offline_fixture else args.aviation
-            variflight_backend = VariFlightBackend.from_spec(
-                aviation_mode, repo_root, deadline_seconds=args.variflight_deadline,
-            )
-            for backend in (
-                rail_backend, mobility_backend, flyai_backend,
-                amap_lodging_backend, variflight_backend,
-            ):
-                _attach_progress(backend, progress)
-            result = plan_trip(
-                request_value, candidates_value, clock, rail_backend, mobility_backend,
-                flyai_backend, variflight_backend, amap_lodging_backend,
-            )
-            args.output_json.parent.mkdir(parents=True, exist_ok=True)
-            args.output_html.parent.mkdir(parents=True, exist_ok=True)
-            write_canonical_json(args.output_json, result.trip)
-            args.output_html.write_text(result.html, encoding="utf-8")
-            print("PLAN_COMPLETE json=%s html=%s mode=%s stages=%s calls=%s trip_sha256=%s html_sha256=%s errors=0" % (
+    try:
+        request_value = read_json(args.request)
+        candidates_value = read_json(args.candidates)
+        if args.fixed_clock and not args.offline_fixture:
+            raise ValueError("--fixed-clock is allowed only with --offline-fixture")
+        if args.offline_fixture and args.rail == "live":
+            raise ValueError("--offline-fixture requires --rail off or fixture:<file>")
+        if args.offline_fixture and args.mobility != "off":
+            raise ValueError("--offline-fixture requires --mobility off")
+        if args.offline_fixture and args.lodging != "off":
+            raise ValueError("--offline-fixture requires --lodging off")
+        clock = FixedClock.from_iso(args.fixed_clock) if args.fixed_clock else SystemClock()
+        repo_root = _repo_root()
+        rail_backend = RailBackend.from_spec(
+            args.rail, repo_root, deadline_seconds=args.rail_deadline,
+        )
+        mobility_backend = MobilityBackend.from_spec(
+            args.mobility, repo_root, deadline_seconds=args.mobility_deadline,
+        )
+        flyai_backend = FlyAIBackend.from_spec(
+            args.lodging, repo_root, deadline_seconds=args.flyai_deadline,
+        )
+        amap_lodging_backend = AMapLodgingBackend.from_spec(
+            "auto" if args.lodging == "live" else "off",
+            repo_root,
+            deadline_seconds=args.mobility_deadline,
+        )
+        aviation_mode = "off" if args.offline_fixture else args.aviation
+        variflight_backend = VariFlightBackend.from_spec(
+            aviation_mode, repo_root, deadline_seconds=args.variflight_deadline,
+        )
+        for backend in (
+            rail_backend, mobility_backend, flyai_backend,
+            amap_lodging_backend, variflight_backend,
+        ):
+            _attach_progress(backend, progress)
+        result = plan_journey(
+            request_value,
+            candidates_value,
+            clock,
+            rail_backend,
+            mobility_backend,
+            flyai_backend,
+            variflight_backend,
+            amap_lodging_backend,
+            expected_segment_days=args.expected_segment_days,
+            amap_total_max_calls=args.amap_total_max_calls,
+        )
+        args.output_json.parent.mkdir(parents=True, exist_ok=True)
+        write_canonical_json(args.output_json, result.journey)
+        trip_days = [len(item["days"]) for item in result.journey["trips"]]
+        print(
+            "JOURNEY_PLAN_COMPLETE json=%s trips=%d days=%d max_trip_days=%d calls=%s journey_sha256=%s errors=0"
+            % (
                 args.output_json,
-                args.output_html,
-                result.trip["mode"],
-                ",".join(result.stages),
+                len(trip_days),
+                sum(trip_days),
+                max(trip_days),
                 ",".join(result.business_calls),
-                result.trip_sha256,
-                result.html_sha256,
-            ))
-            progress.emit({"event": "completion", "command": "plan", "status": "ok"})
-            return 0
-        except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
-            _progress_failed(progress, "plan")
-            print("PLAN_FAILED %s" % exc, file=sys.stderr)
-            return 1
-    if args.command == "mobility":
-        from .clock import SystemClock
-        from .errors import CTWError
-        from .mobility import MobilityBackend, normalize_modes
-
-        try:
-            if args.deadline <= 0:
-                raise ValueError("--deadline must be positive")
-            candidates_value = read_json(args.candidates)
-            modes = normalize_modes(tuple(part for part in args.modes.split(",") if part.strip()))
-            repo_root = Path(__file__).resolve().parents[4]
-            backend = MobilityBackend.from_spec("live", repo_root, deadline_seconds=args.deadline)
-            _attach_progress(backend, progress)
-            result = backend.resolve(candidates_value, SystemClock(), modes)
-            output = result.as_dict()
-            if args.output_json is not None:
-                args.output_json.parent.mkdir(parents=True, exist_ok=True)
-                write_canonical_json(args.output_json, output)
-                print("MOBILITY_COMPLETE output=%s cells=%d locations=%d status=%s calls=%d" % (
-                    args.output_json,
-                    len(result.cells),
-                    len(result.locations),
-                    result.health["status"],
-                    len(result.business_calls),
-                ))
-            else:
-                print(canonical_json(output))
-            progress.emit({
-                "event": "completion", "command": "mobility",
-                "status": "ok" if result.cells and result.health["status"] == "ready" else "degraded",
-                "items": len(result.cells),
-            })
-            return 0 if result.cells and result.health["status"] == "ready" else 1
-        except CTWError as exc:
-            _progress_failed(progress, "mobility", exc.error_class)
-            print("MOBILITY_FAILED %s %s" % (exc.error_class, exc.code), file=sys.stderr)
-            return 1
-        except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
-            _progress_failed(progress, "mobility")
-            print("MOBILITY_FAILED %s" % exc, file=sys.stderr)
-            return 1
-    if args.command in ("lodging", "air"):
-        from .clock import SystemClock
-        from .errors import CTWError
-        from .flyai_inventory import FlyAIBackend
-
-        try:
-            if args.deadline <= 0:
-                raise ValueError("--deadline must be positive")
-            repo_root = Path(__file__).resolve().parents[4]
-            backend = FlyAIBackend.from_spec(
-                "live",
-                repo_root,
-                deadline_seconds=args.deadline,
-                keyless_trial=args.keyless_trial,
+                result.journey_sha256,
             )
-            _attach_progress(backend, progress)
-            clock = SystemClock()
-            if args.command == "lodging":
-                result = backend.query_lodging(
-                    args.city,
-                    args.check_in,
-                    args.check_out,
-                    clock,
-                    party={"adults": args.adults, "children": 0},
-                    rooms=args.rooms,
-                    adult_count=args.adults,
-                    occupancy=args.room_constraint,
-                    bed_config=args.bed_config,
-                    parking_required=args.parking_required,
-                    cancellation_preference=args.cancellation_preference,
-                )
-                items = list(result.normalized_items)
-                output_key = "lodgings"
-            else:
-                result = backend.query_flight(
-                    args.origin,
-                    args.destination,
-                    args.date,
-                    "city-" + args.origin,
-                    "city-" + args.destination,
-                    clock,
-                )
-                items = list(result.normalized_items)
-                output_key = "transport_legs"
-            price_types = _price_type_counts(items)
-            transport = backend.transport
-            output = {
-                "provider": result.provider,
-                "provider_version": result.provider_version,
-                output_key: items,
-                "claims": list(result.claims),
-                "health": result.health,
-                "warnings": list(result.warnings),
-                "error_class": result.error_class,
-                "stats": {
-                    "items": len(items),
-                    "price_types": price_types,
-                    "business_calls": int(getattr(transport, "calls", 0)),
-                    "probe_calls": int(getattr(transport, "probe_calls", 0)),
-                    "credential": "configured" if backend.credentials.get("FLYAI_API_KEY") else "keyless-trial",
-                },
-            }
-            if args.output_json is not None:
-                args.output_json.parent.mkdir(parents=True, exist_ok=True)
-                write_canonical_json(args.output_json, output)
-                print("%s_COMPLETE output=%s items=%d status=%s price_types=%s" % (
-                    args.command.upper(), args.output_json, len(items), result.health["status"],
-                    ",".join("%s:%d" % pair for pair in sorted(price_types.items())) or "none",
-                ))
-            else:
-                print(canonical_json(output))
-            progress.emit({
-                "event": "completion", "command": args.command,
-                "provider": result.provider,
-                "status": "ok" if items else "degraded", "items": len(items),
-            })
-            return 0 if items else 1
-        except CTWError as exc:
-            _progress_failed(progress, args.command, exc.error_class)
-            print("%s_FAILED %s %s" % (args.command.upper(), exc.error_class, exc.code), file=sys.stderr)
-            return 1
-        except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
-            _progress_failed(progress, args.command)
-            print("%s_FAILED %s" % (args.command.upper(), exc), file=sys.stderr)
-            return 1
-    if args.command == "rail":
-        from .clock import FixedClock, SystemClock
-        from .contracts import ProviderRequest
-        from .credentials import resolve_credentials
-        from .providers.base import ProviderContext, ReplayTransport, stable_id
-        from .providers.mcp_stdio import RailMCPStdioTransport
-        from .providers.rail12306 import Rail12306Adapter
-
-        try:
-            if args.limit <= 0 or args.deadline <= 0:
-                raise ValueError("--limit and --deadline must be positive")
-            if args.fixed_clock and args.fixture is None:
-                raise ValueError("--fixed-clock is allowed only with --fixture")
-            repo_root = Path(__file__).resolve().parents[4]
-            if args.fixture is not None:
-                fixture = read_json(args.fixture)
-                if fixture.get("provider") != "rail12306" or not isinstance(fixture.get("transport"), dict):
-                    raise ValueError("--fixture must be a rail12306 provider fixture")
-                clock = FixedClock.from_iso(args.fixed_clock or fixture["captured_at"])
-                transport = ReplayTransport(fixture["transport"], raw_ref=args.fixture.as_posix())
-            else:
-                clock = SystemClock()
-                credentials = resolve_credentials({}, repo_root / ".tmp" / "rail-no-credentials")
-                transport = RailMCPStdioTransport(
-                    cache_dir=repo_root / ".npm-cache",
-                    credentials=credentials,
-                    cwd=repo_root,
-                )
-            _attach_progress(transport, progress)
-            request = ProviderRequest(
-                request_id=stable_id("rail-query", args.date, args.from_name, args.to_name, args.train_filter_flags, args.limit),
-                capability="rail",
-                parameters={
-                    "date": args.date,
-                    "from_name": args.from_name,
-                    "to_name": args.to_name,
-                    "from_ref": stable_id("place", "city", args.from_name),
-                    "to_ref": stable_id("place", "city", args.to_name),
-                    "train_filter_flags": args.train_filter_flags,
-                    "limited_num": args.limit,
-                },
-                deadline_ms=int(args.deadline * 1000),
-                as_of=args.date,
-                cache_policy="bypass",
-                trace={"stage": "rail-cli"},
-            )
-            context = ProviderContext(
-                clock=clock,
-                credentials=resolve_credentials({}, repo_root / ".tmp" / "rail-no-credentials"),
-                transport=transport,
-            )
-            result = Rail12306Adapter().query(request, context)
-            output = {
-                "provider": result.provider,
-                "provider_version": result.provider_version,
-                "queried_at": result.queried_at,
-                "transport_legs": list(result.normalized_items),
-                "claims": list(result.claims),
-                "health": result.health,
-                "warnings": list(result.warnings),
-                "error_class": result.error_class,
-            }
-            if args.output_json is not None:
-                args.output_json.parent.mkdir(parents=True, exist_ok=True)
-                write_canonical_json(args.output_json, output)
-                print("RAIL_COMPLETE output=%s legs=%d status=%s error=%s" % (
-                    args.output_json,
-                    len(result.normalized_items),
-                    result.health["status"],
-                    result.error_class or "none",
-                ))
-            else:
-                print(canonical_json(output))
-            progress.emit({
-                "event": "completion", "command": "rail", "provider": result.provider,
-                "status": "ok" if result.normalized_items else "degraded",
-                "items": len(result.normalized_items),
-            })
-            if result.normalized_items:
-                return 0
-            return 2 if result.error_class == "no_results" else 1
-        except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
-            _progress_failed(progress, "rail")
-            print("RAIL_FAILED %s" % exc, file=sys.stderr)
-            return 1
-    if args.command == "replan":
-        import hashlib
-
-        from .clock import FixedClock, SystemClock
-        from .render import render_trip, validate_html
-        from .replan import ReplanError, replan_trip
-        from .validate_trip import validate_trip
-
-        try:
-            trip = read_json(args.trip)
-            event_document = read_json(args.event)
-            event = event_document.get("event", event_document)
-            locked_refs = list(event_document.get("user_locked_refs", ())) + list(args.locked_ref)
-            if not isinstance(event, dict) or not isinstance(locked_refs, list):
-                raise ValueError("event document has the wrong shape")
-            base_report = validate_trip(trip)
-            if not base_report.ok:
-                raise ValueError("base Trip is invalid: " + "; ".join(item.render() for item in base_report.errors))
-            clock = FixedClock.from_iso(args.fixed_clock) if args.fixed_clock else SystemClock()
-            result = replan_trip(trip, event, args.base_revision, locked_refs, clock)
-            report = validate_trip(result.trip)
-            if not report.ok:
-                raise ValueError("replanned Trip is invalid: " + "; ".join(item.render() for item in report.errors))
-            rendered = render_trip(result.trip)
-            html_report = validate_html(rendered, result.trip)
-            if not html_report.ok:
-                raise ValueError("replanned HTML is invalid: " + "; ".join(item.render() for item in html_report.errors))
-            args.output_json.parent.mkdir(parents=True, exist_ok=True)
-            args.output_html.parent.mkdir(parents=True, exist_ok=True)
-            write_canonical_json(args.output_json, result.trip)
-            args.output_html.write_text(rendered, encoding="utf-8")
-            print("REPLAN_COMPLETE json=%s html=%s revision=%d patch=%s trigger=%s reverify=%d trip_sha256=%s html_sha256=%s errors=0" % (
-                args.output_json,
-                args.output_html,
-                result.trip["revision"]["number"],
-                result.patch["patch_id"],
-                result.patch["trigger"],
-                len(result.reverify_claim_ids),
-                hashlib.sha256(canonical_json(result.trip).encode("utf-8")).hexdigest(),
-                hashlib.sha256(rendered.encode("utf-8")).hexdigest(),
-            ))
-            return 0
-        except ReplanError as exc:
-            print("REPLAN_FAILED %s %s" % (exc.code, exc), file=sys.stderr)
-            return 1
-        except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
-            print("REPLAN_FAILED %s" % exc, file=sys.stderr)
-            return 1
-    if args.command == "render":
-        import hashlib
-
-        from .render import RendererError, render_trip, safe_output_name, validate_html
-
-        try:
-            trip = read_json(args.trip)
-            rendered = render_trip(trip)
-            report = validate_html(rendered, trip)
-            if not report.ok:
-                for issue in report.errors:
-                    print(issue.render(), file=sys.stderr)
-                return 1
-            output = args.output or Path.cwd() / safe_output_name(trip["trip_id"])
-            output.write_text(rendered, encoding="utf-8")
-            digest = hashlib.sha256(rendered.encode("utf-8")).hexdigest()
-            print("RENDERED %s sha256=%s errors=0" % (output, digest))
-            return 0
-        except (OSError, UnicodeError, ValueError, json.JSONDecodeError, RendererError) as exc:
-            print("RENDER_FAILED %s" % exc, file=sys.stderr)
-            return 1
-    if args.command == "validate-html":
-        from .render import validate_html
-
-        try:
-            trip = read_json(args.trip)
-            rendered = args.html.read_text(encoding="utf-8")
-            report = validate_html(rendered, trip)
-        except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
-            print("HTML_INVALID %s" % exc, file=sys.stderr)
-            return 1
-        if report.ok:
-            print("HTML VALID %s errors=0" % args.html)
-            return 0
-        for issue in report.errors:
-            print(issue.render(), file=sys.stderr)
-        print("HTML INVALID %s errors=%d" % (args.html, len(report.errors)), file=sys.stderr)
+        )
+        progress.emit({
+            "event": "completion", "command": "journey-plan", "status": "ok",
+            "items": len(trip_days),
+        })
+        return 0
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        _progress_failed(progress, "journey-plan")
+        print("JOURNEY_PLAN_FAILED %s" % exc, file=sys.stderr)
         return 1
-    print("%s is not available until its implementation milestone" % args.command, file=sys.stderr)
-    return 3
+
+
+def _cmd_plan(args: argparse.Namespace, progress: "_NDJSONProgress") -> int:
+    from .clock import FixedClock, SystemClock
+    from .flyai_inventory import AMapLodgingBackend, FlyAIBackend
+    from .mobility import MobilityBackend
+    from .planning import RailBackend, plan_trip
+    from .variflight_enrichment import VariFlightBackend
+
+    try:
+        request_value = read_json(args.request)
+        candidates_value = read_json(args.candidates)
+        if args.fixed_clock and not args.offline_fixture:
+            raise ValueError("--fixed-clock is allowed only with --offline-fixture")
+        if args.offline_fixture and args.rail == "live":
+            raise ValueError("--offline-fixture requires --rail off or fixture:<file>")
+        if args.offline_fixture and args.mobility != "off":
+            raise ValueError("--offline-fixture requires --mobility off")
+        if args.offline_fixture and args.lodging != "off":
+            raise ValueError("--offline-fixture requires --lodging off")
+        clock = FixedClock.from_iso(args.fixed_clock) if args.fixed_clock else SystemClock()
+        repo_root = _repo_root()
+        rail_backend = RailBackend.from_spec(args.rail, repo_root, deadline_seconds=args.rail_deadline)
+        mobility_backend = MobilityBackend.from_spec(
+            args.mobility, repo_root, deadline_seconds=args.mobility_deadline,
+        )
+        flyai_backend = FlyAIBackend.from_spec(
+            args.lodging, repo_root, deadline_seconds=args.flyai_deadline,
+        )
+        amap_lodging_backend = AMapLodgingBackend.from_spec(
+            "auto" if args.lodging == "live" else "off",
+            repo_root,
+            deadline_seconds=args.mobility_deadline,
+        )
+        aviation_mode = "off" if args.offline_fixture else args.aviation
+        variflight_backend = VariFlightBackend.from_spec(
+            aviation_mode, repo_root, deadline_seconds=args.variflight_deadline,
+        )
+        for backend in (
+            rail_backend, mobility_backend, flyai_backend,
+            amap_lodging_backend, variflight_backend,
+        ):
+            _attach_progress(backend, progress)
+        result = plan_trip(
+            request_value, candidates_value, clock, rail_backend, mobility_backend,
+            flyai_backend, variflight_backend, amap_lodging_backend,
+        )
+        args.output_json.parent.mkdir(parents=True, exist_ok=True)
+        args.output_html.parent.mkdir(parents=True, exist_ok=True)
+        write_canonical_json(args.output_json, result.trip)
+        args.output_html.write_text(result.html, encoding="utf-8")
+        print("PLAN_COMPLETE json=%s html=%s mode=%s stages=%s calls=%s trip_sha256=%s html_sha256=%s errors=0" % (
+            args.output_json,
+            args.output_html,
+            result.trip["mode"],
+            ",".join(result.stages),
+            ",".join(result.business_calls),
+            result.trip_sha256,
+            result.html_sha256,
+        ))
+        progress.emit({"event": "completion", "command": "plan", "status": "ok"})
+        return 0
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        _progress_failed(progress, "plan")
+        print("PLAN_FAILED %s" % exc, file=sys.stderr)
+        return 1
+
+
+def _cmd_mobility(args: argparse.Namespace, progress: "_NDJSONProgress") -> int:
+    from .clock import SystemClock
+    from .errors import CTWError
+    from .mobility import MobilityBackend, normalize_modes
+
+    try:
+        if args.deadline <= 0:
+            raise ValueError("--deadline must be positive")
+        candidates_value = read_json(args.candidates)
+        modes = normalize_modes(tuple(part for part in args.modes.split(",") if part.strip()))
+        repo_root = _repo_root()
+        backend = MobilityBackend.from_spec("live", repo_root, deadline_seconds=args.deadline)
+        _attach_progress(backend, progress)
+        result = backend.resolve(candidates_value, SystemClock(), modes)
+        output = result.as_dict()
+        if args.output_json is not None:
+            args.output_json.parent.mkdir(parents=True, exist_ok=True)
+            write_canonical_json(args.output_json, output)
+            print("MOBILITY_COMPLETE output=%s cells=%d locations=%d status=%s calls=%d" % (
+                args.output_json,
+                len(result.cells),
+                len(result.locations),
+                result.health["status"],
+                len(result.business_calls),
+            ))
+        else:
+            print(canonical_json(output))
+        progress.emit({
+            "event": "completion", "command": "mobility",
+            "status": "ok" if result.cells and result.health["status"] == "ready" else "degraded",
+            "items": len(result.cells),
+        })
+        return 0 if result.cells and result.health["status"] == "ready" else 1
+    except CTWError as exc:
+        _progress_failed(progress, "mobility", exc.error_class)
+        print("MOBILITY_FAILED %s %s" % (exc.error_class, exc.code), file=sys.stderr)
+        return 1
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        _progress_failed(progress, "mobility")
+        print("MOBILITY_FAILED %s" % exc, file=sys.stderr)
+        return 1
+
+
+def _cmd_lodging_air(args: argparse.Namespace, progress: "_NDJSONProgress") -> int:
+    from .clock import SystemClock
+    from .errors import CTWError
+    from .flyai_inventory import FlyAIBackend
+
+    try:
+        if args.deadline <= 0:
+            raise ValueError("--deadline must be positive")
+        repo_root = _repo_root()
+        backend = FlyAIBackend.from_spec(
+            "live",
+            repo_root,
+            deadline_seconds=args.deadline,
+            keyless_trial=args.keyless_trial,
+        )
+        _attach_progress(backend, progress)
+        clock = SystemClock()
+        if args.command == "lodging":
+            result = backend.query_lodging(
+                args.city,
+                args.check_in,
+                args.check_out,
+                clock,
+                party={"adults": args.adults, "children": 0},
+                rooms=args.rooms,
+                adult_count=args.adults,
+                occupancy=args.room_constraint,
+                bed_config=args.bed_config,
+                parking_required=args.parking_required,
+                cancellation_preference=args.cancellation_preference,
+            )
+            items = list(result.normalized_items)
+            output_key = "lodgings"
+        else:
+            result = backend.query_flight(
+                args.origin,
+                args.destination,
+                args.date,
+                "city-" + args.origin,
+                "city-" + args.destination,
+                clock,
+            )
+            items = list(result.normalized_items)
+            output_key = "transport_legs"
+        price_types = _price_type_counts(items)
+        transport = backend.transport
+        output = {
+            "provider": result.provider,
+            "provider_version": result.provider_version,
+            output_key: items,
+            "claims": list(result.claims),
+            "health": result.health,
+            "warnings": list(result.warnings),
+            "error_class": result.error_class,
+            "stats": {
+                "items": len(items),
+                "price_types": price_types,
+                "business_calls": int(getattr(transport, "calls", 0)),
+                "probe_calls": int(getattr(transport, "probe_calls", 0)),
+                "credential": "configured" if backend.credentials.get("FLYAI_API_KEY") else "keyless-trial",
+            },
+        }
+        if args.output_json is not None:
+            args.output_json.parent.mkdir(parents=True, exist_ok=True)
+            write_canonical_json(args.output_json, output)
+            print("%s_COMPLETE output=%s items=%d status=%s price_types=%s" % (
+                args.command.upper(), args.output_json, len(items), result.health["status"],
+                ",".join("%s:%d" % pair for pair in sorted(price_types.items())) or "none",
+            ))
+        else:
+            print(canonical_json(output))
+        progress.emit({
+            "event": "completion", "command": args.command,
+            "provider": result.provider,
+            "status": "ok" if items else "degraded", "items": len(items),
+        })
+        return 0 if items else 1
+    except CTWError as exc:
+        _progress_failed(progress, args.command, exc.error_class)
+        print("%s_FAILED %s %s" % (args.command.upper(), exc.error_class, exc.code), file=sys.stderr)
+        return 1
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        _progress_failed(progress, args.command)
+        print("%s_FAILED %s" % (args.command.upper(), exc), file=sys.stderr)
+        return 1
+
+
+def _cmd_rail(args: argparse.Namespace, progress: "_NDJSONProgress") -> int:
+    from .clock import FixedClock, SystemClock
+    from .contracts import ProviderRequest
+    from .credentials import resolve_credentials
+    from .providers.base import ProviderContext, ReplayTransport, stable_id
+    from .providers.mcp_stdio import RailMCPStdioTransport
+    from .providers.rail12306 import Rail12306Adapter
+
+    try:
+        if args.limit <= 0 or args.deadline <= 0:
+            raise ValueError("--limit and --deadline must be positive")
+        if args.fixed_clock and args.fixture is None:
+            raise ValueError("--fixed-clock is allowed only with --fixture")
+        repo_root = _repo_root()
+        if args.fixture is not None:
+            fixture = read_json(args.fixture)
+            if fixture.get("provider") != "rail12306" or not isinstance(fixture.get("transport"), dict):
+                raise ValueError("--fixture must be a rail12306 provider fixture")
+            clock = FixedClock.from_iso(args.fixed_clock or fixture["captured_at"])
+            transport = ReplayTransport(fixture["transport"], raw_ref=args.fixture.as_posix())
+        else:
+            clock = SystemClock()
+            credentials = resolve_credentials({}, repo_root / ".tmp" / "rail-no-credentials")
+            transport = RailMCPStdioTransport(
+                cache_dir=repo_root / ".npm-cache",
+                credentials=credentials,
+                cwd=repo_root,
+            )
+        _attach_progress(transport, progress)
+        request = ProviderRequest(
+            request_id=stable_id("rail-query", args.date, args.from_name, args.to_name, args.train_filter_flags, args.limit),
+            capability="rail",
+            parameters={
+                "date": args.date,
+                "from_name": args.from_name,
+                "to_name": args.to_name,
+                "from_ref": stable_id("place", "city", args.from_name),
+                "to_ref": stable_id("place", "city", args.to_name),
+                "train_filter_flags": args.train_filter_flags,
+                "limited_num": args.limit,
+            },
+            deadline_ms=int(args.deadline * 1000),
+            as_of=args.date,
+            cache_policy="bypass",
+            trace={"stage": "rail-cli"},
+        )
+        context = ProviderContext(
+            clock=clock,
+            credentials=resolve_credentials({}, repo_root / ".tmp" / "rail-no-credentials"),
+            transport=transport,
+        )
+        result = Rail12306Adapter().query(request, context)
+        output = {
+            "provider": result.provider,
+            "provider_version": result.provider_version,
+            "queried_at": result.queried_at,
+            "transport_legs": list(result.normalized_items),
+            "claims": list(result.claims),
+            "health": result.health,
+            "warnings": list(result.warnings),
+            "error_class": result.error_class,
+        }
+        if args.output_json is not None:
+            args.output_json.parent.mkdir(parents=True, exist_ok=True)
+            write_canonical_json(args.output_json, output)
+            print("RAIL_COMPLETE output=%s legs=%d status=%s error=%s" % (
+                args.output_json,
+                len(result.normalized_items),
+                result.health["status"],
+                result.error_class or "none",
+            ))
+        else:
+            print(canonical_json(output))
+        progress.emit({
+            "event": "completion", "command": "rail", "provider": result.provider,
+            "status": "ok" if result.normalized_items else "degraded",
+            "items": len(result.normalized_items),
+        })
+        if result.normalized_items:
+            return 0
+        return 2 if result.error_class == "no_results" else 1
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        _progress_failed(progress, "rail")
+        print("RAIL_FAILED %s" % exc, file=sys.stderr)
+        return 1
+
+
+def _cmd_replan(args: argparse.Namespace) -> int:
+    import hashlib
+
+    from .clock import FixedClock, SystemClock
+    from .render import render_trip, validate_html
+    from .replan import ReplanError, replan_trip
+    from .validate_trip import validate_trip
+
+    try:
+        trip = read_json(args.trip)
+        event_document = read_json(args.event)
+        event = event_document.get("event", event_document)
+        locked_refs = list(event_document.get("user_locked_refs", ())) + list(args.locked_ref)
+        if not isinstance(event, dict) or not isinstance(locked_refs, list):
+            raise ValueError("event document has the wrong shape")
+        base_report = validate_trip(trip)
+        if not base_report.ok:
+            raise ValueError("base Trip is invalid: " + "; ".join(item.render() for item in base_report.errors))
+        clock = FixedClock.from_iso(args.fixed_clock) if args.fixed_clock else SystemClock()
+        result = replan_trip(trip, event, args.base_revision, locked_refs, clock)
+        report = validate_trip(result.trip)
+        if not report.ok:
+            raise ValueError("replanned Trip is invalid: " + "; ".join(item.render() for item in report.errors))
+        rendered = render_trip(result.trip)
+        html_report = validate_html(rendered, result.trip)
+        if not html_report.ok:
+            raise ValueError("replanned HTML is invalid: " + "; ".join(item.render() for item in html_report.errors))
+        args.output_json.parent.mkdir(parents=True, exist_ok=True)
+        args.output_html.parent.mkdir(parents=True, exist_ok=True)
+        write_canonical_json(args.output_json, result.trip)
+        args.output_html.write_text(rendered, encoding="utf-8")
+        print("REPLAN_COMPLETE json=%s html=%s revision=%d patch=%s trigger=%s reverify=%d trip_sha256=%s html_sha256=%s errors=0" % (
+            args.output_json,
+            args.output_html,
+            result.trip["revision"]["number"],
+            result.patch["patch_id"],
+            result.patch["trigger"],
+            len(result.reverify_claim_ids),
+            hashlib.sha256(canonical_json(result.trip).encode("utf-8")).hexdigest(),
+            hashlib.sha256(rendered.encode("utf-8")).hexdigest(),
+        ))
+        return 0
+    except ReplanError as exc:
+        print("REPLAN_FAILED %s %s" % (exc.code, exc), file=sys.stderr)
+        return 1
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        print("REPLAN_FAILED %s" % exc, file=sys.stderr)
+        return 1
+
+
+def _cmd_render(args: argparse.Namespace) -> int:
+    import hashlib
+
+    from .render import RendererError, render_trip, safe_output_name, validate_html
+
+    try:
+        trip = read_json(args.trip)
+        rendered = render_trip(trip)
+        report = validate_html(rendered, trip)
+        if not report.ok:
+            for issue in report.errors:
+                print(issue.render(), file=sys.stderr)
+            return 1
+        output = args.output or Path.cwd() / safe_output_name(trip["trip_id"])
+        output.write_text(rendered, encoding="utf-8")
+        digest = hashlib.sha256(rendered.encode("utf-8")).hexdigest()
+        print("RENDERED %s sha256=%s errors=0" % (output, digest))
+        return 0
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError, RendererError) as exc:
+        print("RENDER_FAILED %s" % exc, file=sys.stderr)
+        return 1
+
+
+def _cmd_validate_html(args: argparse.Namespace) -> int:
+    from .render import validate_html
+
+    try:
+        trip = read_json(args.trip)
+        rendered = args.html.read_text(encoding="utf-8")
+        report = validate_html(rendered, trip)
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        print("HTML_INVALID %s" % exc, file=sys.stderr)
+        return 1
+    if report.ok:
+        print("HTML VALID %s errors=0" % args.html)
+        return 0
+    for issue in report.errors:
+        print(issue.render(), file=sys.stderr)
+    print("HTML INVALID %s errors=%d" % (args.html, len(report.errors)), file=sys.stderr)
+    return 1
 
 
 def _price_type_counts(items: Sequence[Mapping[str, object]]) -> Mapping[str, int]:

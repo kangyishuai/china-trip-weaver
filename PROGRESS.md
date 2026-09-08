@@ -62,6 +62,64 @@ fix-names` 会把它们列为人工项。
   断为超出本轮范围，留待专门一轮（`docs/design` 内重复文件与本机路径清理已
   由本书任务 1/2 完成，不再属于这份清单）。
 
+## 本轮记录（2026-09-08，书 C：cli.py 的 main 拆分）
+
+- 目标：`cli.py` 的 `main`（706 行、13 个 `if args.command` 分支）拆成每个子
+  命令一个 `_cmd_<name>` 函数加分发表，`_parser`（235 行）拆成每个子命令一个
+  `_add_<name>_parser`，行为一个字节不变；`main`/`_parser`/`_probe_layers`/
+  `_doctor_probe_report` 四个名字与签名原地不动（测试从
+  `china_trip_weaver.cli` 导入并打补丁）。
+- 顺序：任务 0 冻结 `--help`/`canonicalize`/`rail`/`validate` 四组金样
+  （`.tmp/goldens/`，被 `.gitignore` 挡住不提交）并核对哈希，与任务书对照
+  逐一吻合 → 任务 1 拆 `main` → 任务 2 拆 `_parser` → 终验两次反向验证。
+- 最大风险：13 个分支里 `candidates`/`journey` 各自还有 4 个子子命令分支，
+  且共享局部变量（如 `candidates` 分支的 `clock` 在 `add-poi`/`add-lodging`
+  间共用）——直接摘取会漏传参数；用「把共享局部变量在分发函数里算好、经参数
+  传给子函数」的方式规避，不改变计算时机与顺序。
+- 任务 1（已完成）：`main` 拆成分发表 `main` （29 行）+ 13 个 `_cmd_<name>`
+  函数；`candidates`/`journey` 两个有子子命令的分支各自再拆成 1 个分发函数
+  + 4 个子函数（`_cmd_candidates_init/fix_names/add_poi/add_lodging`、
+  `_cmd_journey_validate/render/validate_html/plan`）。搬移全程剪切—去缩进
+  —把用到的局部变量或必须的上下文（`progress`、`credential_path`、
+  `poi_name_transport`、`clock`）改成参数，不重写任何逻辑、不合并任何重复
+  代码、不改任何消息文本；每个 `_cmd_*` 只声明自己实际用到的参数（不是所有
+  函数塞同一组参数），`main` 里的分发表用闭包把不同函数的不同参数补齐——
+  `{"validate": lambda: _cmd_validate(args), ...}`。额外实现了任务书标注为
+  「建议」的一项：6 处重复的 `repo_root = Path(__file__).resolve().parents
+  [4]` 合成 `_repo_root()` 辅助函数，计算内容不变（`__file__` 在同一模块内
+  取值恒定，提取不影响结果）。验收：`py_compile` 通过；pyflakes 0 行；函数
+  长度量表 `main` 29 行、最长函数（`_cmd_rail`/`_cmd_lodging_air`）85 行，
+  均低于 50/120 的门槛（`_parser` 233 行是任务 2 的范围，尚未拆）；任务 0 的
+  四组金样在拆分后重新生成到 `.tmp/after/`，`diff -r .tmp/goldens .tmp/after`
+  空输出；全量 `/usr/bin/python3 -m unittest discover -s tests` `Ran 507
+  tests` `OK` 0 skipped；`git diff HEAD --stat -- tests demo plugins/china-
+  trip-weaver ':!*cli.py'` 为空，只有 `cli.py` 改动。
+- 任务 2（已完成）：`_parser`（235 行）拆成 `_parser()`（21 行，只剩创建顶层
+  parser、`--version`/`--progress`、`commands = parser.add_subparsers(...)`
+  与按原注册顺序逐个调用）+ 14 个 `_add_<name>_parser(commands)`（对应 14 个
+  `commands.add_parser(...)` 调用：validate、validate-candidates、
+  candidates、canonicalize、doctor、plan、journey、replan、rail、mobility、
+  lodging、air、render、validate-html）。`candidates`/`journey` 各自的 4 个
+  子子命令解析没有像任务 1 那样再拆——任务书原文是「按子命令拆」，且两者单个
+  函数分别只有 76/47 行，仍在 120 行门槛内，拆到子子命令一级不是任务书要求，
+  按「不重写逻辑」的最小改动原则保留为一个函数。参数类型统一标 `commands:
+  Any`（`Any` 已在文件顶部导入），未采用 `argparse._SubParsersAction`（真实
+  存在但带下划线的半私有名字），降低无谓风险。验收：`py_compile` 通过；
+  pyflakes 0 行；`main` 29 行、`_parser` 21 行、最长函数仍是 `_cmd_rail`/
+  `_cmd_lodging_air` 85 行；任务 0 的四组金样重新生成，`diff -r .tmp/goldens
+  .tmp/after` 空输出；全量 `Ran 507 tests` `OK` 0 skipped。
+- 终验：README「Run the synthetic demo」里 `ctw plan --request
+  demo/request.json ...` 那条命令原样跑完，`git status --short -- demo` 为
+  空（重新生成的 `demo/trip.json`/`demo/trip.html` 与已提交内容字节相同）；
+  `git diff --check`、`git diff --cached --check` 均空；`git diff HEAD
+  --stat` 只有 `PROGRESS.md`、`cli.py` 两个文件。反向验证一：给
+  `_add_canonicalize_parser` 的 help 文案尾部加一个 `X` → 重生成
+  `.tmp/after` → `diff -r .tmp/goldens .tmp/after` 在 `help.txt` 报出该行
+  差异（红）→ 还原 → 重生成 → 空输出（绿）。反向验证二：把
+  `_cmd_validate_candidates` 的形参 `args` 改名为 `args_renamed` 而不改函数体
+  用法 → pyflakes 报 3 处 `undefined name 'args'`（红）→ 还原 → pyflakes 0
+  行（绿）。`BLOCKED.md` 本轮追加「无待裁决项」记录（书 C 小节）。
+
 ## 历史索引
 
 - 2026-09-03 至 09-06 的完整逐轮任务书、实测证据与验收记录：
