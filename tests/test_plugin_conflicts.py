@@ -75,12 +75,13 @@ class PluginConflictTests(unittest.TestCase):
             )))
 
     def test_doctor_reports_conflict_status_and_keeps_credentials_opaque(self):
-        result = subprocess.run(
-            [str(PLUGIN / "scripts" / "ctw"), "doctor"],
-            capture_output=True,
-            text=True,
-            env={"PATH": "/usr/bin:/bin", "HOME": "/nonexistent-ctw-home", "CODEX_BIN": "/nonexistent-ctw-codex"},
-        )
+        with TemporaryPluginRoot() as home:
+            result = subprocess.run(
+                [str(PLUGIN / "scripts" / "ctw"), "doctor"],
+                capture_output=True,
+                text=True,
+                env={"PATH": "/usr/bin:/bin", "HOME": str(home), "CODEX_BIN": "/nonexistent-ctw-codex"},
+            )
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
         report = json.loads(result.stdout)
         self.assertEqual("unknown", report["skill_conflicts"]["status"])

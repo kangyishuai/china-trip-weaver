@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, Mapping, Optional
 from urllib.parse import urlsplit
 
 from .clock import Clock, isoformat_seconds
@@ -81,38 +81,4 @@ def validate_claim(claim: Mapping[str, Any]) -> None:
         raise ValueError("claim source URL must be credential-free HTTPS")
     if not 0 <= claim["confidence"] <= 1:
         raise ValueError("invalid confidence")
-
-
-class EvidenceLedger:
-    def __init__(self, claims: Sequence[Mapping[str, Any]] = ()) -> None:
-        self._claims: List[Dict[str, Any]] = []
-        for claim in claims:
-            self.add(claim)
-
-    def add(self, claim: Mapping[str, Any]) -> str:
-        validate_claim(claim)
-        candidate = copy.deepcopy(dict(claim))
-        for existing in self._claims:
-            if existing["claim_id"] == candidate["claim_id"]:
-                if canonical_json(existing) != canonical_json(candidate):
-                    raise ValueError("claim_id collision")
-                return existing["claim_id"]
-            same_fact = (
-                existing["subject_ref"] == candidate["subject_ref"]
-                and existing["field_path"] == candidate["field_path"]
-            )
-            same_evidence = same_fact and existing["provider"] == candidate["provider"] and canonical_json(existing["value"]) == canonical_json(candidate["value"])
-            if same_evidence:
-                return existing["claim_id"]
-            if same_fact and canonical_json(existing["value"]) != canonical_json(candidate["value"]):
-                existing["status"] = "conflict"
-                candidate["status"] = "conflict"
-        self._claims.append(candidate)
-        return candidate["claim_id"]
-
-    def claims(self) -> Tuple[Mapping[str, Any], ...]:
-        return tuple(copy.deepcopy(self._claims))
-
-    def for_subject(self, subject_ref: str) -> Tuple[Mapping[str, Any], ...]:
-        return tuple(copy.deepcopy([claim for claim in self._claims if claim["subject_ref"] == subject_ref]))
 

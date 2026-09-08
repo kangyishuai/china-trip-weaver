@@ -14,7 +14,7 @@ sys.path.insert(0, str(SRC))
 from china_trip_weaver.clock import FixedClock
 from china_trip_weaver.contracts import ProviderRequest, canonical_json
 from china_trip_weaver.credentials import resolve_credentials
-from china_trip_weaver.evidence import EvidenceLedger, make_claim, validate_claim
+from china_trip_weaver.evidence import make_claim, validate_claim
 from china_trip_weaver.geo import Point, coordinate_record
 from china_trip_weaver.mobility import MobilityBackend
 from china_trip_weaver.providers import (
@@ -531,11 +531,6 @@ class AMapIdentityAndSemanticTests(unittest.TestCase):
             mode="static",
             clock=FixedClock.from_iso("2026-09-04T00:00:00+08:00"),
         )
-        ledger = EvidenceLedger((official, business))
-        conflicts = ledger.claims()
-        self.assertEqual(2, len(conflicts))
-        self.assertEqual({"conflict"}, {claim["status"] for claim in conflicts})
-
         mobility_transport = AMapScenarioTransport(scenario)
         mobility = MobilityBackend(
             "live",

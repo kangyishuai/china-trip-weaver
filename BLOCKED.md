@@ -365,3 +365,31 @@ PY
 ## 书 25 歧义判定死角（2026-09-05）
 
 - 本轮新增阻塞：无。两个明确死角已由合成离线夹具复现并修复；前缀与不同地点仍保持人工判定。
+
+## 书 36 仓库瘦身：范围内认定超出本轮、留待专门一轮的四项（2026-09-08，待裁决）
+
+书 36（PROGRESS 归档、删测试专用代码、版本号单源、测试不再污染工作树）执行前
+由任务书作者判断以下四项行为不变但改动面大，划出本轮界限之外，本条只记录
+实测事实供下一轮裁决，本轮未做任何相关改动。
+
+- **三个 `*_home_shim.cjs` 待合并**：确认存在
+  `plugins/china-trip-weaver/src/china_trip_weaver/providers/` 下的
+  `flyai_home_shim.cjs`、`rail_home_shim.cjs`、`variflight_home_shim.cjs`
+  三个文件，未逐行比对差异面，留给专门一轮判断能否合并为一个带参数的模板。
+- **`.npm-cache`/`.tmp` 清理或迁移**：实测大小与任务书的"两处各约 500 MB"
+  不完全一致——`.npm-cache/` 428 MB，`.tmp/` 76 MB（`.tmp/` 下是
+  `doctor-flyai`、`doctor-variflight`、`flyai-runtime`、`rail-runtime`、
+  `variflight-runtime` 五个运行期临时目录，均在 `.gitignore` 内，git 不跟踪
+  任何一个文件）。体量真实但两处并不对等，处置方式（删、迁出仓库、还是保留
+  但加体积告警）留给专门一轮。
+- **`cli.py` 的 `main` 函数拆分**：实测精确为 706 行（`plugins/china-trip-
+  weaver/src/china_trip_weaver/cli.py:329-1034`，文件总长 1276 行），占全文件
+  过半，是本轮认定"改动面大、行为易变"因而不做的最主要一项。
+- **`docs/design` 重复文件与本机路径清理**：本条实测**没有复现**——
+  `grep -rlE "/Users/[a-zA-Z]+|/home/[a-zA-Z]+"  docs/design/` 与按内容
+  哈希查重均为 0 命中；`docs/design/` 35 个文件里未发现本机路径或字节级重复
+  文件。`CLAUDE.md` 描述的"含本机路径与第三方文档拷贝"精确指向仓库根**顶层**
+  的 `design/`（未纳入 git、由根 `.gitignore` 挡住的阶段一原件），与仓库内
+  `docs/design/`（脱敏后现役副本）是两个不同目录。任务书这条按顶层 `design/`
+  转述，本轮予以更正记录；顶层 `design/` 既不在 git 里也不在本轮"源码目录"
+  定义内，仍然超出本轮改动范围，留给专门一轮确认是否需要清理及如何清理。

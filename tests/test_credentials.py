@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "plugins" / "china-trip-weaver" / "src"
 sys.path.insert(0, str(SRC))
 
+from china_trip_weaver import __version__
 from china_trip_weaver.credentials import (
     SECRET_NAMES,
     provider_credential_status,
@@ -201,7 +202,7 @@ class CredentialTests(unittest.TestCase):
         payload = json.loads(stdout.getvalue())
         self.assertEqual(probe_report, payload["probes"])
         self.assertTrue(payload["schema_exists"])
-        self.assertEqual("0.6.0", payload["plugin_version"])
+        self.assertEqual(__version__, payload["plugin_version"])
         self.assertNotIn(amap, stdout.getvalue())
         self.assertNotIn(flyai, stdout.getvalue())
         self.assertEqual(1, probe.call_count)

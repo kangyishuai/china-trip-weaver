@@ -19,7 +19,6 @@ from china_trip_weaver.contracts import canonical_json
 from china_trip_weaver.matrix import MatrixError, RouteCell, RouteMatrix, bounded_query_plan, static_estimate_cell
 from china_trip_weaver.pipeline import PipelineError, PipelineRun
 from china_trip_weaver.scheduler.light import PACE_PROFILES, LightScheduler
-from china_trip_weaver.scheduler.ortools_bridge import ortools_available, should_use_ortools
 
 
 FIXTURES = ROOT / "tests" / "fixtures" / "scheduler"
@@ -449,17 +448,6 @@ class SchedulerCorpusTests(unittest.TestCase):
         self.assertIn(("a", "b"), plan)
         self.assertIn(("b", "a"), plan)
         self.assertEqual(5, len([pair for pair in plan if pair[0] == "c"]))
-
-    def test_ortools_is_never_imported_without_explicit_flag(self):
-        with mock.patch("importlib.util.find_spec") as find_spec:
-            self.assertFalse(ortools_available({}))
-            self.assertFalse(should_use_ortools([99], [99], 99, True, 1, {}))
-            find_spec.assert_not_called()
-
-    def test_ortools_thresholds_apply_only_after_probe(self):
-        with mock.patch("importlib.util.find_spec", return_value=object()):
-            self.assertTrue(should_use_ortools([9], [0], 0, False, 0, {"CTW_ENABLE_ORTOOLS": "1"}))
-            self.assertFalse(should_use_ortools([8], [3], 1, False, 21, {"CTW_ENABLE_ORTOOLS": "1"}))
 
 
 class PipelineTests(unittest.TestCase):

@@ -56,8 +56,3 @@ class CTWError(Exception):
     def health_status(self) -> str:
         return self.policy.health_status
 
-
-class ValidationFailure(CTWError):
-    def __init__(self, message: str = "Trip validation failed.") -> None:
-        super().__init__("invalid_request", "TRIP_INVALID", message)
-

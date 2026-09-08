@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
+from .. import __version__
 from ..contracts import ProviderRequest, canonical_json
 from ..credentials import CredentialResolution, provider_environment
 from .base import (
@@ -140,7 +141,7 @@ class MCPStdioClient:
             {
                 "protocolVersion": MCP_PROTOCOL_VERSION,
                 "capabilities": {},
-                "clientInfo": {"name": "china-trip-weaver", "version": "0.6.0"},
+                "clientInfo": {"name": "china-trip-weaver", "version": __version__},
             },
         )
         result = _result_object(response, "initialize")

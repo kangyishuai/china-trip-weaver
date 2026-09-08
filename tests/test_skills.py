@@ -15,6 +15,10 @@ CODEX_HOME = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
 VALIDATOR = CODEX_HOME / "skills/.system/skill-creator/scripts/quick_validate.py"
 PLUGIN = ROOT / "plugins" / "china-trip-weaver"
 INSTALLER = ROOT / "scripts" / "install_local_plugin.sh"
+SRC = PLUGIN / "src"
+sys.path.insert(0, str(SRC))
+
+from china_trip_weaver import __version__
 
 DESCRIPTIONS = {
     "plan-china-trip": "Plan, compare, or locally replan a read-only trip or multi-Trip Journey within mainland China. Use when the user asks for a China itinerary of any length, a city weekend, cross-city transport and lodging choices, an executable day schedule, a disruption-aware revision, or a sourced mobile Trip or Journey overview. Orchestrate the plugin's explicit-only research, provider, scheduling, replanning, and rendering Skills; never book, log in, submit identity, pay, cancel, or change an order.",
@@ -119,7 +123,7 @@ class SkillPackagingTests(unittest.TestCase):
     def test_manifest_uses_repository_website_without_invented_legal_urls(self):
         manifest = json.loads((PLUGIN / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
         interface = manifest["interface"]
-        self.assertEqual("0.6.0", manifest["version"])
+        self.assertEqual(__version__, manifest["version"])
         self.assertEqual("https://github.com/kangyishuai/china-trip-weaver", interface["websiteURL"])
         self.assertNotIn("privacyPolicyURL", interface)
         self.assertNotIn("termsOfServiceURL", interface)

@@ -28,6 +28,8 @@ from .scheduler.light import LightScheduler, PaceProfile, pace_profile
 from .validate_trip import SchemaSubsetValidator, load_schema, validate_trip
 from .variflight_enrichment import VariFlightBackend
 
+__all__ = ["SUPPORTED_KEY_NAMES"]
+
 
 @dataclass(frozen=True)
 class PlanResult:

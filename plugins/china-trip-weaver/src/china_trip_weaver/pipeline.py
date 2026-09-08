@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from .contracts import canonical_json
 

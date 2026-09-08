@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import copy
 import hashlib
-import html
 import json
 import math
 import re
@@ -13,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
-from typing import Any, Callable, Dict, List, Mapping, Optional, Protocol, Sequence, Tuple
+from typing import Any, List, Mapping, Optional, Protocol, Sequence, Tuple
 from urllib.parse import urlsplit
 
 from ..clock import Clock, isoformat_seconds

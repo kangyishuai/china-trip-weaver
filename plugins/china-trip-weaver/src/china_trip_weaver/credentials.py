@@ -7,7 +7,7 @@ import re
 import stat
 from pathlib import Path
 from types import MappingProxyType
-from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .errors import CTWError
 

@@ -7,7 +7,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 
 
 JSONValue = Any
@@ -121,24 +121,6 @@ class AdapterResult:
             response_hash=response_hash,
             error_class=error_class,
         )
-
-
-@dataclass(frozen=True)
-class MatrixCell:
-    from_ref: str
-    to_ref: str
-    travel_mode: str
-    duration_minutes: Optional[int]
-    distance_meters: Optional[int]
-    provider: str
-    provider_version: str
-    mode: str
-    queried_at: str
-    claim_ids: Tuple[str, ...]
-    reachable: bool
-    degradation_rung: str
-    fare: Optional[Mapping[str, Any]] = None
-    geometry_ref: Optional[str] = None
 
 
 @dataclass(frozen=True)

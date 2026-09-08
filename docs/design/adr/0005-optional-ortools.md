@@ -1,6 +1,6 @@
 # ADR-0005：轻量排程为默认，OR-Tools 按阈值显式启用
 
-- **Status:** Accepted
+- **Status:** Superseded by ADR-0014
 - **Date:** 2026-09-03
 
 ## Context
