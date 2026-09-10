@@ -386,3 +386,119 @@ Python 3.13 矩阵全绿，本机单独重跑该测试也是 `ok`，且该测试
 `refresh` 无任何依赖关系（不在本轮允许改动的文件之列）。判断为 CI runner
 偶发的无头浏览器启动超时，`gh run rerun 34447222187 --failed` 重跑后两条
 矩阵均转 `success`（`gh run list --limit 3` 三条全 `success`）。
+
+## 书 A2：journey extract/assemble（2026-09-10，分支 journey-assemble）
+
+本书在 `.tmp/wt-a2`（分支 `journey-assemble`）里干，只推分支不合并，界限见
+任务书「界限」节。与并行的书 B（`docs-drift`）、书 A1（main 直接改
+`replan.py`）地界不重叠。
+
+- 任务 0 核对：HEAD `c9c9c15` 与任务书一致；全量 `Ran 507 tests` `OK` 0
+  skipped，`scan_secrets.py` 0 命中，均与任务书数字吻合。`journey.py` 行号
+  核对：`_bridge_segment_lodgings` 1181、`_ensure_boundary_lodging` 1283、
+  `_segment_connections` 1339、`assemble_journey` 1408，与任务书完全一致。
+  「两份 README」实指根目录 `README.md`+`README.zh-CN.md`（没有
+  `plugins/china-trip-weaver/README.md` 这个文件）。`_segment_connections`
+  硬取 `right["budget_ledger"]["items"]`：Trip 缺账本会 `KeyError`，属实——
+  但 `journey_budget_ledger`（1485）与 `_validate_connection`（2160，读
+  `right.get("budget_ledger")` 后判断 `isinstance`）都已经对缺账本 Trip 容
+  错，全仓库只有 `_segment_connections` 这一处没有容错，这是「账本缺失时价
+  格字段置 None」唯一需要动的地方。README 第 134 行段落（journey-16d 固定
+  时钟/revision）逐字核对通过；`expected_segment_days` 实际嵌套在
+  `journey["segmentation"]["expected_segment_days"]` 而非顶层字段，但值确
+  为 `null`，与任务书表述一致（只是路径写得粗略）。
+- 理解的目标：给 `journey.py` 加两个只读的新函数——
+  `extract_trip_from_journey`（从 Journey 按 `trip_id` 取子 Trip，deepcopy
+  后返回，找不到就 `ValueError`，不碰任何既有函数）与
+  `assemble_journey_from_trips`（按 `start_date` 排序 Trip，住宿连接从 Trip
+  自身 `lodgings` 直接判定「是否已覆盖边界夜」，交通连接复用改过的
+  `_segment_connections`），CLI 各包一层 `journey extract`/`journey
+  assemble` 子命令，不改任何既有子命令的行为。
+- 顺序：Task 0 核对 → Task 1 extract → Task 2 assemble → Task 3 补测试，与
+  任务书顺序一致——assemble 的验收（往返 `cmp`）依赖 extract 先能跑。
+- 最大风险：`assemble_journey` 结尾本来就会调用 `validate_journey` 做穷尽
+  性校验（`J_DATE_GAP`/`J_LODGING_STATUS`/`J_TRANSPORT_*` 等 20+ 种结构化
+  错误），所以「相邻段日期必须首尾相接」这类断裂检查不需要在 assemble 入口
+  重复手写，可以直接依赖这个既有校验兜底；核对下来这个判断成立（任务 2 的
+  反向验证——把住宿 check_in 改晚一天——命中的正是 `validate_journey` 里的
+  `J_LODGING_HANDOFF`，不是我自己写的检查）。真正必须手写的断裂只有一处：
+  左段自己找不到覆盖边界夜的已选住宿时，没有下游校验能替我发现，只能在
+  `assemble_journey_from_trips` 自己的住宿匹配循环里直接 `raise`。
+- 任务 1（extract）：`extract_trip_from_journey(journey, trip_id)` 遍历
+  `journey["trips"]` 按 `trip_id` 精确匹配，`copy.deepcopy` 后返回；找不到
+  `raise ValueError("Journey does not contain Trip %s" % trip_id)`。CLI
+  `ctw journey extract --journey J.json --trip-id T --output-json T.json`，
+  失败路径在 `write_canonical_json` 之前就 `raise`，不会写文件。验收：对
+  `demo/journey-16d/journey.json` 的三个 trip_id 各取到
+  `.tmp/t{1,2,3}.json`，`ctw validate` 三份均打 `VALID`；未知 trip-id 打
+  `JOURNEY_EXTRACT_FAILED Journey does not contain Trip
+  trip-does-not-exist`，exit 1，`.tmp/bad.json` 未生成。
+- 任务 2（assemble）：新函数 `assemble_journey_from_trips(trips, request,
+  clock, expected_segment_days=None)`——按 `request["start_date"]` 排序 Trip
+  （原文用 `request`，这里等价于按 `trip["request"]["start_date"]` 排序）后
+  依次调用三步：① 新写的 `_assembled_lodging_links`（`_bridge_segment_
+  lodgings` 第二段循环的只读版：左段末日城市里找自己 `lodgings` 中
+  `check_in <= overnight < check_out` 的已选住宿当 `outgoing`，右段按
+  `check_in == next_start` 找 `incoming`，比 `candidate_ref` 得
+  continued/changed/departing；找不到 `outgoing` 时用
+  `_no_stay_conflict(overnight, final_city, left["lodgings"])` 抛结构化
+  `ValueError`——`_no_stay_conflict` 本身就是通用的"候选池找不到覆盖某夜的
+  住宿"诊断，改传 Trip 自己的 `lodgings` 当"候选池"完全适配，不用另造错误
+  形状）；② 复用（未复制）改过的 `_segment_connections`——唯一改动是
+  `right["budget_ledger"]["items"]` 硬取改成 `right.get("budget_ledger")` +
+  `isinstance` 判断，账本缺失时 `budget_item=None` 从而
+  `price_type`/`amount_min_cny`/`amount_max_cny` 均为 `None`，这个改动对
+  `plan_journey` 现有调用方零影响（原来的 Trip 一定有账本）；③ 复用未改的
+  `assemble_journey` 做最终组装与校验。刻意不在入口手写"相邻日期必须首尾
+  相接"检查——`assemble_journey` 结尾必然调用的 `validate_journey` 已经
+  穷尽性覆盖 `J_DATE_GAP`/`J_DATE_OVERLAP`/`J_LODGING_*`/`J_TRANSPORT_*`
+  20+ 种断裂，重复手写是造轮子；任务书要求的反向验证也证实了这一点，命中
+  的正是这条已有校验。CLI `ctw journey assemble --request R --trip T1
+  [--trip T2 ...] [--expected-segment-days N] [--fixed-clock ISO]
+  --output-json J.json`，`--trip` 用 `action="append"` 支持重复。验收
+  （往返一致）：`ctw journey assemble --request demo/journey-16d/request.json
+  --trip .tmp/t1.json --trip .tmp/t2.json --trip .tmp/t3.json --fixed-clock
+  2026-09-05T09:00:00+08:00 --output-json .tmp/j.json` 后
+  `ctw canonicalize .tmp/j.json` 与 `ctw canonicalize
+  demo/journey-16d/journey.json` 的输出 `cmp` 无差异（`journey_sha256` 与
+  demo 原文一致）。反向验证：把 t2 第一晚（Hangzhou，check_in
+  2026-10-06）改成 2026-10-07 → `JOURNEY_ASSEMBLE_FAILED Journey validation
+  failed: J_LODGING_HANDOFF /segment_connections/0/lodging_continuity/
+  to_lodging_id the following multi-day Trip must name its first selected
+  stay`，exit 1，`.tmp/j-broken.json` 未生成 → 还原 t2 → 重新 assemble →
+  cmp 再次无差异。额外手测（非任务书要求，为任务 3 的账本缺失场景探路）：
+  从 t2 删掉 `budget_ledger` 并同步删除指向 `/budget_ledger/` 的
+  `unknowns`（否则 `validate_trip` 报 `J_TRIP_V_UNKNOWN_PATH`——纯删
+  `budget_ledger` 键会留下指向它的 unknown 指针，这不是"缺账本 Trip"的正确
+  构造方式，必须两者一起删）——assemble 后连接 0 的
+  `cross_segment_transport` 三个价格字段均为 `None`，`ctw journey validate`
+  打 `VALID`。
+- 任务 3（测试收口）：`tests/test_journey.py` 新增 `JourneyExtractAssembleTests`
+  类，6 个 `def test_`（任务书要求至少 5 个）：
+  `test_extract_returns_each_trip_as_an_independently_valid_standalone_document`
+  （extract 成功，三段各自 `validate_trip` 通过）、
+  `test_extract_unknown_trip_id_is_a_structured_error`（extract 未知
+  id）、`test_extract_then_assemble_round_trips_the_checked_in_demo_byte_for_byte`
+  （往返一致，Python API 层面用 `canonical_json` 比对，等价于任务书要求的
+  CLI `cmp`）、`test_a_boundary_lodging_gap_between_extracted_trips_is_a_structured_j_error`
+  （断裂报错，复用任务 2 验收里已证实会命中 `J_LODGING_HANDOFF` 的同一个
+  变异——把 t2 第一晚住宿 check_in 改晚一天——断言异常消息含 `"J_"`）、
+  `test_assemble_tolerates_a_trip_without_a_budget_ledger`（缺账本 Trip 可
+  拼，断言连接价格三字段为 `None` 且 `validate_journey` 通过）；第 6 个
+  `test_cli_journey_extract_and_assemble_round_trip_the_checked_in_demo` 是
+  任务书未强制要求的额外补充，走真实 `ctw` 子进程（而不是直接调 Python
+  函数）把 extract→assemble 全链路过一遍，顺带验证 CLI 层"失败不写文件"
+  （对未知 trip-id 断言 `missing_path.exists()` 为 `False`）——这一层任务
+  2/3 的纯 Python 测试都覆盖不到，因为 `write_canonical_json` 调用点在
+  `cli.py` 里，不在 `journey.py` 的函数体内。`from china_trip_weaver.journey
+  import (...)` 顶层导入块按字母序插入 `assemble_journey_from_trips`、
+  `extract_trip_from_journey`；新增 `from china_trip_weaver.contracts import
+  canonical_json`。反向验证：`git stash push -u -m
+  "wt-a2-reverse-verify-journeypy" -- .../journey.py`（只挪 journey.py，
+  未触碰 cli.py/tests，遵循环境提示"禁止裸 stash"的要求，用 tag 定位、
+  `apply` 不用 `pop`）→ `python -m unittest tests.test_journey` 整个模块
+  `ImportError: cannot import name 'assemble_journey_from_trips'`（顶层
+  import 失败会让全文件 51 个测试一起报错，不止新增的 6 个，属于比"新测试
+  红"更强的证据）→ `git stash apply <sha>` 恢复 → 重跑
+  `Ran 51 tests ... OK` → `git stash drop <sha>` 清理，`git stash list`
+  确认为空。全量 `Ran 513 tests`（507 + 新增 6）`OK` 0 skipped。

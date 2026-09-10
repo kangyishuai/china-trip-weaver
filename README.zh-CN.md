@@ -185,6 +185,8 @@ ctw journey plan --request REQUEST.json --candidates CANDIDATES.json [--expected
 ctw journey validate JOURNEY.json
 ctw journey render JOURNEY.json --output JOURNEY.html
 ctw journey validate-html JOURNEY.html JOURNEY.json
+ctw journey extract --journey JOURNEY.json --trip-id TRIP_ID --output-json TRIP.json
+ctw journey assemble --request REQUEST.json --trip TRIP.json [--trip TRIP.json ...] [--expected-segment-days N] [--fixed-clock ISO] --output-json JOURNEY.json
 ```
 
 运行时不使用任何第三方 Python 包。Trip 与 Journey renderer 都会拒绝无效输入；两套 HTML validator 都会拦截结构、CSP、远程资源、危险链接、密钥、事实映射、追溯缺口和交易动作等违规。

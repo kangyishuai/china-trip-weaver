@@ -553,3 +553,13 @@ china_trip_weaver/replan.py`）无歧义、按实际路径处理，不算待裁�
 旧 claim 不删、CLI 循环测试从 glob 改显式名单）均按自身判断处理并记录取舍
 理由，见 `PROGRESS.md` 本轮小节，均不影响硬指标或既有断言力度，不算待
 裁决。
+
+## 书 A2：journey extract/assemble（2026-09-10，分支 journey-assemble）
+
+无。任务书自身已经替可能有分歧的两点拍板（拼装只认左段自己已选的边界夜住
+宿、缺账本 Trip 照拼不补账本），任务 0 核对的现状与任务书描述完全一致
+（唯一偏差是 `expected_segment_days` 实际嵌套在
+`journey["segmentation"]["expected_segment_days"]` 而非顶层，只是任务书写
+得粗略，不影响验收，已在 `PROGRESS.md` 任务 0 小节记录），三个任务与两条
+硬指标均一次性达标，过程中没有遇到需要向管理者请示的越界、含糊或验收口径
+冲突。

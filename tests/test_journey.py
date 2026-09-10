@@ -20,10 +20,13 @@ SRC = PLUGIN / "src"
 sys.path.insert(0, str(SRC))
 
 from china_trip_weaver.clock import FixedClock
+from china_trip_weaver.contracts import canonical_json
 from china_trip_weaver.credentials import resolve_credentials
 from china_trip_weaver.journey import (
     _merge_provider_health,
     assemble_journey,
+    assemble_journey_from_trips,
+    extract_trip_from_journey,
     journey_booking_checklist,
     journey_budget_ledger,
     journey_risk_items,
@@ -1337,6 +1340,116 @@ class JourneyContinuityTests(unittest.TestCase):
         self.assertEqual(render_journey(journey), rendered)
         report = validate_journey_html(rendered, journey)
         self.assertTrue(report.ok, [item.render() for item in report.errors])
+
+
+class JourneyExtractAssembleTests(unittest.TestCase):
+    """`ctw journey extract` / `ctw journey assemble` round trip the checked-in demo."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.journey = load(JOURNEY_DEMO / "journey.json")
+        cls.request = load(JOURNEY_DEMO / "request.json")
+        cls.trip_ids = [item["trip_id"] for item in cls.journey["trips"]]
+
+    def extract_all(self):
+        return [
+            extract_trip_from_journey(self.journey, trip_id)
+            for trip_id in self.trip_ids
+        ]
+
+    def test_extract_returns_each_trip_as_an_independently_valid_standalone_document(self):
+        for trip_id in self.trip_ids:
+            trip = extract_trip_from_journey(self.journey, trip_id)
+            self.assertEqual(trip_id, trip["trip_id"])
+            report = validate_trip(trip)
+            self.assertTrue(report.ok, [item.render() for item in report.errors])
+
+    def test_extract_unknown_trip_id_is_a_structured_error(self):
+        with self.assertRaises(ValueError):
+            extract_trip_from_journey(self.journey, "trip-does-not-exist")
+
+    def test_extract_then_assemble_round_trips_the_checked_in_demo_byte_for_byte(self):
+        reassembled = assemble_journey_from_trips(
+            self.extract_all(), self.request, FixedClock.from_iso(FIXED_NOW),
+        )
+        self.assertEqual(canonical_json(self.journey), canonical_json(reassembled))
+
+    def test_a_boundary_lodging_gap_between_extracted_trips_is_a_structured_j_error(self):
+        trips = self.extract_all()
+        middle = trips[1]
+        for lodging in middle["lodgings"]:
+            if lodging["check_in"] == middle["request"]["start_date"]:
+                lodging["check_in"] = (
+                    date.fromisoformat(lodging["check_in"]) + timedelta(days=1)
+                ).isoformat()
+        with self.assertRaises(ValueError) as failure:
+            assemble_journey_from_trips(trips, self.request, FixedClock.from_iso(FIXED_NOW))
+        self.assertIn("J_", str(failure.exception))
+
+    def test_assemble_tolerates_a_trip_without_a_budget_ledger(self):
+        trips = self.extract_all()
+        middle = trips[1]
+        del middle["budget_ledger"]
+        middle["unknowns"] = [
+            item for item in middle["unknowns"]
+            if not str(item["field_path"]).startswith("/budget_ledger/")
+        ]
+        reassembled = assemble_journey_from_trips(
+            trips, self.request, FixedClock.from_iso(FIXED_NOW),
+        )
+        transport = reassembled["segment_connections"][0]["cross_segment_transport"]
+        self.assertIsNone(transport["price_type"])
+        self.assertIsNone(transport["amount_min_cny"])
+        self.assertIsNone(transport["amount_max_cny"])
+        report = validate_journey(reassembled)
+        self.assertTrue(report.ok, [item.render() for item in report.errors])
+
+    def test_cli_journey_extract_and_assemble_round_trip_the_checked_in_demo(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            output = Path(temporary)
+            trip_paths = []
+            for trip_id in self.trip_ids:
+                trip_path = output / (trip_id + ".json")
+                extracted = subprocess.run(
+                    [
+                        str(CTW), "journey", "extract",
+                        "--journey", str(JOURNEY_DEMO / "journey.json"),
+                        "--trip-id", trip_id,
+                        "--output-json", str(trip_path),
+                    ],
+                    text=True,
+                    capture_output=True,
+                )
+                self.assertEqual(0, extracted.returncode, extracted.stdout + extracted.stderr)
+                trip_paths.append(trip_path)
+
+            journey_path = output / "journey.json"
+            assemble_args = [str(CTW), "journey", "assemble", "--request", str(JOURNEY_DEMO / "request.json")]
+            for trip_path in trip_paths:
+                assemble_args += ["--trip", str(trip_path)]
+            assemble_args += [
+                "--fixed-clock", FIXED_NOW,
+                "--output-json", str(journey_path),
+            ]
+            assembled = subprocess.run(assemble_args, text=True, capture_output=True)
+            self.assertEqual(0, assembled.returncode, assembled.stdout + assembled.stderr)
+            self.assertIn("JOURNEY_ASSEMBLE_COMPLETE", assembled.stdout)
+            self.assertEqual(canonical_json(self.journey), canonical_json(load(journey_path)))
+
+            missing_path = output / "missing.json"
+            failed = subprocess.run(
+                [
+                    str(CTW), "journey", "extract",
+                    "--journey", str(JOURNEY_DEMO / "journey.json"),
+                    "--trip-id", "trip-does-not-exist",
+                    "--output-json", str(missing_path),
+                ],
+                text=True,
+                capture_output=True,
+            )
+            self.assertNotEqual(0, failed.returncode)
+            self.assertIn("JOURNEY_EXTRACT_FAILED", failed.stdout + failed.stderr)
+            self.assertFalse(missing_path.exists())
 
 
 if __name__ == "__main__":
