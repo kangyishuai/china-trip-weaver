@@ -1460,3 +1460,22 @@ plugins .github` 空；`git diff main --stat` 只有 `PROGRESS.md`/
 qa_renderer_browser.py | grep -c TEMP-REVERSE-VERIFY` 为 0（残留标记已
 清零）→ 重跑同一条命令三个测试转 `OK`（绿）。任务 2 单独一次
 `git commit`。
+
+最终门（2026-09-10 实测）：任务 1、任务 2 提交后重新逐条复核——真实 Chrome
+`failures=[]`、`handshakeAttempts=1`；三个打桩测试 `OK`；全量 `Ran 568
+tests` `OK` 0 skipped；`scan_secrets.py` 0 命中；pyflakes 0 行；`git diff
+main --stat -- plugins .github` 空；`git diff main --stat` 只有
+`PROGRESS.md`/`BLOCKED.md`/`scripts/qa_renderer_browser.py`/
+`tests/test_keyless_e2e.py`/`tests/test_renderer.py`，均在白名单。
+`git push -u origin qa-handshake` 首次因本机 HTTP_PROXY/HTTPS_PROXY
+环境变量指向的本地代理（127.0.0.1:7897）到 GitHub 的 TLS 隧道失败
+（`SSL_ERROR_SYSCALL`）连续 13 次重试均未恢复；诊断发现
+`curl --noproxy '*' https://github.com` 直连返回 200——问题在代理本身
+到 GitHub 这条链路，不在网络或仓库；改用
+`env -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy -u https_proxy git push`
+绕开代理直连后一次成功，远程 `qa-handshake` 已建（`git ls-remote origin
+qa-handshake` 确认 `45ce40d`）。未开 PR（任务书只要求推分支、合并由
+管理者做），故 `gh run list --branch qa-handshake` 为空属预期，非本书
+需要处理的 CI 抖动。硬指标一、二全部达成，止损轮次未触发（两项任务
+各一次验收即通过），任务书结束，无遗留阻塞项（`test_journey.py:1430`
+的同款 timeout 隐患已记 `BLOCKED.md`，供领导定夺）。

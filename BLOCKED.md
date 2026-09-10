@@ -773,3 +773,15 @@ china_trip_weaver/replan.py`）无歧义、按实际路径处理，不算待裁�
    第 1154 行附近那一处），未改动，只记录供领导定夺是否需要单独一本书
    把这个 `timeout=60` 也放宽（建议同样改成 150，与本书对
    `test_keyless_e2e.py` 的改法一致）。
+3. （环境笔记，非代码判断）`git push -u origin qa-handshake` 首次直接
+   执行时连续失败：本机 `HTTP_PROXY`/`HTTPS_PROXY` 指向的本地代理
+   （`127.0.0.1:7897`，进程本身在监听）到 `github.com:443` 的 TLS 隧道
+   报 `SSL_ERROR_SYSCALL`，13 次自动重试（4 分钟窗口）均未恢复；
+   `curl --noproxy '*' https://github.com` 直连返回 200，证明问题在代理
+   到 GitHub 这条链路本身，不在网络整体或仓库状态。改用
+   `env -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy -u https_proxy git
+   push ...` 绕开代理直连后一次成功。记录供以后任何需要 `git push`/
+   `gh` 访问 GitHub 的任务书参考：这台机器上遇到同款 `SSL_ERROR_SYSCALL`
+   时，先用 `curl --noproxy '*' https://github.com` 探一次直连，通的话
+   同样用 `env -u HTTP_PROXY -u HTTPS_PROXY ...` 绕开代理即可，不必假设
+   是网络整体故障。
