@@ -866,3 +866,28 @@ china_trip_weaver/replan.py`）无歧义、按实际路径处理，不算待裁�
 `_journey_trace_deadline`，实际主逻辑在 `journey_booking_checklist`）均已
 在撰写阶段自行发现并改正，未留待裁决项，详见 `PROGRESS.md` 本书任务 1/2
 小节的记录。
+
+## 书 S1：12306 站点跨城/后缀（2026-09-10，worktree `.tmp/wt-s1` 分支 `station-cross-city`）
+
+任务 1「后缀重试」，「我替领导拍的板」写的是「返回的 `query` 改为剥后缀后
+的名字」——按此实现后，实网 `ctw rail --to 武夷山市` 返回
+`contract_mismatch`，不是任务书基线记录的 `station_resolution_no_results`。
+排查发现 `providers/rail12306.py:270`（只读文件，不在本书「只允许改」
+白名单内）有一条既有硬校验：
+```python
+if query != request.parameters.get(parameter_name):
+    raise ContractMismatch("12306 station resolution query does not match the request")
+```
+`query` 必须逐字等于**原始请求参数**（`from_name`/`to_name`，即用户敲的
+「武夷山市」），不允许偏离——这是一条我不能碰、且验证下来是真实生产路径
+上会触发的硬约束，不是猜测分歧。任务书自己也把「query 改名」标成
+「（猜的）」，与此处的硬约束直接冲突。
+判断：功能目标是「武夷山市」能查到候选站（`legs=10`），不是「query 字段
+必须显示剥后缀后的名字」——后者只是任务书给的一种实现细节猜想。按目标
+优先，保留 `query` 为原始请求名（"武夷山市"），只让**候选站点列表**换成
+剥后缀重试后解析到的结果；不改 `rail12306.py`。已把
+`test_rail_station_fallback.py` 里新增的
+`test_suffixed_city_empty_after_three_layers_retries_stripped_name_and_resolves`
+断言同步改为 `query == "武夷山市"`（不是 "武夷山"）。改后实网
+`--to 武夷山市` 返回 `legs=10`（见 PROGRESS.md 本书任务 1 小节实测输出），
+硬指标一达成。

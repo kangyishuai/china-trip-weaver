@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any, Dict, List
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -14,7 +16,11 @@ from china_trip_weaver.clock import FixedClock
 from china_trip_weaver.contracts import ProviderRequest
 from china_trip_weaver.credentials import resolve_credentials
 from china_trip_weaver.providers.base import ProviderContext, ProviderEnvelope, ProviderNetworkError
-from china_trip_weaver.providers.mcp_stdio import EXPECTED_12306_TOOLS, RailMCPStdioTransport
+from china_trip_weaver.providers.mcp_stdio import (
+    EXPECTED_12306_TOOLS,
+    RailMCPStdioTransport,
+    _resolve_rail_stations,
+)
 from china_trip_weaver.providers.rail12306 import Rail12306Adapter
 from china_trip_weaver.station_distance import AMapStationDistanceEnricher
 
@@ -664,6 +670,138 @@ class RailStationFallbackTests(unittest.TestCase):
                 "get-stations-code-in-city",
             ],
             self._calls(diagnostics),
+        )
+
+
+class _StubStationClient:
+    """Fake 12306 client so the suffix-retry logic can be tested without a subprocess.
+
+    `_resolve_rail_stations`/its private helper only need an object with a
+    `call_tool(name, arguments)` method; they never construct `MCPStdioClient`
+    themselves. `tests/fixtures/` is off limits for this book, so these tests
+    exercise the resolver directly instead of adding a new fixture-server mode
+    (same approach as the direct `AMapStationDistanceEnricher.enrich()` calls
+    above).
+    """
+
+    def __init__(self, handler):
+        self.calls: List[Dict[str, Any]] = []
+        self._handler = handler
+
+    def call_tool(self, name, arguments):
+        self.calls.append({"name": name, "arguments": dict(arguments)})
+        return self._handler(name, dict(arguments))
+
+
+def _stub_tool_result(payload):
+    return {"isError": False, "content": [{"type": "text", "text": json.dumps(payload)}]}
+
+
+def _stub_station(code, name):
+    return {"station_code": code, "station_name": name}
+
+
+class RailStationSuffixRetryTests(unittest.TestCase):
+    """`_resolve_rail_stations` retries once with the administrative suffix stripped."""
+
+    def test_suffixed_city_empty_after_three_layers_retries_stripped_name_and_resolves(self):
+        def handler(name, arguments):
+            if name == "get-station-code-by-names":
+                if arguments["stationNames"] == "厦门|武夷山市":
+                    return _stub_tool_result({"厦门": _stub_station("XMX", "厦门")})
+                if arguments["stationNames"] == "武夷山":
+                    return _stub_tool_result({"武夷山": _stub_station("WYX", "武夷山")})
+            elif name == "get-station-code-of-citys" and arguments["citys"] == "武夷山市":
+                return _stub_tool_result({})
+            elif name == "get-stations-code-in-city" and arguments["city"] == "武夷山市":
+                return _stub_tool_result([])
+            raise AssertionError("unexpected tool call %s %r" % (name, arguments))
+
+        client = _StubStationClient(handler)
+        body: Dict[str, Any] = {"calls": []}
+        resolution = _resolve_rail_stations(client, body, "厦门", "武夷山市")
+
+        self.assertEqual("resolved", resolution["status"])
+        # The reported query stays the caller's original "武夷山市": it is
+        # checked verbatim against the request in rail12306.py's contract
+        # guard (`query != request.parameters.get(parameter_name)`), so only
+        # the candidates come from the stripped-name retry, not the label.
+        self.assertEqual("武夷山市", resolution["endpoints"]["to"]["query"])
+        self.assertEqual(
+            [{"station_code": "WYX", "station_name": "武夷山"}],
+            resolution["endpoints"]["to"]["candidates"],
+        )
+        self.assertEqual("厦门", resolution["endpoints"]["from"]["query"])
+        self.assertEqual(
+            [
+                "get-station-code-by-names",
+                "get-station-code-of-citys",
+                "get-stations-code-in-city",
+                "get-station-code-by-names",
+            ],
+            [call["name"] for call in client.calls],
+        )
+        self.assertEqual("武夷山", client.calls[3]["arguments"]["stationNames"])
+
+    def test_suffixed_city_still_empty_after_stripped_retry_is_no_results_with_six_calls(self):
+        def handler(name, arguments):
+            if name == "get-station-code-by-names":
+                if arguments["stationNames"] == "厦门|武夷山市":
+                    return _stub_tool_result({"厦门": _stub_station("XMX", "厦门")})
+                if arguments["stationNames"] == "武夷山":
+                    return _stub_tool_result({})
+            elif name == "get-station-code-of-citys" and arguments["citys"] in ("武夷山市", "武夷山"):
+                return _stub_tool_result({})
+            elif name == "get-stations-code-in-city" and arguments["city"] in ("武夷山市", "武夷山"):
+                return _stub_tool_result([])
+            raise AssertionError("unexpected tool call %s %r" % (name, arguments))
+
+        client = _StubStationClient(handler)
+        body: Dict[str, Any] = {"calls": []}
+        resolution = _resolve_rail_stations(client, body, "厦门", "武夷山市")
+
+        self.assertEqual("no_results", resolution["status"])
+        self.assertEqual((), tuple(resolution["endpoints"]["to"]["candidates"]))
+        self.assertEqual("武夷山市", resolution["endpoints"]["to"]["query"])
+        self.assertEqual(6, len(client.calls))
+        self.assertEqual(
+            [
+                "get-station-code-by-names",
+                "get-station-code-of-citys",
+                "get-stations-code-in-city",
+                "get-station-code-by-names",
+                "get-station-code-of-citys",
+                "get-stations-code-in-city",
+            ],
+            [call["name"] for call in client.calls],
+        )
+
+    def test_names_without_administrative_suffix_do_not_retry_and_keep_call_count(self):
+        def handler(name, arguments):
+            if name == "get-station-code-by-names" and arguments["stationNames"] == "未知甲地|未知乙地":
+                return _stub_tool_result({})
+            if name == "get-station-code-of-citys" and arguments["citys"] == "未知甲地|未知乙地":
+                return _stub_tool_result({})
+            if name == "get-stations-code-in-city" and arguments["city"] in ("未知甲地", "未知乙地"):
+                return _stub_tool_result([])
+            raise AssertionError("unexpected tool call %s %r" % (name, arguments))
+
+        client = _StubStationClient(handler)
+        body: Dict[str, Any] = {"calls": []}
+        resolution = _resolve_rail_stations(client, body, "未知甲地", "未知乙地")
+
+        self.assertEqual("no_results", resolution["status"])
+        self.assertEqual("未知甲地", resolution["endpoints"]["from"]["query"])
+        self.assertEqual("未知乙地", resolution["endpoints"]["to"]["query"])
+        self.assertEqual(4, len(client.calls))
+        self.assertEqual(
+            [
+                "get-station-code-by-names",
+                "get-station-code-of-citys",
+                "get-stations-code-in-city",
+                "get-stations-code-in-city",
+            ],
+            [call["name"] for call in client.calls],
         )
 
 

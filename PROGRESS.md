@@ -2002,3 +2002,83 @@ README.md README.zh-CN.md` 空输出；`/usr/bin/python3 -m unittest discover
 「无」条目（见上）。单独一次 `git commit`，随后 `git push -u origin
 rental-ferry-adr`。止损轮次未触发（任务 0/1/2 均一轮验收通过，未出现
 连败）。
+
+## 书 S1：12306 站点跨城/后缀（2026-09-10，worktree `.tmp/wt-s1` 分支 `station-cross-city`）
+
+任务 0（已完成）：HEAD `05f1056` 与任务书一致；`Ran 584 tests OK` 0
+skipped、`scan_secrets` 0、pyflakes 0 行，均吻合。`mcp_stdio.py:576-626`
+`_resolve_rail_stations` 三层逐行核对吻合；`station_distance.py` 的
+`_station_point`（154-200）、`_city_or_district_matches`（270-280）、
+`_unique_point`（331-333）、`enrich`（64-125）行号吻合；`amap_http.py:
+371-378` poi 分支 `city_limit` 写死 `"true"` 吻合；`test_amap_live.py:300`
+`["true"]` 断言吻合；`geo.py:31` `administrative_area_key` 存在，对纯中文
+地名（无空格标点）是可直接复用的「剥后缀后的名字」而不仅是比较键（NFKC+
+casefold 对中文字符是恒等操作）。credentials.env 有 AMAP Key，但两条实网
+命令留到任务交付前最后核对（避免中途改动源码期间浪费真实调用）。
+理解的目标：① 后缀重试——`_resolve_rail_stations` 三层全空且
+`administrative_area_key(name) != name` 时，把三层逻辑抽成可复用的
+`_resolve_station_candidates(client, body, endpoint_names)`，对仍空的端点用
+剥后缀名再跑一遍（只重试一次），`query` 字段同步改名；②
+邻市距离——`_station_point` 加 `city_limit`/`require_city_match`/
+`centre`+`max_distance_meters` 可选参数，第一遍同城找不到距离的候选，用
+`city_limit=false`+不判城市+80km 距离过滤+`_unique_point` 去重做第二遍；
+`amap_http.py` 的 `city_limit` 从写死改成可选参数（默认 `"true"`，只收
+`"true"/"false"`，不影响现有默认行为）。
+顺序：任务 1（后缀重试，独立、收益明确）→ 任务 2（邻市距离，依赖
+`amap_http.py` 的 `city_limit` 参数化，与任务 1 无代码交集）。
+最大风险：`tests/test_rail_station_fallback.py:359`（`station_city=
+"另一座城市"`，坐标仍在 100.0,20.0 附近 104m/1045m）与首层几何推算下，站
+名逐字相同、类目相同、距离远小于 80km，新逻辑下会实际获得距离——这条会
+真的变；但 `:425`（`test_unrelated_district_does_not_gain_a_distance`，
+研究城市「平潭」对上完全不相关的「厦门市/思明区」）在 `_city_centre` 这
+一步就因为城市/区都不匹配研究地名而拿不到 `centre`（`centre is None` →
+`continue`，根本不会进入第二遍站点匹配逻辑）——按当前设计这条测试的行为
+**不会**变，「拍的板」把它也列为「钉旧规则」大概率是估计，不是逐行验证；
+处理方式：按规范实现后，先跑全量测试用真实结果说话，只有它真的红了才去
+改，不为了「用满两条既有断言改写权限」而无意义地改一条其实不需要改的
+断言（`tests/fixtures/` 零改动的硬约束意味着新增测试必须绕开 MCP 子进程
+夹具，改用直接构造 `_resolve_rail_stations`/`enrich()` 的 stub client，
+docs-drift 书任务 3 已有同款先例）。
+
+任务 1（已完成）：`mcp_stdio.py` 的 `_resolve_rail_stations` 三层逻辑抽成
+`_resolve_station_candidates(client, body, endpoint_names)`（同样的三层
+调用，只是 `("from","to")` 硬编码换成 `tuple(endpoint_names)`，行为对原始
+两端点调用逐字等价）；`_resolve_rail_stations` 先跑一遍原名，对三层后仍
+0 候选、且 `administrative_area_key(name) != name` 的端点，用剥后缀名再跑
+一遍（只这一次，不递归）。新增 3 个 `def test_`（`RailStationSuffixRetryTests`，
+用不经 12306 fixture server 的 stub client 直接调 `_resolve_rail_stations`，
+因为 `tests/fixtures/` 零改动）：三层空后剥后缀重试并 resolved、剥后缀仍空
+→ no_results 且恰 6 次调用、无后缀不重试调用数不变（4 次，同
+`test_three_empty_station_layers...` 的形状）。
+连带发现并处理：初版按「我替领导拍的板」把 retry 成功后的
+`endpoints[endpoint]["query"]` 改写成剥后缀后的名字，实网
+`ctw rail --to 武夷山市` 返回 `contract_mismatch`——`providers/rail12306.py:270`
+（只读文件）有硬校验 `query != request.parameters.get(parameter_name)` 时
+`raise`，要求 `query` 逐字等于原始请求参数。判断：目标是「武夷山市」能查到
+候选站，不是「query 字段必须显示剥后缀后的名字」（后者任务书自己标了
+「猜的」）；改为保留 `query` 为原始请求名，只让候选站点换成剥后缀重试
+结果，不碰 `rail12306.py`。完整取舍与实网对照记在 `BLOCKED.md`。
+硬指标一实测（2026-09-10，改正 query 字段之后）：
+```
+$ plugins/china-trip-weaver/scripts/ctw rail --date 2026-09-20 --from 福州 --to 武夷山市 --output-json .tmp/s1-task1-real2.json
+RAIL_COMPLETE output=.tmp/s1-task1-real2.json legs=10 status=ready error=none
+```
+基线 `--to 武夷山`（无后缀，原本就能查到）同样 `legs=10 status=ready`，
+证明后缀重试不影响既有直接命中路径。
+反向验证（终端记录，在「改正 query 字段」之后的最终代码上重做）：临时把
+`retry_names` 的构建循环整体换成 `if False:` 死代码禁用重试 →
+`RailStationSuffixRetryTests` 3 个测试里 2 个红
+（`'resolved' != 'no_results'`、`6 != 3`，第三个「无后缀不重试」测试本就不
+依赖重试逻辑，符合预期地保持绿）→ 用同一份 Python 脚本按原字符串精确还原
+→ `grep -c TEMP-REVERSE-VERIFY` 为 0（残留标记清零）→ 全量
+`Ran 587 tests` `OK` 0 skipped（584 基线 + 3 个新 `def test_`）。
+`scripts/scan_secrets.py` 0 命中；pyflakes（src+tests+scripts）0 行。
+`git diff main --stat` 会额外带出 `journey.py`/`test_journey.py`/
+`journey.html`——这是并行的「F1 预订清单按开售日」书已直接提交到 main
+（`7fc10f3`/`4809bb8`/`cccb5e4`，任务书本身允许的并行），不是我的改动；
+改用分叉点 `git diff 05f1056 --stat` 核对，只有 `BLOCKED.md`/`PROGRESS.md`/
+`mcp_stdio.py`/`tests/test_rail_station_fallback.py` 四个文件，
+`git diff 05f1056 -- tests | grep -E '^-\s*def test_'` 0 行，
+`git diff 05f1056 --stat -- tests/fixtures plugins/china-trip-weaver/schema
+'*/rail12306.py' '*/planning.py' '*/mobility.py'` 空输出——均在白名单内、
+零越界。单独一次 `git commit`（任务 1 单独提交，SHA 见下）。
