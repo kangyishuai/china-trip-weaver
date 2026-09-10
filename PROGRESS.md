@@ -2,23 +2,39 @@
 
 唯一的当前进度记录。2026-09-03 到 09-06 的逐轮任务书、实测证据、验收记录已归档，见「历史索引」。
 
-## 现状速览（2026-09-10 实测，0.10.0）
+## 现状速览（2026-09-10 实测，0.11.0）
 
-- 版本：`0.10.0`，唯一来源是
+- 版本：`0.11.0`，唯一来源是
   `plugins/china-trip-weaver/.codex-plugin/plugin.json` 与
   `src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
   位置一律引用这两处之一，历史版本只以日期提及、不写字面值。
-- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 565 tests`，`OK`，0 skipped；数字以
-  本节下方「0.10.0 终验」为准；`scripts/scan_secrets.py` 0 命中；
+- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 584 tests`，`OK`，0 skipped；
+  `scripts/scan_secrets.py` 0 命中；
   `~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src
-  tests scripts` 0 行。
-- 0.10.0（第三波三份并行书）：Journey 页新增 `day-timeline`、
-  `priority-actions`、`transport-overview` 三个分区，接口地址（如
-  `restapi.amap.com`）不再渲染成链接（验证器 E106/JH106），
-  `scripts/qa_renderer_browser.py` 加 `--sections`；AnySearch 改成真实的
-  MCP JSON-RPC 合同（传输层 `providers/anysearch_http.py`、Markdown 解析、
-  7 份夹具重建，`ctw research` 命令与 doctor 探针是下一本书）；
-  `ctw candidates import` 批量导入，全部通过才落盘。
+  tests scripts` 0 行。带假 Key（`ANYSEARCH_API_KEY=... unittest`）跑全量同样
+  584 OK，README 的 demo 重生成在有无 Key 两种环境下都零差异。
+- 0.11.0（第四波两份并行书 + 管理者合并修正）：`ctw research --city CITY
+  --query TEXT [--max-results N] [--fixture FILE] [--fixed-clock ISO]
+  --output-json OUT`，信封与退出码同 `ctw rail`（有结果 0、空结果或 Key
+  missing 2、其他 1），无 Key 时不构造 HTTP 传输层、进度流零网络事件；
+  `ctw doctor --probe` 的 anysearch 报 `credential` + `probe` 两层（探针用
+  `get_sub_domains`，传输层加 `tool` 参数，新增 `probe_success`/`probe_401`
+  两份夹具，夹具总数 78）；research Skill 第二档与两份 README 改为现状。
+  浏览器 QA `scripts/qa_renderer_browser.py` 首条 CDP 握手等 30 秒
+  （`--handshake-timeout`），超时则关掉 Chrome 重启一次再试，结果 JSON 报
+  `handshakeAttempts`，`validate_report` 检查项一字未动；三处调用它的测试
+  子进程 timeout 60→150。合并时管理者修正一处：`plan_trip`/`plan_journey`
+  的 anysearch 健康行改为显式入参 `anysearch_configured`（默认 False），
+  `ctw plan`/`ctw journey plan` 只在非 `--offline-fixture` 时读凭据——D2
+  原实现在 planning.py 里直接读机器凭据，配置了 Key 的机器上
+  `test_provider_health_and_business_calls_match_candidate_contract` 会红、
+  demo 重生成会漂移；`tests/test_anysearch.py` 的 `AnySearchPlanHealthTests`
+  4 项锁住这一点。
+- 0.10.0（第三波）：Journey 页 `day-timeline`、`priority-actions`、
+  `transport-overview` 三个分区，接口地址不再渲染成链接（E106/JH106），
+  QA 脚本 `--sections`；AnySearch 真实 MCP JSON-RPC 合同（传输层
+  `providers/anysearch_http.py`、Markdown 解析、夹具重建）；`ctw candidates
+  import` 批量导入，全部通过才落盘。
 - 0.9.0：`ctw replan --rail-result`（ADR-0015）与 `ctw journey assemble
   --replace-trip`；火车票原地刷新链路：`ctw rail --output-json` →
   `ctw journey extract` → `ctw replan --event refresh.json --rail-result` →
@@ -30,11 +46,13 @@
 - 并行惯例：一波里只有一份书在主检出 `main` 直改，其余各在 `.tmp/wt-<名>`
   的 worktree 分支上干、只推分支，合并与冲突（PROGRESS/BLOCKED 末尾追加）
   由管理者解决；worktree 里不跑 `install_local_plugin.sh`。发版只推具体
-  标签名，不用 `git push --tags`。
-- 已知抖动：GitHub 的 Python 3.9 矩阵在 2026-09-10 两次出现
-  `qa_renderer_browser.py` 起无头 Chrome 时首条 CDP 命令 `Target.createTarget`
-  10 秒超时（`test_keyless_html_opens_offline_with_no_remote_requests`），
-  `gh run rerun --failed` 即绿；下一波单独加固握手超时与一次重启。
+  标签名，不用 `git push --tags`。本机若 `git push` 报 `SSL_ERROR_SYSCALL`，
+  先 `curl --noproxy '*' https://github.com` 探直连，通就用
+  `env -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy -u https_proxy git push`。
+- 已知抖动：2026-09-10 GitHub CI 共四次在 `qa_renderer_browser.py` 起无头
+  Chrome 时首条 CDP 命令 `Target.createTarget` 10 秒超时（3.9 两次；0.10.0
+  发版提交 3.9 与 3.13 同时；D2 任务 3 提交 3.13 一次），`gh run rerun
+  --failed` 即绿。0.11.0 起握手等 30 秒并重启一次，之后再出现请记在这里。
 - 本机 Codex 与源码的差距：以 `bash scripts/install_local_plugin.sh --check`
   实时输出为准；`ctw doctor` 的 `runtime_root` 是缓存所在目录，可随时删除。
 
