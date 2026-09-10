@@ -411,6 +411,13 @@ tests/fixtures` 空（一字未改）。硬指标一、硬指标二（除已记�
 `SKILL.md` 一处例外）均达成。BLOCKED.md 本轮追加一条判断记录（书
 「ctw replan --rail-result」任务 2），无其他待裁决项。
 
+任务 1（`4216c59`）、任务 2（`f2b0f34`）各一次 `git commit` 后
+`git push origin main`；`gh run list --limit 3` 三条全 `success`
+（`f2b0f34` 对应 run `34454031335`，1m4s；此前两条 `7fc66ec`/
+`c208ba0`+`f27989b` 一线也都是 `success`）。任务书结束，硬指标一、
+硬指标二全部达成（硬指标二的 `SKILL.md` 例外已在 BLOCKED.md 完整记录取
+舍与证据），无遗留阻塞项，止损轮次未触发（1 轮验收即全绿，未连败）。
+
 ## 本轮记录（2026-09-10，`replan` 支持 `refresh` 事件；main 直改，三书并行之一）
 
 任务 0 核对（HEAD `c9c9c15`）：507 测试 OK 0 skip、`scan_secrets` 0、
