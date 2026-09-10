@@ -256,6 +256,17 @@ def _add_journey_parser(commands: Any) -> None:
     journey_extract.add_argument("--journey", type=Path, required=True)
     journey_extract.add_argument("--trip-id", required=True)
     journey_extract.add_argument("--output-json", type=Path, required=True)
+    journey_assemble = journey_commands.add_parser(
+        "assemble", help="assemble complete standalone Trips into one validated Journey",
+    )
+    journey_assemble.add_argument("--request", type=Path, required=True)
+    journey_assemble.add_argument(
+        "--trip", type=Path, action="append", required=True, dest="trips",
+        help="path to a complete standalone Trip JSON document; repeat for every segment",
+    )
+    journey_assemble.add_argument("--expected-segment-days", type=int, default=None)
+    journey_assemble.add_argument("--fixed-clock", default=None)
+    journey_assemble.add_argument("--output-json", type=Path, required=True)
 
 
 def _add_replan_parser(commands: Any) -> None:
@@ -644,6 +655,8 @@ def _cmd_journey(args: argparse.Namespace, progress: "_NDJSONProgress") -> int:
         return _cmd_journey_validate_html(args)
     if args.journey_command == "extract":
         return _cmd_journey_extract(args)
+    if args.journey_command == "assemble":
+        return _cmd_journey_assemble(args)
     return _cmd_journey_plan(args, progress)
 
 
@@ -739,6 +752,40 @@ def _cmd_journey_extract(args: argparse.Namespace) -> int:
         return 0
     except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
         print("JOURNEY_EXTRACT_FAILED %s" % exc, file=sys.stderr)
+        return 1
+
+
+def _cmd_journey_assemble(args: argparse.Namespace) -> int:
+    import hashlib
+
+    from .clock import FixedClock, SystemClock
+    from .journey import assemble_journey_from_trips
+
+    try:
+        request_value = read_json(args.request)
+        trips_value = [read_json(path) for path in args.trips]
+        clock = FixedClock.from_iso(args.fixed_clock) if args.fixed_clock else SystemClock()
+        journey = assemble_journey_from_trips(
+            trips_value,
+            request_value,
+            clock,
+            expected_segment_days=args.expected_segment_days,
+        )
+        args.output_json.parent.mkdir(parents=True, exist_ok=True)
+        write_canonical_json(args.output_json, journey)
+        trip_days = [len(item["days"]) for item in journey["trips"]]
+        print(
+            "JOURNEY_ASSEMBLE_COMPLETE json=%s trips=%d days=%d journey_sha256=%s errors=0"
+            % (
+                args.output_json,
+                len(trip_days),
+                sum(trip_days),
+                hashlib.sha256(canonical_json(journey).encode("utf-8")).hexdigest(),
+            )
+        )
+        return 0
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        print("JOURNEY_ASSEMBLE_FAILED %s" % exc, file=sys.stderr)
         return 1
 
 

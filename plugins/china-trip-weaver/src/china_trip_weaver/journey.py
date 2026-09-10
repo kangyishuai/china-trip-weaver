@@ -1370,13 +1370,14 @@ def _segment_connections(
                     "to_trip_id": right["trip_id"],
                 }))
             leg = min(candidates, key=lambda item: (item["depart_at"], item["leg_id"]))
+            right_ledger = right.get("budget_ledger")
             budget_item = next(
                 (
-                    item for item in right["budget_ledger"]["items"]
+                    item for item in right_ledger["items"]
                     if item["ref_id"] == leg["leg_id"]
                 ),
                 None,
-            )
+            ) if isinstance(right_ledger, Mapping) else None
             transport = {
                 "status": "included_in_next_trip",
                 "leg_id": leg["leg_id"],
@@ -1403,6 +1404,71 @@ def _segment_connections(
             "cross_segment_transport": transport,
         })
     return tuple(connections)
+
+
+def _assembled_lodging_links(
+    trips: Sequence[Mapping[str, Any]],
+) -> Tuple[Mapping[str, Any], ...]:
+    """Derive lodging continuity for already-complete standalone Trips.
+
+    Unlike _bridge_segment_lodgings, this never extends a checkout or
+    materializes a new stay from a candidate pool: the preceding Trip must
+    already own a selected lodging that covers its own final overnight, or
+    this raises the same structured NO_STAY_FOR_NIGHT error rather than
+    guessing a fix.
+    """
+
+    links: List[Mapping[str, Any]] = []
+    for index in range(len(trips) - 1):
+        left = trips[index]
+        right = trips[index + 1]
+        overnight = left["request"]["end_date"]
+        next_start = right["request"]["start_date"]
+        final_city = left["days"][-1]["city"]
+        eligible = [
+            (lodging["check_out"], lodging_index)
+            for lodging_index, lodging in enumerate(left["lodgings"])
+            if lodging["city"] == final_city
+            and lodging["check_in"] <= overnight < lodging["check_out"]
+        ]
+        if not eligible:
+            raise ValueError(
+                "Journey continuity failed: "
+                + canonical_json(_no_stay_conflict(overnight, final_city, left["lodgings"]))
+            )
+        _, lodging_index = max(eligible)
+        outgoing = left["lodgings"][lodging_index]
+        incoming = min(
+            (
+                item for item in right["lodgings"]
+                if item["check_in"] == next_start
+            ),
+            key=lambda item: (item["check_out"], item["lodging_id"]),
+            default=None,
+        )
+        outgoing_ref = outgoing.get("candidate_ref") or outgoing["lodging_id"]
+        incoming_ref = (
+            incoming.get("candidate_ref") or incoming["lodging_id"]
+            if incoming is not None
+            else None
+        )
+        if incoming is None:
+            status = "departing"
+            reason = "the following Trip ends without another overnight stay"
+        elif incoming_ref == outgoing_ref:
+            status = "continued"
+            reason = "the same selected lodging candidate continues across the Trip boundary"
+        else:
+            status = "changed"
+            reason = "the preceding lodging covers the boundary night before the next stay begins"
+        links.append({
+            "status": status,
+            "overnight_date": overnight,
+            "from_lodging_id": outgoing["lodging_id"],
+            "to_lodging_id": incoming["lodging_id"] if incoming is not None else None,
+            "reason": reason,
+        })
+    return tuple(links)
 
 
 def assemble_journey(
@@ -1492,6 +1558,36 @@ def extract_trip_from_journey(
         if trip["trip_id"] == trip_id:
             return copy.deepcopy(dict(trip))
     raise ValueError("Journey does not contain Trip %s" % trip_id)
+
+
+def assemble_journey_from_trips(
+    trips: Sequence[Mapping[str, Any]],
+    request: Mapping[str, Any],
+    clock: Clock,
+    expected_segment_days: Optional[int] = None,
+) -> Mapping[str, Any]:
+    """Assemble complete standalone Trips into one validated Journey.
+
+    Every continuity fact (lodging handoff, cross-segment transport) is
+    derived only from what each Trip already contains; no lodging is
+    extended or materialized, so a Trip whose selected lodging does not
+    already cover its own final overnight is a structural error rather than
+    something this function guesses a fix for.
+    """
+
+    if not trips:
+        raise ValueError("Journey requires at least one complete Trip")
+    normalized_request = _normalize_journey_request(request)
+    ordered_trips = sorted(trips, key=lambda item: item["request"]["start_date"])
+    lodging_links = _assembled_lodging_links(ordered_trips)
+    connections = _segment_connections(ordered_trips, lodging_links)
+    return assemble_journey(
+        ordered_trips,
+        normalized_request,
+        connections,
+        clock,
+        expected_segment_days=expected_segment_days,
+    )
 
 
 def journey_budget_ledger(

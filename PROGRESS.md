@@ -325,3 +325,43 @@ fix-names` 会把它们列为人工项。
   `.tmp/t{1,2,3}.json`，`ctw validate` 三份均打 `VALID`；未知 trip-id 打
   `JOURNEY_EXTRACT_FAILED Journey does not contain Trip
   trip-does-not-exist`，exit 1，`.tmp/bad.json` 未生成。
+- 任务 2（assemble）：新函数 `assemble_journey_from_trips(trips, request,
+  clock, expected_segment_days=None)`——按 `request["start_date"]` 排序 Trip
+  （原文用 `request`，这里等价于按 `trip["request"]["start_date"]` 排序）后
+  依次调用三步：① 新写的 `_assembled_lodging_links`（`_bridge_segment_
+  lodgings` 第二段循环的只读版：左段末日城市里找自己 `lodgings` 中
+  `check_in <= overnight < check_out` 的已选住宿当 `outgoing`，右段按
+  `check_in == next_start` 找 `incoming`，比 `candidate_ref` 得
+  continued/changed/departing；找不到 `outgoing` 时用
+  `_no_stay_conflict(overnight, final_city, left["lodgings"])` 抛结构化
+  `ValueError`——`_no_stay_conflict` 本身就是通用的"候选池找不到覆盖某夜的
+  住宿"诊断，改传 Trip 自己的 `lodgings` 当"候选池"完全适配，不用另造错误
+  形状）；② 复用（未复制）改过的 `_segment_connections`——唯一改动是
+  `right["budget_ledger"]["items"]` 硬取改成 `right.get("budget_ledger")` +
+  `isinstance` 判断，账本缺失时 `budget_item=None` 从而
+  `price_type`/`amount_min_cny`/`amount_max_cny` 均为 `None`，这个改动对
+  `plan_journey` 现有调用方零影响（原来的 Trip 一定有账本）；③ 复用未改的
+  `assemble_journey` 做最终组装与校验。刻意不在入口手写"相邻日期必须首尾
+  相接"检查——`assemble_journey` 结尾必然调用的 `validate_journey` 已经
+  穷尽性覆盖 `J_DATE_GAP`/`J_DATE_OVERLAP`/`J_LODGING_*`/`J_TRANSPORT_*`
+  20+ 种断裂，重复手写是造轮子；任务书要求的反向验证也证实了这一点，命中
+  的正是这条已有校验。CLI `ctw journey assemble --request R --trip T1
+  [--trip T2 ...] [--expected-segment-days N] [--fixed-clock ISO]
+  --output-json J.json`，`--trip` 用 `action="append"` 支持重复。验收
+  （往返一致）：`ctw journey assemble --request demo/journey-16d/request.json
+  --trip .tmp/t1.json --trip .tmp/t2.json --trip .tmp/t3.json --fixed-clock
+  2026-09-05T09:00:00+08:00 --output-json .tmp/j.json` 后
+  `ctw canonicalize .tmp/j.json` 与 `ctw canonicalize
+  demo/journey-16d/journey.json` 的输出 `cmp` 无差异（`journey_sha256` 与
+  demo 原文一致）。反向验证：把 t2 第一晚（Hangzhou，check_in
+  2026-10-06）改成 2026-10-07 → `JOURNEY_ASSEMBLE_FAILED Journey validation
+  failed: J_LODGING_HANDOFF /segment_connections/0/lodging_continuity/
+  to_lodging_id the following multi-day Trip must name its first selected
+  stay`，exit 1，`.tmp/j-broken.json` 未生成 → 还原 t2 → 重新 assemble →
+  cmp 再次无差异。额外手测（非任务书要求，为任务 3 的账本缺失场景探路）：
+  从 t2 删掉 `budget_ledger` 并同步删除指向 `/budget_ledger/` 的
+  `unknowns`（否则 `validate_trip` 报 `J_TRIP_V_UNKNOWN_PATH`——纯删
+  `budget_ledger` 键会留下指向它的 unknown 指针，这不是"缺账本 Trip"的正确
+  构造方式，必须两者一起删）——assemble 后连接 0 的
+  `cross_segment_transport` 三个价格字段均为 `None`，`ctw journey validate`
+  打 `VALID`。
