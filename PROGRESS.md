@@ -1573,4 +1573,20 @@ skipped（≥573 达标）；secrets 0；pyflakes 0 行；`git status --short`
 '*/credentials.py' '*/render/*'` 空。三个任务各一次独立 `git commit`
 直接提交 main，止损轮次未触发（每项验收均一次通过，未出现连败）。
 BLOCKED.md 本轮追加两条判断记录（`test_providers.py`、`test_skills.py`
-的隐藏依赖），均按既有先例处理、不阻塞交付。任务书结束，无遗留阻塞项。
+的隐藏依赖），均按既有先例处理、不阻塞交付。
+
+`git push` 后 `gh run list --limit 3` 首次显示任务 3 提交（`f92b51b`）
+`completed failure`：Python 3.13 矩阵（这次不是以往记录里的 3.9）在
+`test_journey.py:test_checked_in_sixteen_day_demo_passes_offline_browser_qa`
+与 `test_keyless_e2e.py:test_keyless_html_opens_offline_with_no_remote_
+requests` 两处 `TimeoutError: CDP pipe read timed out`（`qa_renderer_
+browser.py:214` 的 `Target.createTarget` 起无头 Chrome 超时）——与本书
+改动的文件（cli.py/planning.py/anysearch_http.py/两份 README/SKILL.md/
+三个测试文件）均无交集，是「已知抖动」小节记录过的同一模式（这次矩阵换了
+一侧）。`gh run rerun 34481265869 --failed` 后转 `success`。随后又发现
+PROGRESS.md 里把 `anysearch_http.py:68` 误写成 `transport.py:68`（本节
+「任务 0 核对」小段），补一次独立提交（`ab38b47`，纯文档，不改任何
+硬指标相关文件）改正后重新触发的 push CI 同样 `success`。`gh run list
+--limit 3` 终态三条全 `success`。任务书结束，无遗留阻塞项，止损轮次未
+触发（每项验收一次通过，两次 CI 波动均按任务书明文允许的「Chrome 握手
+超时可 rerun 一次」处理，非代码回归）。
