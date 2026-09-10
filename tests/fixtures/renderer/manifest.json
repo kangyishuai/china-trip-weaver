@@ -1,6 +1,6 @@
 {
   "counts": {
-    "html": 11,
+    "html": 12,
     "trip": 9
   },
   "files": [
@@ -11,6 +11,10 @@
     {
       "path": "html/csp-loosened.json",
       "sha256": "7e52be3f76193860c52698a8ed1aca9b81c044cbe47caf00367bc70e34ef0e44"
+    },
+    {
+      "path": "html/interface-endpoint-link.json",
+      "sha256": "bf14cf25c45657c9586e64fa3792bd9a7192b542f3b92c7240f82a298d93e9de"
     },
     {
       "path": "html/invented-train-price-facts.json",

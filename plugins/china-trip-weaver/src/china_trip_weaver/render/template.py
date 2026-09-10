@@ -15,6 +15,11 @@ from ..contracts import canonical_json
 RENDERER_VERSION = "1"
 CSP = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'none'; font-src data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
 FORBIDDEN_QUERY_KEYS = frozenset(("key", "api_key", "apikey", "token", "access_token", "secret", "password", "authorization"))
+# Bare provider API endpoints that return nothing useful when opened directly
+# in a browser; a claim sourced from one of these is shown as a provider
+# label instead of a dead link. This never changes the claim's stored
+# source_url, only how the renderer presents it.
+INTERFACE_HOSTS = frozenset(("restapi.amap.com", "api.anysearch.com"))
 
 
 @lru_cache(maxsize=1)
@@ -44,6 +49,13 @@ def safe_https_url(value: str) -> str:
 def external_link(url: str, label: str) -> str:
     safe = safe_https_url(url)
     return '<a href="%s" rel="noopener noreferrer">%s</a>' % (attr(safe), text(label))
+
+
+def claim_source_html(source_url: str, provider_label: str, link_label: str) -> str:
+    """Render a claim's source as a link, unless it is a bare interface endpoint."""
+    if urlsplit(source_url).hostname in INTERFACE_HOSTS:
+        return text(provider_label)
+    return external_link(source_url, link_label)
 
 
 def dom_id(prefix: str, value: str) -> str:

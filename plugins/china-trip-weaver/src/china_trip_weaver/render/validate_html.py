@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 
 from ..contracts import canonical_json
 from ..credentials import SUPPORTED_KEY_NAMES
-from .template import CSP, FORBIDDEN_QUERY_KEYS
+from .template import CSP, FORBIDDEN_QUERY_KEYS, INTERFACE_HOSTS
 
 
 REQUIRED_SECTIONS = frozenset((
@@ -301,6 +301,8 @@ def validate_html(html_text: str, trip: Mapping[str, Any]) -> HTMLValidationRepo
         rel = set(attrs.get("rel", "").split())
         if not {"noopener", "noreferrer"}.issubset(rel):
             add("E105", "external link is missing noopener/noreferrer")
+        if parsed.hostname in INTERFACE_HOSTS:
+            add("E106", "raw interface endpoint rendered as a clickable link")
     if "</script" in (trip_scripts[0]["content"].lower() if trip_scripts else ""):
         add("E103", "embedded JSON can close the script element")
 

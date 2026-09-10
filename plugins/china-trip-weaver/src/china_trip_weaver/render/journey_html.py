@@ -18,7 +18,7 @@ from .html import (
     _number,
     _provider_label,
 )
-from .template import CSP, RENDERER_VERSION, attr, embedded_json, external_link, renderer_css, text
+from .template import CSP, RENDERER_VERSION, attr, claim_source_html, embedded_json, external_link, renderer_css, text
 
 
 JOURNEY_READABILITY_CSS = """
@@ -684,7 +684,7 @@ def _source_link(
 ) -> str:
     claim = _claim_for_item(journey, item)
     if claim is not None:
-        return '<p>%s</p>' % external_link(claim["source_url"], labels["open_source"])
+        return '<p>%s</p>' % claim_source_html(claim["source_url"], _provider_label(labels, claim["provider"]), labels["open_source"])
     entity = _entity_for_item(journey, item)
     if item["kind"] == "transport" and entity and entity.get("booking_url"):
         return '<p>%s</p>' % external_link(entity["booking_url"], labels["open_booking"])

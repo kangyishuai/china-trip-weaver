@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 from ..contracts import canonical_json
 from ..journey import journey_booking_checklist, journey_risk_items
 from .journey_html import JOURNEY_SECTIONS
-from .template import CSP, FORBIDDEN_QUERY_KEYS
+from .template import CSP, FORBIDDEN_QUERY_KEYS, INTERFACE_HOSTS
 from .validate_html import (
     AuditParser,
     DISALLOWED_TAGS,
@@ -347,6 +347,8 @@ def _shared_document_issues(
         rel = set(attrs.get("rel", "").split())
         if not {"noopener", "noreferrer"}.issubset(rel):
             add("JH105", "external link is missing noopener/noreferrer")
+        if parsed.hostname in INTERFACE_HOSTS:
+            add("JH106", "raw interface endpoint rendered as a clickable link")
 
     for pattern in SECRET_PATTERNS:
         if pattern.search(html_text):

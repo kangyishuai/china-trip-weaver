@@ -69,6 +69,12 @@ def build_html_mutations() -> List[Mapping[str, Any]]:
         html_fixture("remote-script", "</body>", '<script src="https://example.invalid/x.js"></script></body>', ["E101"]),
         html_fixture("trip-data-mismatch", '\"travelers\":2', '\"travelers\":3', ["E002"]),
         html_fixture("missing-link-rel", 'rel="noopener noreferrer"', 'rel=""', ["E105"]),
+        html_fixture(
+            "interface-endpoint-link",
+            'href="https://uri.amap.com/navigation"',
+            'href="https://restapi.amap.com/v3/geocode/geo"',
+            ["E106"],
+        ),
         html_fixture("schematic-label-removed", ' data-schematic-label="true"', "", ["E203"]),
         html_fixture("transaction-form", "</main>", '<form><button>立即购买</button></form></main>', ["E101", "E204"]),
         html_fixture("viewport-removed", '<meta name="viewport" content="width=device-width, initial-scale=1">', "", ["E001"]),

@@ -1310,6 +1310,34 @@ class JourneyContinuityTests(unittest.TestCase):
         codes = {item.code for item in validate_journey_html(mutated, journey).errors}
         self.assertIn("JH205", codes)
 
+    def test_journey_html_rejects_a_raw_interface_endpoint_link(self):
+        journey = self.result.journey
+        rendered = render_journey(journey)
+        mutated = re.sub(
+            r'href="https://[^"]+"',
+            'href="https://restapi.amap.com/v3/geocode/geo"',
+            rendered,
+            count=1,
+        )
+        self.assertNotEqual(rendered, mutated)
+        codes = {item.code for item in validate_journey_html(mutated, journey).errors}
+        self.assertIn("JH106", codes)
+
+    def test_journey_source_link_shows_a_provider_label_for_a_bare_interface_endpoint(self):
+        from china_trip_weaver.render.journey_html import _journey_labels, _provider_label, _source_link
+        from china_trip_weaver.render.template import text
+
+        journey = copy.deepcopy(self.result.journey)
+        claim = journey["trips"][0]["claims"][0]
+        claim["source_url"] = "https://restapi.amap.com/v3/geocode/geo?address=x"
+        labels = _journey_labels(journey["trips"][0]["request"]["locale"])
+        item = {"trip_index": 0, "claim_id": claim["claim_id"]}
+
+        html = _source_link(journey, item, labels)
+
+        self.assertNotIn("restapi.amap.com", html)
+        self.assertEqual('<p>%s</p>' % text(_provider_label(labels, claim["provider"])), html)
+
     def test_cli_renders_and_validates_the_journey_overview(self):
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
             output = Path(temporary)

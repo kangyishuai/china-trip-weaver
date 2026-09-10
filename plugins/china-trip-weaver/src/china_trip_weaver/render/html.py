@@ -6,7 +6,7 @@ import re
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
 from ..validate_trip import validate_trip
-from .template import CSP, RENDERER_VERSION, attr, dom_id, embedded_json, external_link, renderer_css, text
+from .template import CSP, RENDERER_VERSION, attr, claim_source_html, dom_id, embedded_json, external_link, renderer_css, text
 
 
 class RendererError(ValueError):
@@ -533,28 +533,33 @@ def _lodging_section(
     return _section("lodging-summary", labels["lodging"], "".join(cards) or _empty(labels), "panel")
 
 
+def _render_day_slots(day: Mapping[str, Any], claims: Mapping[str, Any], labels: Mapping[str, str]) -> str:
+    """Render one day's slot timeline as ``<li>`` items; shared with the Journey day-timeline."""
+    slots = []
+    for slot in day["slots"]:
+        lock = '<span class="lock-badge" data-locked="true">%s</span>' % text(labels["locked"]) if slot["locked"] else ""
+        state = {"scheduled": "selected", "tentative": "alternative", "skipped": "skipped", "unknown": "unknown"}[slot["status"]]
+        slots.append(
+            '<li class="timeline-item" data-slot-id="%s" data-ref-id="%s" data-slot-kind="%s" data-slot-status="%s" '
+            'data-start-at="%s" data-end-at="%s">'
+            '<span class="slot-time"><time datetime="%s">%s</time>–<time datetime="%s">%s</time></span>'
+            '<h3>%s</h3><div class="badge-row"><span class="status-badge" data-kind="%s">%s</span>%s%s</div>%s</li>' % (
+                attr(slot["slot_id"]), attr(slot["ref_id"] or ""), attr(slot["kind"]), attr(slot["status"]),
+                attr(slot["start_at"]), attr(slot["end_at"]),
+                attr(slot["start_at"]), _clock(slot["start_at"]), attr(slot["end_at"]), _clock(slot["end_at"]),
+                text(slot["title"]), attr(slot["kind"]), text(_enum_label(labels, "kind", slot["kind"])),
+                _selection_badge(state, labels), lock, _claim_links(slot["claim_ids"], claims, labels),
+            )
+        )
+    return "".join(slots) or '<li class="empty-state">%s</li>' % text(labels["none"])
+
+
 def _days_section(trip: Mapping[str, Any], claims: Mapping[str, Any], labels: Mapping[str, str]) -> str:
     days = []
     for index, day in enumerate(trip["days"]):
-        slots = []
-        for slot in day["slots"]:
-            lock = '<span class="lock-badge" data-locked="true">%s</span>' % text(labels["locked"]) if slot["locked"] else ""
-            state = {"scheduled": "selected", "tentative": "alternative", "skipped": "skipped", "unknown": "unknown"}[slot["status"]]
-            slots.append(
-                '<li class="timeline-item" data-slot-id="%s" data-ref-id="%s" data-slot-kind="%s" data-slot-status="%s" '
-                'data-start-at="%s" data-end-at="%s">'
-                '<span class="slot-time"><time datetime="%s">%s</time>–<time datetime="%s">%s</time></span>'
-                '<h3>%s</h3><div class="badge-row"><span class="status-badge" data-kind="%s">%s</span>%s%s</div>%s</li>' % (
-                    attr(slot["slot_id"]), attr(slot["ref_id"] or ""), attr(slot["kind"]), attr(slot["status"]),
-                    attr(slot["start_at"]), attr(slot["end_at"]),
-                    attr(slot["start_at"]), _clock(slot["start_at"]), attr(slot["end_at"]), _clock(slot["end_at"]),
-                    text(slot["title"]), attr(slot["kind"]), text(_enum_label(labels, "kind", slot["kind"])),
-                    _selection_badge(state, labels), lock, _claim_links(slot["claim_ids"], claims, labels),
-                )
-            )
         body = '<article class="day-block" id="%s" data-day-id="%s"><h3>%s · %s · %s</h3><ol class="timeline">%s</ol></article>' % (
             dom_id("day", day["day_id"]), attr(day["day_id"]), text(labels["day_label"] % (index + 1)), text(day["date"]), text(day["city"]),
-            "".join(slots) or '<li class="empty-state">%s</li>' % text(labels["none"]),
+            _render_day_slots(day, claims, labels),
         )
         days.append(body)
     return _section("days", labels["days"], "".join(days), "panel panel-wide")
@@ -671,7 +676,7 @@ def _evidence_section(trip: Mapping[str, Any], names: Mapping[str, str], labels:
                 text(_reference_name(claim["subject_ref"], names, labels)), text(_field_label(claim["field_path"], labels)),
                 text(labels["queried"]), _time(claim["queried_at"]), text(labels["confidence"]), int(round(claim["confidence"] * 100)),
                 text(labels["mode"]), text(_enum_label(labels, "mode", claim["mode"])),
-                external_link(claim["source_url"], labels["source"]),
+                claim_source_html(claim["source_url"], _provider_label(labels, claim["provider"]), labels["source"]),
             )
         )
     return _section("evidence", labels["evidence"], "".join(items) or _empty(labels), "panel panel-wide")

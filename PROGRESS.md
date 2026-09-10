@@ -768,3 +768,60 @@ pyflakes 0 行、`git diff main --stat -- plugins/china-trip-weaver/schema
 demo` 与 `git diff 7fc66ec --stat`（分支真实分出点）均为空。`git push -u
 origin journey-replace` 成功（远端已建 `journey-replace` 分支）。硬指标
 一、二均达标，BLOCKED.md 随本次提交带一条非空白裁决记录，任务书结束。
+
+## 书「Journey 逐日时间轴」任务 0：核对通过（2026-09-10，main 直改）
+
+任务书列出的所有事实核对：全量 534 测试 OK 0 skipped、secrets 0（369
+文件）、pyflakes 0 行、JOURNEY_SECTIONS 12 个分区（journey_html.py:157）、
+demo/journey-16d/journey.html 0 个 slot 元素、`_days_section` 在
+html.py:536、README.md:134 提到 demo 5，`git grep -c 'restapi.amap.com'
+-- demo` 现为 0（"40 条链接"是真实行程渲染页的事实，不在仓库演示夹具
+里）——与任务书描述逐字相符，无出入，BLOCKED.md 不新增记录。
+理解的目标：Journey 页加三个新分区（逐日时间轴/优先事项/跨城交通）+ 接口
+地址不再可点击；顺序按任务书 1→2→3。最大风险：day_id 在不同 Trip 间重复
+（已用 trip_id 组合再哈希规避 DOM id 冲突）；html.py 抽取共享槽位渲染函数
+必须字节不变（已用 4 个 Trip demo 的 render_trip() 结果与已提交 .html 逐
+字节对比，全部一致，写入 .tmp/pre_change_baseline.json 作回归基线，事后
+复核用）；journey.json 必须字节不变（只改 render 层，不碰 plan_journey/
+schema）。
+
+## 书「Journey 逐日时间轴」任务 1：接口地址不再渲染成链接（2026-09-10，完成）
+
+`template.py` 新增 `INTERFACE_HOSTS`（`restapi.amap.com`、`api.anysearch.com`）
+与 `claim_source_html(source_url, provider_label, link_label)`：主机在清单内
+只输出 `text(provider_label)`，不改 `claim["source_url"]` 本身、不改
+adapter。两处唯一的 claim 来源渲染点——`html.py:_evidence_section`、
+`journey_html.py:_source_link`——都改用它，传入
+`_provider_label(labels, claim["provider"])`。两个验证器各加一行：
+`validate_html.py`/`validate_journey_html.py` 现有 `for attrs in
+parser.links` 循环里加 `if parsed.hostname in INTERFACE_HOSTS: add("E106"/
+"JH106", ...)`，对所有渲染出的 href 生效（不止 claim 来源），多一层防线。
+
+新增 5 个测试（534→539）：`build_renderer_fixtures.py` 的
+`build_html_mutations()` 加一条 `interface-endpoint-link`（把
+weekend-live.json 渲染页里唯一一处 `href="https://uri.amap.com/navigation"`
+换成 restapi.amap.com，期望 `["E106"]`），自动变成
+`test_html_adversarial_interface_endpoint_link`，`test_renderer_fixture_manifest`
+的 html 计数同步改 11→12；`test_renderer.py` 加
+`test_claim_source_html_shows_a_provider_label_for_bare_interface_hosts`（直
+测共享函数）与 `test_a_claim_from_a_bare_interface_endpoint_shows_a_provider_
+label_not_a_dead_link`（改 weekend-live.json 第一条 claim 的 source_url 后
+render_trip，定位到该 claim 自己的 evidence 卡片，断言卡片内无
+restapi.amap.com、有正确的"官方网站"标签，且 validate_html 仍 ok）；
+`test_journey.py` 加 `test_journey_html_rejects_a_raw_interface_endpoint_link`
+（JH106 反向验证）与 `test_journey_source_link_shows_a_provider_label_for_
+a_bare_interface_endpoint`（直测 `_source_link`）。
+
+验收：`/usr/bin/python3 scripts/build_renderer_fixtures.py` 后
+`git status --short -- demo` 空输出（journey-16d 的 journey.json/journey.html
+均未变——demo 里现有 claim 的 source_url 主机本来就不含
+restapi.amap.com/api.anysearch.com，任务书给的"40 条链接"是真实行程渲染页
+的事实，不在仓库夹具里）；`git grep -c 'restapi.amap.com' -- demo` 无输出
+（0 命中，exit 1）。反向验证：取 weekend-live.json 渲染页里唯一的
+`href="https://uri.amap.com/navigation"`，替换成
+`href="https://restapi.amap.com/x"` 喂给 `validate_html` → `codes:
+['E106']`；取 journey-16d 渲染页第一个 href 同样替换后喂给
+`validate_journey_html` → `codes: ['JH106']`。全量
+`/usr/bin/python3 -m unittest discover -s tests` → `Ran 539 tests` `OK` 0
+skipped；`scan_secrets.py` 0 命中（370 文件）；pyflakes（src tests scripts）
+0 行。单独一次 `git commit`。

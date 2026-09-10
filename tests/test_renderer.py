@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -17,6 +18,7 @@ sys.path.insert(0, str(SRC))
 
 from china_trip_weaver.credentials import SUPPORTED_KEY_NAMES
 from china_trip_weaver.render import RendererError, render_trip, safe_output_name, validate_html
+from china_trip_weaver.render.template import claim_source_html, dom_id
 from china_trip_weaver.render.validate_html import AuditParser
 from china_trip_weaver.validate_trip import validate_trip
 
@@ -150,7 +152,7 @@ class RendererTests(unittest.TestCase):
 
     def test_renderer_fixture_manifest(self):
         manifest = load(FIXTURES / "manifest.json")
-        self.assertEqual({"trip": 9, "html": 11}, manifest["counts"])
+        self.assertEqual({"trip": 9, "html": 12}, manifest["counts"])
         for entry in manifest["files"]:
             data = (FIXTURES / entry["path"]).read_bytes()
             self.assertEqual(entry["sha256"], hashlib.sha256(data).hexdigest(), entry["path"])
@@ -247,6 +249,31 @@ class RendererTests(unittest.TestCase):
                 injected = rendered.replace("</footer>", "<p>%s = ctw-render-canary</p></footer>" % name, 1)
                 codes = {item.code for item in validate_html(injected, trip).errors}
                 self.assertIn("E104", codes)
+
+    def test_claim_source_html_shows_a_provider_label_for_bare_interface_hosts(self):
+        self.assertEqual(
+            '<a href="https://www.shanghai.gov.cn/" rel="noopener noreferrer">查看来源</a>',
+            claim_source_html("https://www.shanghai.gov.cn/", "官方网站", "查看来源"),
+        )
+        self.assertEqual("高德地图", claim_source_html("https://restapi.amap.com/v3/geocode/geo", "高德地图", "查看来源"))
+        self.assertEqual("AnySearch", claim_source_html("https://api.anysearch.com/mcp", "AnySearch", "查看来源"))
+
+    def test_a_claim_from_a_bare_interface_endpoint_shows_a_provider_label_not_a_dead_link(self):
+        trip = load(VALID / "weekend-live.json")
+        claim = trip["claims"][0]
+        claim["source_url"] = "https://restapi.amap.com/v3/geocode/geo?address=%E5%A4%96%E6%BB%A9"
+        self.assertTrue(validate_trip(trip).ok)
+
+        rendered = render_trip(trip)
+
+        card = re.search(
+            r'<details class="entity-card evidence-card" id="%s".*?</details>' % re.escape(dom_id("claim", claim["claim_id"])),
+            rendered,
+            re.DOTALL,
+        ).group(0)
+        self.assertNotIn("restapi.amap.com", card)
+        self.assertIn("官方网站", card)
+        self.assertTrue(validate_html(rendered, trip).ok)
 
 
 def _make_trip_test(path: Path):
