@@ -1390,7 +1390,7 @@ candidates-import` 成功（远端已建 `candidates-import` 分支，PR 未开�
 
 任务 0 核对（HEAD `df5712e`）：565 测试 OK 0 skip、secrets 0、pyflakes 0，
 均与任务书吻合；逐条核实 `anysearch_http.py` 工具名写死 `search`
-（transport.py:68）、适配器用 `parameters["city"]`（anysearch.py:50）、
+（anysearch_http.py:68）、适配器用 `parameters["city"]`（anysearch.py:50）、
 `test_anysearch.py` 用 `RecordingOpener`、7 份夹具、`_doctor_probe_report`
 里 anysearch 只报 credential、`_probe_flyai`/`_probe_layers`/
 `_not_run_probe`/`_add_rail_parser`/`_cmd_rail` 样板、planning.py:2481
