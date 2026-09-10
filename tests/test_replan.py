@@ -112,6 +112,78 @@ def run_invalid_cli_event(testcase: unittest.TestCase, event):
         return command
 
 
+def _refresh_service(**overrides) -> dict:
+    service = {
+        "leg_id": "leg-rail-live-g1001",
+        "travel_mode": "rail",
+        "data_mode": "live",
+        "from_ref": "place-beijing-live",
+        "to_ref": "place-shanghai-live",
+        "depart_at": "2026-10-16T08:00:00+08:00",
+        "arrive_at": "2026-10-16T12:00:00+08:00",
+        "duration_minutes": 240,
+        "provider": "12306-mcp",
+        "service_number": "G1001",
+        "price": {
+            "amount": 553, "currency": "CNY", "price_type": "live", "unit": "per_person",
+            "includes_taxes": True, "queried_at": "2026-09-10T00:00:00+08:00", "claim_id": "claim-refresh-price",
+        },
+        "booking_url": "https://kyfw.12306.cn/otn/leftTicket/init?date=2026-10-16",
+        "claim_ids": ["claim-refresh-depart", "claim-refresh-price"],
+        "locked": False,
+    }
+    service.update(overrides)
+    return service
+
+
+def _refresh_claims(leg_id: str, depart_claim_id: str, price_claim_id: str) -> list:
+    return [
+        {
+            "claim_id": depart_claim_id, "subject_ref": leg_id, "field_path": "/depart_at",
+            "value": {"planning": "synthetic rail claim for tests"},
+            "source_url": "https://kyfw.12306.cn/otn/leftTicket/init?date=2026-10-16", "provider": "12306-mcp",
+            "queried_at": "2026-09-10T00:00:00+08:00", "status": "verified", "confidence": 0.95, "mode": "live",
+            "as_of": "2026-09-10T00:00:00+08:00", "raw_ref": None, "response_hash": None, "json_path": "/start_time",
+        },
+        {
+            "claim_id": price_claim_id, "subject_ref": leg_id, "field_path": "/price",
+            "value": {"amount": 553, "currency": "CNY"},
+            "source_url": "https://kyfw.12306.cn/otn/leftTicket/init?date=2026-10-16", "provider": "12306-mcp",
+            "queried_at": "2026-09-10T00:00:00+08:00", "status": "verified", "confidence": 0.95, "mode": "live",
+            "as_of": "2026-09-10T00:00:00+08:00", "raw_ref": None, "response_hash": None, "json_path": "/prices",
+        },
+    ]
+
+
+def _refresh_rail_result(legs=None, claims=None) -> dict:
+    services = legs if legs is not None else [_refresh_service()]
+    return {
+        "provider": "12306-mcp",
+        "provider_version": "0.3.10",
+        "queried_at": "2026-09-10T00:00:00+08:00",
+        "transport_legs": services,
+        "claims": claims if claims is not None else _refresh_claims("leg-rail-live-g1001", "claim-refresh-depart", "claim-refresh-price"),
+        "health": {
+            "provider": "12306-mcp", "version": "0.3.10", "mode": "live", "status": "ready",
+            "checked_at": "2026-09-10T00:00:00+08:00", "capabilities": ["rail"], "reason": "contract probe passed",
+        },
+        "warnings": [],
+        "error_class": None,
+    }
+
+
+def _refresh_event(**overrides) -> dict:
+    event = {
+        "type": "refresh",
+        "subject_ref": "leg-rail-fallback-6d95c810b44d",
+        "service_number": "G1001",
+        "reason": "12306 real-time service located",
+        "reverify_claim_ids": [],
+    }
+    event.update(overrides)
+    return event
+
+
 class ReplanTests(unittest.TestCase):
     def test_revision_conflict_fails_without_rebase(self):
         base = load(ROOT / "tests/fixtures/trips/schema/valid/weekend-live.json")
@@ -318,6 +390,121 @@ class ReplanTests(unittest.TestCase):
         html_report = validate_html(html, result.trip)
         self.assertTrue(html_report.ok, [issue.render() for issue in html_report.errors])
         self.assertIn(leg["service_number"], html)
+
+    def test_refresh_no_same_day_service_fails(self):
+        base = load(ROOT / "demo/trip.json")
+        rail_result = _refresh_rail_result(legs=[_refresh_service(
+            depart_at="2026-10-17T08:00:00+08:00", arrive_at="2026-10-17T12:00:00+08:00",
+        )])
+        with self.assertRaises(ReplanError) as raised:
+            replan_trip(
+                base, _refresh_event(service_number=None), base_revision=base["revision"]["number"],
+                user_locked_refs=[], clock=FixedClock.from_iso("2026-10-15T12:00:00+08:00"), rail_result=rail_result,
+            )
+        self.assertEqual("refresh_no_service", raised.exception.code)
+
+    def test_refresh_requested_service_number_not_found_fails(self):
+        base = load(ROOT / "demo/trip.json")
+        with self.assertRaises(ReplanError) as raised:
+            replan_trip(
+                base, _refresh_event(service_number="G9999"), base_revision=base["revision"]["number"],
+                user_locked_refs=[], clock=FixedClock.from_iso("2026-10-15T12:00:00+08:00"),
+                rail_result=_refresh_rail_result(),
+            )
+        self.assertEqual("refresh_service_not_found", raised.exception.code)
+
+    def test_refresh_cross_day_arrival_unsupported(self):
+        base = load(ROOT / "demo/trip.json")
+        rail_result = _refresh_rail_result(legs=[_refresh_service(arrive_at="2026-10-17T00:30:00+08:00")])
+        with self.assertRaises(ReplanError) as raised:
+            replan_trip(
+                base, _refresh_event(), base_revision=base["revision"]["number"],
+                user_locked_refs=[], clock=FixedClock.from_iso("2026-10-15T12:00:00+08:00"), rail_result=rail_result,
+            )
+        self.assertEqual("refresh_unsupported", raised.exception.code)
+
+    def test_refresh_locked_leg_rejected(self):
+        base = load(ROOT / "demo/trip.json")
+        for leg in base["transport_legs"]:
+            if leg["leg_id"] == "leg-rail-fallback-6d95c810b44d":
+                leg["locked"] = True
+        for day in base["days"]:
+            for slot in day["slots"]:
+                if slot.get("ref_id") == "leg-rail-fallback-6d95c810b44d":
+                    slot["locked"] = True
+        with self.assertRaises(ReplanError) as raised:
+            replan_trip(
+                base, _refresh_event(), base_revision=base["revision"]["number"],
+                user_locked_refs=[], clock=FixedClock.from_iso("2026-10-15T12:00:00+08:00"),
+                rail_result=_refresh_rail_result(),
+            )
+        self.assertEqual("locked_ref", raised.exception.code)
+
+    def test_refresh_requires_rail_result(self):
+        base = load(ROOT / "demo/trip.json")
+        with self.assertRaises(ReplanError) as raised:
+            replan_trip(
+                base, _refresh_event(), base_revision=base["revision"]["number"],
+                user_locked_refs=[], clock=FixedClock.from_iso("2026-10-15T12:00:00+08:00"), rail_result=None,
+            )
+        self.assertEqual("refresh_result_required", raised.exception.code)
+
+    def test_refresh_rejects_non_rail_subject(self):
+        base = load(ROOT / "demo/trip.json")
+        with self.assertRaises(ReplanError) as raised:
+            replan_trip(
+                base, _refresh_event(subject_ref="poi-bjs-bund", service_number=None),
+                base_revision=base["revision"]["number"], user_locked_refs=[],
+                clock=FixedClock.from_iso("2026-10-15T12:00:00+08:00"), rail_result=_refresh_rail_result(),
+            )
+        self.assertEqual("refresh_not_rail", raised.exception.code)
+
+    def test_refresh_rejects_overlap_with_previous_slot(self):
+        base = load(ROOT / "demo/trip.json")
+        service = _refresh_service(
+            leg_id="leg-rail-live-g2002", service_number="G2002",
+            depart_at="2026-10-18T14:30:00+08:00", arrive_at="2026-10-18T18:30:00+08:00",
+            claim_ids=["claim-refresh-depart-2", "claim-refresh-price-2"],
+        )
+        rail_result = _refresh_rail_result(
+            legs=[service],
+            claims=_refresh_claims("leg-rail-live-g2002", "claim-refresh-depart-2", "claim-refresh-price-2"),
+        )
+        with self.assertRaises(ReplanError) as raised:
+            replan_trip(
+                base,
+                _refresh_event(subject_ref="leg-rail-fallback-e67d77f564f5", service_number="G2002"),
+                base_revision=base["revision"]["number"], user_locked_refs=[],
+                clock=FixedClock.from_iso("2026-10-15T12:00:00+08:00"), rail_result=rail_result,
+            )
+        self.assertEqual("refresh_overlap", raised.exception.code)
+
+    def test_refresh_later_arrival_shifts_subsequent_same_day_slots(self):
+        base = load(ROOT / "demo/trip.json")
+        service = _refresh_service(arrive_at="2026-10-16T13:10:00+08:00", duration_minutes=310)
+        result = replan_trip(
+            base, _refresh_event(), base_revision=base["revision"]["number"],
+            user_locked_refs=[], clock=FixedClock.from_iso("2026-10-15T12:00:00+08:00"),
+            rail_result=_refresh_rail_result(legs=[service]),
+        )
+        slots = result.trip["days"][0]["slots"]
+        self.assertEqual("2026-10-16T13:10:00+08:00", slots[0]["end_at"])
+        self.assertEqual("2026-10-16T13:10:00+08:00", slots[1]["start_at"])
+        self.assertEqual("2026-10-16T14:10:00+08:00", slots[1]["end_at"])
+        for index in range(2, len(base["days"][0]["slots"])):
+            original = base["days"][0]["slots"][index]
+            shifted = slots[index]
+            self.assertEqual(
+                (_shift(original["start_at"], 10), _shift(original["end_at"], 10)),
+                (shifted["start_at"], shifted["end_at"]),
+            )
+
+
+def _shift(value: str, minutes: int) -> str:
+    from datetime import datetime, timedelta
+
+    parsed = datetime.fromisoformat(value)
+    return (parsed + timedelta(minutes=minutes)).isoformat(timespec="seconds")
 
 
 def _make_replan(path: Path):

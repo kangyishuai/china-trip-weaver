@@ -329,11 +329,37 @@ fixtures_run_through_cli_and_render` 从 glob 改成显式 4 个 CLI 已支持
 必要改动，四个既有断言力度未变（仍要求恰好 4 个、逐个跑通 CLI+渲染+
 `validate_trip`）。
 
-任务 1 门（2026-09-10 实测，任务 2 与最终门见本节后续提交的追加段落）：
-`/usr/bin/python3 -m unittest discover -s tests` → `Ran 509 tests` `OK`
-0 skipped（507 基线 + `test_replan_refresh` + `test_replan_refresh_
-resolves_to_live_service`）；硬指标一（demo/trip.json 一条深链腿经
-refresh 后 provider=12306-mcp、service_number 非空、两条 unknown 消失、
-`validate_trip`/`validate_html` 全过、补丁可回放）由这两个测试共同覆盖，
-均通过；既有 4 个金样字节不变。任务 2（负向测试与反向验证）与全量最终门
-紧接着在下一次提交完成。
+任务 1 门（2026-09-10 实测）：`/usr/bin/python3 -m unittest discover -s
+tests` → `Ran 509 tests` `OK` 0 skipped（507 基线 + `test_replan_refresh`
++ `test_replan_refresh_resolves_to_live_service`）；硬指标一（demo/
+trip.json 一条深链腿经 refresh 后 provider=12306-mcp、service_number
+非空、两条 unknown 消失、`validate_trip`/`validate_html` 全过、补丁可
+回放）由这两个测试共同覆盖，均通过；既有 4 个金样字节不变。单独一次
+`git commit` 提交（`c208ba0`）。
+
+任务 2：新增 8 个测试，覆盖必测 5 项（`refresh_no_same_day_service_
+fails`/`refresh_requested_service_number_not_found_fails`/`refresh_
+cross_day_arrival_unsupported`/`refresh_locked_leg_rejected`/`refresh_
+requires_rail_result`）+ 3 项补充（`refresh_rejects_non_rail_subject`/
+`refresh_rejects_overlap_with_previous_slot`/`refresh_later_arrival_
+shifts_subsequent_same_day_slots`，覆盖 `refresh_not_rail`/`refresh_
+overlap`/顺延机制本身；最后一项不经 `run_replan_fixture`、不断言
+`validate_trip`，因为如上"最大风险"所述，任何晚到都会把首个午餐槽顶出
+其零余量 `opening_windows`，与 refresh 逻辑正确性无关，只断言操作产生的
+槽位时间本身）。反向验证两次，终端记录：①临时把"删 unknown"的两行改成
+`pass` → `test_replan_refresh`/`_resolves_to_live_service` 均
+`AssertionError: 31 != 17` → 还原 → 两测试转 `ok`；②临时把 `_TRIGGER_BY_
+EVENT_TYPE["refresh"]` 改成 `"delay"` → 两测试均
+`AssertionError: 'provider_change' != 'delay'` → 还原 → 转 `ok`；两次均
+额外用 `git diff c9c9c15 -- plugins/.../replan.py | grep -c TEMP-REVERSE`
+确认改动已完整撤回（0 行残留）。
+
+最终门（2026-09-10 实测）：`/usr/bin/python3 -m unittest discover -s tests`
+→ `Ran 517 tests` `OK` 0 skipped；`scan_secrets.py` 0 命中；
+`~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/
+src` 0 行输出；`git status --short` 只有本轮改的文件；`git diff c9c9c15
+--stat -- plugins ':!*replan.py'` 空；`git diff c9c9c15 -- tests | grep -E
+'^-\s*def test_'` 0 行；既有 4 个金样（`closure`/`weather`/`delay`/`user-
+delete.json`）单独 `git diff c9c9c15 --stat` 为空，一字未改。任务 1、任务 2
+各一次 `git commit` 直接提交 main（任务 1 为 `c208ba0`，任务 2 见本次提交
+自身）。BLOCKED.md 本轮无新增待裁决条目。

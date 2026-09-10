@@ -486,3 +486,15 @@ grep 模式 `/Users/[a-zA-Z]+|/home/[a-zA-Z]+` 只找字面量 `/Users/`、`/hom
 处重复的 `repo_root = Path(__file__).resolve().parents[4]` 合并成
 `_repo_root()`——已采纳并执行，不算待裁决，取舍记录见 `PROGRESS.md` 本轮
 小节。
+
+## 书：`replan` 支持 `refresh` 事件（2026-09-10，无）
+
+本轮（main 直改，三书并行之一）没有遇到需要停下来问人、必须跳过的越界或
+含糊之处。唯一的事实出入（任务书把 `replan.py` 路径写成
+`src/china_trip_weaver/replan.py`，实际是 `plugins/china-trip-weaver/src/
+china_trip_weaver/replan.py`）无歧义、按实际路径处理，不算待裁决。若干任务
+书未点名的实现细节（`refresh_not_rail` 错误码命名、`provider_health`
+`reason` 文案自撰、顶层 `mode` 只上调不下调、日程槽位 `claim_ids` 同步、
+旧 claim 不删、CLI 循环测试从 glob 改显式名单）均按自身判断处理并记录取舍
+理由，见 `PROGRESS.md` 本轮小节，均不影响硬指标或既有断言力度，不算待
+裁决。
