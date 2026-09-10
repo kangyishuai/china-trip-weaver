@@ -365,3 +365,32 @@ fix-names` 会把它们列为人工项。
   构造方式，必须两者一起删）——assemble 后连接 0 的
   `cross_segment_transport` 三个价格字段均为 `None`，`ctw journey validate`
   打 `VALID`。
+- 任务 3（测试收口）：`tests/test_journey.py` 新增 `JourneyExtractAssembleTests`
+  类，6 个 `def test_`（任务书要求至少 5 个）：
+  `test_extract_returns_each_trip_as_an_independently_valid_standalone_document`
+  （extract 成功，三段各自 `validate_trip` 通过）、
+  `test_extract_unknown_trip_id_is_a_structured_error`（extract 未知
+  id）、`test_extract_then_assemble_round_trips_the_checked_in_demo_byte_for_byte`
+  （往返一致，Python API 层面用 `canonical_json` 比对，等价于任务书要求的
+  CLI `cmp`）、`test_a_boundary_lodging_gap_between_extracted_trips_is_a_structured_j_error`
+  （断裂报错，复用任务 2 验收里已证实会命中 `J_LODGING_HANDOFF` 的同一个
+  变异——把 t2 第一晚住宿 check_in 改晚一天——断言异常消息含 `"J_"`）、
+  `test_assemble_tolerates_a_trip_without_a_budget_ledger`（缺账本 Trip 可
+  拼，断言连接价格三字段为 `None` 且 `validate_journey` 通过）；第 6 个
+  `test_cli_journey_extract_and_assemble_round_trip_the_checked_in_demo` 是
+  任务书未强制要求的额外补充，走真实 `ctw` 子进程（而不是直接调 Python
+  函数）把 extract→assemble 全链路过一遍，顺带验证 CLI 层"失败不写文件"
+  （对未知 trip-id 断言 `missing_path.exists()` 为 `False`）——这一层任务
+  2/3 的纯 Python 测试都覆盖不到，因为 `write_canonical_json` 调用点在
+  `cli.py` 里，不在 `journey.py` 的函数体内。`from china_trip_weaver.journey
+  import (...)` 顶层导入块按字母序插入 `assemble_journey_from_trips`、
+  `extract_trip_from_journey`；新增 `from china_trip_weaver.contracts import
+  canonical_json`。反向验证：`git stash push -u -m
+  "wt-a2-reverse-verify-journeypy" -- .../journey.py`（只挪 journey.py，
+  未触碰 cli.py/tests，遵循环境提示"禁止裸 stash"的要求，用 tag 定位、
+  `apply` 不用 `pop`）→ `python -m unittest tests.test_journey` 整个模块
+  `ImportError: cannot import name 'assemble_journey_from_trips'`（顶层
+  import 失败会让全文件 51 个测试一起报错，不止新增的 6 个，属于比"新测试
+  红"更强的证据）→ `git stash apply <sha>` 恢复 → 重跑
+  `Ran 51 tests ... OK` → `git stash drop <sha>` 清理，`git stash list`
+  确认为空。全量 `Ran 513 tests`（507 + 新增 6）`OK` 0 skipped。

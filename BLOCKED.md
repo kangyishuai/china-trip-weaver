@@ -486,3 +486,13 @@ grep 模式 `/Users/[a-zA-Z]+|/home/[a-zA-Z]+` 只找字面量 `/Users/`、`/hom
 处重复的 `repo_root = Path(__file__).resolve().parents[4]` 合并成
 `_repo_root()`——已采纳并执行，不算待裁决，取舍记录见 `PROGRESS.md` 本轮
 小节。
+
+## 书 A2：journey extract/assemble（2026-09-10，分支 journey-assemble）
+
+无。任务书自身已经替可能有分歧的两点拍板（拼装只认左段自己已选的边界夜住
+宿、缺账本 Trip 照拼不补账本），任务 0 核对的现状与任务书描述完全一致
+（唯一偏差是 `expected_segment_days` 实际嵌套在
+`journey["segmentation"]["expected_segment_days"]` 而非顶层，只是任务书写
+得粗略，不影响验收，已在 `PROGRESS.md` 任务 0 小节记录），三个任务与两条
+硬指标均一次性达标，过程中没有遇到需要向管理者请示的越界、含糊或验收口径
+冲突。
