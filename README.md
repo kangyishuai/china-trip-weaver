@@ -186,6 +186,7 @@ ctw journey plan --request REQUEST.json --candidates CANDIDATES.json [--expected
 ctw journey validate JOURNEY.json
 ctw journey render JOURNEY.json --output JOURNEY.html
 ctw journey validate-html JOURNEY.html JOURNEY.json
+ctw journey extract --journey JOURNEY.json --trip-id TRIP_ID --output-json TRIP.json
 ```
 
 The runtime uses no third-party Python package. Trip and Journey renderers refuse invalid input; both HTML validators block structural, CSP, remote-resource, unsafe-link, secret, fact-mapping, traceability, and transaction-action violations.

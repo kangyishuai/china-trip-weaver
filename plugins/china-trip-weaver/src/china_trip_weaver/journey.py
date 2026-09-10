@@ -1482,6 +1482,18 @@ def assemble_journey(
     return journey
 
 
+def extract_trip_from_journey(
+    journey: Mapping[str, Any],
+    trip_id: str,
+) -> Mapping[str, Any]:
+    """Return one embedded Trip as a standalone canonical Trip document."""
+
+    for trip in journey["trips"]:
+        if trip["trip_id"] == trip_id:
+            return copy.deepcopy(dict(trip))
+    raise ValueError("Journey does not contain Trip %s" % trip_id)
+
+
 def journey_budget_ledger(
     trips: Sequence[Mapping[str, Any]],
     segment_connections: Sequence[Mapping[str, Any]],

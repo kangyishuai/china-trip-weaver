@@ -250,6 +250,12 @@ def _add_journey_parser(commands: Any) -> None:
     )
     journey_validate_html.add_argument("html", type=Path)
     journey_validate_html.add_argument("journey", type=Path)
+    journey_extract = journey_commands.add_parser(
+        "extract", help="pull one embedded Trip out of a Journey as a standalone document",
+    )
+    journey_extract.add_argument("--journey", type=Path, required=True)
+    journey_extract.add_argument("--trip-id", required=True)
+    journey_extract.add_argument("--output-json", type=Path, required=True)
 
 
 def _add_replan_parser(commands: Any) -> None:
@@ -636,6 +642,8 @@ def _cmd_journey(args: argparse.Namespace, progress: "_NDJSONProgress") -> int:
         return _cmd_journey_render(args)
     if args.journey_command == "validate-html":
         return _cmd_journey_validate_html(args)
+    if args.journey_command == "extract":
+        return _cmd_journey_extract(args)
     return _cmd_journey_plan(args, progress)
 
 
@@ -717,6 +725,21 @@ def _cmd_journey_validate_html(args: argparse.Namespace) -> int:
         file=sys.stderr,
     )
     return 1
+
+
+def _cmd_journey_extract(args: argparse.Namespace) -> int:
+    from .journey import extract_trip_from_journey
+
+    try:
+        journey_value = read_json(args.journey)
+        trip = extract_trip_from_journey(journey_value, args.trip_id)
+        args.output_json.parent.mkdir(parents=True, exist_ok=True)
+        write_canonical_json(args.output_json, trip)
+        print("JOURNEY_EXTRACT_COMPLETE json=%s trip_id=%s" % (args.output_json, args.trip_id))
+        return 0
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        print("JOURNEY_EXTRACT_FAILED %s" % exc, file=sys.stderr)
+        return 1
 
 
 def _cmd_journey_plan(args: argparse.Namespace, progress: "_NDJSONProgress") -> int:

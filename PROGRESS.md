@@ -278,3 +278,50 @@ fix-names` 会把它们列为人工项。
   `git stash push tests/test_plugin_conflicts.py` 复现污染（`nonexistent-
   ctw-home/` 重新出现）→ `git stash pop` 恢复 → 全量 `Ran 507 tests` `OK`，
   `nonexistent-ctw-home` 不再出现。
+
+## 书 A2：journey extract/assemble（2026-09-10，分支 journey-assemble）
+
+本书在 `.tmp/wt-a2`（分支 `journey-assemble`）里干，只推分支不合并，界限见
+任务书「界限」节。与并行的书 B（`docs-drift`）、书 A1（main 直接改
+`replan.py`）地界不重叠。
+
+- 任务 0 核对：HEAD `c9c9c15` 与任务书一致；全量 `Ran 507 tests` `OK` 0
+  skipped，`scan_secrets.py` 0 命中，均与任务书数字吻合。`journey.py` 行号
+  核对：`_bridge_segment_lodgings` 1181、`_ensure_boundary_lodging` 1283、
+  `_segment_connections` 1339、`assemble_journey` 1408，与任务书完全一致。
+  「两份 README」实指根目录 `README.md`+`README.zh-CN.md`（没有
+  `plugins/china-trip-weaver/README.md` 这个文件）。`_segment_connections`
+  硬取 `right["budget_ledger"]["items"]`：Trip 缺账本会 `KeyError`，属实——
+  但 `journey_budget_ledger`（1485）与 `_validate_connection`（2160，读
+  `right.get("budget_ledger")` 后判断 `isinstance`）都已经对缺账本 Trip 容
+  错，全仓库只有 `_segment_connections` 这一处没有容错，这是「账本缺失时价
+  格字段置 None」唯一需要动的地方。README 第 134 行段落（journey-16d 固定
+  时钟/revision）逐字核对通过；`expected_segment_days` 实际嵌套在
+  `journey["segmentation"]["expected_segment_days"]` 而非顶层字段，但值确
+  为 `null`，与任务书表述一致（只是路径写得粗略）。
+- 理解的目标：给 `journey.py` 加两个只读的新函数——
+  `extract_trip_from_journey`（从 Journey 按 `trip_id` 取子 Trip，deepcopy
+  后返回，找不到就 `ValueError`，不碰任何既有函数）与
+  `assemble_journey_from_trips`（按 `start_date` 排序 Trip，住宿连接从 Trip
+  自身 `lodgings` 直接判定「是否已覆盖边界夜」，交通连接复用改过的
+  `_segment_connections`），CLI 各包一层 `journey extract`/`journey
+  assemble` 子命令，不改任何既有子命令的行为。
+- 顺序：Task 0 核对 → Task 1 extract → Task 2 assemble → Task 3 补测试，与
+  任务书顺序一致——assemble 的验收（往返 `cmp`）依赖 extract 先能跑。
+- 最大风险：`assemble_journey` 结尾本来就会调用 `validate_journey` 做穷尽
+  性校验（`J_DATE_GAP`/`J_LODGING_STATUS`/`J_TRANSPORT_*` 等 20+ 种结构化
+  错误），所以「相邻段日期必须首尾相接」这类断裂检查不需要在 assemble 入口
+  重复手写，可以直接依赖这个既有校验兜底；核对下来这个判断成立（任务 2 的
+  反向验证——把住宿 check_in 改晚一天——命中的正是 `validate_journey` 里的
+  `J_LODGING_HANDOFF`，不是我自己写的检查）。真正必须手写的断裂只有一处：
+  左段自己找不到覆盖边界夜的已选住宿时，没有下游校验能替我发现，只能在
+  `assemble_journey_from_trips` 自己的住宿匹配循环里直接 `raise`。
+- 任务 1（extract）：`extract_trip_from_journey(journey, trip_id)` 遍历
+  `journey["trips"]` 按 `trip_id` 精确匹配，`copy.deepcopy` 后返回；找不到
+  `raise ValueError("Journey does not contain Trip %s" % trip_id)`。CLI
+  `ctw journey extract --journey J.json --trip-id T --output-json T.json`，
+  失败路径在 `write_canonical_json` 之前就 `raise`，不会写文件。验收：对
+  `demo/journey-16d/journey.json` 的三个 trip_id 各取到
+  `.tmp/t{1,2,3}.json`，`ctw validate` 三份均打 `VALID`；未知 trip-id 打
+  `JOURNEY_EXTRACT_FAILED Journey does not contain Trip
+  trip-does-not-exist`，exit 1，`.tmp/bad.json` 未生成。
