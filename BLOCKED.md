@@ -1,3 +1,13 @@
+## 顺手发现：0.7.0 没有实际的 git tag 或 GitHub Release（2026-09-10，未处理，仅记录）
+
+写任务 4（发版流程写进 CONTRIBUTING）时核对历史实际发版步骤，发现 `git tag -l`
+只有一条无关的 `backup-before-author-rewrite`、`gh release list` 为空——`0.7.0`
+虽然提交信息以 `Release 0.7.0:` 开头、`PROGRESS.md`/`CLAUDE.md` 都记「已发布」，
+但实际从未执行过 `git tag`/`gh release create`，只完成了「装进本机真实
+Codex」这一步。任务 4 的范围是「把发版流程写进文档，只写不执行」，不包含替
+历史版本补标签/Release，因此未处理，仅记在此供领导决定是否要为 `0.7.0`
+（或直接从下一个版本开始）补打标签与发布。
+
 ## 书 docs-drift 任务 2：`scripts/build_plan_fixtures.py` 不在白名单但被 pyflakes 点名（2026-09-10，已按最小改动处理，非空白裁决）
 
 任务书「界限」只允许改 `scripts/scan_secrets.py` 这一个 scripts 文件；但 pyflakes
