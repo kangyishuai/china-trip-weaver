@@ -896,4 +896,64 @@ validate-candidates` 对 import 产物报 `CANDIDATES VALID`。反向验证（�
 `scan_secrets.py` 0 命中（369 文件）；pyflakes 0 行；`git diff main --stat
 -- plugins/china-trip-weaver/schema demo` 空；改动文件只有
 `candidates.py`/`cli.py`/`PROGRESS.md` 三个，均在白名单内。单独一次
-`git commit`（提交见下）。
+`git commit`（`f70df0f`）。
+
+任务 2（已完成）：新建 `tests/fixtures/candidate-import/items.json`（3 POI +
+2 lodging，含 `duration_minutes`/`opens_at`/`closes_at`/`opening_status`/
+`price_amount`/`nightly_price`/`includes_taxes`/`area: null` 等可选字段）。
+`test_candidates.py` 新增 5 个 `def test_`（均在
+`test_generator_refuses_overwrite_and_duplicate_without_changing_file` 之
+后插入）：`test_import_candidates_matches_sequential_add_poi_and_add_lodging`
+（对同一份 items.json，`import_candidates` 一次调用与逐条
+`add_poi_candidate`/`add_lodging_candidate`（同一 `FixedClock`）产出的文件
+字节相同，且 `CandidatesImportResult(pois=3, lodgings=2)`）、
+`test_import_candidates_does_not_write_on_item_failure`（第 4 项 lodging
+`check_out` 改到 `check_in` 之前，触发业务规则失败，`item_number==4`、
+文件与调用前逐字节相同）、`test_import_candidates_rejects_unknown_key`（第
+2 项加一个未知键，`item_number==2`、`reason` 含 "unknown key" 与键名、
+文件不变）、`test_import_candidates_dry_run_leaves_file_untouched`
+（`dry_run=True` 返回正确计数且文件不变）、
+`test_cli_import_subcommand_succeeds_and_validates`（子进程跑
+`candidates init`→`candidates import`→`validate-candidates` 三条真实命令，
+逐条 `returncode==0`，stdout 含 `CANDIDATES_IMPORT_COMPLETE pois=3
+lodgings=2` 与 `CANDIDATES VALID`）。`research-china-destination/SKILL.md`
+在 add-poi/add-lodging 代码块之后、fix-names 段之前加一段 import 用法（清单
+格式、键名对应关系、双阶段失败都不写盘且报"第几项+原因"、`--dry-run`
+说明）。两份 README「Other commands」各只加一行
+`ctw candidates import CANDIDATES.json --items ITEMS.json [--queried-at ISO]
+[--dry-run]`（紧跟 add-poi 那行之后），未改动块内其余行。
+
+反向验证（终端记录，因 candidates.py 的任务 1 改动已单独提交，不是未提交
+状态，"stash 掉改动"无法照字面顺序执行——`git stash push` 只能保存未提交
+差异且 push 后工作区总是回到 HEAD，与"push 后应处于失败态"字面冲突；
+采用等价且更贴合 git 语义的操作序列，push/apply/drop 三个动作全部用上，
+理由记在此处供合并时核对）：①`git show 1f1e966:.../candidates.py` 覆盖
+工作区文件，制造"HEAD→旧版本"的未提交差异；②`git stash push -u -m
+"import-check" -- .../candidates.py`（只限定这一个文件的 pathspec，任务 2
+其余未提交改动如 `test_candidates.py`/新 fixture 不受影响）保存这份差异，
+工作区随之恢复为 HEAD（新版本）——`git stash list --format='%H %gs'` 记录
+SHA `f69e52686e1c983a84fdc051c67db68688c923ff`；③`git stash apply <SHA>`
+把该差异重新应用到当前工作区，使其变回旧版本（`grep -c "def
+import_candidates"` 变 0）——此时是本次反向验证真正的"红"检查点；跑 5 个
+新测试 → `ImportError: cannot import name 'CandidatesImportError'`，
+`FAILED (errors=5)`；④`git checkout HEAD -- .../candidates.py` 恢复为新
+版本（`grep -c` 变回 1）→ 重跑同 5 个测试 → `Ran 5 tests OK`（绿）；
+⑤`git rev-parse stash@{0}` 核对等于步骤②记录的 SHA 后，用
+`git stash drop stash@{0}`（非裸 `pop`）清理，`git stash list` 确认为空，
+`git status --short` 确认其余未提交改动原样保留。全量
+`/usr/bin/python3 -m unittest discover -s tests` → `Ran 539 tests` `OK`
+0 skipped（534 基线 + 本任务 5 个新 `def test_`）；`scan_secrets.py` 0 命中
+（370 文件）；pyflakes 0 行。
+
+发现：写本节时 `main` 已被并行的「渲染页可读性」书推进（新增/删除了
+`render/`、`tests/test_journey.py`、`tests/test_renderer.py` 等与本书无关
+的内容），此刻字面执行任务书写的 `git diff main ...` 会把那些改动也混进
+比对结果（例如误报删除了 4 个不属于本书的 `def test_`）。按此前
+`journey-replace`/`docs-drift` 等书的同款先例（分支已分出后 main 前进，
+验收改用分支真实分出点），本书统一改用 `git merge-base HEAD main` 核实的
+真实分出点 `1f1e966` 做比对，不算待裁决：`git diff 1f1e966 -- tests |
+grep -E '^-\s*def test_'` 0 行；`git diff 1f1e966 --stat --
+plugins/china-trip-weaver/schema demo` 空；`git diff 1f1e966 --stat`
+只有 7 个文件（`PROGRESS.md`/两份 README/`SKILL.md`/`candidates.py`/
+`cli.py`/`test_candidates.py`），全部在白名单内。单独一次 `git commit`
+（提交见下）。

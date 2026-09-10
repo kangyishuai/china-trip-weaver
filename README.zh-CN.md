@@ -172,6 +172,7 @@ ctw doctor
 ctw validate TRIP.json
 ctw validate-candidates CANDIDATES.json
 ctw candidates add-poi CANDIDATES.json --name NAME --city CITY --category CATEGORY --source-url URL [--verify-name]
+ctw candidates import CANDIDATES.json --items ITEMS.json [--queried-at ISO] [--dry-run]
 ctw candidates fix-names CANDIDATES.json --trip TRIP_OR_JOURNEY.json [--apply | --export-manual NAME-REVIEW.json | --apply-manual NAME-REVIEW.json]
 ctw canonicalize TRIP.json
 ctw rail --date YYYY-MM-DD --from CITY --to CITY --output-json rail-result.json
