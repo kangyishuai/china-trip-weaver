@@ -27,6 +27,24 @@ pathspec 更像是编写任务书时假设「`plugins` 下这轮只会动 `cli.p
 下唯二被改的文件就是白名单点名的 `cli.py`（任务 1，已被该 pathspec 排除）
 与 `SKILL.md`（任务 2，被排除式漏算）。
 
+## 书 A2b 任务 2：`git diff main` 的"删测试"验收因并行 A1b 书已合入 main 而失真（2026-09-10，判断，非空白裁决）
+
+任务 2 完成后按任务书跑 `git diff main -- tests | grep -E '^-\s*def test_'`，
+非 0 行，打出 `test_cli_refresh_without_rail_result_fails_without_outputs`/
+`test_cli_non_refresh_event_with_rail_result_fails` 两条。查明：这不是本书
+删除的测试——任务书安排的并行书 A1b（`ctw replan --rail-result` 接线，在
+main 上直改）已在本书执行期间合入 main（提交 `4216c59`、`f2b0f34`），本
+分支仍从任务书指定的分支点 `7fc66ec` 分出、按规矩"不碰 main"未合并 main
+后续提交，两条测试是 A1b 书新增，本书从未触碰 `test_replan.py`。
+
+处置：改用本分支真实分出点 `7fc66ec`（而非已经移动的 `main`）重新比较，
+`git diff 7fc66ec -- tests | grep -E '^-\s*def test_'` 与
+`git diff 7fc66ec --stat -- plugins/china-trip-weaver/schema demo` 均为
+0/空，证实本书确实 0 行删测试、0 行碰 schema/demo。任务书的验收命令写在
+"main 静止不动"的假设下，未预见另一本并行书会在同一时间窗口合入 main；
+按"跳过做别的，继续"处理，不停工，供合并时核对——merge 时这两条测试会随
+main 的最新提交自然出现在合并结果里，不需要额外动作。
+
 ## 顺手发现：0.7.0 没有实际的 git tag 或 GitHub Release（2026-09-10，未处理，仅记录）
 
 写任务 4（发版流程写进 CONTRIBUTING）时核对历史实际发版步骤，发现 `git tag -l`

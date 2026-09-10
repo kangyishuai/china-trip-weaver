@@ -628,3 +628,140 @@ Python 3.13 矩阵全绿，本机单独重跑该测试也是 `ok`，且该测试
   红"更强的证据）→ `git stash apply <sha>` 恢复 → 重跑
   `Ran 51 tests ... OK` → `git stash drop <sha>` 清理，`git stash list`
   确认为空。全量 `Ran 513 tests`（507 + 新增 6）`OK` 0 skipped。
+
+## 书 A2b：journey assemble --replace-trip（2026-09-10，分支 journey-replace）
+
+任务 0 核对（worktree `.tmp/wt-a2b`，HEAD `7fc66ec`）：全量 `Ran 525 tests` `OK`
+0 skipped、`scan_secrets.py` 0 命中（368 文件）、pyflakes 0 行，均与任务书吻合；
+journey.py:1551 `extract_trip_from_journey`、:1563
+`assemble_journey_from_trips(trips, request, clock, expected_segment_days=None)`
+行号精确吻合；cli.py:259 assemble 解析器 `--request`/`--trip` 确为 required；
+demo/journey-16d/journey.json 的 revision.number=1、三段、journey_id
+`journey-d7d147568550c48c`；delay.json 的 event 为
+`{"type":"delay","subject_ref":"slot-2","delta_minutes":15,...}`，无
+`base_trip` 键，需另配 extract 出的 trip 文件跑 `ctw replan`。全部核对一致，
+无出入。
+
+理解的目标：`journey assemble --replace-trip` 把 replan 后的子 Trip 放回原
+Journey，连接/账本靠 `assemble_journey_from_trips` 重算，revision 加一、
+journey_id 不变。
+顺序：任务 1（`replace_trip_in_journey` + CLI 接线，两条反向验证）→ 任务 2
+（≥4 新测试 + 文档，红→绿反向验证）。
+最大风险：`assemble_journey_from_trips` 强制完整 `#/$defs/request` schema
+校验（`destinations`/`interests`/`pace`/`constraints`/`assumptions`/`locale`/
+`pasted_notes` 等 Journey 文档本身不存储的字段），但下游真正读取内容的
+`assemble_journey` 只用 origin/travelers/traveler_groups/meeting_anchor/
+budget_cny 四类字段算身份与账本，其余字段只过 schema 门、不进 journey_id
+哈希（哈希只取 start/end_date+身份+分段天数+trip_ids）。
+对策（非空白裁决，任务书未提及此实现细节）：用 Journey 自身可恢复字段（已
+实测 `budget_ledger.budget_cny`==20000，与 demo 原 request.json 一致；
+`segmentation.expected_segment_days`）重建一个 schema 合法的 request，其余
+字段取中性占位值（pace=balanced、locale=zh-CN、interests/constraints/
+assumptions=[]、pasted_notes=null），不影响 journey_id 或任何输出内容。
+
+任务 1（已完成）：journey.py 新增 `replace_trip_in_journey(journey, trip,
+base_revision, clock, reason=None)` 与私有辅助 `_journey_identity_request`
+（按上面「对策」重建 request）；cli.py 的 assemble 解析器把 `--request`/
+`--trip` 从 required 改 `default=None`，新增 `--journey`/`--replace-trip`/
+`--base-revision`/`--reason`，`_cmd_journey_assemble` 按
+replace_mode/build_mode 互斥分流，错误全部经既有
+`ValueError`→`JOURNEY_ASSEMBLE_FAILED` 路径，失败不写文件。
+
+验收（实测命令与输出）：
+- extract：`ctw journey extract --journey demo/journey-16d/journey.json
+  --trip-id trip-c5eba1b26542ed43 --output-json .tmp/t1.json` →
+  `JOURNEY_EXTRACT_COMPLETE`，exit 0。
+- replan：delay.json 的 `subject_ref="slot-2"` 在 t1.json 里不存在（t1 的
+  slot_id 全是描述性长名，如 `slot-poi-routine-meal-2acb635f18d4`；实测
+  直接传 delay.json 得 `REPLAN_FAILED subject_not_found`）——改用同形状
+  （`type=delay`、`delta_minutes=15`、`reason` 逐字复用 delay.json 的
+  "接驳晚点 15 分钟"）但 `subject_ref` 换成 t1 里真实存在的
+  `slot-poi-routine-meal-2acb635f18d4`（day-3 当天最后一槽，同日无下游槽
+  联动风险）：`ctw replan --trip .tmp/t1.json --event .tmp/delay-event.json
+  --base-revision 1 --fixed-clock 2026-10-15T12:00:00+08:00 --output-json
+  .tmp/t1-r2.json --output-html .tmp/t1-r2.html` → `REPLAN_COMPLETE
+  revision=2 ... errors=0`，exit 0。
+- assemble --replace-trip：`ctw journey assemble --journey
+  demo/journey-16d/journey.json --replace-trip .tmp/t1-r2.json
+  --base-revision 1 --fixed-clock 2026-10-15T12:00:00+08:00 --output-json
+  .tmp/j-r2.json` → `JOURNEY_ASSEMBLE_COMPLETE trips=3 days=16 errors=0`，
+  exit 0；`ctw journey validate .tmp/j-r2.json` → `JOURNEY VALID trips=3`。
+  python 断言：journey_id 两边均为 `journey-d7d147568550c48c`（不变）；
+  revision = `{number:2, parent_revision:1, created_by:"user",
+  reason:"接驳晚点 15 分钟"}`（未传 `--reason`，取自子 Trip 最新
+  `revision.reason`）；`trips[0].revision.number`=2，`trips[1]`/`trips[2]`
+  仍为 1。`ctw journey render` 与 `journey validate-html` 均
+  errors=0、exit 0。`git status --short -- demo` 空输出。
+- 反向验证一：`--base-revision 9` → `JOURNEY_ASSEMBLE_FAILED
+  revision_conflict: Journey is at revision 1, not 9`，exit 1，
+  `.tmp/j-bad-revision.json` 未生成。
+- 反向验证二：把 t1-r2.json 的 `trip_id` 改成 `"trip-does-not-exist"` →
+  `JOURNEY_ASSEMBLE_FAILED trip_not_found: Journey does not contain Trip
+  trip-does-not-exist`，exit 1，`.tmp/j-bad-tripid.json` 未生成。
+- 额外手测（非任务书要求，防止改坏既有路径）：同时传 `--replace-trip` 与
+  `--request`/`--trip` → `JOURNEY_ASSEMBLE_FAILED ... mutually
+  exclusive`，exit 1；既有 build-mode 的 extract→assemble 往返（demo 三段）
+  重新走一遍，`ctw canonicalize` 的输出与 demo 原 journey.json 的
+  canonicalize 输出 `cmp` 无差异，确认 `--request`/`--trip` 改成
+  `default=None` 未改变原有语义下的实际行为。`py_compile`+pyflakes 单独对
+  journey.py/cli.py 两文件全程 0 行。单独一次 `git commit`。
+
+任务 2（已完成）：`tests/test_journey.py` 新增 `JourneyReplaceTripTests` 类
+（导入块按字母序插入 `replace_trip_in_journey`），7 个 `def test_`（任务书要求
+至少 4 个）：替换成功且 journey_id 不变+revision 字段齐全、显式 `--reason`
+覆盖子 Trip 自身 reason、`revision_conflict`、`trip_not_found`、
+`journey_identity_changed`（见下）、CLI 混用 `--replace-trip` 与
+`--request`/`--trip` 被拒、CLI 全链路（真实 `ctw journey extract` →
+`ctw replan` → `ctw journey assemble --replace-trip` 子进程）往返。
+`journey_identity_changed` 一条：真实数据很难在不先撞
+`assemble_journey` 自身结构校验（日期缺口/住宿续接等）的前提下单独构造出
+「trip_id 存在但会改变 journey_id」的合法输入，改用
+`mock.patch("china_trip_weaver.journey.assemble_journey_from_trips",
+return_value=...)` 隔离测 `replace_trip_in_journey` 自己的身份校验分支——
+`assemble_journey_from_trips` 是被测函数的协作对象而非被测对象本身，且
+`test_flyai_live.py`（`mock.patch.object(FlyAIBackend, "from_spec", ...)`）等
+已有先例证明本仓库测试套件接受这种"隔离协作对象"的 mock 用法，不算违反
+"不许 mock 被测对象"。plan-china-trip/SKILL.md 第 27 行（Workflow 第 6 条，
+原文正是"替现有子 Trip 调 replan"那条）末尾加一句：属于 Journey 的子 Trip 先
+`ctw journey extract` 取出，replan 后用 `ctw journey assemble
+--replace-trip` 放回。两份 README 的 `ctw journey assemble` 行后各加一行
+替换形式的命令签名。
+
+验收：`JourneyReplaceTripTests` 单独跑 `Ran 7 tests OK`；`test_journey`
+整模块 `Ran 57 tests OK`（51 基线 + 6 已有 + 新增均计入，与前一轮书 A2 的
+51 相加吻合）。反向验证：把 `replace_trip_in_journey` 里
+`if reassembled["journey_id"] != journey["journey_id"]:` 临时改成
+`if False and ...:`（加 `# TEMP-REVERSE-VERIFY` 标记）→ 单独跑
+`test_replace_trip_rejects_a_reassembly_that_changes_the_journey_identity`
+→ `FAILED`（`AssertionError: ValueError not raised`，红）→ 还原 →
+`git diff plugins/.../journey.py | grep -c TEMP-REVERSE` 为 0（改动已完整
+撤回）→ 同一测试重跑 `ok`（绿）。
+
+最终门（2026-09-10 实测）：`/usr/bin/python3 -m unittest discover -s tests`
+→ `Ran 532 tests` `OK` 0 skipped（525 基线 + 新增 7）；`scan_secrets.py` 0
+命中（368 文件）；`~/miniconda3/envs/core/bin/python -m pyflakes
+plugins/china-trip-weaver/src tests scripts` 0 行；`git status --short --
+demo` 空。`git diff main --stat -- plugins/china-trip-weaver/schema demo`
+空——但 `git diff main -- tests | grep -E '^-\s*def test_'` 此刻并非 0 行
+（打出两条 `test_cli_refresh_without_rail_result_fails_without_outputs`/
+`test_cli_non_refresh_event_with_rail_result_fails`）。查明原因：并行的
+A1b 书（`ctw replan --rail-result` 接线，在 main 上直改）已在本书任务 1/2
+执行期间合入 main（提交 `4216c59`、`f2b0f34`，`git log main` 可见），本分支
+仍从任务书指定的 `7fc66ec` 分出、未合并 main 的后续提交（任务书明令
+"不碰 main，合并由管理者做"）；这两条测试属于 A1b 书新增，本书从未接触过
+`test_replan.py`。改用本分支真实的分出点 `7fc66ec` 重新比较——
+`git diff 7fc66ec -- tests | grep -E '^-\s*def test_'` 0 行、
+`git diff 7fc66ec --stat -- plugins/china-trip-weaver/schema demo` 同样为
+空——证实本书确实 0 行删测试、0 行碰 schema/demo，任务书这条验收命令写在
+"main 不动"的假设下，未预见另一本并行书会话内合入 main；按"跳过做别的，
+继续"处理，不算待裁决，只记录供合并时核对。单独一次 `git commit`。
+
+终验（提交后复核，2026-09-10）：任务 1 的替换命令与两条反向验证全部重新
+跑了一遍（extract→replan→assemble --replace-trip→validate→render→
+validate-html，均 exit 0；`--base-revision 9` 与 trip_id 改错两条均
+exit 1、不产文件），结果与任务 1 首次验收逐字一致。全量
+`Ran 532 tests` `OK` 0 skipped、`scan_secrets.py` 0 命中（368 文件）、
+pyflakes 0 行、`git diff main --stat -- plugins/china-trip-weaver/schema
+demo` 与 `git diff 7fc66ec --stat`（分支真实分出点）均为空。`git push -u
+origin journey-replace` 成功（远端已建 `journey-replace` 分支）。硬指标
+一、二均达标，BLOCKED.md 随本次提交带一条非空白裁决记录，任务书结束。

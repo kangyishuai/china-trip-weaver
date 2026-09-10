@@ -1590,6 +1590,93 @@ def assemble_journey_from_trips(
     )
 
 
+def replace_trip_in_journey(
+    journey: Mapping[str, Any],
+    trip: Mapping[str, Any],
+    base_revision: int,
+    clock: Clock,
+    reason: Optional[str] = None,
+) -> Mapping[str, Any]:
+    """Swap one embedded Trip for an updated copy and recompute the Journey.
+
+    Identity (origin/travelers or traveler_groups/meeting_anchor), budget_cny,
+    and expected_segment_days all come from the Journey being replaced into,
+    never from the replacement Trip; a resulting journey_id that differs from
+    the original is a structural error, since only the caller can decide
+    whether a Trip that changes the Journey's identity was intended.
+    """
+
+    current_revision = int(journey["revision"]["number"])
+    if base_revision != current_revision:
+        raise ValueError(
+            "revision_conflict: Journey is at revision %d, not %d"
+            % (current_revision, base_revision)
+        )
+    trip_id = trip["trip_id"]
+    if not any(item["trip_id"] == trip_id for item in journey["trips"]):
+        raise ValueError("trip_not_found: Journey does not contain Trip %s" % trip_id)
+
+    replaced_trips = [
+        copy.deepcopy(dict(trip)) if item["trip_id"] == trip_id else copy.deepcopy(dict(item))
+        for item in journey["trips"]
+    ]
+    synthetic_request = _journey_identity_request(journey)
+    expected_segment_days = journey.get("segmentation", {}).get("expected_segment_days")
+    reassembled = assemble_journey_from_trips(
+        replaced_trips, synthetic_request, clock, expected_segment_days=expected_segment_days,
+    )
+    if reassembled["journey_id"] != journey["journey_id"]:
+        raise ValueError(
+            "journey_identity_changed: replacement Trip changed the Journey identity (%s != %s)"
+            % (reassembled["journey_id"], journey["journey_id"])
+        )
+
+    now = isoformat_seconds(clock)
+    result = dict(reassembled)
+    result["revision"] = {
+        "number": current_revision + 1,
+        "parent_revision": current_revision,
+        "created_at": now,
+        "reason": reason or trip["revision"]["reason"],
+        "created_by": "user",
+    }
+    result["generated_at"] = now
+    return result
+
+
+def _journey_identity_request(journey: Mapping[str, Any]) -> Dict[str, Any]:
+    """Rebuild a schema-valid request carrying only the Journey's own identity.
+
+    assemble_journey (the only function that reads this request's content)
+    uses just origin/travelers/traveler_groups/meeting_anchor/budget_cny; every
+    other #/$defs/request-required field below is a neutral placeholder that
+    only needs to satisfy schema validation, since none of it reaches the
+    reassembled Journey document or its journey_id hash.
+    """
+
+    request: Dict[str, Any] = {
+        "start_date": journey["start_date"],
+        "end_date": journey["end_date"],
+        "budget_cny": journey["budget_ledger"].get("budget_cny"),
+        "interests": [],
+        "pace": "balanced",
+        "constraints": [],
+        "assumptions": [],
+        "locale": "zh-CN",
+        "pasted_notes": None,
+    }
+    if journey.get("traveler_groups"):
+        traveler_groups = copy.deepcopy(list(journey["traveler_groups"]))
+        request["traveler_groups"] = traveler_groups
+        request["meeting_anchor"] = copy.deepcopy(dict(journey["meeting_anchor"]))
+        request["destinations"] = [copy.deepcopy(dict(traveler_groups[0]["origin"]))]
+    else:
+        request["origin"] = copy.deepcopy(dict(journey["origin"]))
+        request["travelers"] = int(journey["travelers"])
+        request["destinations"] = [copy.deepcopy(dict(journey["origin"]))]
+    return request
+
+
 def journey_budget_ledger(
     trips: Sequence[Mapping[str, Any]],
     segment_connections: Sequence[Mapping[str, Any]],
