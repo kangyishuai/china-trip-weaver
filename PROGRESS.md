@@ -298,6 +298,68 @@ fix-names` 会把它们列为人工项。
   ctw-home/` 重新出现）→ `git stash pop` 恢复 → 全量 `Ran 507 tests` `OK`，
   `nonexistent-ctw-home` 不再出现。
 
+## 本轮记录（2026-09-10，`ctw replan --rail-result` 命令行接线；main 直改，第二波并行之一）
+
+任务 0 核对（HEAD `7fc66ec`）：525 测试 OK 0 skip、`scan_secrets` 0、pyflakes 0
+行；`replan.py:25` `replan_trip` 已带 `rail_result: Optional[Mapping[str, Any]]
+= None`；`cli.py:272` `_add_replan_parser`、`1156` `_cmd_replan` 均无
+`--rail-result`；`test_replan.py:221` 的 CLI 循环测试 docstring 明写
+refresh.json 因 CLI 未接线被排除，`run_replan_fixture`（59 行）已透传
+`rail_result=fixture.get("rail_result")`；README.md 第 182 行、README.zh-CN.md
+第 181 行均为 `ctw replan` 用法行；`docs/design/adr/0015-refresh-event.md`
+尚不存在。全部与任务书吻合，不停工。额外核实：`_apply_refresh`
+（replan.py:232）内 `_find_rail_leg` 先于 `rail_result is None` 判断执行，
+`refresh.json` 夹具的 `rail_result` 顶层含 `provider="12306-mcp"`+
+`transport_legs`+`claims`+`health`，与 `_cmd_rail`（cli.py:1121 的
+`output` 字典）写出的真实形状逐字段对应。
+理解的目标：给 `_add_replan_parser` 加 `--rail-result`，`_cmd_replan` 按事件
+type 决定必填/禁止、只查文件顶层形状（provider/transport_legs/claims/
+health），其余深度校验交给既有 `replan_trip`；成功/失败沿用
+REPLAN_COMPLETE/REPLAN_FAILED 与失败不写输出文件的既有保证；测试扩到 5 夹具
++2 条新负向、README/SKILL/ADR-0015 同步。
+顺序：任务 1（parser+`_cmd_replan`接线）→ 硬指标一四条命令验收 → 任务 2
+（测试+文档+ADR）→ 反向验证 → 最终门。
+最大风险：非 refresh 事件禁止 `--rail-result`是`replan_trip`本身不做的校验
+（它只在 `event_type=="refresh"` 分支才用得到这个参数），必须在 CLI 层新增
+判断，用普通 `ValueError` 走既有 `except (OSError, ...) ` 分支即可，不需要
+新的 `ReplanError` 码;而"refresh 缺 `--rail-result`"已经是
+`replan_trip`/`_apply_refresh` 的既有行为（`refresh_result_required`），
+CLI 只需把 `rail_result=None` 照常传下去，不必重复判断。
+
+任务 1（已完成，提交见下）：`_add_replan_parser` 加 `--rail-result`（`type=Path,
+default=None`），`--event` 的 help 追加 refresh 与 `--rail-result` 的搭配说明。
+`_cmd_replan` 在读完 event 之后、校验 base Trip 之前插入两步：① 判
+`event.get("type")=="refresh"`，非 refresh 却给了 `--rail-result` 直接
+`raise ValueError`；② 给了 `--rail-result` 就 `read_json` 读入并只查顶层
+形状（`provider=="12306-mcp"` 且 `transport_legs`/`claims` 为 list、`health`
+为 dict），不做更深校验；随后原样传给 `replan_trip(..., rail_result=rail_result)`
+（refresh 缺 `--rail-result` 时 `rail_result=None`，交给 `replan_trip` 已有的
+`refresh_result_required` 校验，CLI 不重复判断，与开工笔记的风险预判一致）。
+`read_json` 已保证返回 dict 且非 dict 会 `raise ValueError`，故未在 CLI 侧
+重复 `isinstance(rail_result, dict)` 判断（照抄 `_cmd_rail` 校验 `--fixture`
+顶层形状时的同款写法，不判外层类型只判内层字段）。
+硬指标一实测（2026-09-10）：正向命令
+`ctw replan --trip demo/trip.json --event .tmp/refresh.json --rail-result
+.tmp/rail.json --base-revision 1 --fixed-clock 2026-10-15T12:00:00+08:00
+--output-json .tmp/trip-r2.json --output-html .tmp/trip-r2.html` → exit 0，
+`REPLAN_COMPLETE ... trigger=provider_change ...`；`ctw validate
+.tmp/trip-r2.json` → `VALID`；`ctw validate-html .tmp/trip-r2.html
+.tmp/trip-r2.json` → `HTML VALID ... errors=0`；`grep -c G1001
+.tmp/trip-r2.html` → 2；`git status --short -- demo` 空。反向 1（refresh 缺
+`--rail-result`）→ exit 1，stderr `REPLAN_FAILED refresh_result_required
+refresh requires a rail_result`，两个输出文件均不存在。反向 2（`delay.json`
+事件 + `--rail-result`）→ exit 1，stderr `REPLAN_FAILED --rail-result is
+only valid when --event has type refresh`。
+连带发现并修复：改 `--event` help 文案后，既有测试
+`test_cli_kind_field_reports_type_contract`（`test_replan.py:292`）对
+`--help` 输出做逐字 `assertIn`，命中旧文案而失败——这是任务书明确要求的
+文案变更的直接连带后果，不是放宽断言，已把该测试期望的字符串同步改成新
+文案（结构与断言强度不变，仍是逐字匹配）。全量
+`/usr/bin/python3 -m unittest discover -s tests` → `Ran 525 tests` `OK`
+0 skipped；`scripts/scan_secrets.py` 0 命中；pyflakes（src+tests+scripts）
+0 行；`git diff --stat` 只有 `PROGRESS.md`/`cli.py`/`tests/test_replan.py`
+三个文件，均在白名单内。
+
 ## 本轮记录（2026-09-10，`replan` 支持 `refresh` 事件；main 直改，三书并行之一）
 
 任务 0 核对（HEAD `c9c9c15`）：507 测试 OK 0 skip、`scan_secrets` 0、

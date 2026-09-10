@@ -277,9 +277,10 @@ def _add_replan_parser(commands: Any) -> None:
         type=Path,
         required=True,
         help=(
-            "path to a JSON event file; required fields: type (closure, weather, delay, or "
-            "user_delete) and subject_ref (the target slot's slot_id, or the ref_id it schedules); delay also requires "
-            "delta_minutes; closure and weather also require replacement_slot; example delay "
+            "path to a JSON event file; required fields: type (closure, weather, delay, "
+            "user_delete, or refresh) and subject_ref (the target slot's slot_id, or the ref_id it schedules); delay also requires "
+            "delta_minutes; closure and weather also require replacement_slot; refresh also requires "
+            "--rail-result and only applies to a rail transport leg; example delay "
             'event: {"type": "delay", "subject_ref": "slot-2", "delta_minutes": 15}'
         ),
     )
@@ -288,6 +289,15 @@ def _add_replan_parser(commands: Any) -> None:
     replan.add_argument("--output-html", type=Path, required=True)
     replan.add_argument("--fixed-clock", default=None)
     replan.add_argument("--locked-ref", action="append", default=[])
+    replan.add_argument(
+        "--rail-result",
+        type=Path,
+        default=None,
+        help=(
+            "path to a `ctw rail --output-json` result to refresh a rail leg with; required when "
+            "--event has type refresh, and rejected for every other event type"
+        ),
+    )
 
 
 def _add_rail_parser(commands: Any) -> None:
@@ -1168,11 +1178,27 @@ def _cmd_replan(args: argparse.Namespace) -> int:
         locked_refs = list(event_document.get("user_locked_refs", ())) + list(args.locked_ref)
         if not isinstance(event, dict) or not isinstance(locked_refs, list):
             raise ValueError("event document has the wrong shape")
+        is_refresh = event.get("type") == "refresh"
+        if args.rail_result is not None and not is_refresh:
+            raise ValueError("--rail-result is only valid when --event has type refresh")
+        rail_result = None
+        if args.rail_result is not None:
+            rail_result = read_json(args.rail_result)
+            if (
+                rail_result.get("provider") != "12306-mcp"
+                or not isinstance(rail_result.get("transport_legs"), list)
+                or not isinstance(rail_result.get("claims"), list)
+                or not isinstance(rail_result.get("health"), dict)
+            ):
+                raise ValueError(
+                    "--rail-result must be a `ctw rail --output-json` result for provider 12306-mcp "
+                    "with transport_legs, claims, and health"
+                )
         base_report = validate_trip(trip)
         if not base_report.ok:
             raise ValueError("base Trip is invalid: " + "; ".join(item.render() for item in base_report.errors))
         clock = FixedClock.from_iso(args.fixed_clock) if args.fixed_clock else SystemClock()
-        result = replan_trip(trip, event, args.base_revision, locked_refs, clock)
+        result = replan_trip(trip, event, args.base_revision, locked_refs, clock, rail_result=rail_result)
         report = validate_trip(result.trip)
         if not report.ok:
             raise ValueError("replanned Trip is invalid: " + "; ".join(item.render() for item in report.errors))

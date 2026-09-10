@@ -297,10 +297,11 @@ class ReplanTests(unittest.TestCase):
         normalized_help = " ".join(help_command.stdout.split())
         self.assertIn(
             "--event EVENT path to a JSON event file; required fields: type "
-            "(closure, weather, delay, or user_delete) and subject_ref (the target slot's "
+            "(closure, weather, delay, user_delete, or refresh) and subject_ref (the target slot's "
             "slot_id, or the ref_id it schedules); delay also requires delta_minutes; "
-            "closure and weather also require "
-            'replacement_slot; example delay event: {"type": "delay", "subject_ref": '
+            "closure and weather also require replacement_slot; refresh also requires "
+            "--rail-result and only applies to a rail transport leg; example delay "
+            'event: {"type": "delay", "subject_ref": '
             '"slot-2", "delta_minutes": 15}',
             normalized_help,
         )
