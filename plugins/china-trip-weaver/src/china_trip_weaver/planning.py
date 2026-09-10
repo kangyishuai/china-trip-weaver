@@ -128,17 +128,10 @@ class RailBackend:
         return Rail12306Adapter().query(request, context)
 
 
-def plan_trip(
+def _plan_intake(
     request: Mapping[str, Any],
     candidates: Mapping[str, Any],
-    clock: Clock,
-    rail_backend: RailBackend,
-    mobility_backend: Optional[MobilityBackend] = None,
-    flyai_backend: Optional[FlyAIBackend] = None,
-    variflight_backend: Optional[VariFlightBackend] = None,
-    amap_lodging_backend: Optional[AMapLodgingBackend] = None,
-    anysearch_configured: bool = False,
-) -> PlanResult:
+) -> Tuple[Dict[str, Any], Dict[str, Any], str, PipelineRun]:
     normalized_request = _normalize_request(request)
     normalized_candidates = _normalize_candidates(candidates, normalized_request)
     trip_id = "trip-" + hashlib.sha256(
@@ -159,7 +152,20 @@ def plan_trip(
         1,
         {"candidate-schema": "1.0.0"},
     )
+    return normalized_request, normalized_candidates, trip_id, run
 
+
+def _plan_resolve_candidates(
+    normalized_request: Mapping[str, Any],
+    normalized_candidates: Mapping[str, Any],
+    clock: Clock,
+    rail_backend: RailBackend,
+    flyai_backend: Optional[FlyAIBackend],
+    variflight_backend: Optional[VariFlightBackend],
+    amap_lodging_backend: Optional[AMapLodgingBackend],
+    run: PipelineRun,
+    trip_id: str,
+):
     now = isoformat_seconds(clock)
     claims = copy.deepcopy(normalized_candidates["claims"])
     pois = copy.deepcopy(normalized_candidates["pois"])
@@ -214,7 +220,24 @@ def plan_trip(
         1,
         {"12306-mcp": "0.3.10", "candidate-schema": "1.0.0"},
     )
+    return (
+        now, claims, pois, lodging_candidates, transport_legs, rail_health,
+        rail_unknowns, business_calls, rail_warnings, inventory, amap_lodging,
+        lodging_unknowns, enrichment,
+    )
 
+
+def _plan_resolve_mobility_and_stays(
+    normalized_request: Mapping[str, Any],
+    normalized_candidates: Mapping[str, Any],
+    clock: Clock,
+    mobility_backend: Optional[MobilityBackend],
+    rail_backend: RailBackend,
+    transport_legs: List[Mapping[str, Any]],
+    pois: List[Mapping[str, Any]],
+    lodging_candidates: List[Mapping[str, Any]],
+    claims: List[Mapping[str, Any]],
+):
     active_mobility = mobility_backend or MobilityBackend.from_spec("off", rail_backend.repo_root)
     mobility = active_mobility.resolve(normalized_candidates, clock, ("transit",))
     pois, lodging_candidates = apply_locations(pois, lodging_candidates, mobility)
@@ -242,6 +265,19 @@ def plan_trip(
         clock,
     )
     claims.extend(routine_claims)
+    return active_mobility, mobility, lodgings, pois, claims, stay_selections, routine_unknowns
+
+
+def _plan_schedule_matrix(
+    normalized_request: Mapping[str, Any],
+    transport_legs: Sequence[Mapping[str, Any]],
+    lodgings: Sequence[Mapping[str, Any]],
+    pois: Sequence[Mapping[str, Any]],
+    mobility: MobilityResult,
+    active_mobility: MobilityBackend,
+    run: PipelineRun,
+    trip_id: str,
+) -> List[Mapping[str, Any]]:
     problems, matrix_cells, live_matrix_cells = _schedule_problems(
         normalized_request, transport_legs, lodgings, pois, mobility,
     )
@@ -258,6 +294,16 @@ def plan_trip(
         1,
         {"amap": "web-service-v5-v3-route", "matrix": "ctw-route-matrix/1"},
     )
+    return problems
+
+
+def _plan_schedule_days(
+    normalized_request: Dict[str, Any],
+    transport_legs: Sequence[Mapping[str, Any]],
+    problems: List[Mapping[str, Any]],
+    run: PipelineRun,
+    trip_id: str,
+) -> Mapping[str, Any]:
     reserved_cost, reserved_unknown_refs = _reserved_meeting_cost(
         normalized_request, transport_legs,
     )
@@ -283,7 +329,25 @@ def plan_trip(
         trip_id,
         1,
     )
+    return scheduled
 
+
+def _plan_trip_unknowns(
+    normalized_request: Mapping[str, Any],
+    scheduled: Mapping[str, Any],
+    transport_legs: Sequence[Mapping[str, Any]],
+    lodgings: Sequence[Mapping[str, Any]],
+    pois: Sequence[Mapping[str, Any]],
+    claims: Sequence[Mapping[str, Any]],
+    lodging_unknowns: Sequence[Mapping[str, Any]],
+    stay_selections: Mapping[str, Any],
+    rail_unknowns: Sequence[Mapping[str, Any]],
+    routine_unknowns: Sequence[Mapping[str, Any]],
+    rail_warnings: Sequence[Any],
+    inventory,
+    mobility: MobilityResult,
+    enrichment,
+):
     entities = {
         "transport_legs": transport_legs,
         "lodgings": lodgings,
@@ -332,6 +396,27 @@ def plan_trip(
         mobility.warnings,
         mobility.business_calls,
     )
+    return days, unknowns, budget_ledger
+
+
+def _plan_build_trip(
+    normalized_request: Mapping[str, Any],
+    days: Sequence[Mapping[str, Any]],
+    transport_legs: Sequence[Mapping[str, Any]],
+    trip_id: str,
+    now: str,
+    budget_ledger: Mapping[str, Any],
+    lodgings: Sequence[Mapping[str, Any]],
+    pois: Sequence[Mapping[str, Any]],
+    claims: Sequence[Mapping[str, Any]],
+    rail_health: Mapping[str, Any],
+    inventory,
+    mobility: MobilityResult,
+    amap_lodging,
+    enrichment,
+    anysearch_configured: bool,
+    unknowns: Sequence[Mapping[str, Any]],
+) -> Dict[str, Any]:
     transport_pricing = _transport_pricing(
         normalized_request, days, transport_legs,
     )
@@ -370,6 +455,14 @@ def plan_trip(
     }
     if transport_pricing is not None:
         trip["transport_pricing"] = transport_pricing
+    return trip
+
+
+def _plan_validate_and_render(
+    trip: Mapping[str, Any],
+    run: PipelineRun,
+    trip_id: str,
+) -> Tuple[str, str]:
     report = validate_trip(trip)
     if not report.ok:
         raise ValueError("Trip validation failed: " + "; ".join(item.render() for item in report.errors))
@@ -381,6 +474,52 @@ def plan_trip(
         raise ValueError("HTML validation failed: " + "; ".join(item.render() for item in html_report.errors))
     html_digest = hashlib.sha256(html.encode("utf-8")).hexdigest()
     run.advance("RENDERED", {"errors": 0, "html_sha256": html_digest}, trip_id, 1)
+    return html, html_digest
+
+
+def plan_trip(
+    request: Mapping[str, Any],
+    candidates: Mapping[str, Any],
+    clock: Clock,
+    rail_backend: RailBackend,
+    mobility_backend: Optional[MobilityBackend] = None,
+    flyai_backend: Optional[FlyAIBackend] = None,
+    variflight_backend: Optional[VariFlightBackend] = None,
+    amap_lodging_backend: Optional[AMapLodgingBackend] = None,
+    anysearch_configured: bool = False,
+) -> PlanResult:
+    normalized_request, normalized_candidates, trip_id, run = _plan_intake(request, candidates)
+    (
+        now, claims, pois, lodging_candidates, transport_legs, rail_health,
+        rail_unknowns, business_calls, rail_warnings, inventory, amap_lodging,
+        lodging_unknowns, enrichment,
+    ) = _plan_resolve_candidates(
+        normalized_request, normalized_candidates, clock, rail_backend,
+        flyai_backend, variflight_backend, amap_lodging_backend, run, trip_id,
+    )
+
+    active_mobility, mobility, lodgings, pois, claims, stay_selections, routine_unknowns = (
+        _plan_resolve_mobility_and_stays(
+            normalized_request, normalized_candidates, clock, mobility_backend, rail_backend,
+            transport_legs, pois, lodging_candidates, claims,
+        )
+    )
+    problems = _plan_schedule_matrix(
+        normalized_request, transport_legs, lodgings, pois, mobility, active_mobility, run, trip_id,
+    )
+    scheduled = _plan_schedule_days(normalized_request, transport_legs, problems, run, trip_id)
+
+    days, unknowns, budget_ledger = _plan_trip_unknowns(
+        normalized_request, scheduled, transport_legs, lodgings, pois, claims,
+        lodging_unknowns, stay_selections, rail_unknowns, routine_unknowns,
+        rail_warnings, inventory, mobility, enrichment,
+    )
+    trip = _plan_build_trip(
+        normalized_request, days, transport_legs, trip_id, now, budget_ledger,
+        lodgings, pois, claims, rail_health, inventory, mobility, amap_lodging,
+        enrichment, anysearch_configured, unknowns,
+    )
+    html, html_digest = _plan_validate_and_render(trip, run, trip_id)
     return PlanResult(
         trip=trip,
         html=html,
@@ -2041,23 +2180,12 @@ def _cross_city_buffer_candidate(
     }
 
 
-def _schedule_problems(
+def _add_rail_leg_candidates(
     request: Mapping[str, Any],
     legs: Sequence[Mapping[str, Any]],
-    lodgings: Sequence[Mapping[str, Any]],
-    pois: Sequence[Mapping[str, Any]],
-    mobility: MobilityResult,
-) -> Tuple[List[Mapping[str, Any]], int, int]:
-    profile = pace_profile(str(request["pace"]))
-    walking_tolerance_km = float(
-        request.get("walking_tolerance_km", profile.max_walking_segment_km)
-    )
-    start = date.fromisoformat(request["start_date"])
-    end = date.fromisoformat(request["end_date"])
-    dates = [(start + timedelta(days=index)).isoformat() for index in range((end - start).days + 1)]
-    by_date: Dict[str, List[Mapping[str, Any]]] = {day: [] for day in dates}
-    city_by_date = _day_city_by_date(request, legs)
-
+    by_date: Dict[str, List[Mapping[str, Any]]],
+    profile: PaceProfile,
+) -> None:
     for leg in legs:
         if leg["travel_mode"] == "flight" or _is_meeting_arrival_leg(request, leg):
             continue
@@ -2086,6 +2214,14 @@ def _schedule_problems(
         })
         by_date[day].append(_cross_city_buffer_candidate(leg, day, profile))
 
+
+def _add_lodging_candidates(
+    request: Mapping[str, Any],
+    legs: Sequence[Mapping[str, Any]],
+    lodgings: Sequence[Mapping[str, Any]],
+    by_date: Dict[str, List[Mapping[str, Any]]],
+    profile: PaceProfile,
+) -> None:
     for lodging in lodgings:
         day = lodging["check_in"]
         if day not in by_date:
@@ -2125,6 +2261,15 @@ def _schedule_problems(
             "blocked_reason": None,
         })
 
+
+def _add_poi_candidates(
+    request: Mapping[str, Any],
+    pois: Sequence[Mapping[str, Any]],
+    by_date: Dict[str, List[Mapping[str, Any]]],
+    city_by_date: Mapping[str, str],
+    dates: Sequence[str],
+    profile: PaceProfile,
+) -> None:
     unslotted: List[Mapping[str, Any]] = []
     for poi in pois:
         usable = [window for window in poi["opening_windows"] if window["status"] in ("verified", "tentative")]
@@ -2157,6 +2302,14 @@ def _schedule_problems(
         city_offsets[poi["city"]] = offset + 1
         by_date[day].append(_poi_candidate(poi, [], day, profile, request))
 
+
+def _add_rest_candidates(
+    request: Mapping[str, Any],
+    legs: Sequence[Mapping[str, Any]],
+    dates: Sequence[str],
+    by_date: Dict[str, List[Mapping[str, Any]]],
+    profile: PaceProfile,
+) -> bool:
     senior = bool((request.get("mobility_profile") or {}).get("senior", False))
     for day in dates:
         rest_count = 0
@@ -2211,7 +2364,20 @@ def _schedule_problems(
                     "closed": False,
                     "blocked_reason": None,
                 })
+    return senior
 
+
+def _build_day_problems(
+    request: Mapping[str, Any],
+    dates: Sequence[str],
+    by_date: Dict[str, List[Mapping[str, Any]]],
+    lodgings: Sequence[Mapping[str, Any]],
+    pois: Sequence[Mapping[str, Any]],
+    mobility: MobilityResult,
+    profile: PaceProfile,
+    walking_tolerance_km: float,
+    senior: bool,
+) -> Tuple[List[Mapping[str, Any]], int, int]:
     problems = []
     cell_count = 0
     live_cell_count = 0
@@ -2283,6 +2449,33 @@ def _schedule_problems(
             "matrix": matrix,
         })
     return problems, cell_count, live_cell_count
+
+
+def _schedule_problems(
+    request: Mapping[str, Any],
+    legs: Sequence[Mapping[str, Any]],
+    lodgings: Sequence[Mapping[str, Any]],
+    pois: Sequence[Mapping[str, Any]],
+    mobility: MobilityResult,
+) -> Tuple[List[Mapping[str, Any]], int, int]:
+    profile = pace_profile(str(request["pace"]))
+    walking_tolerance_km = float(
+        request.get("walking_tolerance_km", profile.max_walking_segment_km)
+    )
+    start = date.fromisoformat(request["start_date"])
+    end = date.fromisoformat(request["end_date"])
+    dates = [(start + timedelta(days=index)).isoformat() for index in range((end - start).days + 1)]
+    by_date: Dict[str, List[Mapping[str, Any]]] = {day: [] for day in dates}
+    city_by_date = _day_city_by_date(request, legs)
+
+    _add_rail_leg_candidates(request, legs, by_date, profile)
+    _add_lodging_candidates(request, legs, lodgings, by_date, profile)
+    _add_poi_candidates(request, pois, by_date, city_by_date, dates, profile)
+    senior = _add_rest_candidates(request, legs, dates, by_date, profile)
+
+    return _build_day_problems(
+        request, dates, by_date, lodgings, pois, mobility, profile, walking_tolerance_km, senior,
+    )
 
 
 def _poi_candidate(

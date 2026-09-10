@@ -1776,3 +1776,99 @@ subTest）从 `AssertionError: 'identity_conflict' not found in
 一次通过，仅两次反向验证候选文案挑选失误，非代码回归）。单次
 `git commit`（`e2804b1`）直接提交 main，`git push` 后 `gh run list
 --limit 3` 最新一条 `success`（run `34489413776`，1m13s），无需重跑。
+
+## 书 R2：拆 plan_trip 与 _schedule_problems（2026-09-10，worktree `.tmp/wt-r2` 分支 `split-planning`）
+
+任务 0 核对（HEAD `ec7c12d`）：全量 `Ran 584 tests` OK 0 skipped、secrets 0、
+pyflakes 0 行；长度命令输出 `[(96, '_select_stays'), (110, '_resolve_rail'),
+(242, '_schedule_problems'), (266, 'plan_trip')]`；文件 2533 行、61 个顶层
+函数；`plan_trip` 起始行 131、`_schedule_problems` 起始行 2044；三个语料命令
+（README demo、`build_plan_fixtures.py`、`build_renderer_fixtures.py`）重跑
+后 `git status --short` 均空；`test_keyless_e2e.py:461` 直接调用
+`_schedule_problems` 属实。均与任务书逐字吻合。唯一出入：直接调用
+`plan_trip` 的测试实为 42 处（任务书「41……」漏计 `test_anysearch.py`、
+`test_variflight_live.py` 各 1 处），判断为背景信息非硬指标，记录不停工
+（见 BLOCKED.md）。
+
+理解的目标：`_schedule_problems`（242→≤100 行）与 `plan_trip`（266→≤100 行）
+按内部阶段拆成模块私有小函数，签名、返回类型、行为逐字节不变；全文件无函数
+超过 150 行。
+顺序：先拆 `_schedule_problems`（被 `plan_trip` 调用，内层先拆再拆外层）→
+再拆 `plan_trip`。
+最大风险：两百多行里任何条件、阈值、文案、字段顺序的手滑都会被三个语料命令
+的字节级 diff 与两个 e2e 用例的快照哈希放大成红；抽段必须是纯粹的「剪切—去
+缩进—把用到的局部变量改成参数」，不顺手合并重复代码、不简化任何判断分支。
+
+任务 1（已完成，不提交）：`.tmp/snapshot_plan.py` 照抄 `test_keyless_e2e.py`
+的 `run_direct` 写法（`E2E`/`FIXED_NOW`/`RailBackend.from_spec`/`load` 同款），
+对 `beijing-shanghai-3d`、`beijing-hangzhou-4d` 两个用例用
+`FixedClock.from_iso("2026-09-03T12:00:00+08:00")` 调 `plan_trip`，把
+`result.trip_sha256`/`result.html_sha256` 写入 JSON。验收：`.tmp/snap-
+before.json` 两个用例各两条哈希（`beijing-shanghai-3d` trip=`94c5a5c3...`
+html=`927f5ce6...`；`beijing-hangzhou-4d` trip=`bea36d23...`
+html=`70a7fa74...`）；连跑两次（`snap-before.json` 与 `snap-before-
+run2.json`）`diff` 空输出，逐字节相同，验证 `plan_trip` 在两个用例上确定性
+可复现，可作拆分前后的行为基线。
+
+任务 2（已完成）：先拆 `_schedule_problems`（242→25 行），按原有空行分隔的
+五个阶段逐段抽出模块私有函数（均为「剪切—去缩进—把用到的局部变量改成参数」，
+不改任何条件/阈值/文案/字段顺序）：`_add_rail_leg_candidates`（33 行，火车腿
+候选）→ `_add_lodging_candidates`（45 行，住宿入住候选）→
+`_add_poi_candidates`（39 行，景点候选+未排入景点轮转）→
+`_add_rest_candidates`（62 行，作息候选+老年恢复候选，返回 `senior` 供下一段
+用）→ `_build_day_problems`（82 行，距离矩阵+逐日 problem 组装）。再拆
+`plan_trip`（266→56 行），按文件里本来就有的 7 个 `run.advance("STAGE", ...)`
+管道检查点为天然边界拆成 8 段：`_plan_intake`（INTAKE+RESEARCHED）→
+`_plan_resolve_candidates`（rail/flyai/amap/variflight 解析到
+CANDIDATES_READY，13 项返回值）→ `_plan_resolve_mobility_and_stays`（mobility
+解析+`_select_stays`+`_with_required_meals`）→ `_plan_schedule_matrix`
+（`_schedule_problems` 调用+MATRIX 检查点，`matrix_cells`/`live_matrix_cells`
+只在本段内部的 `run.advance` 里用到，未向外层返回）→ `_plan_schedule_days`
+（`LightScheduler` 调度+可行性校验+SCHEDULED 检查点，`normalized_request
+["assumptions"]` 沿用原地 `.append` 语义、不改成返回值）→ `_plan_trip_unknowns`
+（entities/days/unknowns/budget_ledger 四项计算+两处既有 `raise ValueError`
+分支）→ `_plan_build_trip`（Trip 字典组装+`provider_health`）→
+`_plan_validate_and_render`（VALIDATED+RENDERED 检查点）。全部 13 个新函数
+均为纯粹的原地文本搬移，未合并任何重复代码、未简化任何判断分支，两个既有
+`raise ValueError`（无可行排程；scheduler 与 Trip 账本不一致）与 HTML/Trip
+校验失败的 `raise` 原样保留在各自新函数体内。
+过程：13 次抽取每次都单独跑一次 `/usr/bin/python3 -m unittest
+tests.test_keyless_e2e`（37 项，非全量，任务书明文指定），全部一次通过，无
+需回退重来。
+验收（长度命令）：`plan_trip` 56 行、`_schedule_problems` 25 行，均 ≤100；
+全文件最长函数 110 行（`_resolve_rail`，未改动，早于本书已存在），≤150。
+验收（快照）：`.tmp/snap-after.json` 与 `.tmp/snap-before.json` `diff` 空
+输出，两个用例四条哈希逐字节相同。
+验收（语料）：README demo（`trip_sha256`/`html_sha256` 与拆分前完全一致）、
+`build_plan_fixtures.py`、`build_renderer_fixtures.py`（`journey_sha256`/
+`html_sha256` 与拆分前完全一致）三条命令后 `git status --short` 均只剩
+`planning.py` 本身，`demo/`/`tests/fixtures/` 零改动。
+验收（全量）：`Ran 584 tests` `OK` 0 skipped；pyflakes（src+tests+scripts）
+0 行；`scan_secrets.py` 0 命中（372 文件）；`git diff main -- tests | grep
+-cE '^-\s*def test_'` 为 0；`git diff main --stat -- plugins/china-trip-
+weaver/schema '*/mobility.py' '*/journey.py' '*/cli.py' '*/render/*' demo
+tests/fixtures` 空输出；`git diff main --stat` 只有 `BLOCKED.md`/
+`PROGRESS.md`/`planning.py` 三个文件，均在白名单内。
+反向验证（终端记录，红→绿）：临时把 `_add_lodging_candidates` 里
+`"title": "%s 入住" % lodging["name"]` 改成 `"%s 入住X"`（标
+`# TEMP-REVERSE-VERIFY`）→ `build_renderer_fixtures.py` 后
+`journey_sha256` 从 `7ada91c0...` 变成 `b100dcef...`、`html_sha256` 从
+`42a92506...` 变成 `aee24aa8...`，`git status --short` 报
+`demo/journey-16d/journey.html`/`journey.json` 两个文件被改（红，证明新
+抽出的函数确实在被调用、文本确实在生效，不是死代码）→ 还原文案 → `git diff
+-- planning.py | grep -c TEMP-REVERSE-VERIFY` 为 0（残留标记已清零）→ 重跑
+`build_renderer_fixtures.py` 后两条哈希均变回 `7ada91c0...`/`42a92506...`，
+`git status --short` 只剩 `planning.py`（绿，`demo/` 已恢复原样）→ 收尾前
+再跑一次全量测试确认仍是 `Ran 584 tests` `OK` 0 skipped。
+未触发止损（13 次抽取一次性全过，止损线是同一验收连败 3 次）。任务书结束，
+`BLOCKED.md` 本轮只有任务 0 的一条非阻塞记录，无新增待裁决项。
+
+终验：`git diff main --stat` 只有 `BLOCKED.md`/`PROGRESS.md`/`planning.py`
+三个文件，均在白名单（`tests/test_keyless_e2e.py` 本轮未改，无需新增测试就
+已覆盖）；两次 `git commit`（任务 0/1 docs 一次、任务 2 拆分一次）；
+`git push -u origin split-planning` 成功，远程分支已建（`https://github.com/
+kangyishuai/china-trip-weaver/pull/new/split-planning` 提示，未开 PR，按
+任务书「只推分支、合并由管理者做」不处理）；`.github/workflows/*.yml` 的
+触发条件只认 `push: branches: [main]` 与 `pull_request`，非 main 分支 push
+后 `gh run list --branch split-planning` 为空属预期，非 CI 抖动。硬指标一、
+硬指标二全部达成，任务书结束，无遗留阻塞项。
