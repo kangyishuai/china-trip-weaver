@@ -179,7 +179,7 @@ ctw rail --date YYYY-MM-DD --from CITY --to CITY --output-json rail-result.json
 ctw mobility --candidates CANDIDATES.json --modes transit,walking --output-json mobility.json
 ctw lodging --city CITY --check-in YYYY-MM-DD --check-out YYYY-MM-DD --output-json lodging.json
 ctw air --origin CITY --destination CITY --date YYYY-MM-DD --output-json air.json
-ctw replan --trip TRIP.json --event EVENT.json --base-revision N --output-json TRIP-rN.json --output-html TRIP-rN.html
+ctw replan --trip TRIP.json --event EVENT.json --base-revision N --output-json TRIP-rN.json --output-html TRIP-rN.html [--rail-result RAIL.json]
 ctw render TRIP.json --output TRIP.html
 ctw validate-html TRIP.html TRIP.json
 ctw journey plan --request REQUEST.json --candidates CANDIDATES.json [--expected-segment-days N] [--amap-total-max-calls N] --output-json JOURNEY.json
@@ -191,6 +191,8 @@ ctw journey assemble --request REQUEST.json --trip TRIP.json [--trip TRIP.json .
 ```
 
 The runtime uses no third-party Python package. Trip and Journey renderers refuse invalid input; both HTML validators block structural, CSP, remote-resource, unsafe-link, secret, fact-mapping, traceability, and transaction-action violations.
+
+`ctw replan`'s `refresh` event replaces one rail leg with a freshly queried service: run `ctw rail --output-json` first, then pass that file's path as `--rail-result`. `--rail-result` is required for a `refresh` event and rejected for every other event type.
 
 ## Tests
 

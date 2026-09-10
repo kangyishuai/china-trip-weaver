@@ -219,15 +219,18 @@ class ReplanTests(unittest.TestCase):
         self.assertEqual("locked_overlap", raised.exception.code)
 
     def test_all_four_replan_fixtures_run_through_cli_and_render(self):
-        """The `ctw replan` CLI does not accept rail_result yet (CLI wiring is a
-        later change), so this exercises only the four event types it already
-        supports; refresh.json is covered separately via run_replan_fixture."""
+        """Covers all five replan fixtures (the name predates refresh.json's CLI
+        wiring and is kept as-is; renaming it would delete-and-recreate a
+        `def test_` line, which this task's rules forbid). For refresh.json, the
+        embedded rail_result is written to a sibling file and passed via
+        --rail-result, exactly as `ctw rail --output-json` followed by
+        `ctw replan --rail-result` would in real use."""
 
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
             output = Path(temporary)
-            cli_fixture_names = ("closure.json", "delay.json", "user-delete.json", "weather.json")
+            cli_fixture_names = ("closure.json", "delay.json", "refresh.json", "user-delete.json", "weather.json")
             fixture_paths = [FIXTURES / name for name in cli_fixture_names]
-            self.assertEqual(4, len(fixture_paths))
+            self.assertEqual(5, len(fixture_paths))
             for path in fixture_paths:
                 self.assertTrue(path.is_file(), path)
             for path in fixture_paths:
@@ -236,19 +239,20 @@ class ReplanTests(unittest.TestCase):
                     base = load(ROOT / fixture["base_fixture"])
                     json_path = output / (path.stem + ".json")
                     html_path = output / (path.stem + ".html")
-                    command = subprocess.run(
-                        [
-                            str(CTW), "replan",
-                            "--trip", str(ROOT / fixture["base_fixture"]),
-                            "--event", str(path),
-                            "--base-revision", str(base["revision"]["number"]),
-                            "--output-json", str(json_path),
-                            "--output-html", str(html_path),
-                            "--fixed-clock", FIXED_NOW,
-                        ],
-                        text=True,
-                        capture_output=True,
-                    )
+                    command_args = [
+                        str(CTW), "replan",
+                        "--trip", str(ROOT / fixture["base_fixture"]),
+                        "--event", str(path),
+                        "--base-revision", str(base["revision"]["number"]),
+                        "--output-json", str(json_path),
+                        "--output-html", str(html_path),
+                        "--fixed-clock", FIXED_NOW,
+                    ]
+                    if "rail_result" in fixture:
+                        rail_result_path = output / (path.stem + "-rail-result.json")
+                        rail_result_path.write_text(json.dumps(fixture["rail_result"]), encoding="utf-8")
+                        command_args += ["--rail-result", str(rail_result_path)]
+                    command = subprocess.run(command_args, text=True, capture_output=True)
                     self.assertEqual(0, command.returncode, command.stdout + command.stderr)
                     self.assertIn("REPLAN_COMPLETE", command.stdout)
                     self.assertIn("errors=0", command.stdout)
@@ -263,6 +267,59 @@ class ReplanTests(unittest.TestCase):
                     self.assertTrue(report.ok, [issue.render() for issue in report.errors])
                     html_report = validate_html(html_path.read_text(encoding="utf-8"), result)
                     self.assertTrue(html_report.ok, [issue.render() for issue in html_report.errors])
+
+    def test_cli_refresh_without_rail_result_fails_without_outputs(self):
+        fixture = load(FIXTURES / "refresh.json")
+        base_path = ROOT / fixture["base_fixture"]
+        base = load(base_path)
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            output = Path(temporary)
+            json_path = output / "trip.json"
+            html_path = output / "trip.html"
+            command = subprocess.run(
+                [
+                    str(CTW), "replan",
+                    "--trip", str(base_path),
+                    "--event", str(FIXTURES / "refresh.json"),
+                    "--base-revision", str(base["revision"]["number"]),
+                    "--output-json", str(json_path),
+                    "--output-html", str(html_path),
+                    "--fixed-clock", FIXED_NOW,
+                ],
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(1, command.returncode, command.stdout + command.stderr)
+            self.assertIn("refresh_result_required", command.stderr)
+            self.assertFalse(json_path.exists())
+            self.assertFalse(html_path.exists())
+
+    def test_cli_non_refresh_event_with_rail_result_fails(self):
+        base_path = ROOT / "tests" / "fixtures" / "trips" / "schema" / "valid" / "weekend-live.json"
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            output = Path(temporary)
+            rail_result_path = output / "rail-result.json"
+            rail_result_path.write_text(json.dumps(_refresh_rail_result()), encoding="utf-8")
+            json_path = output / "trip.json"
+            html_path = output / "trip.html"
+            command = subprocess.run(
+                [
+                    str(CTW), "replan",
+                    "--trip", str(base_path),
+                    "--event", str(FIXTURES / "closure.json"),
+                    "--rail-result", str(rail_result_path),
+                    "--base-revision", "1",
+                    "--output-json", str(json_path),
+                    "--output-html", str(html_path),
+                    "--fixed-clock", FIXED_NOW,
+                ],
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(1, command.returncode, command.stdout + command.stderr)
+            self.assertIn("--rail-result is only valid when --event has type refresh", command.stderr)
+            self.assertFalse(json_path.exists())
+            self.assertFalse(html_path.exists())
 
     def test_cli_revision_conflict_fails_without_outputs(self):
         base_path = ROOT / "tests" / "fixtures" / "trips" / "schema" / "valid" / "weekend-live.json"

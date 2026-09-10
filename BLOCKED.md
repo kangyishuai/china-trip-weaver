@@ -1,3 +1,32 @@
+## 书「ctw replan --rail-result」任务 2：硬指标二的 plugins diff 排除式与白名单本身冲突（2026-09-10，已按白名单执行，非空白裁决）
+
+任务书「界限」明确把 `skills/replan-china-trip/SKILL.md` 列入允许改动清单，
+任务 2 正文也明确要求「replan-china-trip/SKILL.md 加 refresh 两步用法」——
+这是两处独立、明确写出的要求。但「完成条件」硬指标二写
+`git diff 7fc66ec --stat -- plugins ':!*cli.py'` 须为空，而 `SKILL.md` 的
+真实路径是 `plugins/china-trip-weaver/skills/replan-china-trip/SKILL.md`，
+落在 `plugins` 之下，`':!*cli.py'` 这个 pathspec 只排除文件名匹配
+`*cli.py` 的路径（本仓库里就是 `cli.py` 一个文件），不排除同目录树下的
+`SKILL.md`——两者字面直接冲突，若不改 `SKILL.md` 就完不成任务 2 的明文要求
+（也违反白名单允许改动的意图），若改了 `SKILL.md` 硬指标二这条 grep 式检查
+必然非空。
+
+判断：白名单与任务正文两处明确、具体地要求编辑这一个文件，硬指标二那条
+pathspec 更像是编写任务书时假设「`plugins` 下这轮只会动 `cli.py`」而漏算了
+同样在白名单内、同样在 `plugins/` 目录树下的 `SKILL.md`，是任务书自身的
+疏漏而非故意设的边界（对照「界限」小节，读/写权限从未把 `SKILL.md` 排除在
+外，反而是唯一点名要求编辑的 skills 文件）。按「算得对 > 做得全」与既有
+先例（本文件「书 docs-drift 任务 2」条目：验收硬指标与白名单字面冲突时，
+选更接近「说的与代码一致」的一侧）处理：保留 `SKILL.md` 的编辑，不为了让
+这条 grep 式检查归零而阉割任务 2 的明文要求。
+
+证据：`git diff 7fc66ec --stat -- plugins ':!*cli.py'` 输出仅一行
+`plugins/china-trip-weaver/skills/replan-china-trip/SKILL.md | 9
++++++++++`，是本轮任务 2 新增的 refresh 两步用法段落（`ctw rail
+--output-json` → `ctw replan --rail-result`），不含任何其他改动；`plugins/`
+下唯二被改的文件就是白名单点名的 `cli.py`（任务 1，已被该 pathspec 排除）
+与 `SKILL.md`（任务 2，被排除式漏算）。
+
 ## 顺手发现：0.7.0 没有实际的 git tag 或 GitHub Release（2026-09-10，未处理，仅记录）
 
 写任务 4（发版流程写进 CONTRIBUTING）时核对历史实际发版步骤，发现 `git tag -l`

@@ -178,7 +178,7 @@ ctw rail --date YYYY-MM-DD --from CITY --to CITY --output-json rail-result.json
 ctw mobility --candidates CANDIDATES.json --modes transit,walking --output-json mobility.json
 ctw lodging --city CITY --check-in YYYY-MM-DD --check-out YYYY-MM-DD --output-json lodging.json
 ctw air --origin CITY --destination CITY --date YYYY-MM-DD --output-json air.json
-ctw replan --trip TRIP.json --event EVENT.json --base-revision N --output-json TRIP-rN.json --output-html TRIP-rN.html
+ctw replan --trip TRIP.json --event EVENT.json --base-revision N --output-json TRIP-rN.json --output-html TRIP-rN.html [--rail-result RAIL.json]
 ctw render TRIP.json --output TRIP.html
 ctw validate-html TRIP.html TRIP.json
 ctw journey plan --request REQUEST.json --candidates CANDIDATES.json [--expected-segment-days N] [--amap-total-max-calls N] --output-json JOURNEY.json
@@ -190,6 +190,8 @@ ctw journey assemble --request REQUEST.json --trip TRIP.json [--trip TRIP.json .
 ```
 
 运行时不使用任何第三方 Python 包。Trip 与 Journey renderer 都会拒绝无效输入；两套 HTML validator 都会拦截结构、CSP、远程资源、危险链接、密钥、事实映射、追溯缺口和交易动作等违规。
+
+`ctw replan` 的 `refresh` 事件用新查到的车次原地换掉一条火车腿：先跑 `ctw rail --output-json`，再把输出文件路径传给 `--rail-result`。`refresh` 事件必须带 `--rail-result`，其余事件类型一律拒绝。
 
 ## 测试
 

@@ -358,7 +358,58 @@ only valid when --event has type refresh`。
 `/usr/bin/python3 -m unittest discover -s tests` → `Ran 525 tests` `OK`
 0 skipped；`scripts/scan_secrets.py` 0 命中；pyflakes（src+tests+scripts）
 0 行；`git diff --stat` 只有 `PROGRESS.md`/`cli.py`/`tests/test_replan.py`
-三个文件，均在白名单内。
+三个文件，均在白名单内。任务 1 单独一次 `git commit`（`4216c59`）。
+
+任务 2（已完成）：`test_all_four_replan_fixtures_run_through_cli_and_render`
+（`test_replan.py:221`）循环夹具从 4 个扩到 5 个（新增 `refresh.json`）；
+`"rail_result" in fixture` 时把该字段写到临时目录下的兄弟文件、传
+`--rail-result` 给子进程，其余 4 个夹具不带该参数（沿用既有行为字节不变）；
+断言从 `assertEqual(4, ...)` 改 `assertEqual(5, ...)`。方法名本身刻意
+**不改**——`test_all_four_...` 现在覆盖 5 个夹具、名字与内容不再一致，但
+本任务书「规矩」明写 `git diff 7fc66ec -- tests | grep '^-\s*def test_'`
+须 0 行，改名等价于删一行旧签名、加一行新签名，会让该 grep 非空；用
+docstring 首句说明「方法名早于 refresh.json 接线、故意不改」替代改名，
+字面合规优先于名字准确。新增 2 个 `def test_`：
+`test_cli_refresh_without_rail_result_fails_without_outputs`（用
+`refresh.json` 整份夹具直接当 `--event`，不给 `--rail-result` → exit 1、
+stderr 含 `refresh_result_required`、两输出文件均不存在）、
+`test_cli_non_refresh_event_with_rail_result_fails`（`closure.json` 事件 +
+`_refresh_rail_result()` 写临时文件当 `--rail-result` → exit 1、stderr 含
+新增的 CLI 校验文案、两输出文件均不存在）。两份 README「Other commands」
+块只改 `ctw replan` 那一行（加 `[--rail-result RAIL.json]`），说明性文字加
+在代码块之外，紧跟既有「运行时不使用第三方包」那句之后，不触碰块内其余行
+（遵守本书与 A2b 书的接缝约定）。`replan-china-trip/SKILL.md` 在既有单命令
+示例后加一段「先 `ctw rail --output-json` 再 `ctw replan --rail-result`」
+的两步示例与必填/禁止说明。新建
+[docs/design/adr/0015-refresh-event.md](docs/design/adr/0015-refresh-event.md)，
+记「只换证据不改结构、离线、火车腿先行」三条边界（对应任务书「我替领导
+拍的板」）。
+验收：`git grep -n 'rail-result' -- README.md README.zh-CN.md
+plugins/china-trip-weaver/skills/replan-china-trip/SKILL.md` 三个文件各
+≥1 行（实际 2+2+3）；`test -f docs/design/adr/0015-refresh-event.md`
+存在。全量 `Ran 527 tests` `OK` 0 skipped（525 基线 + 本任务 2 个新
+`def test_`）；`scan_secrets.py` 0 命中；pyflakes 0 行。
+`git diff 7fc66ec --stat -- plugins ':!*cli.py'` **非空**（只有
+`SKILL.md` 一行 9 处新增）——与白名单、任务 2 正文的明文要求直接冲突，
+判断为任务书自身遗漏，已保留 `SKILL.md` 编辑，完整取舍与证据记在
+`BLOCKED.md` 顶部（书「ctw replan --rail-result」任务 2 条目）。
+反向验证（终端记录）：临时把 `_cmd_replan` 里
+`replan_trip(..., rail_result=rail_result)` 改成
+`replan_trip(..., rail_result=None)  # TEMP-REVERSE-VERIFY` →
+`test_all_four_replan_fixtures_run_through_cli_and_render` 的 `refresh.json`
+子测试报 `AssertionError: 0 != 1 : REPLAN_FAILED refresh_result_required
+refresh requires a rail_result`（红）→ 还原 → `git diff 7fc66ec -- cli.py |
+grep -c TEMP-REVERSE-VERIFY` 为 0（残留标记已清零）→ 重跑同一测试转
+`ok`（绿）。任务 2 单独一次 `git commit`（提交见下）。
+
+最终门（2026-09-10 实测）：`/usr/bin/python3 -m unittest discover -s
+tests` → `Ran 527 tests` `OK` 0 skipped；`scripts/scan_secrets.py` 0
+命中；`~/miniconda3/envs/core/bin/python -m pyflakes
+plugins/china-trip-weaver/src tests scripts` 0 行；`git diff 7fc66ec --
+tests | grep -E '^-\s*def test_'` 0 行；`git diff 7fc66ec --stat --
+tests/fixtures` 空（一字未改）。硬指标一、硬指标二（除已记录并说明的
+`SKILL.md` 一处例外）均达成。BLOCKED.md 本轮追加一条判断记录（书
+「ctw replan --rail-result」任务 2），无其他待裁决项。
 
 ## 本轮记录（2026-09-10，`replan` 支持 `refresh` 事件；main 直改，三书并行之一）
 

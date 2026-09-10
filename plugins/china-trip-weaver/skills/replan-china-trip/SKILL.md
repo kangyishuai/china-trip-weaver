@@ -20,4 +20,13 @@ The event file is either the event object itself or a fixture wrapper containing
 scripts/ctw replan --trip trip.json --event event.json --base-revision 1 --output-json trip-r2.json --output-html trip-r2.html
 ```
 
+A `refresh` event replaces one rail leg with a freshly queried 12306 service instead of editing a slot by hand; it is two commands, query then apply:
+
+```bash
+scripts/ctw rail --date 2026-10-16 --from CITY --to CITY --output-json rail-result.json
+scripts/ctw replan --trip trip.json --event refresh-event.json --rail-result rail-result.json --base-revision 1 --output-json trip-r2.json --output-html trip-r2.html
+```
+
+`--rail-result` is required when the event's `type` is `refresh` and rejected for every other event type; it only checks the file's top-level shape (provider `12306-mcp` with `transport_legs`, `claims`, and `health`), then hands it to the same revision/lock/stability rules above.
+
 Treat `revision_conflict` as a stop condition. Deliver only when the command reports `errors=0`; the output Trip contains the appended patch and revision metadata.
