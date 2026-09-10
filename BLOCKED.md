@@ -610,3 +610,39 @@ china_trip_weaver/replan.py`）无歧义、按实际路径处理，不算待裁�
 得粗略，不影响验收，已在 `PROGRESS.md` 任务 0 小节记录），三个任务与两条
 硬指标均一次性达标，过程中没有遇到需要向管理者请示的越界、含糊或验收口径
 冲突。
+
+## 书：`ctw candidates import` 批量导入（2026-09-10，worktree `.tmp/wt-c` 分支 `candidates-import`）
+
+无需要停工请示领导的裁决项；以下几处任务书留白/含糊之处已按自身判断处理，
+均不影响硬指标或既有断言力度，完整取舍与实测证据见 `PROGRESS.md` 本书
+小节，此处只列结论：
+
+1. 任务书路径写 `src/china_trip_weaver/candidates.py`，实际是
+   `plugins/china-trip-weaver/src/china_trip_weaver/candidates.py`——与
+   `replan.py`/`journey.py` 此前的同类出入（已有先例判过不算待裁决）
+   同款处理，按实际路径改。
+2. `CANDIDATES_IMPORT_COMPLETE pois=N lodgings=M` 的 N/M 语义任务书未
+   点名，判为「本批次新增计数」而非「文件累计总数」，因为对用户更有
+   信息量、也更贴近现有 `CANDIDATE_POI_ADDED`/`CANDIDATE_LODGING_ADDED`
+   逐条打印一次新增的既有风格。
+3. `item=N` 的编号任务书未点名 0-based 还是 1-based，判为 1-based（与
+   人类清单描述"第几条"的直觉一致），已在 fixture 与测试里实测验证。
+4. 反向验证一节，任务书写"用 `git stash push -u -m import-check` 掉
+   candidates.py 改动 → 新测试红 → 恢复 → 绿"，但 candidates.py 的任务 1
+   改动此刻已单独提交（遵守"每个任务一次 `git commit`"的规矩），不是
+   未提交状态，无法照字面顺序执行（`stash push` 只能保存未提交差异，
+   且 push 后工作区必然回到 HEAD，与"push 后应处于失败态"字面冲突）。
+   采用等价且合乎 git 语义的操作序列（先用 `git show <分支起点>:文件`
+   覆盖工作区制造未提交差异、`stash push` 限定 pathspec 只保存这一个
+   文件、`stash apply <SHA>` 触发红、`checkout HEAD --` 恢复、核对
+   `stash@{0}` 等于记录的 SHA 后 `stash drop` 清理），push/apply/drop
+   三个动作都用到，且全程只影响 candidates.py 一个文件的 pathspec，
+   任务 2 其余未提交改动（测试、文档、fixture）未受干扰。终端记录见
+   `PROGRESS.md`。
+5. 写验收记录时发现 `main` 已被并行的「渲染页可读性」书推进（新增/删除
+   了 `render/`、`tests/test_journey.py`、`tests/test_renderer.py` 等与
+   本书无关的内容）。此刻字面执行任务书写的 `git diff main ...` 会把
+   那些改动混进比对结果。按 `journey-replace`/`docs-drift` 等书已有的
+   同款先例（分支分出后 main 前进，验收改用 `git merge-base HEAD main`
+   核实的真实分出点），本书统一改用真实分出点 `1f1e966` 做比对，两条
+   规矩检查（无删测试函数、schema/demo 零改动）均干净通过。
