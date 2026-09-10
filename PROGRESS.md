@@ -956,4 +956,36 @@ grep -E '^-\s*def test_'` 0 行；`git diff 1f1e966 --stat --
 plugins/china-trip-weaver/schema demo` 空；`git diff 1f1e966 --stat`
 只有 7 个文件（`PROGRESS.md`/两份 README/`SKILL.md`/`candidates.py`/
 `cli.py`/`test_candidates.py`），全部在白名单内。单独一次 `git commit`
-（提交见下）。
+（`2bba4ba`）。
+
+终验（提交 BLOCKED.md 后复核，2026-09-10）：`BLOCKED.md` 记录一条本书
+小节（`eef9bea`，无需要停工请示领导的裁决项，五点判断记录见上）后，清空
+`.tmp/manual-check/` 临时验证文件，`git status --short` 为空。硬指标一
+四项在最终代码上重新完整跑了一遍（非任务 1 阶段的旧结果复述）：①对同一份
+`candidates init` 骨架，`candidates import`（用
+`tests/fixtures/candidate-import/items.json`，同一
+`--queried-at 2026-09-04T12:00:00+08:00`）与逐条 `add-poi`×3/`add-lodging`×2
+（参数逐条照抄 fixture 内容）产出的文件 `cmp` 零差异（`IDENTICAL`）；
+②把第 4 项（lodging "合成酒店"）删掉 `source_url` →
+`CANDIDATES_IMPORT_FAILED item=4 reason=missing required key(s):
+source_url`、exit 1、`cmp` 确认文件与导入前逐字节相同；③`--dry-run`
+→ `CANDIDATES_IMPORT_COMPLETE pois=3 lodgings=2`、exit 0、`cmp` 确认文件
+与导入前逐字节相同；④`ctw validate-candidates` 报 `CANDIDATES VALID`。
+硬指标二：`/usr/bin/python3 -m unittest discover -s tests` → `Ran 539
+tests` `OK` 0 skipped（≥539 达标；本次机器负载较高单跑 88.6s，非同一时刻
+对照，不判定为回归——沿用「机器负载会让全量测试从 33 秒飘到 85 秒」的既有
+经验）；`scan_secrets.py` 0 命中（370 文件）；pyflakes（src+tests+scripts）
+0 行；`git diff 1f1e966 --stat -- plugins/china-trip-weaver/schema demo`
+空；分支真实分出点核实为 `git merge-base HEAD main` = `1f1e966`（写本节时
+`main` 已被并行的「渲染页可读性」书推进，字面 `git diff main` 会混入无关
+改动，按既有先例改用真实分出点，见 `BLOCKED.md` 第 5 点）；`git diff
+1f1e966 --stat` 最终 9 个文件（`BLOCKED.md`/`PROGRESS.md`/两份
+README/`SKILL.md`/`candidates.py`/`cli.py`/新建的
+`tests/fixtures/candidate-import/items.json`/`test_candidates.py`），全部
+在「只允许改」白名单内；`git diff 1f1e966 -- tests | grep -E
+'^-\s*def test_'` 0 行（未删除任何测试函数）。`git push -u origin
+candidates-import` 成功（远端已建 `candidates-import` 分支，PR 未开——
+任务书只要求推分支、合并由管理者做，未要求开 PR）。任务 1、任务 2、
+`BLOCKED.md` 各一次独立 `git commit`（`f70df0f`/`2bba4ba`/`eef9bea`），
+`main` 分支未被本书触碰。硬指标一、二全部达成，止损轮次未触发（每项任务
+一次验收即通过，未出现连败），任务书结束，无遗留阻塞项。
