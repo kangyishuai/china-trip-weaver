@@ -1702,3 +1702,75 @@ qa-handshake` 确认 `45ce40d`）。未开 PR（任务书只要求推分支、�
 需要处理的 CI 抖动。硬指标一、二全部达成，止损轮次未触发（两项任务
 各一次验收即通过），任务书结束，无遗留阻塞项（`test_journey.py:1430`
 的同款 timeout 隐患已记 `BLOCKED.md`，供领导定夺）。
+
+## 书「拆 MobilityBackend.resolve」（2026-09-10，main 直改，三书并行之一）
+
+任务 0 核对（HEAD `ec7c12d`）：全量 584 测试 OK 0 skip、secrets 0、pyflakes 0
+行；长度命令末四项 `[(45,'poi_identity_feedback'),(63,'check_poi_name_
+identity'),(70,'_semantic_location_checks'),(366,'resolve')]`、`resolve`
+精确在 L124-489；`AMapMobilityTests` 精确 53 个 `def test_`；三处调用方
+（`cli.py:1073`、`planning.py`、`journey.py`）与
+`test_keyless_e2e.py:694` 附近的 `MobilityBackend(...)` 构造均核对吻合。
+全部与任务书一致，不停工。
+理解的目标：把 366 行的 `resolve` 按内部阶段（早退→实体循环[POI 识别→
+geocode]→路线矩阵→健康结算）拆成 7 个 `MobilityBackend` 私有方法，公开
+签名与逐字节输出不变。
+顺序：先写快照脚本存 5 场景基线（已完成，`.tmp/snap-before/*.json` 5 个
+文件非空，脚本自身连跑两次 `diff -r` 空）→ 按阶段自底向上拆（早退→健康
+结算→路线矩阵→geocode/POI 叶子函数→entity 包装→locations 循环包装）
+→ 每步跑 `test_amap_live` → 全部完成后跑全量+快照 diff+反向验证。
+最大风险（已定位）：geocode 阶段的 `identity_candidates`/
+`identity_candidate_claims`（喂给错误提示 `poi_identity_feedback`）是
+POI 识别阶段留下的候选列表，不是各自阶段的空默认值——若在抽取
+`_resolve_geocode` 时误把它们重新初始化为 `()`，会在 POI 命中过候选但
+geocode 出错的场景下悄悄改掉警告文案里的候选详情，测试断言字符串包含
+关系可能不会立刻察觉。对策：`_resolve_poi_identity` 把这两个值随
+`geocode_address`/`identity_claims`/`provider_name` 一起返回，由
+`_resolve_entity` 原样转交给 `_resolve_geocode`，lodging 实体路径维持
+`()`/`()` 默认值不变。
+
+任务 1（已完成）：`.tmp/snapshot_mobility.py`（不提交）复用
+`AMapScenarioTransport`/`amap_scenario_candidates`，对 5 份场景各跑一次
+`resolve(candidates, clock, ("walking",))`，`result.as_dict()` 落盘
+`.tmp/snap-before/<场景>.json`。验收：5 个文件存在非空（3502~17794
+字节）；连跑两次 `diff -r` 为空，快照确定。
+
+任务 2（已完成）：按阶段自底向上拆出 7 个 `MobilityBackend` 私有方法
+（`_resolve_early_exit`、`_resolve_locations`、`_resolve_entity`、
+`_resolve_poi_identity`、`_resolve_geocode`、`_resolve_route_matrix`、
+`_finalize_result`），每步用行索引脚本机械搬移+`pyflakes`单文件检查+
+`test_amap_live` 三重把关，共 6 步（详见 `.tmp/`下脚本，未提交）。过程中
+pyflakes 当场抓到一处真实 bug：`_resolve_poi_identity` 前三行若不重新
+初始化 `geocode_address`/`identity_claims`/`provider_name` 默认值，
+早退路径会引用未定义名字（`undefined name`），已在函数顶部补上与原
+`_resolve_entity` 调用前一致的三行默认值再消除。
+硬指标一实测：长度命令
+`[(70,'_semantic_location_checks'),(102,'_resolve_geocode'),
+(108,'_resolve_route_matrix'),(120,'_resolve_poi_identity')]`，`resolve`
+本体 32 行——`_resolve_poi_identity` 卡在 120 行上限（本体逻辑量所致，
+无法在不改控制流风格的前提下再瘦身，压缩点仅限合并 3 行返回类型注解为 2
+行，纯格式改动、零逻辑变化）。
+硬指标二实测：`.tmp/snap-after` 与 `.tmp/snap-before` `diff -r` 为空；
+全量 `Ran 584 tests` `OK` 0 skipped；`scan_secrets.py` 0 命中；pyflakes
+（src+tests+scripts）0 行；三常量三函数保护 grep 0 行；
+`git diff ec7c12d -- tests | grep -E '^-\s*def test_'` 0 行；
+`git diff ec7c12d --stat -- plugins/china-trip-weaver/schema
+'*/providers/*' '*/cli.py' '*/planning.py' '*/journey.py'` 空。
+反向验证（终端记录）：把 g3 场景会命中的 `warnings.extend(("identity_
+conflict",) ...)` 首项文案改一字 `"identity_conflicX"` → 快照 diff
+在 `g3_identity_conflict.json` 报出两处差异（`reason`
+字段与 `warnings` 数组）且 `test_amap_live` 3 个用例
+（`test_g3_ambiguous_poi_and_wrong_geocode_admin_leave_coordinates_unknown`、
+`test_prefix_and_different_candidate_names_remain_unknown` 的 2 个
+subTest）从 `AssertionError: 'identity_conflict' not found in
+(...)` 报红 → 还原（`grep -c TEMP-REVERSE-VERIFY` 确认 0 行残留）→
+快照 diff 转空、`Ran 61 tests` `OK` 转绿。首次尝试的两个候选文案
+（POI 无结果、business_conflict 尾缀）因不在 5 份快照场景的实际触发
+路径内，diff/测试均未变红，已换成 g3 场景真正命中的文案后才拿到完整
+红→绿闭环，记录此处避免以后误以为"没变红=白改了"。
+`git status --short` 只剩 `PROGRESS.md`/`mobility.py`（`BLOCKED.md`
+本轮追加"无待裁决项"一条空记录，`test_amap_live.py` 未新增测试，
+因白名单只说"只许新增"而非强制）。
+
+最终门：硬指标一、二全部达成，无遗留阻塞项，止损轮次未触发（每步验收
+一次通过，仅两次反向验证候选文案挑选失误，非代码回归）。

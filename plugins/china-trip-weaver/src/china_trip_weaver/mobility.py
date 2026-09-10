@@ -132,21 +132,37 @@ class MobilityBackend:
             raise ValueError("invalid candidates: " + "; ".join(item.render() for item in report.errors))
         normalized_modes = normalize_modes(modes)
         now = isoformat_seconds(clock)
-        if self.mode == "off":
-            return MobilityResult((), (), (), _health(
-                "static", "missing", now,
-                "AMap mobility is off; calls=0/80 qps<=2; route matrix uses static estimates",
-            ), ())
-        if not self.credentials.get("AMAP_WEBSERVICE_KEY"):
-            return MobilityResult((), (), (), _health(
-                "static", "missing", now,
-                "AMap credential is missing; calls=0/80 qps<=2; route matrix uses static estimates",
-            ), ())
+        early_result = self._resolve_early_exit(now)
+        if early_result is not None:
+            return early_result
         if self.transport is None:
             raise ValueError("live mobility requires an AMap transport")
 
         adapter = AMapAdapter()
         context = ProviderContext(clock=clock, credentials=self.credentials, transport=self.transport)
+        locations, claims, calls, errors, warnings, fatal_status = self._resolve_locations(
+            candidates, adapter, context, now,
+        )
+
+        claims, semantic_warnings = _semantic_location_checks(locations, claims, candidates)
+        warnings.extend(semantic_warnings)
+
+        cells, fatal_status = self._resolve_route_matrix(
+            locations, candidates, normalized_modes, adapter, context, clock, now,
+            claims, calls, errors, fatal_status,
+        )
+
+        return self._finalize_result(locations, cells, claims, calls, errors, warnings, fatal_status, now)
+
+    def _resolve_locations(
+        self,
+        candidates: Mapping[str, Any],
+        adapter: AMapAdapter,
+        context: ProviderContext,
+        now: str,
+    ) -> Tuple[
+        Dict[str, MobilityLocation], List[Mapping[str, Any]], List[str], List[str], List[str], Optional[str],
+    ]:
         source_entities = _candidate_entities(candidates)
         locations: Dict[str, MobilityLocation] = {}
         claims: List[Mapping[str, Any]] = []
@@ -162,208 +178,289 @@ class MobilityBackend:
                     entity["ref_id"], entity["name"], entity["city"], existing, (),
                 )
                 continue
-            identity_claims: List[Mapping[str, Any]] = []
-            identity_candidates: Sequence[Mapping[str, Any]] = ()
-            identity_candidate_claims: Sequence[Mapping[str, Any]] = ()
-            selected: Optional[Mapping[str, Any]] = None
-            provider_name: Optional[str] = None
-            geocode_address = "%s%s" % (entity["city"], entity["name"])
-            if not entity["lodging"]:
-                poi_request = ProviderRequest(
-                    request_id=stable_id("amap-poi", entity["ref_id"], entity["name"], entity["city"]),
-                    capability="poi",
-                    parameters={
-                        "subject_ref": entity["ref_id"],
-                        "keywords": entity["name"],
-                        "city": entity["city"],
-                        "page_size": 2,
-                        "page_num": 1,
-                    },
-                    deadline_ms=int(min(self.deadline_seconds, 8.0) * 1000),
-                    as_of=now[:10],
-                    cache_policy="bypass",
-                    trace={"stage": "mobility-poi-identity"},
-                )
-                calls_before = _transport_calls(self.transport)
-                poi_result = adapter.query(poi_request, context)
-                if _transport_calls(self.transport) > calls_before:
-                    calls.append("amap.poi:%s" % entity["ref_id"])
-                identity_candidates = poi_result.normalized_items
-                identity_candidate_claims = poi_result.claims
-                if not poi_result.normalized_items:
-                    error = poi_result.error_class or "no_results"
-                    errors.append(error)
-                    warnings.append(
-                        "%s:%s:poi_identity_lookup:%s" % (
-                            error,
-                            entity["ref_id"],
-                            poi_identity_feedback(
-                                identity_candidates, identity_candidate_claims,
-                            ),
-                        )
-                    )
-                    if error in FATAL_ERRORS:
-                        fatal_status = poi_result.health["status"]
-                        break
-                    continue
-                selected = poi_result.normalized_items[0]
-                conflict_reasons = _poi_identity_conflicts(
-                    entity, poi_result.normalized_items, poi_result.claims,
-                )
-                if (
-                    conflict_reasons == ("ambiguous_name_margin",)
-                    and _poi_candidates_share_coordinate_cluster(
-                        poi_result.normalized_items,
-                    )
-                ):
-                    conflict_reasons = ()
-                    warnings.append(
-                        "identity_conflict:%s:nearby_name_candidates:%s" % (
-                            entity["ref_id"],
-                            poi_identity_feedback(
-                                identity_candidates, identity_candidate_claims,
-                            ),
-                        )
-                    )
-                if conflict_reasons:
-                    claims.extend(_claims_with_status(poi_result.claims, "conflict"))
-                    errors.append("identity_conflict")
-                    feedback = poi_identity_feedback(
-                        identity_candidates,
-                        identity_candidate_claims,
-                    )
-                    warnings.extend(("identity_conflict",) + tuple(
-                        "identity_conflict:%s:%s:%s" % (
-                            entity["ref_id"], reason, feedback,
-                        )
-                        for reason in conflict_reasons
-                    ))
-                    continue
-                selected_ids = set(selected.get("claim_ids", ()))
-                identity_claims = [
-                    copy.deepcopy(claim) for claim in poi_result.claims
-                    if claim["claim_id"] in selected_ids
-                ]
-                identity = next(
-                    (claim["value"] for claim in identity_claims if claim["field_path"] == "/provider_identity"),
-                    None,
-                )
-                if not _complete_poi_address(identity):
-                    claims.extend(_claims_with_status(identity_claims, "unknown"))
-                    errors.append("incomplete_address")
-                    warnings.extend((
-                        "incomplete_address",
-                        "incomplete_address:%s" % entity["ref_id"],
-                        "incomplete_address:%s:poi_address_missing_admin_detail:%s" % (
-                            entity["ref_id"],
-                            poi_identity_feedback(
-                                identity_candidates, identity_candidate_claims,
-                            ),
-                        ),
-                    ))
-                    continue
-                if _business_conflict(entity, candidates, identity_claims):
-                    identity_claims = _business_claims_with_conflict(identity_claims)
-                    warnings.extend((
-                        "business_conflict",
-                        "business_conflict:%s" % entity["ref_id"],
-                        "business_conflict:%s:provider_identity_disagrees_with_candidate" % entity["ref_id"],
-                    ))
-                provider_name = selected["name"]
-                if str(identity.get("formatted_address") or "").strip():
-                    geocode_address = identity["formatted_address"]
-
-            request = ProviderRequest(
-                request_id=stable_id("amap-geocode", entity["ref_id"], geocode_address, entity["city"]),
-                capability="geocode",
-                parameters={
-                    "subject_ref": entity["ref_id"],
-                    "address": geocode_address,
-                    "city": entity["city"],
-                },
-                deadline_ms=int(min(self.deadline_seconds, 8.0) * 1000),
-                as_of=now[:10],
-                cache_policy="bypass",
-                trace={"stage": "mobility-geocode"},
+            location, fatal_status = self._resolve_entity(
+                entity, candidates, adapter, context, now, calls, claims, errors, warnings,
             )
-            calls_before = _transport_calls(self.transport)
-            result = adapter.query(request, context)
-            if _transport_calls(self.transport) > calls_before:
-                calls.append("amap.geocode:%s" % entity["ref_id"])
-            if result.normalized_items and result.claims:
-                if len(result.normalized_items) != 1:
-                    claims.extend(_claims_with_status(
-                        identity_claims + list(result.claims), "conflict",
-                    ))
-                    errors.append("identity_conflict")
-                    warnings.extend((
-                        "identity_conflict",
-                        "identity_conflict:%s:geocode_ambiguous:%s" % (
-                            entity["ref_id"],
-                            poi_identity_feedback(
-                                result.normalized_items, result.claims,
-                            ),
-                        ),
-                    ))
-                    continue
-                provider_place = result.normalized_items[0]
-                coordinate_claim = result.claims[0] if result.claims[0]["field_path"] == "/coordinates" else None
-                if coordinate_claim is None or not isinstance(coordinate_claim.get("value"), dict):
-                    errors.append("contract_mismatch")
-                    warnings.append(
-                        "contract_mismatch:%s:geocode_coordinates:%s" % (
-                            entity["ref_id"],
-                            poi_identity_feedback(
-                                identity_candidates, identity_candidate_claims,
-                            ),
-                        )
-                    )
-                    fatal_status = "contract_mismatch"
-                    break
-                if not _poi_admin_matches(entity, provider_place, result.claims):
-                    claims.extend(_claims_with_status(identity_claims + list(result.claims), "conflict"))
-                    errors.append("identity_conflict")
-                    warnings.extend((
-                        "identity_conflict",
-                        "identity_conflict:%s:geocode_admin_mismatch:%s" % (
-                            entity["ref_id"],
-                            poi_identity_feedback(
-                                identity_candidates,
-                                identity_candidate_claims,
-                                actual_administrative_area=provider_place.get("city"),
-                            ),
-                        ),
-                    ))
-                    continue
-                claims.extend(identity_claims)
-                claims.append(copy.deepcopy(coordinate_claim))
-                location_claim_ids = tuple(
-                    claim["claim_id"] for claim in identity_claims
-                ) + (coordinate_claim["claim_id"],)
-                locations[entity["ref_id"]] = MobilityLocation(
-                    entity["ref_id"], provider_name or provider_place["name"], provider_place["city"],
-                    coordinate_claim["value"], location_claim_ids,
+            if location is not None:
+                locations[entity["ref_id"]] = location
+            if fatal_status is not None:
+                break
+        return locations, claims, calls, errors, warnings, fatal_status
+
+
+    def _resolve_entity(
+        self,
+        entity: Mapping[str, Any],
+        candidates: Mapping[str, Any],
+        adapter: AMapAdapter,
+        context: ProviderContext,
+        now: str,
+        calls: List[str],
+        claims: List[Mapping[str, Any]],
+        errors: List[str],
+        warnings: List[str],
+    ) -> Tuple[Optional[MobilityLocation], Optional[str]]:
+        identity_claims: List[Mapping[str, Any]] = []
+        identity_candidates: Sequence[Mapping[str, Any]] = ()
+        identity_candidate_claims: Sequence[Mapping[str, Any]] = ()
+        provider_name: Optional[str] = None
+        geocode_address = "%s%s" % (entity["city"], entity["name"])
+        if not entity["lodging"]:
+            (
+                stop, fatal_status, geocode_address, identity_claims, provider_name,
+                identity_candidates, identity_candidate_claims,
+            ) = self._resolve_poi_identity(
+                entity, candidates, adapter, context, now, calls, claims, errors, warnings,
+            )
+            if stop:
+                return None, fatal_status
+        return self._resolve_geocode(
+            entity, adapter, context, now, calls, claims, errors, warnings,
+            geocode_address, identity_claims, provider_name,
+            identity_candidates, identity_candidate_claims,
+        )
+
+
+    def _resolve_poi_identity(
+        self,
+        entity: Mapping[str, Any],
+        candidates: Mapping[str, Any],
+        adapter: AMapAdapter,
+        context: ProviderContext,
+        now: str,
+        calls: List[str],
+        claims: List[Mapping[str, Any]],
+        errors: List[str],
+        warnings: List[str],
+    ) -> Tuple[
+        bool, Optional[str], str, List[Mapping[str, Any]], Optional[str], Sequence[Mapping[str, Any]], Sequence[Mapping[str, Any]],
+    ]:
+        geocode_address = "%s%s" % (entity["city"], entity["name"])
+        identity_claims: List[Mapping[str, Any]] = []
+        provider_name: Optional[str] = None
+        poi_request = ProviderRequest(
+            request_id=stable_id("amap-poi", entity["ref_id"], entity["name"], entity["city"]),
+            capability="poi",
+            parameters={
+                "subject_ref": entity["ref_id"],
+                "keywords": entity["name"],
+                "city": entity["city"],
+                "page_size": 2,
+                "page_num": 1,
+            },
+            deadline_ms=int(min(self.deadline_seconds, 8.0) * 1000),
+            as_of=now[:10],
+            cache_policy="bypass",
+            trace={"stage": "mobility-poi-identity"},
+        )
+        calls_before = _transport_calls(self.transport)
+        poi_result = adapter.query(poi_request, context)
+        if _transport_calls(self.transport) > calls_before:
+            calls.append("amap.poi:%s" % entity["ref_id"])
+        identity_candidates = poi_result.normalized_items
+        identity_candidate_claims = poi_result.claims
+        if not poi_result.normalized_items:
+            error = poi_result.error_class or "no_results"
+            errors.append(error)
+            warnings.append(
+                "%s:%s:poi_identity_lookup:%s" % (
+                    error,
+                    entity["ref_id"],
+                    poi_identity_feedback(
+                        identity_candidates, identity_candidate_claims,
+                    ),
                 )
-            else:
-                claims.extend(identity_claims)
-                error = result.error_class or "no_results"
-                errors.append(error)
+            )
+            if error in FATAL_ERRORS:
+                return True, poi_result.health["status"], geocode_address, identity_claims, provider_name, identity_candidates, identity_candidate_claims
+            return True, None, geocode_address, identity_claims, provider_name, identity_candidates, identity_candidate_claims
+        selected = poi_result.normalized_items[0]
+        conflict_reasons = _poi_identity_conflicts(
+            entity, poi_result.normalized_items, poi_result.claims,
+        )
+        if (
+            conflict_reasons == ("ambiguous_name_margin",)
+            and _poi_candidates_share_coordinate_cluster(
+                poi_result.normalized_items,
+            )
+        ):
+            conflict_reasons = ()
+            warnings.append(
+                "identity_conflict:%s:nearby_name_candidates:%s" % (
+                    entity["ref_id"],
+                    poi_identity_feedback(
+                        identity_candidates, identity_candidate_claims,
+                    ),
+                )
+            )
+        if conflict_reasons:
+            claims.extend(_claims_with_status(poi_result.claims, "conflict"))
+            errors.append("identity_conflict")
+            feedback = poi_identity_feedback(
+                identity_candidates,
+                identity_candidate_claims,
+            )
+            warnings.extend(("identity_conflict",) + tuple(
+                "identity_conflict:%s:%s:%s" % (
+                    entity["ref_id"], reason, feedback,
+                )
+                for reason in conflict_reasons
+            ))
+            return True, None, geocode_address, identity_claims, provider_name, identity_candidates, identity_candidate_claims
+        selected_ids = set(selected.get("claim_ids", ()))
+        identity_claims = [
+            copy.deepcopy(claim) for claim in poi_result.claims
+            if claim["claim_id"] in selected_ids
+        ]
+        identity = next(
+            (claim["value"] for claim in identity_claims if claim["field_path"] == "/provider_identity"),
+            None,
+        )
+        if not _complete_poi_address(identity):
+            claims.extend(_claims_with_status(identity_claims, "unknown"))
+            errors.append("incomplete_address")
+            warnings.extend((
+                "incomplete_address",
+                "incomplete_address:%s" % entity["ref_id"],
+                "incomplete_address:%s:poi_address_missing_admin_detail:%s" % (
+                    entity["ref_id"],
+                    poi_identity_feedback(
+                        identity_candidates, identity_candidate_claims,
+                    ),
+                ),
+            ))
+            return True, None, geocode_address, identity_claims, provider_name, identity_candidates, identity_candidate_claims
+        if _business_conflict(entity, candidates, identity_claims):
+            identity_claims = _business_claims_with_conflict(identity_claims)
+            warnings.extend((
+                "business_conflict",
+                "business_conflict:%s" % entity["ref_id"],
+                "business_conflict:%s:provider_identity_disagrees_with_candidate" % entity["ref_id"],
+            ))
+        provider_name = selected["name"]
+        if str(identity.get("formatted_address") or "").strip():
+            geocode_address = identity["formatted_address"]
+        return False, None, geocode_address, identity_claims, provider_name, identity_candidates, identity_candidate_claims
+
+
+    def _resolve_geocode(
+        self,
+        entity: Mapping[str, Any],
+        adapter: AMapAdapter,
+        context: ProviderContext,
+        now: str,
+        calls: List[str],
+        claims: List[Mapping[str, Any]],
+        errors: List[str],
+        warnings: List[str],
+        geocode_address: str,
+        identity_claims: List[Mapping[str, Any]],
+        provider_name: Optional[str],
+        identity_candidates: Sequence[Mapping[str, Any]],
+        identity_candidate_claims: Sequence[Mapping[str, Any]],
+    ) -> Tuple[Optional[MobilityLocation], Optional[str]]:
+        request = ProviderRequest(
+            request_id=stable_id("amap-geocode", entity["ref_id"], geocode_address, entity["city"]),
+            capability="geocode",
+            parameters={
+                "subject_ref": entity["ref_id"],
+                "address": geocode_address,
+                "city": entity["city"],
+            },
+            deadline_ms=int(min(self.deadline_seconds, 8.0) * 1000),
+            as_of=now[:10],
+            cache_policy="bypass",
+            trace={"stage": "mobility-geocode"},
+        )
+        calls_before = _transport_calls(self.transport)
+        result = adapter.query(request, context)
+        if _transport_calls(self.transport) > calls_before:
+            calls.append("amap.geocode:%s" % entity["ref_id"])
+        if result.normalized_items and result.claims:
+            if len(result.normalized_items) != 1:
+                claims.extend(_claims_with_status(
+                    identity_claims + list(result.claims), "conflict",
+                ))
+                errors.append("identity_conflict")
+                warnings.extend((
+                    "identity_conflict",
+                    "identity_conflict:%s:geocode_ambiguous:%s" % (
+                        entity["ref_id"],
+                        poi_identity_feedback(
+                            result.normalized_items, result.claims,
+                        ),
+                    ),
+                ))
+                return None, None
+            provider_place = result.normalized_items[0]
+            coordinate_claim = result.claims[0] if result.claims[0]["field_path"] == "/coordinates" else None
+            if coordinate_claim is None or not isinstance(coordinate_claim.get("value"), dict):
+                errors.append("contract_mismatch")
                 warnings.append(
-                    "%s:%s:geocode_lookup:%s" % (
-                        error,
+                    "contract_mismatch:%s:geocode_coordinates:%s" % (
                         entity["ref_id"],
                         poi_identity_feedback(
                             identity_candidates, identity_candidate_claims,
                         ),
                     )
                 )
-                if error in FATAL_ERRORS:
-                    fatal_status = result.health["status"]
-                    break
+                return None, "contract_mismatch"
+            if not _poi_admin_matches(entity, provider_place, result.claims):
+                claims.extend(_claims_with_status(identity_claims + list(result.claims), "conflict"))
+                errors.append("identity_conflict")
+                warnings.extend((
+                    "identity_conflict",
+                    "identity_conflict:%s:geocode_admin_mismatch:%s" % (
+                        entity["ref_id"],
+                        poi_identity_feedback(
+                            identity_candidates,
+                            identity_candidate_claims,
+                            actual_administrative_area=provider_place.get("city"),
+                        ),
+                    ),
+                ))
+                return None, None
+            claims.extend(identity_claims)
+            claims.append(copy.deepcopy(coordinate_claim))
+            location_claim_ids = tuple(
+                claim["claim_id"] for claim in identity_claims
+            ) + (coordinate_claim["claim_id"],)
+            return MobilityLocation(
+                entity["ref_id"], provider_name or provider_place["name"], provider_place["city"],
+                coordinate_claim["value"], location_claim_ids,
+            ), None
+        else:
+            claims.extend(identity_claims)
+            error = result.error_class or "no_results"
+            errors.append(error)
+            warnings.append(
+                "%s:%s:geocode_lookup:%s" % (
+                    error,
+                    entity["ref_id"],
+                    poi_identity_feedback(
+                        identity_candidates, identity_candidate_claims,
+                    ),
+                )
+            )
+            if error in FATAL_ERRORS:
+                return None, result.health["status"]
+        return None, None
 
-        claims, semantic_warnings = _semantic_location_checks(locations, claims, candidates)
-        warnings.extend(semantic_warnings)
 
+    def _resolve_route_matrix(
+        self,
+        locations: Dict[str, MobilityLocation],
+        candidates: Mapping[str, Any],
+        normalized_modes: Sequence[str],
+        adapter: AMapAdapter,
+        context: ProviderContext,
+        clock: Clock,
+        now: str,
+        claims: List[Mapping[str, Any]],
+        calls: List[str],
+        errors: List[str],
+        fatal_status: Optional[str],
+    ) -> Tuple[List[RouteCell], Optional[str]]:
         cells: List[RouteCell] = []
         if fatal_status is None and len(locations) >= 2:
             pairs = _bounded_pairs(tuple(locations.values()), candidates, normalized_modes, _transport_calls(self.transport))
@@ -457,7 +554,19 @@ class MobilityBackend:
                         break
                 if fatal_status is not None:
                     break
+        return cells, fatal_status
 
+    def _finalize_result(
+        self,
+        locations: Dict[str, MobilityLocation],
+        cells: List[RouteCell],
+        claims: List[Mapping[str, Any]],
+        calls: List[str],
+        errors: List[str],
+        warnings: List[str],
+        fatal_status: Optional[str],
+        now: str,
+    ) -> MobilityResult:
         call_count = _transport_calls(self.transport)
         call_limit = _transport_max_calls(self.transport)
         live_cells = sum(1 for item in cells if item.mode == "live")
@@ -487,6 +596,19 @@ class MobilityBackend:
             tuple(calls),
             tuple(dict.fromkeys(warnings)),
         )
+
+    def _resolve_early_exit(self, now: str) -> Optional[MobilityResult]:
+        if self.mode == "off":
+            return MobilityResult((), (), (), _health(
+                "static", "missing", now,
+                "AMap mobility is off; calls=0/80 qps<=2; route matrix uses static estimates",
+            ), ())
+        if not self.credentials.get("AMAP_WEBSERVICE_KEY"):
+            return MobilityResult((), (), (), _health(
+                "static", "missing", now,
+                "AMap credential is missing; calls=0/80 qps<=2; route matrix uses static estimates",
+            ), ())
+        return None
 
 
 def check_poi_name_identity(

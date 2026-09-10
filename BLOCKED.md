@@ -1,3 +1,9 @@
+## 书「拆 MobilityBackend.resolve」（2026-09-10，无待裁决项）
+
+任务 0 核对全部与任务书吻合（HEAD `ec7c12d`：584 测试、secrets 0、pyflakes
+0、长度命令、`resolve` 行号 L124-489、`AMapMobilityTests` 53 项、三处调用方
+位置均一致），拆分过程中未发现 bug、未需要改动逻辑，全程无待裁决问题。
+
 ## 书「Journey 逐日时间轴」任务 0/3：真实 journey 页"40 个 restapi.amap.com 链接"的口径澄清（2026-09-10，判断，非阻塞）
 
 任务书任务 0 写"真实 16 天 journey 渲染页含 40 个指向
