@@ -44,6 +44,9 @@ class StationAMapFixtureTransport:
         station_points=None,
         station_name_overrides=None,
         station_city="多站城市",
+        centre_city="多站城市",
+        centre_district="合成中心区",
+        station_district="合成站区",
     ):
         self.centre_available = centre_available
         self.fail = fail
@@ -53,6 +56,9 @@ class StationAMapFixtureTransport:
         })
         self.station_name_overrides = dict(station_name_overrides or {})
         self.station_city = station_city
+        self.centre_city = centre_city
+        self.centre_district = centre_district
+        self.station_district = station_district
         self.requests = []
 
     def execute(self, provider, request):
@@ -67,8 +73,8 @@ class StationAMapFixtureTransport:
                 geocodes.append({
                     "formatted_address": "多站城市",
                     "province": "合成省",
-                    "city": "多站城市",
-                    "district": "合成中心区",
+                    "city": self.centre_city,
+                    "district": self.centre_district,
                     "adcode": "990001",
                     "location": "100.000000,20.000000",
                     "level": "市",
@@ -93,7 +99,7 @@ class StationAMapFixtureTransport:
                     "location": location,
                     "pname": "合成省",
                     "cityname": self.station_city,
-                    "adname": "合成站区",
+                    "adname": self.station_district,
                     "address": "合成铁路大道",
                     "adcode": "990001",
                     "type": "交通设施服务;火车站;火车站",
@@ -370,6 +376,65 @@ class RailStationFallbackTests(unittest.TestCase):
         self.assertEqual("ambiguous", result.error_class)
         self.assertEqual("ready", result.health["status"])
         self.assertNotIn("get-tickets", self._calls(diagnostics))
+
+    @staticmethod
+    def _district_match_resolution():
+        return {
+            "status": "ambiguous",
+            "endpoints": {
+                "from": {
+                    "query": "平潭",
+                    "candidates": [
+                        {"station_name": "多站城近站"},
+                        {"station_name": "多站城远站"},
+                    ],
+                },
+                "to": {
+                    "query": "昆明南",
+                    "candidates": [{"station_name": "昆明南"}],
+                },
+            },
+        }
+
+    @staticmethod
+    def _district_match_request(request_id):
+        return ProviderRequest(
+            request_id=request_id,
+            capability="rail",
+            parameters={},
+            deadline_ms=2000,
+            as_of="2026-09-10",
+            cache_policy="bypass",
+            trace={"stage": "station-district-test"},
+        )
+
+    def test_district_name_matches_the_researched_city_and_gains_a_distance(self):
+        amap = StationAMapFixtureTransport(
+            centre_city="福州市", centre_district="平潭县",
+            station_city="福州市", station_district="平潭县",
+        )
+        enricher = self._amap_enricher(amap)
+        enriched = enricher.enrich(
+            self._district_match_resolution(),
+            self._district_match_request("station-district-match"),
+        )
+        from_candidates = enriched["endpoints"]["from"]["candidates"]
+        self.assertEqual(2, len(from_candidates))
+        self.assertTrue(all("distance_meters" in item for item in from_candidates))
+
+    def test_unrelated_district_does_not_gain_a_distance(self):
+        amap = StationAMapFixtureTransport(
+            centre_city="厦门市", centre_district="思明区",
+            station_city="厦门市", station_district="思明区",
+        )
+        enricher = self._amap_enricher(amap)
+        enriched = enricher.enrich(
+            self._district_match_resolution(),
+            self._district_match_request("station-district-mismatch"),
+        )
+        from_candidates = enriched["endpoints"]["from"]["candidates"]
+        self.assertEqual(2, len(from_candidates))
+        self.assertTrue(all("distance_meters" not in item for item in from_candidates))
 
     def test_amap_network_failure_keeps_all_candidates_and_rail_health_ready(self):
         amap = StationAMapFixtureTransport(fail=True)

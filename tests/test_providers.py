@@ -519,18 +519,6 @@ class AMapIdentityAndSemanticTests(unittest.TestCase):
             ),
             result.normalized_items[0]["coordinates"],
         )
-        business = next(claim for claim in result.claims if claim["field_path"] == "/business")
-        official = make_claim(
-            subject_ref=entity["ref_id"],
-            field_path="/business",
-            value=scenario["official_business"],
-            source_url="https://example.invalid/official/g4",
-            provider="official-web",
-            status="verified",
-            confidence=0.9,
-            mode="static",
-            clock=FixedClock.from_iso("2026-09-04T00:00:00+08:00"),
-        )
         mobility_transport = AMapScenarioTransport(scenario)
         mobility = MobilityBackend(
             "live",

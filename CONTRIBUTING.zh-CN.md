@@ -33,3 +33,21 @@ python3 scripts/scan_secrets.py
 ## 服务商凭据
 
 凭据是可选的，无 Key 的基线必须始终可用。不要提交凭据文件，也不要把值粘贴进 issue、Pull Request 或与 AI 助手的对话里。
+
+## 发版
+
+版本号字面值只出现在两处，且必须始终一致：
+`plugins/china-trip-weaver/.codex-plugin/plugin.json` 的 `version` 字段，以及
+`plugins/china-trip-weaver/src/china_trip_weaver/__init__.py` 的
+`__version__`。仓库里其余位置一律引用 `__version__`，不得再写第三处字面量。
+
+1. 把这两处的版本号同时改成新版本。
+2. 跑一遍上面[本地检查](#本地检查)里的全量检查，确认以 `OK` 结束、零失败。
+3. 跑 `bash scripts/install_local_plugin.sh`，把新版本装进/刷新到你自己真实的
+   Codex；再跑 `bash scripts/install_local_plugin.sh --check`，确认已装缓存与
+   源码一致（exit 0、零差异）。
+4. 提交版本号改动，然后打标签：`git tag -a v<版本号> -m "Release <版本号>"`。
+5. 推送提交与标签：`git push origin main --tags`。
+6. 从标签发布 GitHub Release：`gh release create v<版本号> --generate-notes`。
+
+只有升版本号的改动才需要第 3–6 步；不涉及版本号字面值的改动跳过这一整节。

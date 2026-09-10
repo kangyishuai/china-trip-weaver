@@ -3,8 +3,6 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
-import math
-import re
 import subprocess
 import sys
 import tempfile
@@ -17,7 +15,6 @@ PLUGIN = ROOT / "plugins" / "china-trip-weaver"
 SRC = PLUGIN / "src"
 sys.path.insert(0, str(SRC))
 
-from china_trip_weaver.contracts import canonical_json
 from china_trip_weaver.credentials import SUPPORTED_KEY_NAMES
 from china_trip_weaver.render import RendererError, render_trip, safe_output_name, validate_html
 from china_trip_weaver.render.validate_html import AuditParser

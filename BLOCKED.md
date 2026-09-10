@@ -1,3 +1,58 @@
+## 顺手发现：0.7.0 没有实际的 git tag 或 GitHub Release（2026-09-10，未处理，仅记录）
+
+写任务 4（发版流程写进 CONTRIBUTING）时核对历史实际发版步骤，发现 `git tag -l`
+只有一条无关的 `backup-before-author-rewrite`、`gh release list` 为空——`0.7.0`
+虽然提交信息以 `Release 0.7.0:` 开头、`PROGRESS.md`/`CLAUDE.md` 都记「已发布」，
+但实际从未执行过 `git tag`/`gh release create`，只完成了「装进本机真实
+Codex」这一步。任务 4 的范围是「把发版流程写进文档，只写不执行」，不包含替
+历史版本补标签/Release，因此未处理，仅记在此供领导决定是否要为 `0.7.0`
+（或直接从下一个版本开始）补打标签与发布。
+
+## 书 docs-drift 任务 2：`scripts/build_plan_fixtures.py` 不在白名单但被 pyflakes 点名（2026-09-10，已按最小改动处理，非空白裁决）
+
+任务书「界限」只允许改 `scripts/scan_secrets.py` 这一个 scripts 文件；但 pyflakes
+`plugins/china-trip-weaver/src tests scripts` 的 11 行里，`scripts/
+build_plan_fixtures.py:10: 'typing.Dict' imported but unused` 也在其中，而任务 2
+的验收明确要求这条命令整体为 0 行。白名单字面只列一个 scripts 文件，验收字面
+要求 scripts 目录全干净，两者直接冲突，无人可问。
+
+判断：比照书 B 任务 1（`tests/test_contracts.py` 越界修改）已定的先例——「验收
+明确要求的硬指标」优先于「白名单遗漏一个文件」，且改动本身与已批准的
+`scan_secrets.py` 那处是同一类最小改动（删一个未使用的 `typing` 导入名，不改
+其他任何字符），按此处理更接近「说的与代码一致」的第一优先级。已执行：
+`from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple` 删掉
+`Dict`，其余名字不动。验收：pyflakes 三目标合计 0 行；全量
+`/usr/bin/python3 -m unittest discover -s tests`：`Ran 507 tests`、`OK`、
+0 skipped；`git diff main -- tests | grep -E '^[-+]\s*def test_'` 0 行
+（本次改动未新增/删除任何测试函数）。
+
+## 书 docs-drift 任务 0：pyflakes 全仓基线与任务书数字差 1 行（2026-09-10，判断，非空白裁决）
+
+任务书「现状与任务 0」写「`~/miniconda3/envs/core/bin/python -m pyflakes
+plugins/china-trip-weaver/src` 0 行，加上 tests scripts 后 10 行」；HEAD
+`c9c9c15` 实测（同一解释器、同一 pyflakes 3.4.0）`src` 单独 0 行、加
+`tests scripts` 后 **11 行**，比任务书多 1 行：
+
+```
+tests/test_contracts.py:19:1: 'china_trip_weaver.clock.SHANGHAI' imported but unused
+tests/test_renderer.py:6:1: 'math' imported but unused
+tests/test_renderer.py:7:1: 're' imported but unused
+tests/test_renderer.py:20:1: 'china_trip_weaver.contracts.canonical_json' imported but unused
+tests/test_providers.py:522:9: local variable 'business' is assigned to but never used
+tests/test_providers.py:523:9: local variable 'official' is assigned to but never used
+tests/test_scheduler.py:11:1: 'unittest.mock' imported but unused
+tests/test_evidence.py:3:1: 'json' imported but unused
+scripts/scan_secrets.py:7:1: 'os' imported but unused
+scripts/scan_secrets.py:12:1: 'typing.Iterable' imported but unused
+scripts/build_plan_fixtures.py:10:1: 'typing.Dict' imported but unused
+```
+
+判断：任务 2 的验收目标是「pyflakes 点名的项清零」，不是「起点必须恰好是
+10」，1 行的起点计数出入不改变任务 2 该做什么（清空以上全部 11 行），也不
+影响任务 3/4；无人可问，按「跳过做别的，继续」处理，不停工，只记录证据。
+可能原因：任务书基线是别的时刻/别的 pyflakes 版本测出的，或人工计数时漏数
+一行；未去追查，因为不影响任何验收口径。
+
 ## Closed：GitHub CI 自 2026-09-05 起连续全红（2026-09-08 洁癖收尾发现，同日经领导裁决修复）
 
 - **处置（2026-09-08）**：领导裁决按建议直接修。提交 `b160501`：`test_codex_skill_parser_smoke_runs_standalone` 改用插件自己的 `plugin_conflicts.codex_executable()` 判断本机有无 Codex，没有时 `skipTest`，与另两条 Codex 依赖测试同款；`actions/checkout@v7`、`actions/setup-python@v7`（node24）；CONTRIBUTING 与两份 README 改为「三项 Codex 依赖测试」。本机全量仍 `Ran 507 tests` OK 零跳过；模拟无 Codex（`CODEX_BIN=/nonexistent`）时 `OK (skipped=1)`。推送后 GitHub Actions run 34217843374 两条矩阵均通过：`Ran 507 tests`、`OK (skipped=3)`、`secret scan: 0 finding(s)`，Node 20 弃用告警消失。

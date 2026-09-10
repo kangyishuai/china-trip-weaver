@@ -2,9 +2,9 @@
 
 状态：阶段三 package/Skill 实现合同。**合格条件 A：只有 `plan-china-trip` 允许隐式触发；其余全部 `allow_implicit_invocation: false`。** 这是硬门禁，不是建议。[依据：研究决策 3](../research/04-design-insights.md#3-采用主-skill-独占宽泛旅行意图子-skill-默认禁止隐式调用)、[官方规范核查 3.2](../research/01-codex-spec.md#32-agentsopenaiyaml)
 
-## 1. 未来插件包布局
+## 1. 插件包布局（阶段三设计稿，实现前所写）
 
-以下是阶段三将实现的 package；本阶段不创建这些产品文件：
+以下是写在实现之前的阶段三设计稿；实际布局与真实目录树已随 `0.7.0` 发布并可在本机 Codex 安装运行，一处与下方设计稿不同——真实包用单个 `providers/home_shim.cjs`（`CTW_ISOLATED_HOME` 环境变量）而非三个按 provider 拆分的 shim 文件。真实目录树见仓库根 `git ls-files plugins/china-trip-weaver`；已装校验见 `bash scripts/install_local_plugin.sh --check`。
 
 ```text
 marketplace-root/
@@ -40,7 +40,7 @@ marketplace-root/
   "version": "0.1.0",
   "description": "Evidence-backed, read-only planning for 1-7 day trips within mainland China, with provider degradation, local replanning, and deterministic mobile HTML.",
   "author": {"name": "ChinaTripWeaver contributors"},
-  "license": "UNLICENSED",
+  "license": "MIT",
   "keywords": ["china-travel", "itinerary", "12306", "amap", "evidence", "replanning"],
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
@@ -67,7 +67,7 @@ marketplace-root/
 |---|---|
 | `name/version/description` | 必填，固定如上；`name` 是 kebab-case namespace，版本从 `0.1.0` 起。[依据：官方字段清单](../research/01-codex-spec.md#21-字段清单) |
 | `author` | 本地开发期用团队占位名；公开发布前替换为真实责任主体。**假设**：该占位仅用于本地包，不进入公开 marketplace。 |
-| `license` | 暂为 `UNLICENSED`，因为发布方式和第三方 ToS 尚未裁决；不得擅自写 MIT。[依据：开放问题 Q14](../research/05-open-questions.md#q14-发布前许可证服务条款与-marketplace-metadata-还缺什么) |
+| `license` | 现为 `MIT`：仓库已在 GitHub 公开发布，本项目自己的代码与文档采用 MIT；这只解决本仓库代码的许可，不解决 AMap/FlyAI/VariFlight/12306 等第三方数据的权利归属，插件仍只从指向本地克隆的 local marketplace 安装，不上架公开 marketplace。[依据：ADR-0012](adr/0012-open-source-under-mit.md) |
 | `homepage/repository` | 省略：当前目录不是仓库，也没有真实 URL；禁止编造。 |
 | `skills/mcpServers` | 精确指向根目录组件。 |
 | `apps` | 省略：MVP 没有已注册 app/connector；`.app.json` 不能证明授权或可调用。[依据：官方规范核查 6](../research/01-codex-spec.md#6-appjson) |
@@ -238,11 +238,11 @@ policy:
 
 > 检测到另一个 `plan-china-trip`（`china-travel-assistant`）或无法唯一确认入口来源。Codex 不会合并同名 Skill。请先在 Plugins Directory 中禁用/卸载旧插件，或禁用本插件，然后新建会话再试；当前未运行任何行程查询。
 
-宿主是否稳定暴露 source metadata 仍未实测，已列入 `BLOCKED.md`；在该能力明确前，阶段三必须把“同时安装测试应拒绝”作为人工安装验收，不得声称自动检测 100% 可用。[依据：开放问题 Q1](../research/05-open-questions.md#q1-目标-plan-china-trip-与旧同名-skill-的真实-ui调用行为是什么)
+「会话层是否稳定暴露 source metadata」这条不确定性已不再是安装/doctor 层的前提：Codex 后来提供了 `codex plugin list --json`，`ctw doctor`（`plugin_conflicts.py`）改为直接读取这份 CLI 输出、遍历每个已启用插件的 `skills/` 目录并报告 `skill_conflicts`，冲突时 exit 非零，已用真实安装的旧插件 `china-travel-assistant`（确实暴露 `plan-china-trip`）验证通过，不再依赖会话层能否读到 source metadata。「同时安装测试应拒绝」因此已经是自动化验收，而不是人工兜底。[依据：`BLOCKED.md`「What was closed, and when」2026-09-04 条目](../../BLOCKED.md)、`plugins/china-trip-weaver/src/china_trip_weaver/plugin_conflicts.py`
 
 ## 9. 桌面应用本地安装验证路径（无 CLI）
 
-本阶段不执行；阶段三在专用测试环境按以下步骤验收：[依据：官方规范核查 10](../research/01-codex-spec.md#10-桌面应用无-cli-时的本地安装与验证)
+以下步骤写在实现之前，如今已是实际在跑的验收清单，而不是阶段三才做的事：现役版本见 [`docs/manual-acceptance.md`](../manual-acceptance.md)（英文）/[`docs/manual-acceptance.zh-CN.md`](../manual-acceptance.zh-CN.md)（中文），`0.7.0` 已按该清单在真实 Codex Desktop 上装机验收。下面按原始设计稿逐条保留，供与现役清单对照：[依据：官方规范核查 10](../research/01-codex-spec.md#10-桌面应用无-cli-时的本地安装与验证)
 
 1. 静态验证 package 中有 `.codex-plugin/plugin.json`、9 个 Skill 和 `.mcp.json`；9 个 name/目录匹配，8 个子 Skill policy 均为 `false`。
 2. 在 Plugins Directory 检查并禁用/卸载 `china-travel-assistant`；若不能确认，停止。
@@ -255,7 +255,7 @@ policy:
 
 ## 10. CLI 本地安装验证路径
 
-本阶段不执行；阶段三在隔离 Codex home/测试账户运行：
+以下写在实现之前；现役实现是 `scripts/install_local_plugin.sh`，日常安装/刷新直接写用户真实 Codex home，隔离验证（`--skill-smoke` 等模式）改用临时 `CODEX_HOME`/`HOME` 而不是"测试账户"，两条路径互不影响，脚本参数与下方设计稿不完全一致，以脚本 `--help` 与源码为准：
 
 ```text
 codex plugin marketplace add /ABS/PATH/marketplace-root

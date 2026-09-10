@@ -35,7 +35,7 @@
 3. 铁路以固定版本的 `12306-mcp` 为主；航班/酒店以固定 `@fly-ai/flyai-cli@1.0.16` 为主；VariFlight 只做可选航空增强。[依据：研究决策 7](../research/04-design-insights.md#7-采用12306-mcp-为铁路主-provider不采用当前-12306-skill)、[研究决策 8](../research/04-design-insights.md#8-采用flyai-主查可售航班酒店variflight-只做航空增强)
 4. AMap Web Service 有 Key 时提供 POI、地理编码和步行/公交/驾车/骑行 route；无 Key 时按统一降级阶梯交付，不启用已证伪的 `travelPlanner`。[依据：研究决策 12](../research/04-design-insights.md#12-不采用amap-lbs-skill-的-travelplanner采用其底层-poiroute-provider-角色)
 5. 所有外部结果进入统一 Trip Schema；未知值为 `null`/`unknown`，并带 provider health、mode、price type 和 claim 证据，不以 0、空串或示例填充。[依据：研究决策 4](../research/04-design-insights.md#4-采用一个版本化-itineraryjson-是所有层的唯一事实源)、[研究决策 6](../research/04-design-insights.md#6-采用unknownprovider-health-与-price-type-必须进入合同)
-6. 先构造 route-time matrix，再以轻量确定性算法排 time windows；OR-Tools 是默认关闭的可选引擎。[依据：研究决策 14](../research/04-design-insights.md#14-采用or-tools-作为复杂日程可选引擎不作为无条件依赖)
+6. 先构造 route-time matrix，再以轻量确定性算法排 time windows。轻量算法是唯一排程引擎；研究阶段曾设想的 OR-Tools 可选引擎从未接入任何生产调用点，已删除对应模块（`scheduler/ortools_bridge.py`）并归档为不打算恢复的历史设计。[依据：ADR-0014](adr/0014-remove-ortools-bridge.md)（原研究依据见[研究决策 14](../research/04-design-insights.md#14-采用or-tools-作为复杂日程可选引擎不作为无条件依赖)）
 7. 支持 versioned patch 局部重排并保护 pinned/booked 项。
 8. 只提供一个确定性手机 HTML renderer；Trip Schema 是唯一输入，核心内容离线可读，地图/图片可降级。[依据：研究决策 16](../research/04-design-insights.md#16-采用v1-只做一个-deterministic-手机-html-renderer)、[研究决策 17](../research/04-design-insights.md#17-采用只承诺核心离线可读地图图片显式降级)
 9. 输出 provider/claim 状态、验证时间、价格口径、深链和显眼的交易边界说明。
@@ -43,7 +43,9 @@
 ## 4. 非目标
 
 - 任何形式的预订、占位、登录代办、验证码处理、实名、支付、退款或改签。
-- 海外行程、港澳台跨境规则、超过 7 天的长途、多人从不同城市出发再会合的规划、移民/签证顾问、团体票务和企业差旅审批。
+- 海外行程、港澳台跨境规则、移民/签证顾问、团体票务和企业差旅审批。
+
+> 现状注记（2026-09-10）：本节原先还把「行程天数超出单个 Trip 上限的规划」「多个团队分别从各自城市动身、最终在一处碰头的规划」列为非目标，两者现已实现，不再属于非目标：天数超出 1–7 天上限的请求拆成若干段落，各自符合上限的 Journey；`traveler_groups[] + meeting_anchor` 承载多团队分别动身、按约定时间在同一地点碰头的规划。[依据：README「Scope」](../../README.md#scope)，实现见 `journey.py`、`planning.py` 的 grouped traveler 分支。
 - 抓取小红书链接、绕过反爬、保存用户账号/全文/图片。
 - 保证库存、价格、准点、开放时间或天气不变；动态事实只对 `queried_at` 时刻负责。
 - 多主题页面、编辑器、协作后端、账号同步、PWA/service worker、自动通知。

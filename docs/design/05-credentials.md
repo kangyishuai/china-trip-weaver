@@ -92,7 +92,7 @@ credential resolver
 2. 轮换后必须重启对应 MCP/CLI process；health 记录新 probe 时间，不记录 key identity/hash。
 3. 用户误贴或 scanner 命中：停止相关 provider、不要复述 secret、建议立刻在 provider 控制台吊销/轮换；删除本地生成物前先列出确切目标并遵守用户授权。
 4. fixtures 必须使用明显 canary 假值；真实响应先脱敏并经 scanner 才可入未来测试目录。
-5. 公开发布前完成 provider 条款、缓存/再分发和 marketplace metadata 审核；未完成保持 `UNLICENSED`/local-only。[依据：开放问题 Q14](../research/05-open-questions.md#q14-发布前许可证服务条款与-marketplace-metadata-还缺什么)
+5. 本仓库自身代码已在 GitHub 公开发布并采用 MIT；这不等于完成了 provider 条款、缓存/再分发和 marketplace metadata 审核——那些仍未完成，插件因此继续只从指向本地克隆的 local marketplace 安装，不上架公开 marketplace。[依据：ADR-0012](adr/0012-open-source-under-mit.md)、[ADR-0013](adr/0013-stay-off-the-public-marketplace.md)
 
 ## 7. 凭据验收
 

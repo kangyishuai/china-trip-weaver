@@ -16,7 +16,7 @@ SRC = PLUGIN / "src"
 sys.path.insert(0, str(SRC))
 
 from china_trip_weaver import SCHEMA_VERSION, __version__
-from china_trip_weaver.clock import FixedClock, SHANGHAI, isoformat_seconds
+from china_trip_weaver.clock import FixedClock, isoformat_seconds
 from china_trip_weaver.contracts import TripDocument, canonical_json, canonical_sha256
 from china_trip_weaver.errors import CTWError, ERROR_POLICIES
 from china_trip_weaver.validate_trip import SchemaSubsetValidator, load_schema, validate_trip

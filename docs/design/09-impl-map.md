@@ -1,6 +1,6 @@
 # 阶段三实现地图
 
-这是未来仓库/插件 package 的目录与完成定义，不是本阶段要创建的代码。核心使用系统 Python 3.9 标准库，Node 只承载固定版本 MCP/CLI；默认路径不依赖手动 venv。[依据：官方插件布局](../research/01-codex-spec.md#2-插件目录与-pluginjson)、[运行时研究取舍](../research/04-design-insights.md#14-采用or-tools-作为复杂日程可选引擎不作为无条件依赖)
+本文档记录仓库/插件 package 的目录与完成定义；§1「未来目录树」写在实现之前，实际目录树见下方 §0。核心使用系统 Python 3.9 标准库，Node 只承载固定版本 MCP/CLI；默认路径不依赖手动 venv（当初避免的是 OR-Tools 需要的 venv，OR-Tools 现已整体删除，见 [ADR-0014](adr/0014-remove-ortools-bridge.md)，venv-free 结论不受影响）。[依据：官方插件布局](../research/01-codex-spec.md#2-插件目录与-pluginjson)、[运行时研究取舍](../research/04-design-insights.md#14-采用or-tools-作为复杂日程可选引擎不作为无条件依赖)
 
 ## 0. 实际目录树（2026-09-08）
 

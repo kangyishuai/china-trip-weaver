@@ -66,6 +66,19 @@ fix-names` 会把它们列为人工项。
 - 2026-09-03/04 越界事实的唯一记录：`BLOCKED.md`（面向公众的产品未决问题，
   Open 区已于 2026-09-06 清零，现为存档）。
 
+## 本轮记录（2026-09-10，书 docs-drift：文档漂移清零 + 站点城市匹配接受区县，worktree `.tmp/wt-b` 分支 `docs-drift`）
+
+- 任务 0（已完成）：`git worktree add .tmp/wt-b -b docs-drift`，HEAD `c9c9c15` 与任务书吻合；任务 1 五条 grep 当前均非零（确认漂移存在）、`adr`/`research` diff 为空，均与任务书吻合；`station_distance.py:261` 确为 `_city_matches`，只剥「市」且只比 `item.get("city")`；实测发现 POI 结果（`_station_point`）的 `district` 只在 claims 里（`providers/amap.py` 的 `_pois()` 把 `district` 塞进 `identity` claim value，item 本身无 `district` 键），geocode 结果（`_city_centre`）的 `district` 才是 item 顶层字段——任务书只说「同时比对 item 的 city 与 district」，未提这个不对称，动工前已核实清楚，不算对不上,不停。唯一数字出入是 pyflakes 全仓 10→11 行，已按「不停工只记录」写入 `BLOCKED.md`。
+- 理解的目标：让文档说的与代码一致（任务 1）、测试代码零无用导入（任务 2）、火车站点距离对县级城市名不误判（任务 3）、发版流程写进 CONTRIBUTING（任务 4），四者独立无依赖。
+- 顺序：任务 1 → 任务 2 → 任务 3 → 任务 4（任务书列出的顺序，互不依赖，按顺序省心）。
+- 最大风险：任务 3 里 `_station_point` 的 district 藏在 claims 而非 item 顶层，直接照抄 `_city_centre` 的写法会拿到恒为 `None` 的 district、看似改了实则没变；对策是给 `_station_point` 补一次「先软取 identity（拿不到就 None，不 raise）→ 判 city-or-district → 通过后再走原有的严格 raise 校验」的改写，保证原有「城市匹配失败永不 raise、城市匹配成功后 claim 缺失才 raise」语义对两种情况（city 命中 / district 命中）都成立，不引入新的假阳性 raise。
+
+任务 1（已完成，提交 `bee27e2`）：8 处文档漂移全部改成「现状＋依据」——license UNLICENSED→MIT（ADR-0012，3 处）、插件冲突检测从「宿主 source metadata 不确定」改成「`ctw doctor` 的 `skill_conflicts` 已用真实旧插件验证」（`BLOCKED.md` 2026-09-04 条目）、桌面/CLI 安装验证从「本阶段不执行」改成指向现役 `docs/manual-acceptance.md`/`scripts/install_local_plugin.sh`、非目标清单摘掉已实现的 Journey（>7 天）与 `traveler_groups`/`meeting_anchor`（README「Scope」）、语义验证标题从「阶段三需补」改成指向已实现的 `validate_trip.py:semantic_issues()`、AMap/12306 的「未实测/标 beta」改成指向 ADR-0011/ADR-0010 与仓库里没有 `beta` 标签的事实、OR-Tools 切换阈值三处（06-pipeline.md、08-testing.md、schedule Skill）改成指向 ADR-0014（已删除，不用第二引擎）。验收：五条 grep 全 0、`adr`/`research` 零改动、507 测试 OK。反向验证：把「7天/会合」现状注记误写成逐字引用原短语，grep 从 0 变回 1，改写措辞后再变回 0（真实的红→绿，非预演）。
+任务 2（已完成，提交 `55ed68e`）：删 pyflakes 点名的 11 处无用导入/变量（5 个测试文件 + `scan_secrets.py` + 白名单外的 `build_plan_fixtures.py`，后者的越界判断记在 `BLOCKED.md`）。验收：pyflakes 0 行、507 测试 OK、`git diff main -- tests | grep 'def test_'` 0 行（此刻测出，晚于任务 3 提交后该数字会变为 2，属预期）。
+任务 4（已完成）：两份 CONTRIBUTING 各加一节「Release」/「发版」，只写文档不执行：改 `plugin.json`+`__init__.py` 两处版本号 → 全量测试 → `bash scripts/install_local_plugin.sh` 装机 → `--check` 校验 → `git tag -a v<版本> -m "Release <版本>"` → `git push origin main --tags` → `gh release create v<版本> --generate-notes`；注明只有升版本号的改动才需要装机起的后续步骤。核对历史实际发版步骤时顺手发现 `0.7.0` 从未真正打过 tag 或建过 GitHub Release（`git tag -l`/`gh release list` 均无对应记录，只是提交信息以 `Release 0.7.0:` 开头），超出任务 4「只写不执行」的范围，记在 `BLOCKED.md` 供领导决定要不要补。验收：全量 509 测试 OK 0 skipped、secrets 0。
+
+任务 3（已完成）：`geo.py` 新增 `administrative_area_key()`（照抄 `mobility.py` `_city_key` 的后缀剥离算法，未改动 `mobility.py` 本身）；`station_distance.py` 的 `_city_matches` 改用它，新增 `_city_or_district_matches()`；`_city_centre` 直接比对 item 的 `city`/`district`（geocode 结果两者都是顶层字段）；`_station_point` 因 POI 结果的 `district` 只在 `/provider_identity` claim 里，改成「先软取 identity（软取失败给 None，不 raise）→ 判 city-or-district → 通过后再走原有的严格 raise」，原有「city 不匹配永不 raise、city 匹配后 claim 缺失才 raise」语义对 district 命中的新路径同样成立。`tests/test_rail_station_fallback.py` 的 `StationAMapFixtureTransport` 加 `centre_city`/`centre_district`/`station_district` 三个可选参数（默认值＝原硬编码值，不影响已有 23 个测试);新增 2 个测试直接调 `AMapStationDistanceEnricher.enrich()`（不经 12306 fixture server，因为经它需要城市名与该 fixture server 硬编码的地名对上，不在本书白名单里）。验收：25 个 station 测试 OK、全量 509 测试 OK 0 skipped、pyflakes 0、secrets 0。反向验证：`git stash` 掉两处源码改动（用 `push -u -m` + 按 SHA `apply`+`drop` 的安全流程，不用裸 `stash`/`pop`）→ 正例测试红（`AssertionError: False is not true`）、负例测试仍绿（旧代码本来就更严格，不能反映回归）→ 恢复→ 25/25 绿。
+
 ## 本轮记录（2026-09-08，shim 合一 + doctor 运行时目录 + 0.7.0 发版）
 
 - 目标：三个 provider 的 `*_home_shim.cjs` 合并为一个 `home_shim.cjs`（环境变量

@@ -111,24 +111,9 @@ AMap query 一律使用 GCJ-02。无 Key/失败时：fresh cached cell → publi
 
 默认单日最多安排 8 个可选 visit（locked 另计）；这是基于研究中“简单 5–8 点轻算法足够”的设计假设，不是实测阈值。[依据：研究决策 14](../research/04-design-insights.md#14-采用or-tools-作为复杂日程可选引擎不作为无条件依赖)
 
-### 5.3 OR-Tools 切换阈值
+### 5.3 第二排程引擎（已移除，不再是可切换项）
 
-OR-Tools 默认关闭且绝不自动安装。只有同时满足以下前置条件才可切换：
-
-```text
-feature flag CTW_ENABLE_ORTOOLS=1
-AND dependency/version probe passes
-AND complete live/cached matrix exists for all hard-required hops
-```
-
-前置满足后，命中任一阈值使用 OR-Tools：
-
-- 任一 day 有 **≥9** 个 schedulable candidates；
-- 任一 day 有 **≥4** 个独立 hard time windows；
-- 存在 **≥2** 个跨日耦合约束；
-- light scheduler 返回 no-solution，但 hard-required candidates ≤20，且需要区分算法不足与真实无解。
-
-OR-Tools 每次 solve wall time 上限 5 秒、单日候选上限 20；超时回到 light 的最佳可行结果或 structured no-solution，不能发布部分未校验解。该阈值是 ADR 中的**暂定假设**，必须通过 Q10 的 20 个 golden benchmark 后才能称为稳定。[依据：开放问题 Q10](../research/05-open-questions.md#q10-轻量排程与-or-tools-的切换阈值是什么)
+以下是实现前的设计稿：曾设想在满足显式开关、依赖探测、完整 matrix 三个前置条件后，按候选数/时间窗/跨日耦合等阈值切换到一个可选的第二排程引擎。该引擎从未接入 `planning.py` 或任何生产调用点，2026-09-08 已整体删除对应桥接模块与其专属测试；轻量确定性算法（`scheduler/light.py`）是唯一排程引擎，没有开关、没有阈值切换逻辑。若将来需要第二引擎，属于新的架构决策，应从 `planning.py` 的真实调用点开始，而不是恢复被删的桥接模块。[依据：ADR-0014](adr/0014-remove-ortools-bridge.md)（原阈值设计见[开放问题 Q10](../research/05-open-questions.md#q10-轻量排程与-or-tools-的切换阈值是什么)，因引擎已删除而不再适用）
 
 ## 6. P5：发布前语义校验
 

@@ -50,3 +50,27 @@ supersedes it rather than editing the implementation silently.
 Credentials are optional. The keyless baseline must keep working without them.
 Never commit a credential file, and never paste a value into an issue, a pull
 request, or an agent conversation.
+
+## Release
+
+The version literal lives in exactly two files, and they must always agree:
+`plugins/china-trip-weaver/.codex-plugin/plugin.json` (the `version` field) and
+`plugins/china-trip-weaver/src/china_trip_weaver/__init__.py` (`__version__`).
+Every other reference in the repository imports `__version__` rather than
+repeating the literal.
+
+1. Bump the version in both files to the same new value.
+2. Run the full check suite from [Running the checks](#running-the-checks)
+   above and confirm it ends `OK` with zero failures.
+3. Run `bash scripts/install_local_plugin.sh` to install/refresh the new
+   version into your own real Codex installation, then
+   `bash scripts/install_local_plugin.sh --check` to confirm the installed
+   cache and the source tree now agree (exit 0, zero differences).
+4. Commit the version bump, then tag it:
+   `git tag -a v<version> -m "Release <version>"`.
+5. Push the commit and the tag: `git push origin main --tags`.
+6. Publish the GitHub Release from the tag:
+   `gh release create v<version> --generate-notes`.
+
+Only a change that bumps the version needs steps 3–6. A change that does not
+touch the version literal skips this whole section.

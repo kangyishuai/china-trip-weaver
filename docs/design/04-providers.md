@@ -92,7 +92,7 @@ normalized_items[], claims[], health, warnings[], raw_ref?, response_hash?
 | VariFlight | 15s | 15s | tools/list 9 tools、schema fingerprint；有 Key 时把 probe 合并首个只读 query | exact flight identity、weather、raw price、401/403/429、any/wrong-shape |
 | AnySearch | 10s | 15s | response shape、usage fields、anonymous 不产生/保存 Key | 中文召回、empty、429/402、auto-register response、source URL |
 
-12306 当前只实测 station，真实余票 parser/日期/失败恢复仍是开放项；fixture 验收通过前 rail inventory 标 beta/degraded。[依据：开放问题 Q4](../research/05-open-questions.md#q4-12306-mcp-的真实余票-parser日期范围与失败恢复是否稳定) FlyAI command 与 keyless trial 同理，不能把文档示例当 probe 结果。[依据：开放问题 Q3](../research/05-open-questions.md#q3-fly-aiflyai-cli-的当前-commandschemakeyless-trial-到底是什么)
+12306 已按 Q4 所述完成余票 parser/日期范围/失败恢复的实测：真实 `12306-mcp@0.3.10` 录制覆盖 station、直达、无票、候补、中转、跨日和 outside-presale 退化，仓库没有任何代码路径给 rail inventory 打 `beta` 标签——provider health/degradation rung 走与其他 provider 相同的统一机制，不是特殊标记。[依据：ADR-0010](adr/0010-candidate-file-planning-and-live-rail.md) FlyAI command 与 keyless trial 同理，已按 Q3 完成 pin 版本探测，不再把文档示例当 probe 结果。[依据：开放问题 Q3](../research/05-open-questions.md#q3-fly-aiflyai-cli-的当前-commandschemakeyless-trial-到底是什么)
 
 ## 4. Capability 细则
 
@@ -114,7 +114,7 @@ Adapter 输出区域、候选物业、dated deep links 和已核验条件。只�
 
 ### 4.5 AMap/坐标/route
 
-Adapter 保存 AMap native GCJ-02、再由有版本的转换函数派生 WGS-84；route query 始终使用 GCJ-02。每个 matrix cell 含 from/to/mode/duration/distance/fare?/queried_at/claim/health；不可达也是有证据的 cell。禁止传旧 pagination 字段或把相邻 POI 顺序连线当 route。当前 endpoint/schema/quota 未实测，必须通过 Q5 所述 probe 才进入 ready。[依据：开放问题 Q5](../research/05-open-questions.md#q5-amap-当前-web-api-的-v3v4v5-schemacrs-与-route-quota-能否形成稳定-adapter)
+Adapter 保存 AMap native GCJ-02、再由有版本的转换函数派生 WGS-84；route query 始终使用 GCJ-02。每个 matrix cell 含 from/to/mode/duration/distance/fare?/queried_at/claim/health；不可达也是有证据的 cell。禁止传旧 pagination 字段或把相邻 POI 顺序连线当 route。endpoint/schema/quota 已按 Q5 所述完成 probe 并投入实网使用（geocode/POI/walking/transit/driving/riding 均已实测），当前的已知天花板是定位准确率而非 endpoint 可用性：某次真实 16 天福建行程 78 个地点定位成功 60、坐标 unknown 12、名字 unknown 6，三条判定口径见 `mobility.py`。[依据：ADR-0011](adr/0011-live-amap-flyai-variflight-boundaries.md)，定位天花板数据见仓库 `PROGRESS.md`「定位失败天花板」
 
 ## 5. 降级阶梯
 
