@@ -278,3 +278,62 @@ fix-names` 会把它们列为人工项。
   `git stash push tests/test_plugin_conflicts.py` 复现污染（`nonexistent-
   ctw-home/` 重新出现）→ `git stash pop` 恢复 → 全量 `Ran 507 tests` `OK`，
   `nonexistent-ctw-home` 不再出现。
+
+## 本轮记录（2026-09-10，`replan` 支持 `refresh` 事件；main 直改，三书并行之一）
+
+任务 0 核对（HEAD `c9c9c15`）：507 测试 OK 0 skip、`scan_secrets` 0、
+`provider_change` 仅见于 `trip.schema.json:819`、`ctw rail --fixture`
+回放腿的 `depart_at` 不随 `--date` 变、demo/trip.json 两条 12306-deep-link
+腿各带 `service_number`+`price/amount` 两条 unknown 且有 `budget_ledger`，
+均与任务书一致。唯一出入：任务书写路径 `src/china_trip_weaver/replan.py`，
+实际是 `plugins/china-trip-weaver/src/china_trip_weaver/replan.py`（
+`tests/test_replan.py` 的 `SRC` 常量可证，仓库内唯一一份，无歧义，按实际
+路径改，不算待裁决）。目标：给 `replan_trip` 加 `rail_result` 关键字参数与
+`refresh` 事件分支，离线把 `ctw rail --output-json` 形状的候选车次接回某条
+火车腿，只碰 `replan.py`/`test_replan.py`/新增夹具。顺序：先读
+`_resolve_rail`/`_budget_ledger`/`V_TOP_MODE`/既有 4 金样，再写
+`_apply_refresh` 与配套小函数，最后负向测试与反向验证。最大风险：
+demo/trip.json 首个午餐 POI 的 `opening_windows` 与原排程零余量，`_shift_
+slots` 顺延分支容易撞违规（后已验证：只影响"晚到"分支自身的 `validate_
+trip`，与 refresh 主逻辑无关，处理见下）。
+
+任务 1：`replan_trip` 尾部加 `rail_result: Optional[Mapping] = None`；
+`VALID_EVENT_TYPES` 元组加 `"refresh"`（同步给事件类型报错文案，仅此一处
+按任务书允许扩成含 refresh）；`_TRIGGER_BY_EVENT_TYPE` 把 `refresh` 映射到
+`provider_change`。新增 `_apply_refresh`/`_find_rail_leg`/`_select_
+refresh_service`/`_recompute_rail_health`/`_recompute_top_mode` 五个函数。
+规则均照任务书：只认 rail 腿，否则 `refresh_not_rail`（任务书未点名的
+错误码，判为"目标未解析出火车腿"这一类，与"缺 rail 结果"等五个既定码同款
+命名风格）；给了 `service_number` 精确匹配同日车次，否则取同日最早到达；
+跨日到达 `refresh_unsupported`；与上一槽重叠 `refresh_overlap`；晚到复用
+既有 `_shift_slots(trip, day, slot_index+1, delta, ...)` 顺延（沿用其"起始
+槽不做锁前置检查"的既有语义，与 `delay` 对被顺延目标槽本身的豁免同款，
+非五个必测负向场景之一，未额外改 `_shift_slots` 本身）；有 `budget_ledger`
+按 `journey.py:1230` 同款调用 `_budget_ledger` 重算；`12306-mcp` 的
+`provider_health` 按 `_resolve_rail` 口径重算（trip 内全部 rail 腿
+`data_mode=="live"` → ready/live，否则 degraded/static），`reason` 文案为
+本轮自撰而非逐字复刻 `_resolve_rail` 内部原始 errors 列表（那份列表来自
+运行期 `AdapterResult`，replan 侧拿不到，判为可自主选择的措辞）；顶层
+`mode` 按 `V_TOP_MODE` 的不等式方向只在当前值不够保守时才上调，不做无条件
+覆盖（避免把与本次刷新无关的既有更保守 `mode` 意外拉低，超出"重算"本意）。
+日程槽位的 `claim_ids` 同步成新腿的 `claim_ids`（任务书未列，但与仓库内
+"槽位 claim_ids 镜像腿 claim_ids"的既有模式一致，不同步会导致日程与证据
+脱节）；旧的两条 claim 不删，只 append 新证据（`validate_trip` 未见"claim
+必须被引用"的规则，任务书原文只说"追加"）。新增 `tests/fixtures/scheduler/
+replan/refresh.json`（base=demo/trip.json，G1001 早到 08:00→12:00、票价
+553，走既有 `run_replan_fixture`）；`run_replan_fixture` 加 `rail_result`
+透传（4 个既有夹具无此键，默认值不受影响）；`test_all_four_replan_
+fixtures_run_through_cli_and_render` 从 glob 改成显式 4 个 CLI 已支持
+文件名单——`ctw replan` CLI 还不认 `rail_result`（接线是下一本书、`cli.py`
+只读），把 refresh.json 塞进这个跑 CLI 子进程的循环必然失败，属被迫的
+必要改动，四个既有断言力度未变（仍要求恰好 4 个、逐个跑通 CLI+渲染+
+`validate_trip`）。
+
+任务 1 门（2026-09-10 实测，任务 2 与最终门见本节后续提交的追加段落）：
+`/usr/bin/python3 -m unittest discover -s tests` → `Ran 509 tests` `OK`
+0 skipped（507 基线 + `test_replan_refresh` + `test_replan_refresh_
+resolves_to_live_service`）；硬指标一（demo/trip.json 一条深链腿经
+refresh 后 provider=12306-mcp、service_number 非空、两条 unknown 消失、
+`validate_trip`/`validate_html` 全过、补丁可回放）由这两个测试共同覆盖，
+均通过；既有 4 个金样字节不变。任务 2（负向测试与反向验证）与全量最终门
+紧接着在下一次提交完成。

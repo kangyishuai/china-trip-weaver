@@ -1,0 +1,112 @@
+{
+  "base_fixture": "demo/trip.json",
+  "case_id": "refresh",
+  "event": {
+    "reason": "12306 real-time service located for the outbound leg",
+    "reverify_claim_ids": [],
+    "service_number": "G1001",
+    "subject_ref": "leg-rail-fallback-6d95c810b44d",
+    "type": "refresh"
+  },
+  "expected": {
+    "affected_day": "day-1",
+    "operation_count": 31,
+    "trigger": "provider_change",
+    "unchanged_day_indexes": [
+      1,
+      2
+    ]
+  },
+  "fixture_version": 1,
+  "rail_result": {
+    "claims": [
+      {
+        "as_of": "2026-09-10T00:00:00+08:00",
+        "claim_id": "claim-refresh-depart",
+        "confidence": 0.95,
+        "field_path": "/depart_at",
+        "json_path": "/start_time",
+        "mode": "live",
+        "provider": "12306-mcp",
+        "queried_at": "2026-09-10T00:00:00+08:00",
+        "raw_ref": null,
+        "response_hash": null,
+        "source_url": "https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc&fs=%E5%8C%97%E4%BA%AC&ts=%E4%B8%8A%E6%B5%B7&date=2026-10-16&flag=N%2CN%2CY",
+        "status": "verified",
+        "subject_ref": "leg-rail-live-g1001",
+        "value": {
+          "arrive_at": "2026-10-16T12:00:00+08:00",
+          "depart_at": "2026-10-16T08:00:00+08:00",
+          "duration_minutes": 240
+        }
+      },
+      {
+        "as_of": "2026-09-10T00:00:00+08:00",
+        "claim_id": "claim-refresh-price",
+        "confidence": 0.95,
+        "field_path": "/price",
+        "json_path": "/prices",
+        "mode": "live",
+        "provider": "12306-mcp",
+        "queried_at": "2026-09-10T00:00:00+08:00",
+        "raw_ref": null,
+        "response_hash": null,
+        "source_url": "https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc&fs=%E5%8C%97%E4%BA%AC&ts=%E4%B8%8A%E6%B5%B7&date=2026-10-16&flag=N%2CN%2CY",
+        "status": "verified",
+        "subject_ref": "leg-rail-live-g1001",
+        "value": {
+          "amount": 553,
+          "currency": "CNY",
+          "seat_name": "二等座"
+        }
+      }
+    ],
+    "error_class": null,
+    "health": {
+      "capabilities": [
+        "rail",
+        "station"
+      ],
+      "checked_at": "2026-09-10T00:00:00+08:00",
+      "mode": "live",
+      "provider": "12306-mcp",
+      "reason": "contract probe and normalization passed",
+      "status": "ready",
+      "version": "0.3.10"
+    },
+    "provider": "12306-mcp",
+    "provider_version": "0.3.10",
+    "queried_at": "2026-09-10T00:00:00+08:00",
+    "transport_legs": [
+      {
+        "arrive_at": "2026-10-16T12:00:00+08:00",
+        "booking_url": "https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc&fs=%E5%8C%97%E4%BA%AC&ts=%E4%B8%8A%E6%B5%B7&date=2026-10-16&flag=N%2CN%2CY",
+        "claim_ids": [
+          "claim-refresh-depart",
+          "claim-refresh-price"
+        ],
+        "data_mode": "live",
+        "depart_at": "2026-10-16T08:00:00+08:00",
+        "duration_minutes": 240,
+        "from_ref": "place-beijing-live",
+        "leg_id": "leg-rail-live-g1001",
+        "locked": false,
+        "price": {
+          "amount": 553,
+          "claim_id": "claim-refresh-price",
+          "currency": "CNY",
+          "includes_taxes": true,
+          "price_type": "live",
+          "queried_at": "2026-09-10T00:00:00+08:00",
+          "unit": "per_person"
+        },
+        "provider": "12306-mcp",
+        "service_number": "G1001",
+        "to_ref": "place-shanghai-live",
+        "travel_mode": "rail"
+      }
+    ],
+    "warnings": []
+  },
+  "user_locked_refs": []
+}

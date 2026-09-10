@@ -8,6 +8,8 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
 from .clock import Clock, isoformat_seconds
 from .contracts import PatchResult, canonical_json
+from .planning import _budget_ledger
+from .validate_trip import MODE_RANK
 
 
 class ReplanError(ValueError):
@@ -16,21 +18,26 @@ class ReplanError(ValueError):
         super().__init__(message)
 
 
+VALID_EVENT_TYPES = ("closure", "weather", "delay", "user_delete", "refresh")
+_TRIGGER_BY_EVENT_TYPE = {"user_delete": "user_edit", "refresh": "provider_change"}
+
+
 def replan_trip(
     base_trip: Mapping[str, Any],
     event: Mapping[str, Any],
     base_revision: int,
     user_locked_refs: Sequence[str],
     clock: Clock,
+    rail_result: Optional[Mapping[str, Any]] = None,
 ) -> PatchResult:
     current_revision = int(base_trip["revision"]["number"])
     if base_revision != current_revision:
         raise ReplanError("revision_conflict", "base revision does not match the current Trip")
     event_type = event.get("type")
-    if event_type not in ("closure", "weather", "delay", "user_delete"):
+    if event_type not in VALID_EVENT_TYPES:
         raise ReplanError(
             "event_type",
-            'event type must use the field "type" with one of: closure, weather, delay, user_delete',
+            'event type must use the field "type" with one of: ' + ", ".join(VALID_EVENT_TYPES),
         )
     subject_ref = event.get("subject_ref")
     if not isinstance(subject_ref, str) or not subject_ref:
@@ -50,6 +57,7 @@ def replan_trip(
     operations: List[Dict[str, Any]] = []
     changed_refs: Set[str] = {subject_ref}
     reverify = set(event.get("reverify_claim_ids", target_slot.get("claim_ids", ())))
+    now = isoformat_seconds(clock)
 
     if event_type in ("closure", "weather"):
         replacement = copy.deepcopy(event.get("replacement_slot"))
@@ -75,6 +83,10 @@ def replan_trip(
             )
         _shift_slots(trip, day_index, slot_index, delta, locked_refs, operations, changed_refs)
         _shift_transport_leg(trip, target_slot.get("ref_id"), delta, operations, changed_refs)
+    elif event_type == "refresh":
+        _apply_refresh(
+            trip, day_index, slot_index, event, rail_result, locked_refs, operations, changed_refs, now,
+        )
 
     if not operations:
         raise ReplanError("empty_patch", "replan produced no operation")
@@ -83,7 +95,6 @@ def replan_trip(
             raise ReplanError("stability_violation", "an unaffected day changed")
 
     target_revision = current_revision + 1
-    now = isoformat_seconds(clock)
     all_refs = _all_refs(base_trip)
     preserved_refs = sorted(all_refs - changed_refs)
     eligible = max(1, len(all_refs))
@@ -92,7 +103,7 @@ def replan_trip(
         "base_revision": current_revision,
         "target_revision": target_revision,
         "created_at": now,
-        "trigger": "user_edit" if event_type == "user_delete" else event_type,
+        "trigger": _TRIGGER_BY_EVENT_TYPE.get(event_type, event_type),
         "reason": str(event.get("reason") or event_type),
         "scope": {
             "day_ids": [trip["days"][day_index]["day_id"]],
@@ -216,4 +227,171 @@ def _dt(value: str):
     from datetime import datetime
 
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def _apply_refresh(
+    trip: Dict[str, Any],
+    day_index: int,
+    slot_index: int,
+    event: Mapping[str, Any],
+    rail_result: Optional[Mapping[str, Any]],
+    locked_refs: Set[str],
+    operations: List[Dict[str, Any]],
+    changed_refs: Set[str],
+    now: str,
+) -> None:
+    target_slot = trip["days"][day_index]["slots"][slot_index]
+    leg_index, leg = _find_rail_leg(trip, target_slot)
+    if rail_result is None:
+        raise ReplanError("refresh_result_required", "refresh requires a rail_result")
+    travel_date = str(leg["depart_at"])[:10]
+    selected = _select_refresh_service(event, rail_result, travel_date)
+    if str(selected["arrive_at"])[:10] != str(selected["depart_at"])[:10]:
+        raise ReplanError(
+            "refresh_unsupported", "refresh does not support a service that arrives on a different day",
+        )
+    if slot_index > 0:
+        previous_slot = trip["days"][day_index]["slots"][slot_index - 1]
+        if str(selected["depart_at"]) < str(previous_slot["end_at"]):
+            raise ReplanError("refresh_overlap", "refreshed service departs before the previous slot ends")
+
+    new_leg = copy.deepcopy(dict(selected))
+    for key in ("leg_id", "from_ref", "to_ref", "locked"):
+        new_leg[key] = copy.deepcopy(leg[key])
+    if "group_refs" in leg:
+        new_leg["group_refs"] = copy.deepcopy(leg["group_refs"])
+    else:
+        new_leg.pop("group_refs", None)
+    trip["transport_legs"][leg_index] = new_leg
+    operations.append({
+        "op": "replace", "path": "/transport_legs/%d" % leg_index, "value": copy.deepcopy(new_leg),
+    })
+
+    new_slot = copy.deepcopy(target_slot)
+    new_slot["start_at"] = new_leg["depart_at"]
+    new_slot["end_at"] = new_leg["arrive_at"]
+    new_slot["claim_ids"] = list(new_leg["claim_ids"])
+    trip["days"][day_index]["slots"][slot_index] = new_slot
+    operations.append({
+        "op": "replace", "path": "/days/%d/slots/%d" % (day_index, slot_index), "value": copy.deepcopy(new_slot),
+    })
+    changed_refs.add(new_slot["slot_id"])
+    changed_refs.add(new_leg["leg_id"])
+
+    old_arrive, new_arrive = leg.get("arrive_at"), new_leg.get("arrive_at")
+    if isinstance(old_arrive, str) and isinstance(new_arrive, str):
+        delta_minutes = int((_dt(new_arrive) - _dt(old_arrive)).total_seconds() // 60)
+        if delta_minutes > 0:
+            _shift_slots(trip, day_index, slot_index + 1, delta_minutes, locked_refs, operations, changed_refs)
+
+    for claim in rail_result.get("claims", ()):
+        if claim.get("subject_ref") != selected.get("leg_id"):
+            continue
+        copied = copy.deepcopy(dict(claim))
+        copied["subject_ref"] = new_leg["leg_id"]
+        trip["claims"].append(copied)
+        operations.append({
+            "op": "add", "path": "/claims/%d" % (len(trip["claims"]) - 1), "value": copy.deepcopy(copied),
+        })
+
+    remove_paths = {"/transport_legs/%d/service_number" % leg_index}
+    if (new_leg.get("price") or {}).get("amount") is not None:
+        remove_paths.add("/transport_legs/%d/price/amount" % leg_index)
+    has_budget = "budget_ledger" in trip
+    remove_indexes = sorted(
+        (
+            index for index, item in enumerate(trip["unknowns"])
+            if item.get("field_path") in remove_paths
+            or (has_budget and str(item.get("field_path", "")).startswith("/budget_ledger/"))
+        ),
+        reverse=True,
+    )
+    for index in remove_indexes:
+        operations.append({"op": "remove", "path": "/unknowns/%d" % index})
+        trip["unknowns"].pop(index)
+
+    if has_budget:
+        ledger, budget_unknowns = _budget_ledger(
+            trip["request"], trip["days"], trip["transport_legs"], trip["lodgings"], trip["pois"], trip["claims"],
+        )
+        trip["budget_ledger"] = ledger
+        operations.append({"op": "replace", "path": "/budget_ledger", "value": copy.deepcopy(ledger)})
+        for item in budget_unknowns:
+            trip["unknowns"].append(item)
+            operations.append({
+                "op": "add", "path": "/unknowns/%d" % (len(trip["unknowns"]) - 1), "value": copy.deepcopy(item),
+            })
+
+    _recompute_rail_health(trip, operations, now)
+    _recompute_top_mode(trip, operations)
+
+
+def _find_rail_leg(trip: Mapping[str, Any], target_slot: Mapping[str, Any]) -> Tuple[int, Mapping[str, Any]]:
+    ref_id = target_slot.get("ref_id")
+    if ref_id:
+        for index, item in enumerate(trip["transport_legs"]):
+            if item["leg_id"] == ref_id and item.get("travel_mode") == "rail":
+                return index, item
+    raise ReplanError("refresh_not_rail", "refresh only supports a rail transport leg")
+
+
+def _select_refresh_service(
+    event: Mapping[str, Any],
+    rail_result: Mapping[str, Any],
+    travel_date: str,
+) -> Mapping[str, Any]:
+    same_day = [
+        item for item in rail_result.get("transport_legs", ())
+        if isinstance(item.get("depart_at"), str) and item["depart_at"][:10] == travel_date
+    ]
+    service_number = event.get("service_number")
+    if service_number:
+        matches = [item for item in same_day if item.get("service_number") == service_number]
+        if not matches:
+            raise ReplanError(
+                "refresh_service_not_found", "no rail service matches the requested service_number",
+            )
+        return matches[0]
+    if not same_day:
+        raise ReplanError("refresh_no_service", "no rail service is available for the requested date")
+    return min(same_day, key=lambda item: (item["arrive_at"], item["depart_at"]))
+
+
+def _recompute_rail_health(trip: Dict[str, Any], operations: List[Dict[str, Any]], now: str) -> None:
+    rail_legs = [leg for leg in trip["transport_legs"] if leg.get("travel_mode") == "rail"]
+    if not rail_legs:
+        return
+    live_count = sum(1 for leg in rail_legs if leg.get("data_mode") == "live")
+    if live_count == len(rail_legs):
+        mode, status = "live", "ready"
+        reason = "all dated rail legs were normalized from live MCP inventory"
+    else:
+        mode, status = "static", "degraded"
+        reason = "dated deep-link fallback used for %d of %d rail leg(s)" % (
+            len(rail_legs) - live_count, len(rail_legs),
+        )
+    for index, entry in enumerate(trip["provider_health"]):
+        if entry.get("provider") != "12306-mcp":
+            continue
+        if entry.get("mode") == mode and entry.get("status") == status and entry.get("reason") == reason:
+            return
+        updated = copy.deepcopy(entry)
+        updated.update(mode=mode, status=status, reason=reason, checked_at=now)
+        trip["provider_health"][index] = updated
+        operations.append({
+            "op": "replace", "path": "/provider_health/%d" % index, "value": copy.deepcopy(updated),
+        })
+        return
+
+
+def _recompute_top_mode(trip: Dict[str, Any], operations: List[Dict[str, Any]]) -> None:
+    component_modes = [leg["data_mode"] for leg in trip["transport_legs"]]
+    component_modes.extend(claim["mode"] for claim in trip["claims"])
+    component_modes.extend(health["mode"] for health in trip["provider_health"])
+    if not component_modes:
+        return
+    conservative = max(component_modes, key=lambda mode: MODE_RANK[mode])
+    if MODE_RANK[trip["mode"]] < MODE_RANK[conservative]:
+        trip["mode"] = conservative
+        operations.append({"op": "replace", "path": "/mode", "value": conservative})
 

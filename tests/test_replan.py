@@ -16,7 +16,7 @@ sys.path.insert(0, str(SRC))
 from china_trip_weaver.clock import FixedClock
 from china_trip_weaver.contracts import canonical_json
 from china_trip_weaver.replan import ReplanError, replan_trip
-from china_trip_weaver.render import validate_html
+from china_trip_weaver.render import render_trip, validate_html
 from china_trip_weaver.validate_trip import validate_trip
 
 
@@ -65,6 +65,7 @@ def run_replan_fixture(testcase: unittest.TestCase, path: Path):
         base_revision=base["revision"]["number"],
         user_locked_refs=fixture["user_locked_refs"],
         clock=FixedClock.from_iso("2026-10-15T12:00:00+08:00"),
+        rail_result=fixture.get("rail_result"),
     )
     expected = fixture["expected"]
     testcase.assertEqual(2, result.trip["revision"]["number"])
@@ -146,10 +147,17 @@ class ReplanTests(unittest.TestCase):
         self.assertEqual("locked_overlap", raised.exception.code)
 
     def test_all_four_replan_fixtures_run_through_cli_and_render(self):
+        """The `ctw replan` CLI does not accept rail_result yet (CLI wiring is a
+        later change), so this exercises only the four event types it already
+        supports; refresh.json is covered separately via run_replan_fixture."""
+
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
             output = Path(temporary)
-            fixture_paths = sorted(FIXTURES.glob("*.json"))
+            cli_fixture_names = ("closure.json", "delay.json", "user-delete.json", "weather.json")
+            fixture_paths = [FIXTURES / name for name in cli_fixture_names]
             self.assertEqual(4, len(fixture_paths))
+            for path in fixture_paths:
+                self.assertTrue(path.is_file(), path)
             for path in fixture_paths:
                 with self.subTest(path=path.name):
                     fixture = load(path)
@@ -229,7 +237,7 @@ class ReplanTests(unittest.TestCase):
         command = run_invalid_cli_event(self, event)
         self.assertEqual(
             'REPLAN_FAILED event_type event type must use the field "type" with one of: '
-            "closure, weather, delay, user_delete\n",
+            "closure, weather, delay, user_delete, refresh\n",
             command.stderr,
         )
 
@@ -280,6 +288,36 @@ class ReplanTests(unittest.TestCase):
             'field, not "minutes"\n',
             command.stderr,
         )
+
+    def test_replan_refresh_resolves_to_live_service(self):
+        """Beyond the generic run_replan_fixture checks, the completion criteria in the
+        task brief require asserting provider/service_number/unknowns/rendered HTML directly."""
+
+        path = FIXTURES / "refresh.json"
+        run_replan_fixture(self, path)
+        fixture = load(path)
+        base = load(ROOT / fixture["base_fixture"])
+        result = replan_trip(
+            base, fixture["event"], base_revision=base["revision"]["number"],
+            user_locked_refs=fixture["user_locked_refs"],
+            clock=FixedClock.from_iso("2026-10-15T12:00:00+08:00"),
+            rail_result=fixture["rail_result"],
+        )
+        leg_id = fixture["event"]["subject_ref"]
+        leg_index, leg = next(
+            (index, item) for index, item in enumerate(result.trip["transport_legs"]) if item["leg_id"] == leg_id
+        )
+        self.assertEqual("12306-mcp", leg["provider"])
+        self.assertTrue(leg["service_number"])
+        leg_unknowns = [
+            item for item in result.trip["unknowns"]
+            if str(item["field_path"]).startswith("/transport_legs/%d/" % leg_index)
+        ]
+        self.assertEqual([], leg_unknowns)
+        html = render_trip(result.trip)
+        html_report = validate_html(html, result.trip)
+        self.assertTrue(html_report.ok, [issue.render() for issue in html_report.errors])
+        self.assertIn(leg["service_number"], html)
 
 
 def _make_replan(path: Path):
