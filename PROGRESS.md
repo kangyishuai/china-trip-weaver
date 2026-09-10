@@ -2,9 +2,9 @@
 
 唯一的当前进度记录。2026-09-03 到 09-06 的逐轮任务书、实测证据、验收记录已归档，见「历史索引」。
 
-## 现状速览（2026-09-10 实测，0.11.0）
+## 现状速览（2026-09-10 实测，0.11.1）
 
-- 版本：`0.11.0`，唯一来源是
+- 版本：`0.11.1`，唯一来源是
   `plugins/china-trip-weaver/.codex-plugin/plugin.json` 与
   `src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
   位置一律引用这两处之一，历史版本只以日期提及、不写字面值。
@@ -13,6 +13,15 @@
   `~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src
   tests scripts` 0 行。带假 Key（`ANYSEARCH_API_KEY=... unittest`）跑全量同样
   584 OK，README 的 demo 重生成在有无 Key 两种环境下都零差异。
+- 0.11.1（第五波三份并行书，纯重构 + 一份 ADR，行为零变化）：`MobilityBackend.resolve`
+  366 行拆成 7 个私有方法（本体 32 行，文件内最长函数 120 行）；`plan_trip`
+  266 行与 `_schedule_problems` 242 行拆成 13 个阶段命名的私有函数（各 56/25
+  行，文件内最长 110 行）；两处拆分都用拆前快照逐字节比对，管理者另用
+  ec7c12d 旧 worktree 回放 36 组 AMap 场景与真实 16 天 journey 离线规划，
+  输出 sha256 全部相同。ADR-0016（Proposed）裁定租车与轮渡不改 schema：
+  现有 `transportLeg` 已含 drive/ferry 与全部取还车字段，真缺口是
+  `journey_booking_checklist`（journey.py）把 deadline 等同 depart_at、以及
+  closure/weather 事件从不动 transport_legs/budget_ledger，两者都是代码改动。
 - 0.11.0（第四波两份并行书 + 管理者合并修正）：`ctw research --city CITY
   --query TEXT [--max-results N] [--fixture FILE] [--fixed-clock ISO]
   --output-json OUT`，信封与退出码同 `ctw rail`（有结果 0、空结果或 Key
