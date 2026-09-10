@@ -2478,8 +2478,20 @@ def _provider_health(
         copy.deepcopy(dict(flyai_health)),
         copy.deepcopy(dict(amap_health)),
         copy.deepcopy(dict(variflight_health)),
-        _health("anysearch", "runtime-probe-v1", "static", "missing", now, ("research",), "optional search supplement is disabled; no auto-registration or business call was made"),
+        _anysearch_health(now),
     ]
+
+
+def _anysearch_health(now: str) -> Mapping[str, Any]:
+    if resolve_credentials().get("ANYSEARCH_API_KEY"):
+        return _health(
+            "anysearch", "runtime-probe-v1", "static", "ready", now, ("research",),
+            "configured; ctw plan does not call it, use `ctw research` to query it explicitly",
+        )
+    return _health(
+        "anysearch", "runtime-probe-v1", "static", "missing", now, ("research",),
+        "optional search supplement is disabled; no auto-registration or business call was made",
+    )
 
 
 def _health(provider: str, version: str, mode: str, status: str, checked_at: str, capabilities: Sequence[str], reason: str) -> Mapping[str, Any]:

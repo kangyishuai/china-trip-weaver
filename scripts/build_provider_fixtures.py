@@ -613,6 +613,11 @@ def any_error_body(message: str) -> Mapping[str, Any]:
     return {"jsonrpc": "2.0", "id": 1, "error": {"code": -32000, "message": message}}
 
 
+def any_sub_domains_body(domains: Sequence[str]) -> Mapping[str, Any]:
+    text = "".join("- %s\n" % domain for domain in domains)
+    return any_rpc_body(text)
+
+
 def build() -> List[Dict[str, Any]]:
     fixtures: List[Dict[str, Any]] = []
 
@@ -772,6 +777,23 @@ def build() -> List[Dict[str, Any]]:
         )])),
         auth_missing=True,
     ))
+
+    # get_sub_domains's 200 body isn't "## Search Results" markdown, so the
+    # full AnySearchAdapter (unlike the doctor probe, which only reads the
+    # status code) truthfully reports contract_mismatch for probe_success.
+    any_probe_req = request("research", {"domain": "travel"})
+    fixtures.extend([
+        fixture(
+            "anysearch", "probe_success", any_probe_req,
+            response(any_sub_domains_body(["news.anysearch.example", "images.anysearch.example"])),
+            health="contract_mismatch", error_class="contract_mismatch",
+        ),
+        fixture(
+            "anysearch", "probe_401", any_probe_req,
+            response(any_error_body("invalid or expired key"), 401),
+            health="forbidden", error_class="forbidden",
+        ),
+    ])
     return fixtures
 
 

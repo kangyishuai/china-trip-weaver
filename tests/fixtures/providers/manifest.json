@@ -89,6 +89,14 @@
       "sha256": "77ecea7ec86d610fc0e0b739e16d448c0e6c26d9dfb58c12f3b30d3cae917149"
     },
     {
+      "path": "anysearch/probe_401.json",
+      "sha256": "261632b197d1fbecffbd94fa744e6149c626a44360f248aacd465149139662ab"
+    },
+    {
+      "path": "anysearch/probe_success.json",
+      "sha256": "c1a9258127b074a12351caa64c2b3cb44b16436a2f56e3cc5e984309203766a5"
+    },
+    {
       "path": "anysearch/rate_limit.json",
       "sha256": "fc92ade2b8fa6c00ae8a43454b868179e3abadcf4c092d3b265e711a8fba6622"
     },
@@ -305,7 +313,7 @@
       "sha256": "46fd6e92dfa195da7d89386332f94ba20a9279229c78bec2ec1eaf2296321f2e"
     }
   ],
-  "fixture_count": 76,
+  "fixture_count": 78,
   "generated_by": "scripts/build_provider_fixtures.py",
   "manifest_version": 1
 }

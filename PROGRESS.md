@@ -1463,3 +1463,69 @@ TEMP-REVERSE-VERIFY` 为 0 → 重跑同一驱动脚本，`__init__`/`execute` �
 exit 2 且进度流零网络事件、`--fixed-clock` 无 `--fixture` 报错、
 非 anysearch 夹具报错。全量 `Ran 569 tests` `OK` 0 skipped（565+4）；
 pyflakes 0 行；secrets 0。`git commit` 单独一次提交任务 1。
+
+任务 2（已完成）：`anysearch_http.py` 的 `AnySearchHTTPTransport.__init__` 加
+`tool: str = "search"`（默认值不变，7 个既有测试零改动即通过）；
+`execute()` 内 `self.tool == "search"` 时保留原 query/max_results 校验，
+否则把 `request.parameters` 原样当 `arguments`（`get_sub_domains` 用
+`{"domain":"travel"}`）。`_doctor_probe_report` 把 anysearch 从硬编码的
+`{"credential","contract":"unsupported",...}` 移进并行探针字典（新增
+`_probe_anysearch`，与 `_probe_amap`/`_probe_variflight` 同款：missing 时
+`{"credential":status,"probe":_not_run_probe(status)}`，不构造
+`AnySearchHTTPTransport`；否则用 `tool="get_sub_domains"` 构造 transport，
+`request.parameters={"domain":"travel"}`，直接调
+`transport.execute("anysearch", request)`（不经过 `AnySearchAdapter().
+normalize()`——它只认「search」工具的「## Search Results」markdown，
+`get_sub_domains` 响应形状完全不同，绕开它是必须的，否则任何 200 响应都会
+被判成 `contract_mismatch`），按 `AnySearchAdapter._http_error(status)`
+（继承自 `BaseAdapter`，复用不重复）分类后复用既有 `_probe_layers`/
+`_probe_exception_layers`）。`_doctor_probe_report` 的兜底异常分支按
+provider 区分两种形状（anysearch 用 `{credential,probe:{...}}`，其余三个
+仍用旧的扁平四键）。夹具生成器加 2 份新夹具：`probe_success`（200，
+get_sub_domains 风格纯文本列表——不是「## Search Results」格式，所以跑
+`tests/test_providers.py` 的通用扫描（对每份夹具跑完整
+`AnySearchAdapter().query()`）时会**如实**报 `contract_mismatch`，已实测
+验证这不是猜测；doctor 探针本身从不调用 `normalize()`，不受影响，见
+`tests/test_anysearch.py` 的 `AnySearchProbeFixtureTests`/
+`AnySearchDoctorProbeTests`）、`probe_401`（401，`health`/`error_class`
+均为 `forbidden`，与既有 `forbidden` 类夹具同款，通用扫描原生通过）。
+`git diff main -- tests/fixtures/providers ':!*/anysearch/*'` 只多出
+`manifest.json`（78 处 sha256/计数变化，全部由 anysearch 7→9 份引起，逐一
+核对与其余 5 个 provider 条目哈希均未变——与书 D 已记录的同一耦合先例
+（BLOCKED.md「书 D」）一致，不算越界）。
+**发现的隐藏依赖（任务书未列，仿「仓库瘦身第二轮」先例处理）**：
+`tests/test_providers.py`（不在「只允许改」名单）有模块级循环
+（`for _path in fixture_paths(): setattr(ProviderCorpusTests, "test_fixture_
+%s_%s"%(provider,case), ...)`）对 `tests/fixtures/providers/*/*.json` 逐
+文件自动生成测试，无法通过夹具自身内容开关；新增 2 份 anysearch 夹具被
+自动纳入扫描：① `test_manifest_hashes_and_file_set_are_exact` 硬编码
+`self.assertEqual(76, manifest["fixture_count"])`，78 与之不符，判断按
+`test_packaging.py`/`test_contracts.py` 那次同款手法就地把 76 改成
+78（断言真实状态，未放宽逻辑）；② 自动生成的
+`test_fixture_anysearch_probe_success` 起初因 `expected.error_class` 沿用
+默认值 `None` 与实测 `contract_mismatch` 不符而红——已用上面「实测过
+不是猜测」的证据核实后改正 `expected` 字段为真实值使其绿，未改测试代码
+本身、未删用例、未放宽断言力度。反向验证：还原
+`test_manifest_hashes_and_file_set_are_exact` 的 76 → 全量测试从该处
+FAIL（`AssertionError: 76 != 78`）→ 改回 78 → 全量绿；还原
+`probe_success.json` 的 `expected.health`/`error_class` 为默认值（`ready`/
+`null`）→ `test_fixture_anysearch_probe_success` FAIL（`AssertionError:
+None != 'contract_mismatch'`）→ 改回真实值 → 绿。取舍完整记录见
+`BLOCKED.md`。
+`planning.py` 新增 `_anysearch_health(now)`：`resolve_credentials().get(
+"ANYSEARCH_API_KEY")` 真配置时返回 `status="ready", mode="static"`，
+reason 说明「ctw plan 不调用它，需显式用 ctw research」；未配置时逐字保留
+原 reason（避免影响 `test_keyless_e2e.py` 的 `assertIn` 断言）。
+硬指标一实测：`ctw doctor --probe` 输出的 `probes.anysearch` 为
+`{"credential":"missing","probe":{...}}`——`set(keys)=={"credential",
+"probe"}`（本机无 Key，走 missing 分支，零网络请求，与本节最大风险预判的
+本机现状吻合）；README「Run the synthetic demo」的 `ctw plan` 命令跑完
+`git status --short -- demo` 为空（demo 环境同样无 Key，anysearch 健康行
+文案逐字不变）。
+全量 `/usr/bin/python3 -m unittest discover -s tests` → `Ran 577 tests`
+`OK` 0 skipped（569+8：2 份新夹具自动生成 2 个测试+3 个 doctor probe
+mock 测试+2 个 fixture 直接回放测试+1 个 transport tool 参数测试）；
+pyflakes 0 行；secrets 0（372 文件）；`git diff df5712e --stat --
+plugins/china-trip-weaver/schema '*/credentials.py' '*/render/*'` 空；
+`git diff df5712e -- tests | grep -E '^-\s*def test_'` 0 行。`git commit`
+单独一次提交任务 2（含 `test_providers.py` 的必要连带改动）。

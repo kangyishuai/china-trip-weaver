@@ -41,9 +41,11 @@ class AnySearchHTTPTransport:
         self,
         credentials: CredentialResolution,
         *,
+        tool: str = "search",
         opener: Optional[Callable[..., Any]] = None,
     ) -> None:
         self.credentials = credentials
+        self.tool = tool
         self._open = opener or urllib.request.build_opener(_NoRedirectHandler()).open
 
     def execute(self, provider: str, request: ProviderRequest) -> ProviderEnvelope:
@@ -56,8 +58,12 @@ class AnySearchHTTPTransport:
         key = self.credentials.get("ANYSEARCH_API_KEY")
         if not key:
             raise ContractMismatch("AnySearch transport requires configured credentials")
-        query = _required_text(request.parameters, "query")
-        max_results = _bounded_max_results(request.parameters.get("max_results", MAX_RESULTS_DEFAULT))
+        if self.tool == "search":
+            query = _required_text(request.parameters, "query")
+            max_results = _bounded_max_results(request.parameters.get("max_results", MAX_RESULTS_DEFAULT))
+            arguments: Mapping[str, Any] = {"query": query, "max_results": max_results}
+        else:
+            arguments = dict(request.parameters)
 
         payload = json.dumps(
             {
@@ -65,8 +71,8 @@ class AnySearchHTTPTransport:
                 "id": 1,
                 "method": "tools/call",
                 "params": {
-                    "name": "search",
-                    "arguments": {"query": query, "max_results": max_results},
+                    "name": self.tool,
+                    "arguments": arguments,
                 },
             },
             ensure_ascii=False,

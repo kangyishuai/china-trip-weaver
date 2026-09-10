@@ -12,6 +12,7 @@ import urllib.error
 import urllib.parse
 from pathlib import Path
 from typing import Any, Mapping
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,6 +20,7 @@ SRC = ROOT / "plugins" / "china-trip-weaver" / "src"
 CTW = ROOT / "plugins" / "china-trip-weaver" / "scripts" / "ctw"
 sys.path.insert(0, str(SRC))
 
+from china_trip_weaver import cli
 from china_trip_weaver.clock import FixedClock
 from china_trip_weaver.contracts import ProviderRequest
 from china_trip_weaver.credentials import resolve_credentials
@@ -27,6 +29,7 @@ from china_trip_weaver.providers.anysearch_http import ANYSEARCH_ENDPOINT, AnySe
 from china_trip_weaver.providers.base import (
     ContractMismatch,
     ProviderContext,
+    ProviderEnvelope,
     ProviderNetworkError,
     ProviderTimeout,
     ReplayTransport,
@@ -203,6 +206,18 @@ class AnySearchHTTPTransportTests(unittest.TestCase):
         with self.assertRaisesRegex(ProviderNetworkError, "pinned origin"):
             transport.execute("anysearch", request({"city": "上海", "query": "博物馆"}))
 
+    def test_execute_with_non_search_tool_forwards_parameters_verbatim_as_arguments(self):
+        opener = RecordingOpener(json_response({"jsonrpc": "2.0", "id": 1, "result": {"content": []}}))
+        transport = AnySearchHTTPTransport(credentials(), tool="get_sub_domains", opener=opener)
+        envelope = transport.execute("anysearch", request({"domain": "travel"}))
+
+        payload = json.loads(opener.requests[-1][0].data.decode("utf-8"))
+        self.assertEqual(
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "get_sub_domains", "arguments": {"domain": "travel"}}},
+            payload,
+        )
+        self.assertEqual(200, envelope.status_code)
+
     def test_http_error_status_is_captured_in_envelope(self):
         def forbidden_opener(http_request, timeout):
             raise urllib.error.HTTPError(
@@ -301,6 +316,82 @@ class AnySearchFixtureTests(unittest.TestCase):
         self.assertNotIn("\x1b", name)
         self.assertIn("[REDACTED]", name)
         self.assertIn("详情", name)
+
+
+class AnySearchProbeFixtureTests(unittest.TestCase):
+    """Fixtures for the doctor probe's get_sub_domains/{"domain":"travel"} call.
+
+    The probe bypasses AnySearchAdapter.normalize() (which only understands
+    the "search" tool's "## Search Results" markdown), so these fixtures are
+    replayed directly at the transport layer, mirroring cli._probe_anysearch.
+    """
+
+    def _replay(self, case: str):
+        fixture = load_fixture(case)
+        transport = ReplayTransport(fixture["transport"])
+        envelope = transport.execute("anysearch", ProviderRequest(**fixture["request"]))
+        return fixture, envelope
+
+    def test_probe_success_fixture_is_a_well_formed_200_response(self):
+        fixture, envelope = self._replay("probe_success")
+        self.assertEqual("configured", fixture["credential_state"])
+        self.assertEqual(200, envelope.status_code)
+        self.assertIsNone(AnySearchAdapter._http_error(envelope.status_code))
+        self.assertEqual("2.0", envelope.body["jsonrpc"])
+
+    def test_probe_401_fixture_maps_to_forbidden_error_class(self):
+        fixture, envelope = self._replay("probe_401")
+        self.assertEqual(401, envelope.status_code)
+        self.assertEqual("forbidden", AnySearchAdapter._http_error(envelope.status_code))
+        self.assertEqual(fixture["expected"]["error_class"], "forbidden")
+
+
+class AnySearchDoctorProbeTests(unittest.TestCase):
+    """cli._probe_anysearch, exercised in-process with a mocked transport
+    class so no real HTTP request is ever made."""
+
+    def _progress(self):
+        return cli._NDJSONProgress(None)
+
+    def test_missing_credential_reports_not_run_without_constructing_transport(self):
+        with mock.patch("china_trip_weaver.providers.anysearch_http.AnySearchHTTPTransport") as transport_cls:
+            result = cli._probe_anysearch(credentials(configured=False), ROOT, "missing", self._progress())
+        transport_cls.assert_not_called()
+        self.assertEqual(
+            {
+                "credential": "missing",
+                "probe": {"credential": "missing", "contract": "not_run", "network": "not_run", "business": "not_run"},
+            },
+            result,
+        )
+
+    def test_200_response_reports_passed_layers_using_get_sub_domains_tool(self):
+        fake_transport = mock.Mock()
+        fake_transport.execute.return_value = ProviderEnvelope(status_code=200, body={"jsonrpc": "2.0"}, headers={})
+        with mock.patch(
+            "china_trip_weaver.providers.anysearch_http.AnySearchHTTPTransport", return_value=fake_transport,
+        ) as transport_cls:
+            result = cli._probe_anysearch(credentials(), ROOT, "configured", self._progress())
+        self.assertEqual("get_sub_domains", transport_cls.call_args.kwargs.get("tool"))
+        sent_request = fake_transport.execute.call_args[0][1]
+        self.assertEqual({"domain": "travel"}, sent_request.parameters)
+        self.assertEqual(
+            {
+                "credential": "configured",
+                "probe": {"credential": "configured", "contract": "passed", "network": "passed", "business": "passed"},
+            },
+            result,
+        )
+
+    def test_401_response_reports_business_failed_but_network_passed(self):
+        fake_transport = mock.Mock()
+        fake_transport.execute.return_value = ProviderEnvelope(status_code=401, body={"jsonrpc": "2.0"}, headers={})
+        with mock.patch("china_trip_weaver.providers.anysearch_http.AnySearchHTTPTransport", return_value=fake_transport):
+            result = cli._probe_anysearch(credentials(), ROOT, "configured", self._progress())
+        self.assertEqual(
+            {"credential": "configured", "contract": "passed", "network": "passed", "business": "failed"},
+            result["probe"],
+        )
 
 
 class AnySearchResearchCLITests(unittest.TestCase):

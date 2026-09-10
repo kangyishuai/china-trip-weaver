@@ -1496,27 +1496,32 @@ def _doctor_probe_report(credentials: Any, repo_root: Path, progress: _NDJSONPro
         "variflight": lambda: _probe_variflight(
             credentials, repo_root, credential_status["variflight"], progress,
         ),
+        "anysearch": lambda: _probe_anysearch(credentials, repo_root, credential_status["anysearch"], progress),
     }
-    report = {
-        "anysearch": {
-            "credential": credential_status["anysearch"],
-            "contract": "unsupported",
-            "network": "unsupported",
-            "business": "unsupported",
-        },
-    }
+    report = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(probes)) as executor:
         futures = {provider: executor.submit(run) for provider, run in probes.items()}
         for provider, future in futures.items():
             try:
                 report[provider] = future.result()
             except Exception:
-                report[provider] = {
-                    "credential": credential_status[provider],
-                    "contract": "failed",
-                    "network": "failed",
-                    "business": "not_run",
-                }
+                if provider == "anysearch":
+                    report[provider] = {
+                        "credential": credential_status[provider],
+                        "probe": {
+                            "credential": credential_status[provider],
+                            "contract": "failed",
+                            "network": "failed",
+                            "business": "not_run",
+                        },
+                    }
+                else:
+                    report[provider] = {
+                        "credential": credential_status[provider],
+                        "contract": "failed",
+                        "network": "failed",
+                        "business": "not_run",
+                    }
     return report
 
 
@@ -1640,6 +1645,45 @@ def _probe_variflight(
     )
     result = VariFlightAdapter().query(request, ProviderContext(clock, credentials, transport))
     return _probe_layers(credential_status, result)
+
+
+def _probe_anysearch(
+    credentials: Any,
+    repo_root: Path,
+    credential_status: str,
+    progress: _NDJSONProgress,
+) -> Mapping[str, Any]:
+    del repo_root
+    if credential_status == "missing":
+        return {"credential": credential_status, "probe": _not_run_probe(credential_status)}
+    from types import SimpleNamespace
+
+    from .clock import SystemClock
+    from .contracts import ProviderRequest
+    from .providers.anysearch import AnySearchAdapter
+    from .providers.anysearch_http import AnySearchHTTPTransport
+    from .providers.base import stable_id
+
+    progress.emit({"event": "probe", "provider": "anysearch", "scope": "doctor", "status": "started"})
+    clock = SystemClock()
+    transport = AnySearchHTTPTransport(credentials, tool="get_sub_domains")
+    _attach_progress(transport, progress)
+    request = ProviderRequest(
+        request_id=stable_id("doctor-anysearch", "get_sub_domains"),
+        capability="research",
+        parameters={"domain": "travel"},
+        deadline_ms=6000,
+        as_of=clock.now().date().isoformat(),
+        cache_policy="bypass",
+        trace={"stage": "doctor"},
+    )
+    try:
+        envelope = transport.execute("anysearch", request)
+    except Exception as exc:
+        return {"credential": credential_status, "probe": _probe_exception_layers(credential_status, exc)}
+    error_class = AnySearchAdapter._http_error(envelope.status_code)
+    layers = _probe_layers(credential_status, SimpleNamespace(error_class=error_class))
+    return {"credential": credential_status, "probe": layers}
 
 
 def _probe_layers(credential_status: str, result: Any) -> Mapping[str, str]:
