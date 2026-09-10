@@ -23,6 +23,7 @@ sys.path.insert(0, str(SRC))
 from china_trip_weaver.clock import FixedClock
 from china_trip_weaver.contracts import canonical_json
 from china_trip_weaver.credentials import resolve_credentials
+from china_trip_weaver.evidence import make_claim
 from china_trip_weaver.journey import (
     _merge_provider_health,
     assemble_journey,
@@ -40,6 +41,7 @@ from china_trip_weaver.mobility import MobilityBackend
 from china_trip_weaver.planning import RailBackend, _normalize_request, plan_trip
 from china_trip_weaver.providers.amap_http import AMapCallBudget
 from china_trip_weaver.providers.base import ProviderTimeout
+from china_trip_weaver.providers.rail12306 import PRESALE_DAYS
 from china_trip_weaver.render import render_journey, validate_journey_html
 from china_trip_weaver.render.validate_html import AuditParser
 from china_trip_weaver.replan import replan_trip
@@ -1188,6 +1190,74 @@ class JourneyContinuityTests(unittest.TestCase):
         self.assertEqual(sorted(deadline_keys), deadline_keys)
         for item in checklist:
             self.assertJourneyItemTraceable(journey, item)
+
+    def test_rail_leg_booking_deadline_is_the_presale_open_date_with_a_reason(self):
+        journey = self.result.journey
+        checklist = journey_booking_checklist(journey)
+        rail_legs = {
+            (trip_index, leg["leg_id"]): leg
+            for trip_index, trip in enumerate(journey["trips"])
+            for leg in trip["transport_legs"]
+            if leg["travel_mode"] == "rail"
+        }
+        self.assertTrue(rail_legs)
+        matched = 0
+        for item in checklist:
+            key = (item["trip_index"], item["source_ref"])
+            if item["kind"] != "transport" or key not in rail_legs:
+                continue
+            depart_date = date.fromisoformat(rail_legs[key]["depart_at"][:10])
+            expected_deadline = (depart_date - timedelta(days=PRESALE_DAYS - 1)).isoformat()
+            self.assertEqual(expected_deadline, item["deadline"])
+            self.assertTrue(item["reason"])
+            matched += 1
+        self.assertEqual(len(rail_legs), matched)
+
+    def test_transport_leg_booking_deadline_claim_overrides_the_presale_calculation(self):
+        journey = copy.deepcopy(self.result.journey)
+        trip = journey["trips"][0]
+        leg = trip["transport_legs"][0]
+        self.assertEqual("rail", leg["travel_mode"])
+        claim = make_claim(
+            subject_ref=leg["leg_id"],
+            field_path="/booking_deadline",
+            value="2026-09-25",
+            source_url="https://example.com/synthetic-journey/booking-deadline",
+            provider="synthetic-test",
+            status="verified",
+            confidence=1.0,
+            mode="mock",
+            clock=FixedClock.from_iso(FIXED_NOW),
+        )
+        trip["claims"].append(claim)
+        leg["claim_ids"].append(claim["claim_id"])
+        checklist = journey_booking_checklist(journey)
+        item = next(
+            entry for entry in checklist
+            if entry["kind"] == "transport"
+            and entry["trip_index"] == 0
+            and entry["source_ref"] == leg["leg_id"]
+        )
+        self.assertEqual("2026-09-25", item["deadline"])
+
+    def test_non_rail_transport_leg_booking_deadline_is_still_departure_time(self):
+        journey = copy.deepcopy(self.result.journey)
+        trip = journey["trips"][0]
+        leg = trip["transport_legs"][0]
+        leg["travel_mode"] = "flight"
+        checklist = journey_booking_checklist(journey)
+        item = next(
+            entry for entry in checklist
+            if entry["kind"] == "transport"
+            and entry["trip_index"] == 0
+            and entry["source_ref"] == leg["leg_id"]
+        )
+        self.assertEqual(leg["depart_at"], item["deadline"])
+
+    def test_checked_in_sixteen_day_demo_first_priority_action_is_the_earliest_rail_presale_date(self):
+        journey = load(JOURNEY_DEMO / "journey.json")
+        checklist = journey_booking_checklist(journey)
+        self.assertEqual("2026-09-17", checklist[0]["deadline"])
 
     def test_risks_cover_every_missing_or_degraded_capability_conflict_and_unknown(self):
         journey = copy.deepcopy(self.result.journey)

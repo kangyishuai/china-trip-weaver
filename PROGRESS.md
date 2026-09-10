@@ -2002,3 +2002,48 @@ README.md README.zh-CN.md` 空输出；`/usr/bin/python3 -m unittest discover
 「无」条目（见上）。单独一次 `git commit`，随后 `git push -u origin
 rental-ferry-adr`。止损轮次未触发（任务 0/1/2 均一轮验收通过，未出现
 连败）。
+
+## 本轮记录（2026-09-10，书 F1：预订清单按开售日；main 直改，第六波三份并行之一）
+
+任务 0 核对（HEAD `05f1056`）：全部与任务书吻合——584 测试 OK 0 skip、`journey.py`
+行号（`journey_booking_checklist` 1769、`_journey_trace_deadline` 2077、
+`_journey_action_item` 1909、`_journey_checklist_sort_key` 1956）、
+`rail12306.py:28` `PRESALE_DAYS=15`、demo/journey-16d 三条 rail 腿
+10-01/10-06/10-11+`generated_at` 2026-09-05+claim 只有 `/depart_at`/`/price`、
+`transportLeg.claim_ids` 经 schema 700-712 确认可查 `/booking_deadline` claim；
+额外核实 `_journey_trace_deadline`/`_journey_entity_trace` 的 `source_kind=
+"transport_leg"`、`source_value`=leg 本身，`reason` 字段当前在渲染/校验里全程
+未被读取（改动零渲染风险）。理解的目标：新增一个私有辅助
+`_journey_transport_leg_deadline(trip, leg)->(deadline, reason)`（claim 优先
+→ rail 走开售日 → 其余 depart_at 不变），`journey_booking_checklist` 交通分支
+与 `_journey_trace_deadline` 的 `transport_leg` 分支共用它；「开售日早于
+generated_at 不挪」按字面理解为「不额外写 clamp 逻辑，让计算值裸算」，不
+引入与 generated_at 的比较代码。顺序：任务 1 写 4+ 红测试 → 任务 2 实现+
+重生成语料+validate-html+浏览器 QA+反向验证 → 全量门禁→提交推送。最大风险：
+`_journey_trace_deadline` 被 unknown 与风险项共用，只改 checklist 内联表达式
+不改这个函数会导致同一条腿在 checklist 与 unknown/risk 两处 deadline 失配，
+渲染器/校验器同时调用两套值必然在 validate-html 报错，故两处必须共用新函数。
+
+任务 1（已完成）：`tests/test_journey.py` 的 `JourneyContinuityTests` 新增 4 个
+`def test_`（顶部加 `from china_trip_weaver.evidence import make_claim`、
+`from china_trip_weaver.providers.rail12306 import PRESALE_DAYS` 两行导入）：
+①`test_rail_leg_booking_deadline_is_the_presale_open_date_with_a_reason` 遍历
+`self.result.journey` 全部 rail 腿，断言 checklist 对应项 `deadline` 等于
+`depart_at` 日期减 `PRESALE_DAYS-1` 天、`reason` 非空；②
+`test_transport_leg_booking_deadline_claim_overrides_the_presale_calculation`
+用 `make_claim` 合成一条 `field_path="/booking_deadline"`、`value="2026-09-25"`
+的 claim 塞进深拷贝 journey 的某条 rail 腿 `claim_ids`，断言该项 `deadline`
+等于 claim 值而非开售日；③
+`test_non_rail_transport_leg_booking_deadline_is_still_departure_time`
+把深拷贝 journey 里一条腿的 `travel_mode` 改成 `flight`，断言 `deadline`
+仍是 `depart_at`（无 claim 场景下非 rail 分支不变）；④
+`test_checked_in_sixteen_day_demo_first_priority_action_is_the_earliest_rail_presale_date`
+直接 `load(JOURNEY_DEMO / "journey.json")`，断言
+`journey_booking_checklist(journey)[0]["deadline"] == "2026-09-17"`。
+验收实测：单独跑这 4 个测试，①②④三个报 `AssertionError`（现状仍是
+`depart_at`/`2026-10-01`），③本身断言的是"不变行为"，新旧代码下都会通过，
+不属于红→绿类别，`Ran 4 tests ... FAILED (failures=3)`，贴出的三条
+`AssertionError` 均为预期的"当前值≠新规则值"（如
+`'2026-09-17' != '2026-10-01T08:00:00+08:00'`）。单独一次 `git commit`
+只含 `tests/test_journey.py`（journey.py 尚未改动，属故意的红提交，后续
+任务 2 的提交会把它转绿）。
