@@ -1422,4 +1422,41 @@ candidates-import` 成功（远端已建 `candidates-import` 分支，PR 未开�
 --output .tmp/qa --viewports 375x812,1440x900 --sections 15` → `failures:
 []`、`handshakeAttempts: 1`；`git diff main -- scripts/qa_renderer_browser.py
 | grep -E '^[-+]' | grep -E 'validate_report|checks = \{|"[a-z ]+": report'`
-0 行（判卷字典未被触碰）；`py_compile`/pyflakes 均 0。
+0 行（判卷字典未被触碰）；`py_compile`/pyflakes 均 0。单独一次
+`git commit`（`1a8943c`）。
+
+任务 2（已完成）：`tests/test_renderer.py` 用 `importlib.util.
+spec_from_file_location` 按路径把 `scripts/qa_renderer_browser.py` 加载成
+独立模块对象（模块不是包、无 `__init__.py`，仓库内首次这样用，未沿用
+subprocess 调用方式，因为要在同进程里打桩 `ChromePipe` 类）；新增
+`_StubHandshakeChromePipe`（只桩 `__init__`/`command`/`wait_event`/
+`close` 四个方法，`command` 对 `Target.createTarget` 按类变量
+`pending_timeouts` 决定抛 `TimeoutError` 还是返回假 `targetId`，其余方法
+返回让 `run_qa` 能跑完整流程所需的最小假数据）与
+`QaRendererHandshakeTests`（3 个 `def test_`：重试一次成功→
+`handshakeAttempts==2`+构造 2 次；两次都超时→`assertRaises(TimeoutError)`；
+首次即成功→只构造 1 次）。`_run_stub_qa` 故意传单一视口 `(800, 600)`
+（不在 375/1440 之列）跳过截图分支，只依赖 `Page.printToPDF` 返回合法
+base64；`validate_report`/`console_errors`/截图逻辑本身未被打桩、按真实
+代码路径跑，只是不深究检查项是否全过（本书打桩范围明写只许桩
+`ChromePipe` 的启动）。`tests/test_keyless_e2e.py:1154` 的子进程
+`timeout=60` 改 `150`（`test_journey.py:1430` 的另一处 16 天 demo QA
+子进程同款 `timeout=60` 不在本书白名单，只记录不改，见 `BLOCKED.md`）。
+验收：`~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-
+weaver/src tests scripts` 0 行；`scripts/scan_secrets.py` 0 命中（370
+文件）；`git diff main -- tests | grep -E '^-\s*def test_'` 0 行；全量
+`/usr/bin/python3 -m unittest discover -s tests` → `Ran 568 tests` `OK`
+0 skipped（565 基线 + 3 个新 `def test_`）；`git diff main --stat --
+plugins .github` 空；`git diff main --stat` 只有 `PROGRESS.md`/
+`scripts/qa_renderer_browser.py`/`tests/test_keyless_e2e.py`/
+`tests/test_renderer.py` 四个文件，均在白名单内。
+反向验证（终端记录）：临时把 `run_qa` 里的
+`try: target_id = ...\nexcept TimeoutError: ...重试...` 整段改回未加固
+前的单次调用（标 `# TEMP-REVERSE-VERIFY`）→
+`python3 -m unittest tests.test_renderer.QaRendererHandshakeTests -v` 报
+`FAILED (errors=1)`，恰好 `test_handshake_retries_once_then_succeeds`
+一个红（`TimeoutError: stub handshake timeout`，其余两个测试语义上仍
+成立故仍绿）→ 还原重试逻辑 → `git diff main -- scripts/
+qa_renderer_browser.py | grep -c TEMP-REVERSE-VERIFY` 为 0（残留标记已
+清零）→ 重跑同一条命令三个测试转 `OK`（绿）。任务 2 单独一次
+`git commit`。

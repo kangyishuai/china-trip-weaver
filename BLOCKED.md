@@ -748,3 +748,28 @@ china_trip_weaver/replan.py`）无歧义、按实际路径处理，不算待裁�
    同款先例（分支分出后 main 前进，验收改用 `git merge-base HEAD main`
    核实的真实分出点），本书统一改用真实分出点 `1f1e966` 做比对，两条
    规矩检查（无删测试函数、schema/demo 零改动）均干净通过。
+
+## 书 G：浏览器 QA 握手加固（2026-09-10，worktree `.tmp/wt-g` 分支 `qa-handshake`）
+
+无需要停工请示领导的裁决项。以下两点已按自身判断处理，均不影响硬指标，
+完整实测见 `PROGRESS.md` 本书小节：
+
+1. 任务书通篇称呼要打桩/加固的类为 `Browser`，仓库内真实类名是
+   `ChromePipe`——`__init__`/`command`/`run_qa`/首条 `Target.createTarget`/
+   `validate_report` 检查字典的行号（71/107/202/214/173）与方法签名
+   （`close()`/`command()`）全部与任务书描述精确吻合，只有类名字面不同。
+   判为任务书的描述性用词、不是要求真的把类改名为 `Browser`（改名是
+   任务书未要求的额外改动，且会牵连测试里对该名字的引用），按真实类名
+   `ChromePipe` 实现，任务 2 的打桩测试同样打在 `ChromePipe` 上。
+2. 顺手发现 `tests/test_journey.py:1430`
+   （`test_checked_in_sixteen_day_demo_passes_offline_browser_qa`）也用
+   `subprocess.run([...qa_renderer_browser.py...], timeout=60)` 调用同一
+   脚本。本书加固后握手最坏耗时约为原来的 6 倍（10 秒→30 秒握手超时 ×
+   最多 2 次尝试），若某次 CI 运行恰好触发一次重启，这个测试自身的
+   `timeout=60` 有可能先于脚本内部逻辑触发 `subprocess.TimeoutExpired`，
+   把"握手重试后成功"变成"外层子进程超时失败"，与本书要消除 CI 抖动的
+   目标背道而驰。`tests/test_journey.py` 不在本书「只允许改」白名单内
+   （白名单只列了 `tests/test_renderer.py`、`tests/test_keyless_e2e.py`
+   第 1154 行附近那一处），未改动，只记录供领导定夺是否需要单独一本书
+   把这个 `timeout=60` 也放宽（建议同样改成 150，与本书对
+   `test_keyless_e2e.py` 的改法一致）。
