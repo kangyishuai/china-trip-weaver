@@ -126,6 +126,6 @@ python3 docs/design/schema/check_schema.py plugins/china-trip-weaver/schema/trip
 
 invalid fixtures 分别且仅违反：坐标缺 `source_crs`、claim 缺 `source_url`、`mode=mock` 缺 `mock_notice`、price 缺 `price_type`。
 
-## 8. 阶段三需补的语义验证
+## 8. JSON Schema 之外的语义验证
 
-JSON Schema 之后还必须实现：ID/claim/ref 完整性、日期与 slot 顺序、request/day 数量一致、route matrix 覆盖、价格与 claim 对齐、provider health 覆盖、mode 取最保守值、坐标派生规则、patch 可重放/稳定性、禁止交易 URL scheme/敏感字段。此分层避免把 Schema 做不到的关系约束写成“已保证”。四层测试设计见 `08-testing.md`。[依据：研究决策 21](../research/04-design-insights.md#21-采用四层测试不把能启动能打印当测试)
+JSON Schema 只管结构，管不到关系约束，因此另需要：ID/claim/ref 完整性、日期与 slot 顺序、request/day 数量一致、route matrix 覆盖、价格与 claim 对齐、provider health 覆盖、mode 取最保守值、坐标派生规则、patch 可重放/稳定性、禁止交易 URL scheme/敏感字段。这一层已经实现，是 `validate_trip.py` 的 `semantic_issues()`（约 200 行），不是尚待补的工作；此分层避免把 Schema 做不到的关系约束写成”已保证”。四层测试设计见 `08-testing.md`。[依据：研究决策 21](../research/04-design-insights.md#21-采用四层测试不把能启动能打印当测试)

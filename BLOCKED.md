@@ -1,3 +1,30 @@
+## 书 docs-drift 任务 0：pyflakes 全仓基线与任务书数字差 1 行（2026-09-10，判断，非空白裁决）
+
+任务书「现状与任务 0」写「`~/miniconda3/envs/core/bin/python -m pyflakes
+plugins/china-trip-weaver/src` 0 行，加上 tests scripts 后 10 行」；HEAD
+`c9c9c15` 实测（同一解释器、同一 pyflakes 3.4.0）`src` 单独 0 行、加
+`tests scripts` 后 **11 行**，比任务书多 1 行：
+
+```
+tests/test_contracts.py:19:1: 'china_trip_weaver.clock.SHANGHAI' imported but unused
+tests/test_renderer.py:6:1: 'math' imported but unused
+tests/test_renderer.py:7:1: 're' imported but unused
+tests/test_renderer.py:20:1: 'china_trip_weaver.contracts.canonical_json' imported but unused
+tests/test_providers.py:522:9: local variable 'business' is assigned to but never used
+tests/test_providers.py:523:9: local variable 'official' is assigned to but never used
+tests/test_scheduler.py:11:1: 'unittest.mock' imported but unused
+tests/test_evidence.py:3:1: 'json' imported but unused
+scripts/scan_secrets.py:7:1: 'os' imported but unused
+scripts/scan_secrets.py:12:1: 'typing.Iterable' imported but unused
+scripts/build_plan_fixtures.py:10:1: 'typing.Dict' imported but unused
+```
+
+判断：任务 2 的验收目标是「pyflakes 点名的项清零」，不是「起点必须恰好是
+10」，1 行的起点计数出入不改变任务 2 该做什么（清空以上全部 11 行），也不
+影响任务 3/4；无人可问，按「跳过做别的，继续」处理，不停工，只记录证据。
+可能原因：任务书基线是别的时刻/别的 pyflakes 版本测出的，或人工计数时漏数
+一行；未去追查，因为不影响任何验收口径。
+
 ## Closed：GitHub CI 自 2026-09-05 起连续全红（2026-09-08 洁癖收尾发现，同日经领导裁决修复）
 
 - **处置（2026-09-08）**：领导裁决按建议直接修。提交 `b160501`：`test_codex_skill_parser_smoke_runs_standalone` 改用插件自己的 `plugin_conflicts.codex_executable()` 判断本机有无 Codex，没有时 `skipTest`，与另两条 Codex 依赖测试同款；`actions/checkout@v7`、`actions/setup-python@v7`（node24）；CONTRIBUTING 与两份 README 改为「三项 Codex 依赖测试」。本机全量仍 `Ran 507 tests` OK 零跳过；模拟无 Codex（`CODEX_BIN=/nonexistent`）时 `OK (skipped=1)`。推送后 GitHub Actions run 34217843374 两条矩阵均通过：`Ran 507 tests`、`OK (skipped=3)`、`secret scan: 0 finding(s)`，Node 20 弃用告警消失。

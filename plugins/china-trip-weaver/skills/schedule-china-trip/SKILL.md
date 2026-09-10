@@ -12,7 +12,7 @@ Consume only normalized candidates and the frozen route-time matrix; do not call
 - Reserve required lunch and dinner slots for 60 minutes, using lunch starts at 12:00±1 hour and dinner starts at 18:00±1.5 hours unless `meal_windows` overrides them. Reserve `rest_windows` or the pace-default lunch rest, and add a required luggage/transfer buffer on every cross-city day.
 - Read optional `mobility_profile`; when `senior=true`, never place two `physical_intensity=heavy` POIs without a recovery `rest` slot between them, even when fitness is `good`.
 - Accumulate comparable CNY POI, scheduled transport, and selected lodging prices across the trip. Emit a min/max range and an `unknowns` reason when room count, tax inclusion, currency, unit, or an unverified/from-price prevents a single comparable total.
-- Use the deterministic lightweight scheduler by default. OR-Tools remains disabled unless the explicit feature flag, dependency probe, complete matrix, and threshold all pass; never install it.
+- Use the deterministic lightweight scheduler. It is the only scheduling engine this plugin ships; a previously-designed second engine was never wired into production and its bridge module has been removed (see ADR-0014). Never try to install or enable a second scheduling engine.
 - Return scheduled slots with selected order, times, matrix hops, exclusions, and objective vector, or `NO_SOLUTION` with a minimal conflict and optional relaxations.
 - Preserve claims and provider health, including the destination-search rung, without rewriting which search tool supplied the evidence.
 - Do not render a normal Trip for a no-solution result and do not drop a requirement to make the output look complete.

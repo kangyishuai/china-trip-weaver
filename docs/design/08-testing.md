@@ -31,7 +31,7 @@
 
 Provider-specific 最小集：
 
-- 12306：8-tool fingerprint、station、direct、no-seat、候补、中转、跨日、pipe column drift；当前真实余票尚未实测，fixture 通过前标 beta。[依据：开放问题 Q4](../research/05-open-questions.md#q4-12306-mcp-的真实余票-parser日期范围与失败恢复是否稳定)
+- 12306：8-tool fingerprint、station、direct、no-seat、候补、中转、跨日、pipe column drift；真实余票 parser/日期范围/失败恢复已按 Q4 完成实测（真实 `12306-mcp@0.3.10` 录制覆盖余票、候补、中转、跨日、outside-presale），代码里没有 `beta` 标签，rail 走与其他 provider 相同的 health/degradation rung。[依据：ADR-0010](adr/0010-candidate-file-planning-and-live-rail.md)
 - FlyAI：version/help、实际 command envelope、flight/hotel、trial limit、stderr error、non-JSON、price missing context；不能从 README 猜 command。[依据：开放问题 Q3](../research/05-open-questions.md#q3-fly-aiflyai-cli-的当前-commandschemakeyless-trial-到底是什么)
 - AMap：POI pagination、geocode GCJ02、walking/transit/driving/riding、unreachable、401/429、v3/v4/v5 drift、边界/HK point；round-trip 误差独立断言。[依据：开放问题 Q5](../research/05-open-questions.md#q5-amap-当前-web-api-的-v3v4v5-schemacrs-与-route-quota-能否形成稳定-adapter)
 - VariFlight：9-tool fingerprint、flight identity、status/weather/comfort/raw price、401/403/429、`any` wrong shape；无 Key 不发业务调用。
@@ -51,7 +51,7 @@ PASS 当且仅当：
 
 ## 3. Layer 2：排程 golden / 无解 / 局部重排
 
-目标：证明 lightweight scheduler 在固定 matrix 下可行、确定、可解释；无解不丢约束；replan 只改影响范围。OR-Tools 只在 opt-in threshold suite 对照。[依据：研究决策 14](../research/04-design-insights.md#14-采用or-tools-作为复杂日程可选引擎不作为无条件依赖)
+目标：证明 lightweight scheduler 在固定 matrix 下可行、确定、可解释；无解不丢约束；replan 只改影响范围。曾设想的第二排程引擎对照 suite 从未接入生产路径，已随对应桥接模块一并删除，light scheduler 是唯一排程引擎。[依据：ADR-0014](adr/0014-remove-ortools-bridge.md)
 
 ### 3.1 Golden corpus
 
@@ -78,9 +78,9 @@ Golden 不锁完整漂亮文案，只锁：selected IDs/order/start/end、hard c
 - 同一输入重复 20 次 canonical output 相同。
 - replan 范围外 canonical day bytes 相同；base revision mismatch 必须拒绝。
 
-### 3.4 OR-Tools threshold 对照
+### 3.4 第二排程引擎对照（已移除，设计稿未实现）
 
-仅当 `CTW_ENABLE_ORTOOLS=1` 且 pin 可用时，用同一 20 golden 比较 light/OR-Tools：hard feasibility 必须一致或 OR-Tools 给出更强有证据解；5s deadline；输出仍经统一 validator。阶段三正式固定阈值前记录 feasible rate、objective、cold/warm time、解释性和小改动 churn。[依据：开放问题 Q10](../research/05-open-questions.md#q10-轻量排程与-or-tools-的切换阈值是什么)
+以下是实现前的设计稿：曾设想在一个显式开关打开且第二引擎可用时，用同一 20 个 golden 比较 light scheduler 与该引擎的 hard feasibility、objective、耗时和可解释性。该引擎与对照 suite 均从未接入生产路径，2026-09-08 已随桥接模块一并删除；light scheduler 是唯一排程引擎，没有对照项。[依据：ADR-0014](adr/0014-remove-ortools-bridge.md)（原阈值设计见[开放问题 Q10](../research/05-open-questions.md#q10-轻量排程与-or-tools-的切换阈值是什么)，因引擎已删除而不再适用）
 
 ### 3.5 判定标准
 

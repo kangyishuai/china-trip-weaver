@@ -66,6 +66,13 @@ fix-names` 会把它们列为人工项。
 - 2026-09-03/04 越界事实的唯一记录：`BLOCKED.md`（面向公众的产品未决问题，
   Open 区已于 2026-09-06 清零，现为存档）。
 
+## 本轮记录（2026-09-10，书 docs-drift：文档漂移清零 + 站点城市匹配接受区县，worktree `.tmp/wt-b` 分支 `docs-drift`）
+
+- 任务 0（已完成）：`git worktree add .tmp/wt-b -b docs-drift`，HEAD `c9c9c15` 与任务书吻合；任务 1 五条 grep 当前均非零（确认漂移存在）、`adr`/`research` diff 为空，均与任务书吻合；`station_distance.py:261` 确为 `_city_matches`，只剥「市」且只比 `item.get("city")`；实测发现 POI 结果（`_station_point`）的 `district` 只在 claims 里（`providers/amap.py` 的 `_pois()` 把 `district` 塞进 `identity` claim value，item 本身无 `district` 键），geocode 结果（`_city_centre`）的 `district` 才是 item 顶层字段——任务书只说「同时比对 item 的 city 与 district」，未提这个不对称，动工前已核实清楚，不算对不上,不停。唯一数字出入是 pyflakes 全仓 10→11 行，已按「不停工只记录」写入 `BLOCKED.md`。
+- 理解的目标：让文档说的与代码一致（任务 1）、测试代码零无用导入（任务 2）、火车站点距离对县级城市名不误判（任务 3）、发版流程写进 CONTRIBUTING（任务 4），四者独立无依赖。
+- 顺序：任务 1 → 任务 2 → 任务 3 → 任务 4（任务书列出的顺序，互不依赖，按顺序省心）。
+- 最大风险：任务 3 里 `_station_point` 的 district 藏在 claims 而非 item 顶层，直接照抄 `_city_centre` 的写法会拿到恒为 `None` 的 district、看似改了实则没变；对策是给 `_station_point` 补一次「先软取 identity（拿不到就 None，不 raise）→ 判 city-or-district → 通过后再走原有的严格 raise 校验」的改写，保证原有「城市匹配失败永不 raise、城市匹配成功后 claim 缺失才 raise」语义对两种情况（city 命中 / district 命中）都成立，不引入新的假阳性 raise。
+
 ## 本轮记录（2026-09-08，shim 合一 + doctor 运行时目录 + 0.7.0 发版）
 
 - 目标：三个 provider 的 `*_home_shim.cjs` 合并为一个 `home_shim.cjs`（环境变量
