@@ -16,6 +16,13 @@ from .matrix import haversine_meters
 
 DEFAULT_CALL_DEADLINE_MS = 2_000
 
+# A same-named station in a neighboring administrative area (e.g. 武夷山东站
+# sitting in 建阳区 rather than 武夷山市) can still be the right one. The
+# nationwide fallback in `_station_point` only accepts such a station within
+# this distance of the researched city's centre; farther or ambiguous
+# matches are left with an unknown distance rather than guessed.
+STATION_MAX_DISTANCE_METERS = 80_000
+
 
 class StationDistanceEnrichmentError(RuntimeError):
     """AMap could not safely provide an optional station-distance signal."""
@@ -81,7 +88,8 @@ class AMapStationDistanceEnricher:
             return enriched
 
         centre_cache: Dict[str, Optional[Point]] = {}
-        station_cache: Dict[Tuple[str, str], Optional[Point]] = {}
+        station_cache: Dict[Tuple[str, str], Tuple[Optional[Point], bool]] = {}
+        nationwide_cache: Dict[Tuple[str, str], Optional[Point]] = {}
         for endpoint_name in ("from", "to"):
             endpoint = endpoints.get(endpoint_name)
             if not isinstance(endpoint, dict):
@@ -114,7 +122,24 @@ class AMapStationDistanceEnricher:
                 lookup_key = (city_key, station_name.strip())
                 if lookup_key not in station_cache:
                     station_cache[lookup_key] = self._station_point(city_key, station_name.strip(), request)
-                station = station_cache[lookup_key]
+                station, found_any_poi = station_cache[lookup_key]
+                if station is None and found_any_poi:
+                    # AMap has some opinion about this keyword within the
+                    # city-limited search (just not a usable same-city match).
+                    # A same-named station in a neighboring administrative
+                    # area may still be it; a keyword AMap found nothing for
+                    # at all is not worth the extra nationwide call.
+                    if lookup_key not in nationwide_cache:
+                        nationwide_point, _ = self._station_point(
+                            city_key,
+                            station_name.strip(),
+                            request,
+                            nationwide=True,
+                            centre=centre,
+                            max_distance_meters=STATION_MAX_DISTANCE_METERS,
+                        )
+                        nationwide_cache[lookup_key] = nationwide_point
+                    station = nationwide_cache[lookup_key]
                 if station is not None:
                     candidate["distance_meters"] = haversine_meters(
                         centre.lng,
@@ -151,21 +176,48 @@ class AMapStationDistanceEnricher:
                 points.append(point)
         return _unique_point(points)
 
-    def _station_point(self, city: str, station_name: str, parent: ProviderRequest) -> Optional[Point]:
+    def _station_point(
+        self,
+        city: str,
+        station_name: str,
+        parent: ProviderRequest,
+        *,
+        nationwide: bool = False,
+        centre: Optional[Point] = None,
+        max_distance_meters: Optional[float] = None,
+    ) -> Tuple[Optional[Point], bool]:
+        """Find one station's coordinates by name.
+
+        `nationwide=False` (the default, first-pass) query is AMap
+        `city_limit=true` and additionally requires the POI's own city or
+        district to match `city`. `nationwide=True` (the cross-city retry)
+        drops both the AMap city limit and that match, since the point is
+        for a same-named station outside `city`'s own administrative area;
+        it instead requires the point be within `max_distance_meters` of
+        `centre`, so a same-named station on the other side of the country
+        is never mistaken for a local one.
+
+        Returns `(point, found_any_poi)`. `found_any_poi` says whether AMap
+        returned any raw POI at all for this keyword, regardless of whether
+        it went on to match; the caller uses it to skip the nationwide retry
+        for a keyword AMap has no opinion about in the first place.
+        """
+
         request = self._request(
             parent,
             capability="poi",
-            identity=(city, station_name),
+            identity=(city, station_name, "nationwide" if nationwide else "city"),
             parameters={
                 "keywords": station_name,
                 "city": city,
+                "city_limit": "false" if nationwide else "true",
                 "page_size": 5,
                 "page_num": 1,
             },
         )
         result, body = self._query(request)
         if not result.normalized_items:
-            return None
+            return None, False
         if not isinstance(body, dict) or not isinstance(body.get("pois"), list):
             raise StationDistanceEnrichmentError("AMap POI response body is unavailable")
         raw_by_id = {
@@ -184,7 +236,7 @@ class AMapStationDistanceEnricher:
             claim_ids = item.get("claim_ids")
             identity = _single_identity_claim(claim_ids, result.claims) if isinstance(claim_ids, list) else None
             district = identity.get("district") if isinstance(identity, dict) else None
-            if not _city_or_district_matches(city, item.get("city"), district):
+            if not nationwide and not _city_or_district_matches(city, item.get("city"), district):
                 continue
             if not isinstance(claim_ids, list):
                 raise StationDistanceEnrichmentError("AMap POI identity claims are missing")
@@ -195,9 +247,13 @@ class AMapStationDistanceEnricher:
             if not isinstance(raw, dict):
                 raise StationDistanceEnrichmentError("AMap POI raw identity does not match normalization")
             point = _location_point(raw.get("location"))
-            if point is not None:
-                points.append(point)
-        return _unique_point(points)
+            if point is None:
+                continue
+            if nationwide and centre is not None and max_distance_meters is not None:
+                if haversine_meters(centre.lng, centre.lat, point.lng, point.lat) > max_distance_meters:
+                    continue
+            points.append(point)
+        return _unique_point(points), True
 
     def _query(self, request: ProviderRequest) -> Tuple[Any, Optional[Mapping[str, Any]]]:
         from .providers.amap import AMapAdapter

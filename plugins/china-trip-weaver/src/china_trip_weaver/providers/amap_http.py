@@ -367,12 +367,15 @@ def _request_contract(request: ProviderRequest) -> Tuple[str, Dict[str, Any], st
     if request.capability == "poi":
         page_size = _bounded_integer(values.get("page_size", 20), "page_size", 1, 25)
         page_num = _bounded_integer(values.get("page_num", 1), "page_num", 1, 100)
+        city_limit = values.get("city_limit", "true")
+        if city_limit not in ("true", "false"):
+            raise ContractMismatch("AMap city_limit must be true or false")
         return (
             AMAP_ORIGIN + "/v5/place/text",
             {
                 "keywords": _required_text(values, "keywords"),
                 "region": _required_text(values, "city"),
-                "city_limit": "true",
+                "city_limit": city_limit,
                 "page_size": page_size,
                 "page_num": page_num,
                 "show_fields": "business",

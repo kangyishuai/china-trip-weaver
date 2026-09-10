@@ -21,6 +21,7 @@ from china_trip_weaver.providers.mcp_stdio import (
     RailMCPStdioTransport,
     _resolve_rail_stations,
 )
+from china_trip_weaver.matrix import haversine_meters
 from china_trip_weaver.providers.rail12306 import Rail12306Adapter
 from china_trip_weaver.station_distance import AMapStationDistanceEnricher
 
@@ -363,6 +364,14 @@ class RailStationFallbackTests(unittest.TestCase):
         self.assertNotIn("distance_meters", candidates[2])
 
     def test_wrong_city_station_pois_do_not_add_distance_or_remove_candidates(self):
+        """Name predates the station-cross-city book's 邻市距离 rule (task 2's
+        leader ruling names this test as one of the two allowed to have its
+        assertions rewritten, not renamed): a same-named station reported
+        under a different city is exactly the "wrong city" shape the
+        nationwide fallback exists for, so it now gains a distance when it
+        is within STATION_MAX_DISTANCE_METERS of the researched city's
+        centre, instead of staying unknown forever.
+        """
         amap = StationAMapFixtureTransport(station_city="另一座城市")
         result, diagnostics = self._query(
             "station-ambiguous", "多站城", "昆明南", self._amap_enricher(amap),
@@ -372,13 +381,29 @@ class RailStationFallbackTests(unittest.TestCase):
             item for item in result.normalized_items
             if item["resolution_for"] == "from"
         ]
-        self.assertEqual(["CCX", "BBX", "AAX"], [
+        self.assertEqual(["BBX", "AAX", "CCX"], [
             item["station_code"] for item in candidates
         ])
-        self.assertTrue(all("distance_meters" not in item for item in candidates))
-        self.assertEqual(["geocode", "poi", "poi", "poi"], [
-            request.capability for request in amap.requests
-        ])
+        self.assertEqual([104, 1045], [item["distance_meters"] for item in candidates[:2]])
+        self.assertNotIn("distance_meters", candidates[2])
+        # Candidates are queried in their pre-distance order (多站城未知站
+        # 多站城近站 多站城远站), and each candidate's nationwide retry
+        # (city_limit=false) runs immediately after its own failed
+        # city-limited pass rather than as a separate later batch. 多站城
+        # 未知站/CCX has no POI at all in the city-limited pass, so it gets
+        # no nationwide call (the "found_any_poi" gate) — a flat 3+2 calls,
+        # not a wasted 3+3.
+        self.assertEqual(
+            [
+                ("geocode", None),
+                ("poi", "true"),
+                ("poi", "true"),
+                ("poi", "false"),
+                ("poi", "true"),
+                ("poi", "false"),
+            ],
+            [(request.capability, request.parameters.get("city_limit")) for request in amap.requests],
+        )
         self.assertEqual("ambiguous", result.error_class)
         self.assertEqual("ready", result.health["status"])
         self.assertNotIn("get-tickets", self._calls(diagnostics))
@@ -803,6 +828,214 @@ class RailStationSuffixRetryTests(unittest.TestCase):
             ],
             [call["name"] for call in client.calls],
         )
+
+
+class ConfigurableStationPoiTransport:
+    """Synthetic AMap transport with per-keyword control of both POI passes.
+
+    `stations` maps a station keyword to an optional `"city_pass"` entry
+    (`{"location": "lng,lat", "cityname": str}`, used for the AMap
+    `city_limit=true` call; omit to mean "AMap found nothing at all for this
+    keyword in-city") and an optional `"nationwide_pass"` list of `"lng,lat"`
+    strings (used for the `city_limit=false` call; 0, 1, or 2+ entries to
+    exercise "not found", "found and within range", and "ambiguous").
+    A keyword absent from `stations` behaves as if both passes found
+    nothing. Only used by the station-cross-city book's task 2 (邻市距离)
+    tests below, which need city-pass/nationwide-pass results to differ per
+    candidate in ways `StationAMapFixtureTransport` does not support.
+    """
+
+    def __init__(self, *, centre_city, stations):
+        self.centre_city = centre_city
+        self.stations = stations
+        self.requests = []
+
+    def execute(self, provider, request):
+        self.requests.append(request)
+        if provider != "amap":
+            raise AssertionError("station fixture is restricted to amap")
+        if request.capability == "geocode":
+            body = {
+                "status": "1",
+                "info": "OK",
+                "infocode": "10000",
+                "count": "1",
+                "api": "geocode-v3",
+                "geocodes": [{
+                    "formatted_address": self.centre_city,
+                    "province": "合成省",
+                    "city": self.centre_city,
+                    "district": "合成中心区",
+                    "adcode": "990001",
+                    "location": "100.000000,20.000000",
+                }],
+            }
+            return ProviderEnvelope(200, body, {})
+        if request.capability != "poi":
+            raise AssertionError("unexpected AMap fixture capability")
+        keyword = request.parameters["keywords"]
+        spec = self.stations.get(keyword, {})
+        pois = []
+        if request.parameters.get("city_limit") == "true":
+            entry = spec.get("city_pass")
+            if entry is not None:
+                pois.append(self._poi(keyword, 0, entry["location"], entry["cityname"], "合成区"))
+        else:
+            for index, location in enumerate(spec.get("nationwide_pass") or ()):
+                pois.append(self._poi(keyword, index, location, "异地城市", "异地区"))
+        body = {
+            "status": "1",
+            "info": "OK",
+            "infocode": "10000",
+            "count": str(len(pois)),
+            "api": "poi-v5",
+            "page_size": request.parameters["page_size"],
+            "page_num": request.parameters["page_num"],
+            "pois": pois,
+        }
+        return ProviderEnvelope(200, body, {})
+
+    @staticmethod
+    def _poi(keyword, suffix, location, cityname, adname):
+        amap_name = keyword[:-1] + "火车站" if keyword.endswith("站") else keyword + "站"
+        return {
+            "id": "SYNTHETIC-%s-%d" % (keyword, suffix),
+            "name": amap_name,
+            "location": location,
+            "pname": "合成省",
+            "cityname": cityname,
+            "adname": adname,
+            "address": "合成铁路大道",
+            "adcode": "990001",
+            "type": "交通设施服务;火车站;火车站",
+        }
+
+
+class RailStationNationwideDistanceTests(unittest.TestCase):
+    """`AMapStationDistanceEnricher`'s second, `city_limit=false` POI pass.
+
+    A candidate whose first (city-limited) pass found some POI for its exact
+    keyword but rejected it on the city/district check gets one more,
+    nationwide try — accepted only within `STATION_MAX_DISTANCE_METERS` of
+    the researched city's centre and only when it resolves to one coordinate.
+    """
+
+    @staticmethod
+    def _resolution(candidate_names):
+        return {
+            "status": "ambiguous",
+            "endpoints": {
+                "from": {
+                    "query": "邻城",
+                    "candidates": [{"station_name": name} for name in candidate_names],
+                },
+                "to": {
+                    "query": "昆明南",
+                    "candidates": [{"station_name": "昆明南"}],
+                },
+            },
+        }
+
+    @staticmethod
+    def _request(request_id):
+        return ProviderRequest(
+            request_id=request_id,
+            capability="rail",
+            parameters={},
+            deadline_ms=2000,
+            as_of="2026-09-10",
+            cache_policy="bypass",
+            trace={"stage": "station-nationwide-test"},
+        )
+
+    def _from_candidates(self, amap, candidate_names, request_id):
+        enricher = RailStationFallbackTests._amap_enricher(amap)
+        enriched = enricher.enrich(self._resolution(candidate_names), self._request(request_id))
+        candidates = enriched["endpoints"]["from"]["candidates"]
+        return {candidate["station_name"]: candidate for candidate in candidates}
+
+    def _nationwide_requests(self, amap, keyword=None):
+        return [
+            call for call in amap.requests
+            if call.capability == "poi"
+            and call.parameters.get("city_limit") == "false"
+            and (keyword is None or call.parameters.get("keywords") == keyword)
+        ]
+
+    def test_same_named_neighboring_station_within_threshold_gains_a_distance(self):
+        near_location = "100.200000,20.000000"
+        amap = ConfigurableStationPoiTransport(
+            centre_city="邻城市",
+            stations={
+                "邻城甲站": {
+                    "city_pass": {"location": "100.001000,20.000000", "cityname": "别处市"},
+                    "nationwide_pass": [near_location],
+                },
+            },
+        )
+        by_name = self._from_candidates(amap, ["邻城甲站", "邻城乙站"], "nationwide-near")
+
+        expected_distance = haversine_meters(100.0, 20.0, 100.2, 20.0)
+        self.assertLess(expected_distance, 80_000)
+        self.assertEqual(expected_distance, by_name["邻城甲站"]["distance_meters"])
+        self.assertNotIn("distance_meters", by_name["邻城乙站"])
+        nationwide = self._nationwide_requests(amap, "邻城甲站")
+        self.assertEqual(1, len(nationwide))
+        self.assertEqual("false", nationwide[0].parameters["city_limit"])
+
+    def test_same_named_neighboring_station_beyond_threshold_stays_unknown(self):
+        far_location = "101.000000,20.000000"
+        amap = ConfigurableStationPoiTransport(
+            centre_city="邻城市",
+            stations={
+                "邻城甲站": {
+                    "city_pass": {"location": "100.001000,20.000000", "cityname": "别处市"},
+                    "nationwide_pass": [far_location],
+                },
+            },
+        )
+        by_name = self._from_candidates(amap, ["邻城甲站", "邻城乙站"], "nationwide-far")
+
+        actual_distance = haversine_meters(100.0, 20.0, 101.0, 20.0)
+        self.assertGreater(actual_distance, 80_000)
+        self.assertNotIn("distance_meters", by_name["邻城甲站"])
+        self.assertNotIn("distance_meters", by_name["邻城乙站"])
+        self.assertEqual(1, len(self._nationwide_requests(amap, "邻城甲站")))
+
+    def test_nationwide_pass_with_two_distinct_coordinates_stays_unknown(self):
+        amap = ConfigurableStationPoiTransport(
+            centre_city="邻城市",
+            stations={
+                "邻城甲站": {
+                    "city_pass": {"location": "100.001000,20.000000", "cityname": "别处市"},
+                    "nationwide_pass": ["100.100000,20.000000", "100.150000,20.000000"],
+                },
+            },
+        )
+        by_name = self._from_candidates(amap, ["邻城甲站", "邻城乙站"], "nationwide-ambiguous")
+
+        self.assertNotIn("distance_meters", by_name["邻城甲站"])
+        self.assertEqual(1, len(self._nationwide_requests(amap, "邻城甲站")))
+
+    def test_candidate_resolved_by_first_pass_does_not_trigger_a_nationwide_call(self):
+        amap = ConfigurableStationPoiTransport(
+            centre_city="邻城市",
+            stations={
+                "邻城本地站": {
+                    "city_pass": {"location": "100.001000,20.000000", "cityname": "邻城市"},
+                },
+                "邻城异地站": {
+                    "city_pass": {"location": "100.002000,20.000000", "cityname": "别处市"},
+                    "nationwide_pass": ["100.200000,20.000000"],
+                },
+            },
+        )
+        by_name = self._from_candidates(amap, ["邻城本地站", "邻城异地站"], "nationwide-skip-resolved")
+
+        self.assertIn("distance_meters", by_name["邻城本地站"])
+        self.assertIn("distance_meters", by_name["邻城异地站"])
+        self.assertEqual(0, len(self._nationwide_requests(amap, "邻城本地站")))
+        self.assertEqual(1, len(self._nationwide_requests(amap, "邻城异地站")))
 
 
 if __name__ == "__main__":

@@ -2082,3 +2082,85 @@ RAIL_COMPLETE output=.tmp/s1-task1-real2.json legs=10 status=ready error=none
 `git diff 05f1056 --stat -- tests/fixtures plugins/china-trip-weaver/schema
 '*/rail12306.py' '*/planning.py' '*/mobility.py'` 空输出——均在白名单内、
 零越界。单独一次 `git commit`（任务 1 单独提交，SHA 见下）。
+
+任务 2（已完成）：`amap_http.py` 的 `_request_contract` poi 分支
+`city_limit` 从写死 `"true"` 改成可选参数（默认 `"true"`，只接受
+`"true"/"false"`，其余值 `raise ContractMismatch`），`test_amap_live.py:300`
+的 `["true"]` 默认值断言未动，新增 1 个 `def test_` 验证
+`city_limit="false"` 落到真实查询串。`station_distance.py` 加
+`STATION_MAX_DISTANCE_METERS = 80_000`；`_station_point` 加
+`nationwide`/`centre`/`max_distance_meters` 三个可选关键字参数——
+`nationwide=True` 时查询串带 `city_limit="false"`、跳过 `_city_or_district_
+matches` 城市校验、改为要求落点到 `centre` ≤ `max_distance_meters`；
+`enrich()` 里第一遍（同城）拿不到距离的候选，改为再跑一遍 `nationwide=True`
+的第二遍，命中就写 `distance_meters`，超出阈值或多坐标（`_unique_point`
+返回 None）仍不写、候选一个不删。
+连带发现并处理：初版一律对「拿不到距离」的候选发第二遍，导致一个不在
+白名单内的既有测试
+（`test_multiple_city_stations_are_returned_sorted_and_classified_ambiguous`）
+多发一次 API 调用而断言失败——根因是该候选（`多站城未知站`/CCX）第一遍
+根本没有任何 POI 结果（不是「有 POI 但城市不对」），对这种「AMap 对这个
+关键词压根没意见」的候选做第二遍纯属浪费配额且改变了调用序列。修法：
+`_station_point` 返回值从 `Optional[Point]` 改成 `Tuple[Optional[Point],
+bool]`，第二个值 `found_any_poi` 表示第一遍是否拿到任意原始 POI（不论
+是否通过后续名称/类目/城市过滤）；`enrich()` 只在 `station is None and
+found_any_poi` 时才发第二遍。这不属于放宽断言——是让实现在「哪些候选值得
+花一次额外 AMap 配额」这件事上更保守，且证实了原有测试的通过不是偶然：
+`git diff 05f1056 --stat -- '*/mobility.py'` 仍为空，未碰定位判定的三条
+硬口径。
+`:359`/`:425` 按拍的板改写（拍的板允许改的唯一两处）：`:425`
+（`test_unrelated_district_does_not_gain_a_distance`）实测后行为
+**未变**——它的研究城市「平潭」与固定的 `centre_city=厦门市/centre_district=
+思明区` 连 `_city_centre` 这一步都匹配不上，`centre` 直接是 `None`，
+根本不会进入候选循环，所以第一遍/第二遍都不会发生，维持原断言不改，
+函数名与内容均未动（印证了 PROGRESS.md 任务 0 笔记里的预判）。`:359`
+（`test_wrong_city_station_pois_do_not_add_distance_or_remove_candidates`）
+改写：`station_city="另一座城市"` 场景下 BBX/AAX 通过第二遍拿到距离
+（104m/1045m，与「正向」测试同一组坐标算出的同一批数字），CCX 仍无
+距离；函数名保持不变（只加 docstring 说明），只改断言本身，同「replan」
+书任务 2 的既有先例（改断言、不改 `def test_` 签名，避免
+`git diff ... | grep '^-\s*def test_'` 非 0）。校验用
+`amap.requests` 的精确 `(capability, city_limit)` 序列断言，实测顺序是
+按候选原始顺序逐个「先同城后跨城」交替（非「全部同城再全部跨城」的批处理
+顺序），用直接跑一遍打印验证过再写进断言，不是猜的。
+新增 4 个 `def test_`（`RailStationNationwideDistanceTests`，新写的
+`ConfigurableStationPoiTransport` 按候选关键词分别控制两遍 POI 结果，
+`StationAMapFixtureTransport` 做不到按候选差异化，故不复用它）：30km 内
+拿到距离且 `nationwide[0].parameters["city_limit"]=="false"`；104km 外
+不拿（用 `haversine_meters` 现算两个阈值两侧的真实距离，不是拍脑袋挑的
+坐标）；第二遍两个不同坐标不拿；第一遍已同城解析出坐标的候选不触发第二遍
+调用（同时验证另一候选确实触发了）。
+硬指标一实测（2026-09-10，真实 AMap Key，直接探针，不经 `ctw` 命令）：
+```
+$ ...AMapHTTPTransport 直接查询「武夷山东站」，city="武夷山"
+city_limit=true  -> 5 条结果，全部是"武夷山站(出站口)"等子设施，无逐字
+                     同名的"武夷山东站"
+city_limit=false -> 5 条结果，新增一条 name="南平市站" cityname="南平市"
+                     adname="建阳区"（只在跨城搜索里出现，验证了"同名邻市
+                     站在 city_limit=false 时才会浮现"这条机制本身在真实
+                     AMap 数据上成立），但同样没有逐字同名的"武夷山东站"
+```
+这次探针没能拿到一个「逐字同名 + 跨城」的端到端真实例子（AMap 数据库里没
+有恰好叫「武夷山东站」的逐字索引条目，`_station_names_match` 要求逐字，
+按「不猜站」原则正确地保持 unknown，不是 bug）；但探针本身证实了底层
+机制（`city_limit=false` 会浮现同城搜索找不到的邻区站点）是真实的，不是
+凭空假设。任务书「完成条件」对任务 2 的硬指标一只要求「四个测试绿 + 反向
+验证红→绿」，不强制实网，故不算未达标。
+`/usr/bin/python3 -m unittest discover -s tests` → `Ran 592 tests` `OK`
+0 skipped（584 基线 + 3 任务 1 + 1 `test_amap_live` city_limit 落地 + 4
+邻市距离）；`scripts/scan_secrets.py` 0 命中；pyflakes（src+tests+scripts）
+0 行。
+反向验证（终端记录）：临时把 `STATION_MAX_DISTANCE_METERS` 改成 `0` →
+`RailStationNationwideDistanceTests` 4 个里 2 个红（`within_threshold`
+用例 `KeyError: 'distance_meters'`、`does_not_trigger_a_nationwide_call`
+用例的跨城候选也拿不到距离了）、另 2 个（`beyond_threshold`/
+`two_distinct_coordinates`，本就断言"拿不到距离"）保持绿——符合预期，
+不是失败 → 精确字符串还原 → `grep -c TEMP-REVERSE-VERIFY` 为 0 → 全量
+`Ran 592 tests` `OK` 0 skipped。
+`git diff 05f1056 --stat` 只有 `BLOCKED.md`/`PROGRESS.md`/`amap_http.py`/
+`mcp_stdio.py`/`station_distance.py`/`test_amap_live.py`/
+`test_rail_station_fallback.py` 七个文件，均在白名单内；`git diff 05f1056
+-- tests | grep -E '^-\s*def test_'` 0 行；`git diff 05f1056 --stat --
+tests/fixtures plugins/china-trip-weaver/schema '*/rail12306.py'
+'*/planning.py' '*/mobility.py'` 空输出。任务 2 单独一次 `git commit`
+（SHA 见下）。
