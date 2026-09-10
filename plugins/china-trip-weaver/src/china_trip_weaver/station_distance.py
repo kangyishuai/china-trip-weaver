@@ -10,7 +10,7 @@ from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 from .clock import Clock, SystemClock
 from .contracts import ProviderRequest
 from .credentials import CredentialResolution
-from .geo import Point
+from .geo import Point, administrative_area_key
 from .matrix import haversine_meters
 
 
@@ -134,7 +134,10 @@ class AMapStationDistanceEnricher:
         result, _ = self._query(request)
         points = []
         for item in result.normalized_items:
-            if not isinstance(item, dict) or not _city_matches(city, item.get("city")):
+            if (
+                not isinstance(item, dict)
+                or not _city_or_district_matches(city, item.get("city"), item.get("district"))
+            ):
                 continue
             ref_id = item.get("ref_id")
             matching_claims = [
@@ -175,20 +178,19 @@ class AMapStationDistanceEnricher:
             if (
                 not isinstance(item, dict)
                 or not _station_names_match(station_name, item.get("name"))
-                or not _city_matches(city, item.get("city"))
                 or not _rail_station_category(item.get("category"))
             ):
                 continue
             claim_ids = item.get("claim_ids")
+            identity = _single_identity_claim(claim_ids, result.claims) if isinstance(claim_ids, list) else None
+            district = identity.get("district") if isinstance(identity, dict) else None
+            if not _city_or_district_matches(city, item.get("city"), district):
+                continue
             if not isinstance(claim_ids, list):
                 raise StationDistanceEnrichmentError("AMap POI identity claims are missing")
-            identities = [
-                claim.get("value") for claim in result.claims
-                if claim.get("claim_id") in claim_ids and claim.get("field_path") == "/provider_identity"
-            ]
-            if len(identities) != 1 or not isinstance(identities[0], dict):
+            if not isinstance(identity, dict):
                 raise StationDistanceEnrichmentError("AMap POI identity is ambiguous")
-            provider_poi_id = identities[0].get("provider_poi_id")
+            provider_poi_id = identity.get("provider_poi_id")
             raw = raw_by_id.get(provider_poi_id)
             if not isinstance(raw, dict):
                 raise StationDistanceEnrichmentError("AMap POI raw identity does not match normalization")
@@ -261,13 +263,31 @@ def _station_name_key(value: str) -> str:
 def _city_matches(expected: str, actual: Any) -> bool:
     if not isinstance(actual, str):
         return False
-    expected_key = _city_key(expected)
-    return bool(expected_key) and expected_key == _city_key(actual)
+    expected_key = administrative_area_key(expected)
+    return bool(expected_key) and expected_key == administrative_area_key(actual)
 
 
-def _city_key(value: str) -> str:
-    key = "".join(unicodedata.normalize("NFKC", value).split()).casefold()
-    return key[:-1] if key.endswith("市") else key
+def _city_or_district_matches(expected: str, city: Any, district: Any) -> bool:
+    """A researched city may match either the provider's city or its district.
+
+    Same administrative-area rule as mobility.py's `_poi_admin_matches`: a
+    district/county name on one side and its enclosing city on the other is
+    not a false mismatch.
+    """
+
+    if _city_matches(expected, city):
+        return True
+    return isinstance(district, str) and _city_matches(expected, district)
+
+
+def _single_identity_claim(
+    claim_ids: Sequence[Any], claims: Sequence[Mapping[str, Any]],
+) -> Optional[Mapping[str, Any]]:
+    identities = [
+        claim.get("value") for claim in claims
+        if claim.get("claim_id") in claim_ids and claim.get("field_path") == "/provider_identity"
+    ]
+    return identities[0] if len(identities) == 1 and isinstance(identities[0], dict) else None
 
 
 def _rail_station_category(value: Any) -> bool:

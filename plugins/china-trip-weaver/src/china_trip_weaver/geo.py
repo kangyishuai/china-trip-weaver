@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import unicodedata
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
@@ -25,6 +26,29 @@ class Point:
 
 def outside_mainland_china(point: Point) -> bool:
     return point.lng < 72.004 or point.lng > 137.8347 or point.lat < 0.8293 or point.lat > 55.8271
+
+
+def administrative_area_key(value: Any) -> str:
+    """Fold an administrative-area name to a comparison key.
+
+    Strips exactly one trailing administrative suffix so a full name and its
+    short form compare equal, e.g. "福州市" and "福州", or "平潭县" and "平潭".
+    Same suffix list and algorithm as mobility.py's own (independent) city-key
+    helper, so a district name and its enclosing city are matched the same way
+    on both the mobility and the rail-station-distance paths.
+    """
+
+    if not isinstance(value, str):
+        return ""
+    result = "".join(
+        character for character in unicodedata.normalize("NFKC", value).casefold()
+        if character.isalnum()
+    )
+    for suffix in ("特别行政区", "自治州", "自治县", "地区", "市", "县", "区", "盟"):
+        if result.endswith(suffix) and len(result) > len(suffix):
+            result = result[:-len(suffix)]
+            break
+    return result
 
 
 def _transform_lat(x: float, y: float) -> float:
