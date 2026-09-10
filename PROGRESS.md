@@ -2,27 +2,30 @@
 
 唯一的当前进度记录。2026-09-03 到 09-06 的逐轮任务书、实测证据、验收记录已归档，见「历史索引」。
 
-## 现状速览（2026-09-10 实测）
+## 现状速览（2026-09-10 实测，0.9.0）
 
-- 版本：`0.8.0`，唯一来源是
+- 版本：`0.9.0`，唯一来源是
   `plugins/china-trip-weaver/.codex-plugin/plugin.json` 与
   `src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
   位置一律引用这两处之一，历史版本只以日期提及、不写字面值。
 - 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量
-  `Ran 525 tests`，`OK`，0 skipped；`scripts/scan_secrets.py` 0 命中；
+  `Ran 534 tests`，`OK`，0 skipped；`scripts/scan_secrets.py` 0 命中；
   `~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src
   tests scripts` 0 行。
-- 0.8.0 内容（三份任务书并行，2026-09-10）：`replan_trip` 新增 `refresh`
-  事件，用 `ctw rail --output-json` 的结果原地换掉一条火车腿（命令行
-  `--rail-result` 接线是下一本书）；`ctw journey extract` 与
-  `ctw journey assemble`（从完整 Trip 拼 Journey；替换模式是下一本书）；
-  设计文档与 schedule Skill 对齐 ADR-0014/0012/0010/0011 与现役代码；
-  站点距离的城市匹配接受 district；CONTRIBUTING 新增发版流程。发版流程
-  首次实跑：`install_local_plugin.sh` 装机、`git tag v0.8.0`、GitHub
-  Release；`0.7.0` 补打了 tag（无 Release）。
+- 0.9.0（第二波两份并行书）：`ctw replan --rail-result` 把 `refresh` 事件开放
+  给命令行（ADR-0015）；`ctw journey assemble --replace-trip` 把改过的子 Trip
+  换回原 Journey、版本加一、journey_id 不变。火车票原地刷新的完整链路：
+  `ctw rail --output-json` → `ctw journey extract` → `ctw replan --event
+  refresh.json --rail-result` → `ctw journey assemble --replace-trip` →
+  `ctw journey render`。
+- 0.8.0（第一波三份并行书）：`replan_trip` 的 `refresh` 事件（库层）、
+  `ctw journey extract/assemble`、设计文档与 schedule Skill 对齐
+  ADR-0014/0012/0010/0011、站点距离城市匹配接受 district、CONTRIBUTING
+  发版流程；tag `v0.8.0` 与补打的 `v0.7.0`，GitHub Release 自 0.8.0 起。
 - 并行惯例：一波里只有一份书在主检出 `main` 直改，其余各在 `.tmp/wt-<名>`
   的 worktree 分支上干、只推分支，合并与冲突（PROGRESS/BLOCKED 末尾追加）
-  由管理者解决；worktree 里不跑 `install_local_plugin.sh`。
+  由管理者解决；worktree 里不跑 `install_local_plugin.sh`。发版只推具体
+  标签名，不用 `git push --tags`。
 - 本机 Codex 与源码的差距：以 `bash scripts/install_local_plugin.sh --check`
   实时输出为准；`ctw doctor` 的 `runtime_root` 是缓存所在目录，可随时删除。
 
