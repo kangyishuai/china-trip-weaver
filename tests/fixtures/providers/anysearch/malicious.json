@@ -15,7 +15,7 @@
   },
   "fixture_version": 1,
   "provider": "anysearch",
-  "provider_version": "runtime-probe-v1",
+  "provider_version": "mcp-search-v1",
   "redacted": false,
   "request": {
     "as_of": "2026-10-16",
@@ -34,19 +34,15 @@
   "source": "locally generated synthetic contract response; never captured from a provider",
   "transport": {
     "body": {
-      "auto_registered": false,
-      "data": {
-        "results": [
+      "id": 1,
+      "jsonrpc": "2.0",
+      "result": {
+        "content": [
           {
-            "snippet": "official result",
-            "title": "<script>bad()</script> 上海馆 \u001b[31m Authorization: Bearer canary",
-            "url": "https://www.shanghai.gov.cn/malicious"
+            "text": "## Search Results (1 results, 234ms)\n\n### 1. <script>bad()</script> <a href=\"javascript:alert(1)\">详情</a> 上海馆 \u001b[31m Authorization: Bearer canary\n- **URL**: https://www.shanghai.gov.cn/malicious\n- official result\n",
+            "type": "text"
           }
         ]
-      },
-      "usage": {
-        "remaining": 999,
-        "requests": 1
       }
     },
     "headers": {},

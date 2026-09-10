@@ -78,43 +78,31 @@
     },
     {
       "path": "anysearch/auth.json",
-      "sha256": "b6fe430805e314d726046ea7f69ad4e6a32155fc08e6e100bb6b671dfbdd65f3"
-    },
-    {
-      "path": "anysearch/auto_register.json",
-      "sha256": "a4acb3e89f26da1acf5326eba35e08b26c48bc4f29aaaeea3ed8c05833cb839a"
+      "sha256": "fb8ff4f187c7077c7fee2dec84e7ad19fd3d882fd925691d3e5a7b371cd009eb"
     },
     {
       "path": "anysearch/empty.json",
-      "sha256": "507f0e3a3272bc46f8e4d81ddaf62b49633c52d0db55346c9406b3713f3b42fd"
+      "sha256": "0d0b39cc42d939a8acd350539fe3d2a60eec0940ba263d0d553ca5b1cd547bef"
     },
     {
       "path": "anysearch/malicious.json",
-      "sha256": "8e2a636863679d61077a5372fde2802923327e1da2c97e9beadfdbfdedfebdbc"
-    },
-    {
-      "path": "anysearch/payment_required.json",
-      "sha256": "956ef50743b4310d017f13483ccc746cb07f3d9bd3263ec6ada0eba10aee6e0e"
+      "sha256": "77ecea7ec86d610fc0e0b739e16d448c0e6c26d9dfb58c12f3b30d3cae917149"
     },
     {
       "path": "anysearch/rate_limit.json",
-      "sha256": "127022345a7367c28134f0b34124d6d28c32bead550af39a66daff0b903bee33"
+      "sha256": "fc92ade2b8fa6c00ae8a43454b868179e3abadcf4c092d3b265e711a8fba6622"
     },
     {
       "path": "anysearch/success.json",
-      "sha256": "7aef4f9ddc8503222fb57451d843bce8d6470af13996f65282c7c4bd8625d328"
+      "sha256": "d7371af443d5315067ab2b0755ded7277886e5f075d361b2ff5e4c45c1fe7321"
     },
     {
       "path": "anysearch/timeout.json",
-      "sha256": "c21274c71533d77c2cabe68580c8ae759a85e03375c3eff1c0d6581988bab9bb"
-    },
-    {
-      "path": "anysearch/usage.json",
-      "sha256": "ff5eb01851269317a9f84c0c68ea68c77d9985445b5e94886c3f69056f7cdf44"
+      "sha256": "767ac9d19202696c9aba8373992e8b22978e369ef950116638af3a4a1133bf50"
     },
     {
       "path": "anysearch/wrong_shape.json",
-      "sha256": "db6575f4d0211f71f49e67dc35834b1d8aa34bd7fb60b638110a55a849684dfc"
+      "sha256": "08fdce84490426c7201a3d8e810077bb0b0f22e2152bb44a5d051477f1586759"
     },
     {
       "path": "flyai/auth.json",
@@ -317,7 +305,7 @@
       "sha256": "46fd6e92dfa195da7d89386332f94ba20a9279229c78bec2ec1eaf2296321f2e"
     }
   ],
-  "fixture_count": 79,
+  "fixture_count": 76,
   "generated_by": "scripts/build_provider_fixtures.py",
   "manifest_version": 1
 }

@@ -768,3 +768,157 @@ pyflakes 0 行、`git diff main --stat -- plugins/china-trip-weaver/schema
 demo` 与 `git diff 7fc66ec --stat`（分支真实分出点）均为空。`git push -u
 origin journey-replace` 成功（远端已建 `journey-replace` 分支）。硬指标
 一、二均达标，BLOCKED.md 随本次提交带一条非空白裁决记录，任务书结束。
+
+## 书 D：AnySearch 真实合同（2026-09-10，分支 anysearch-contract）
+
+本书在 `.tmp/wt-d`（分支 `anysearch-contract`）里干，只推分支不合并，界限
+见任务书「界限」节。与并行的书 E（渲染页可读性，main 直改）、书 C（候选
+批量导入，worktree）地界不重叠。
+
+任务 0 核对（`git worktree add .tmp/wt-d -b anysearch-contract`，HEAD
+`1f1e966`，即 0.9.0 发版提交本身）：全量 `Ran 534 tests` `OK` 0
+skipped、`scan_secrets.py` 0 命中（369 文件）、pyflakes（src+tests+scripts）
+0 行，与任务书数字逐一吻合。`providers/anysearch.py` 的 `normalize()`
+确实期待 `body["data"]["results"]` 与 `body["usage"]`（旧假设形状）；
+`scripts/build_provider_fixtures.py` 的 `any_body`/`any_result` 生成同一
+旧形状,产出 `tests/fixtures/providers/anysearch/` 下 10 份夹具（比任务书
+「7 份」多出 `auto_register`/`usage`/`payment_required` 三个旧形状专属用
+例，任务书目标 7 例本就不含这三个,判定这三个夹具随重写自然废弃,不算
+对不上）；`ctw doctor` 与 `planning.py:2481` 确实把 anysearch 写死
+`missing`（`_health("anysearch", "runtime-probe-v1", "static", "missing",
+now, ("research",), "optional search supplement is disabled; no
+auto-registration or business call was made")`），本书未碰；
+`providers/amap_http.py:202` 的 `AMapHTTPTransport` 确认是 urllib 传输层
+样板：`_NoRedirectHandler` 不跟随重定向、`timeout = request.deadline_ms /
+1000.0`、`ProviderTimeout`/`ProviderNetworkError` 分别接 socket 超时与
+其余网络错误。全部与任务书吻合，不停工。
+
+理解的目标：把 `AnySearchAdapter.normalize()` 从假设的 `data.results` JSON
+形状换成真实的 MCP JSON-RPC 2.0 信封（`result.content[]` 里 type=text 的
+Markdown，用严格正则解析 `## Search Results (N results, Xms)` 头与
+`### 序号. 标题` / `- **URL**: 网址` / `- 摘要` 条目块）；新建
+`AnySearchHTTPTransport` 照抄 `AMapHTTPTransport` 的 urllib 样板（不跟随
+重定向、Key 只进请求头、超时/网络错误分类一致），但不搬 AMap 特有的
+call-budget/QPS/memo（任务书未要求，AnySearch 无此约束，避免过度设计）；
+夹具生成器的 `any_body`/`any_result` 换成 `any_markdown`/`any_rpc_body`/
+`any_error_body`，`error_matrix()` 复用不动（它已经对 anysearch 特判
+`SCHEMA_REFS["poi"]`）。
+顺序：任务 0 核对 → 写 `anysearch_http.py` → 重写 `anysearch.py` 的
+`normalize()` → 改夹具生成器并重建 7 份夹具、删 3 份旧夹具 → 改
+`provider-contracts.md` 一行 → 写 `tests/test_anysearch.py` → 全量测试/
+pyflakes/secrets → 反向验证 → 记录。
+最大风险：HTTP 状态码（401/403/402/429/5xx）到 `error_class` 的映射
+`BaseAdapter._http_error()`（`providers/base.py:328`）已经对**全部**
+provider 通用生效,且早于 `normalize()` 被调用——任务书「拍的板」里
+「401/403 forbidden、402/429 rate_limited、其他 degraded」与
+`errors.py` 的 `ERROR_POLICIES`（`invalid_request`/`upstream_5xx` 的
+`health_status` 均为 `"degraded"`）逐一对上，是已有的通用行为,不需要
+在 `anysearch.py`/`anysearch_http.py` 里重复实现;真正需要我设计的只有
+「顶层 JSON-RPC `error` 字段」这一种此前没有生效路径的形状偏离。判断为
+并入「解析用严格正则,偏离一律 contract_mismatch」这条总纲——JSON-RPC
+`error` 信封缺 `result` 键,天然落进「形状不对」分支,不单独发明新
+`error_class`;实现上把这条判断安排成 `wrong_shape` 夹具本身
+（`{"jsonrpc":"2.0","id":1,"error":{...}}`）,一次覆盖「顶层 error」与
+「偏离即 contract_mismatch」两点。
+
+任务 1（已完成）：
+- 新建 [anysearch_http.py](plugins/china-trip-weaver/src/china_trip_weaver/providers/anysearch_http.py)：
+  `AnySearchHTTPTransport.execute()` 只认 `provider=="anysearch"` 与
+  `capability=="research"`；Key 从 `credentials.get("ANYSEARCH_API_KEY")`
+  取、只进 `Authorization: Bearer <key>` 请求头，从不进 URL/`raw_ref`/日志；
+  POST `https://api.anysearch.com/mcp`，JSON-RPC 请求体
+  `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search",
+  "arguments":{"query":...,"max_results":...}}}`（`max_results` 默认 10、
+  上限 50，越界 `ContractMismatch`）；`_NoRedirectHandler` 不跟随重定向、
+  重定向到非 `api.anysearch.com` 主机判 `ProviderNetworkError`；
+  `socket.timeout`/`TimeoutError` 归 `ProviderTimeout`,其余
+  `URLError`/`OSError` 归 `ProviderNetworkError`；4 MiB 响应体上限；
+  `retry_rate_limits = True`（跟 AMap 一致,但这个开关只在直接用这个
+  传输类实例时生效——夹具测试走 `ReplayTransport`,不受影响，已用
+  `test_max_results_defaults_and_is_bounded` 等直接调用
+  `.execute()` 的测试单独验证传输层，不依赖 `AnySearchAdapter.query()`
+  的完整重试路径）。
+- 重写 [anysearch.py](plugins/china-trip-weaver/src/china_trip_weaver/providers/anysearch.py)
+  的 `normalize()`：`_HEADER_RE` 匹配 `## Search Results (N results,
+  Xms)` 取声明条数,`_ITEM_RE`（`re.MULTILINE`）逐块匹配 `### 序号. 标题`
+  三行结构；声明条数与实际解析条数不等、缺 `jsonrpc`/`result`/单个
+  `content[0].type=="text"` 均 `ContractMismatch`；每条结果生成
+  `field_path="/name"` 的 `partial` claim，`value={"name":标题,
+  "summary":摘要}`（claim schema 没有独立 `note` 字段——
+  `evidence.py:71` 的 `validate_claim()` 用 `set(claim) != required`
+  精确匹配 14 个字段名,加一个 `note` 会直接 `ValueError`,已用
+  `grep -n "^def make_claim\|^def validate_claim" -A 40 evidence.py`
+  核实——所以把摘要放进 `value` 字典而非发明新字段）；`provider_version`
+  从 `"runtime-probe-v1"` 改成 `"mcp-search-v1"`（与
+  `build_provider_fixtures.py` 的 `PINS["anysearch"]` 同步改),因为旧值
+  明确是「未证实探测」的占位名,现在合同已实证,继续用旧名字面误导；删掉
+  旧代码里检查 `body.get("auto_registered")` 的 `ProviderFailure` 分支——
+  真实合同没有这个字段,「不匿名注册」现在完全靠
+  `allow_keyless = False`（未改动）在 `BaseAdapter.query()`
+  （`providers/base.py:175`）里的凭据前置检查结构性保证:没有 Key 时
+  查询在到达 `normalize()`/传输层之前就短路失败,不会发出任何请求。
+- 夹具生成器：`any_body`/`any_result` 换成 `any_markdown`（拼 Markdown
+  文本）/`any_rpc_body`（包 JSON-RPC 信封）/`any_error_body`（顶层
+  `error.message`）/`any_result`（改回 `(title,url,summary)` 语义,供
+  `any_markdown` 消费）；`success`/`empty` 两个正例直接写；
+  `auth`/`rate_limit`/`timeout`/`wrong_shape`/`malicious` 五个复用既有
+  `error_matrix()`（未改动这个函数本身,它已对 anysearch 特判
+  `SCHEMA_REFS["poi"]`），`wrong_body` 传 `any_error_body("invalid
+  query")`、`malicious_body` 传标题里同时嵌 `<script>` 标签与
+  `<a href="javascript:alert(1)">` 的 `any_markdown`；`auth_missing=True`
+  （与 amap/variflight 一致,直接验证「无 Key 零请求」）。`PINS` 的
+  `anysearch` 值同步改 `mcp-search-v1`。删除生成器不再产出的 3 份旧夹具
+  （`auto_register.json`/`usage.json`/`payment_required.json`，`git rm`）。
+- `provider-contracts.md` 的 AnySearch 一行改成：
+  `MCP `tools/call name=search` JSON-RPC 2.0, Markdown `content[]`
+  result | Optional destination-search supplement | 10s | Disabled
+  without user key; no request is sent without one, and
+  auto-registration is always rejected.`
+- `test_providers.py` 只改一行：`test_manifest_hashes_and_file_set_are_
+  exact` 的硬编码总数 `79`→`76`（10→7,净减 3,与其余 5 个 provider 的
+  既有用例数无关)。
+- 新建 [tests/test_anysearch.py](tests/test_anysearch.py)：19 个
+  `def test_`——`AnySearchHTTPTransportTests`（9 个：JSON-RPC 请求体与
+  Bearer 头、Key 不进 URL/`raw_ref`、无 Key/缺 `query`/`max_results`
+  越界时先自身校验拦截、零调用、超时/网络错误/重定向到非法主机的分类、
+  HTTP 错误状态码被完整捕获进 envelope、成功状态非对象响应判
+  `contract_mismatch`)、`AnySearchNormalizeTests`（2 个：声明条数与实际
+  条数不符、缺 `jsonrpc` 信封,均直接构造 `body` 单元测试而非走夹具)、
+  `AnySearchFixtureTests`（7 个,每份夹具各一个,断言 `error_class`/
+  `transport_calls`/claim 字段，含 `malicious` 用例显式断言
+  `<script`/`javascript:`/ANSI 均被清洗、`[REDACTED]`/`详情`（`<a>`
+  标签内的可见文本）均保留)。这 19 个测试与
+  `tests/test_providers.py` 里对 7 份夹具动态生成的
+  `test_fixture_anysearch_<case>`（沿用全部 provider 共用的既有机制,
+  `ProviderCorpusTests` 底部按 `fixture_paths()` 自动 `setattr`)叠加,
+  每份夹具至少两层测试覆盖。
+
+最终门（2026-09-10 实测）：`/usr/bin/python3 -m unittest discover -s
+tests` → `Ran 550 tests` `OK` 0 skipped（534 基线 − 3 净减的 anysearch
+夹具动态测试 + 19 个新增 `def test_` = 550,≥ 硬指标二的 541 下限）；
+`scripts/scan_secrets.py` → `0 finding(s) across 368 file(s)`；
+`~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/
+src tests scripts` → 0 行输出；`git diff main -- tests | grep -E
+'^-\s*def test_'` → 0 行（未删任何测试函数源码行,3 个消失的旧夹具动态
+测试属运行时 `setattr` 生成,不是源码行）；`git diff main --stat --
+plugins/china-trip-weaver/schema plugins/china-trip-weaver/src/
+china_trip_weaver/credentials.py plugins/china-trip-weaver/src/
+china_trip_weaver/cli.py` → 空。`/usr/bin/python3 scripts/
+build_provider_fixtures.py` 重跑，`git status --short -- tests/fixtures`
+在**提交前**非空（`git status` 相对 `HEAD` 比较,提交前本就该显示本轮
+改动本身,幂等性验证挪到提交后单独重跑一次,见下）。
+
+反向验证（终端记录）：把 `anysearch.py` 里 `_ITEM_RE` 的
+`\*\*URL\*\*` 临时改成 `URL`（去掉加粗星号）→ 单独跑
+`test_fixture_anysearch_success`（`test_providers.py`,动态生成)与
+`test_fixture_success_maps_title_url_summary_into_item_and_claim`
+（`test_anysearch.py`,手写)→ 两个均 `FAIL`（前者
+`'ready' != 'contract_mismatch'`,后者
+`'contract_mismatch' is not None`,红)→ 用 Edit 还原→
+`grep -n '\\\*\\\*URL\\\*\\\*'` 确认只剩原始一行、`git diff main --
+plugins/.../anysearch.py` 里不含 `URL: ` 残留→ 全量重跑
+`Ran 550 tests` `OK`（绿)。
+
+BLOCKED.md 记录一条：`git diff main --stat -- tests/fixtures/providers
+':!*/anysearch/*'` 按任务书原样跑**不为空**（`manifest.json` 28 行变
+动)，判断与取舍见 `BLOCKED.md` 本书条目。
