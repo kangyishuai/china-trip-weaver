@@ -682,3 +682,33 @@ china_trip_weaver/replan.py`）无歧义、按实际路径处理，不算待裁�
 得粗略，不影响验收，已在 `PROGRESS.md` 任务 0 小节记录），三个任务与两条
 硬指标均一次性达标，过程中没有遇到需要向管理者请示的越界、含糊或验收口径
 冲突。
+
+## 书 D：AnySearch 真实合同（2026-09-10，分支 anysearch-contract）
+
+一条记录，不阻塞交付，按「跳过做别的，继续」处理：
+
+- **验收命令 `git diff main --stat -- tests/fixtures/providers
+  ':!*/anysearch/*'` 按任务书原样跑不为空**：实际输出只有一个文件——
+  `tests/fixtures/providers/manifest.json`（28 行，8 处新增/20 处删除）。
+  原因是这份 manifest 是 `scripts/build_provider_fixtures.py` 对**全部**
+  provider 一次性生成的合并清单（`fixture_count` 字段 + 每份夹具的
+  `path`/`sha256`），不属于任何单一 provider 目录，因此排除模式
+  `':!*/anysearch/*'`（只排除路径里含 `anysearch` 的文件）覆盖不到它。
+  只要 anysearch 的夹具数量从 10 份（任务书列出的 7 份「合同真」用例之外，
+  旧代码还多出 `auto_register`/`usage`/`payment_required` 三个旧形状专属
+  用例）收敛到任务书要求的 7 份，`fixture_count`（79→76）与文件清单/哈希
+  就必然变化，这是生成器正确性的直接体现，不是手改了其他 provider 的夹具。
+  已逐项核实这条差异**只**由 anysearch 引起：`git diff main -- tests/
+  fixtures/providers/manifest.json` 里改动的 8 处 `sha256` 全部对应
+  anysearch 的 7 个新条目 + 被删的 3 个旧条目，`fixture_count: 79→76`；
+  `host_web`/`rail12306`/`flyai`/`amap`/`variflight` 五个 provider 在
+  manifest 里的条目哈希逐一比对，与改动前完全相同（`git status --short --
+  tests/fixtures` 只列出 `anysearch/*.json` 七个文件 + `manifest.json`
+  一个文件，没有任何其他 provider 目录下的文件出现)。判断：这条验收命令
+  本身没有预见到 manifest.json 与单个 provider 夹具数量变化之间的耦合，
+  按任务书「让步顺序」（合同真实 > 做得全）与「跳过做别的，继续」处理，
+  未回退 manifest.json（回退会导致 `test_manifest_hashes_and_file_set_
+  are_exact` 断言真实文件集与虚假旧哈希不符，直接把已经全绿的测试改红，
+  代价明显更大）。全量测试、`git diff main --stat` 对
+  `schema`/`credentials.py`/`cli.py`/`tests` 删测试行的其余三条硬性验收
+  命令均按字面通过，见 `PROGRESS.md` 本书「最终门」小节的实际输出。

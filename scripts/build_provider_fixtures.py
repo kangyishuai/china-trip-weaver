@@ -41,7 +41,7 @@ PINS = {
     "flyai": "1.0.16",
     "amap": "web-service-v5-v3-route",
     "variflight": "1.0.3",
-    "anysearch": "runtime-probe-v1",
+    "anysearch": "mcp-search-v1",
 }
 SCHEMA_REFS = {
     "poi": "#/$defs/poi",
@@ -583,16 +583,34 @@ def vari_flight(number: str = "XX1002", price: Any = 1002.0) -> Mapping[str, Any
     }
 
 
-def any_body(results: Sequence[Mapping[str, Any]], *, requests: int = 1, auto_registered: bool = False) -> Mapping[str, Any]:
+def any_result(
+    title: str = "上海博物馆开放信息",
+    suffix: str = "museum",
+    summary: str = "official result",
+) -> Mapping[str, str]:
+    return {"title": title, "url": "https://www.shanghai.gov.cn/" + suffix, "summary": summary}
+
+
+def any_markdown(results: Sequence[Mapping[str, str]], *, elapsed_ms: int = 234) -> str:
+    lines = ["## Search Results (%d results, %dms)" % (len(results), elapsed_ms), ""]
+    for index, result in enumerate(results, start=1):
+        lines.append("### %d. %s" % (index, result["title"]))
+        lines.append("- **URL**: %s" % result["url"])
+        lines.append("- %s" % result["summary"])
+        lines.append("")
+    return "\n".join(lines).rstrip("\n") + "\n"
+
+
+def any_rpc_body(text: str) -> Mapping[str, Any]:
     return {
-        "data": {"results": list(results)},
-        "usage": {"requests": requests, "remaining": 999},
-        "auto_registered": auto_registered,
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {"content": [{"type": "text", "text": text}]},
     }
 
 
-def any_result(title: str = "上海博物馆开放信息", suffix: str = "museum") -> Mapping[str, Any]:
-    return {"title": title, "url": "https://www.shanghai.gov.cn/" + suffix, "snippet": "official result"}
+def any_error_body(message: str) -> Mapping[str, Any]:
+    return {"jsonrpc": "2.0", "id": 1, "error": {"code": -32000, "message": message}}
 
 
 def build() -> List[Dict[str, Any]]:
@@ -742,19 +760,18 @@ def build() -> List[Dict[str, Any]]:
 
     any_req = request("research", {"city": "上海", "query": "2026-10-16 博物馆 开放"})
     fixtures.extend([
-        fixture("anysearch", "success", any_req, response(any_body([any_result()])), item_count=1, schema_refs=[SCHEMA_REFS["poi"]]),
-        fixture("anysearch", "empty", any_req, response(any_body([])), error_class="no_results"),
+        fixture("anysearch", "success", any_req, response(any_rpc_body(any_markdown([any_result()]))), item_count=1, schema_refs=[SCHEMA_REFS["poi"]]),
+        fixture("anysearch", "empty", any_req, response(any_rpc_body(any_markdown([]))), error_class="no_results"),
     ])
     fixtures.extend(error_matrix(
-        "anysearch", any_req, {"results": []},
-        any_body([any_result("<script>bad()</script> 上海馆 \u001b[31m Authorization: Bearer canary", "malicious")]),
+        "anysearch", any_req,
+        any_error_body("invalid query"),
+        any_rpc_body(any_markdown([any_result(
+            "<script>bad()</script> <a href=\"javascript:alert(1)\">详情</a> 上海馆 \u001b[31m Authorization: Bearer canary",
+            "malicious",
+        )])),
         auth_missing=True,
     ))
-    fixtures.extend([
-        fixture("anysearch", "auto_register", any_req, response(any_body([], auto_registered=True)), health="unavailable", error_class="policy_blocked"),
-        fixture("anysearch", "usage", any_req, response(any_body([any_result("上海当期活动", "events")], requests=3)), item_count=1, schema_refs=[SCHEMA_REFS["poi"]]),
-        fixture("anysearch", "payment_required", any_req, response({"error": "anonymous daily quota"}, 402), health="rate_limited", error_class="rate_limited"),
-    ])
     return fixtures
 
 

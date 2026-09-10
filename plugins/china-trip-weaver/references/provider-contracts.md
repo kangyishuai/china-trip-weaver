@@ -9,7 +9,7 @@ All providers are read-only adapters. A provider is `ready` only after its pin/f
 | FlyAI (optional) | `@fly-ai/flyai-cli@1.0.16`, version/help/current envelope | Flight and lodging candidates/deep links | 25s | Trial only after probe; dated Fliggy link → unknown. |
 | AMap | v5 POI, v3 geocode/walk/transit/drive, v4 ride fingerprints | POI/geocode/route matrix | 8s POI/geocode; 12s route | No API call; cache → deep link/static estimate → unknown. |
 | VariFlight | `@variflight-ai/variflight-mcp@1.0.3`, exact 9 tools | Optional flight status/weather/comfort/price enrichment | 15s | Probe/list only; no business call. |
-| AnySearch | Runtime structured-result and usage fingerprint | Optional destination-search supplement | 15s | Disabled without user key; auto-registration is always rejected. |
+| AnySearch | MCP `tools/call name=search` JSON-RPC 2.0, Markdown `content[]` result | Optional destination-search supplement | 10s | Disabled without user key; no request is sent without one, and auto-registration is always rejected. |
 
 Degrade each capability independently:
 

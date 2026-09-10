@@ -1,39 +1,62 @@
-"""Optional authenticated AnySearch adapter; anonymous auto-registration is blocked."""
+"""Optional authenticated AnySearch MCP adapter; anonymous auto-registration is blocked."""
 
 from __future__ import annotations
 
+import re
 from typing import Any, List, Mapping
 
 from ..clock import Clock
 from ..contracts import ProviderRequest
 from ..evidence import make_claim
-from .base import BaseAdapter, ContractMismatch, Normalization, ProviderFailure, safe_https_url, sanitize_text, stable_id
+from .base import BaseAdapter, ContractMismatch, Normalization, safe_https_url, sanitize_text, stable_id
+
+
+_HEADER_RE = re.compile(r"^## Search Results \((\d+) results, \d+ms\)", re.MULTILINE)
+_ITEM_RE = re.compile(
+    r"^### \d+\. (?P<title>[^\n]+)\n- \*\*URL\*\*: (?P<url>[^\n]+)\n- (?P<summary>[^\n]+)$",
+    re.MULTILINE,
+)
 
 
 class AnySearchAdapter(BaseAdapter):
     provider = "anysearch"
-    provider_version = "runtime-probe-v1"
+    provider_version = "mcp-search-v1"
     capabilities = ("research",)
     required_secret_names = ("ANYSEARCH_API_KEY",)
     allow_keyless = False
 
     def normalize(self, body: Any, request: ProviderRequest, clock: Clock) -> Normalization:
-        if not isinstance(body, dict):
-            raise ContractMismatch("AnySearch response is not an object")
-        if body.get("auto_registered"):
-            raise ProviderFailure("policy_blocked", "anonymous auto-registration is forbidden")
-        data = body.get("data")
-        if not isinstance(data, dict) or not isinstance(data.get("results"), list) or not isinstance(body.get("usage"), dict):
-            raise ContractMismatch("AnySearch structured response or usage fields changed")
+        if not isinstance(body, dict) or body.get("jsonrpc") != "2.0":
+            raise ContractMismatch("AnySearch response is not a JSON-RPC 2.0 envelope")
+        result = body.get("result")
+        if not isinstance(result, dict):
+            raise ContractMismatch("AnySearch response is missing a result")
+        content = result.get("content")
+        if not isinstance(content, list) or len(content) != 1:
+            raise ContractMismatch("AnySearch result content is not a single block")
+        block = content[0]
+        if not isinstance(block, dict) or block.get("type") != "text" or not isinstance(block.get("text"), str):
+            raise ContractMismatch("AnySearch result content is not a text block")
+
+        text = block["text"]
+        header = _HEADER_RE.search(text)
+        if header is None:
+            raise ContractMismatch("AnySearch results header is missing or malformed")
+        declared_count = int(header.group(1))
+        matches = list(_ITEM_RE.finditer(text))
+        if len(matches) != declared_count:
+            raise ContractMismatch("AnySearch declared result count does not match parsed entries")
+
         city = sanitize_text(request.parameters["city"], 80)
         items: List[Mapping[str, Any]] = []
         claims: List[Mapping[str, Any]] = []
-        for raw in data["results"]:
-            url = safe_https_url(raw["url"])
-            title = sanitize_text(raw["title"], 160)
+        for match in matches:
+            title = sanitize_text(match.group("title"), 160)
+            url = safe_https_url(match.group("url").strip())
+            summary = sanitize_text(match.group("summary"), 300)
             poi_id = stable_id("poi-anysearch", url, title)
             evidence = make_claim(
-                subject_ref=poi_id, field_path="/name", value=title,
+                subject_ref=poi_id, field_path="/name", value={"name": title, "summary": summary},
                 source_url=url, provider=self.provider,
                 status="partial", confidence=0.65, mode="static", clock=clock,
             )
