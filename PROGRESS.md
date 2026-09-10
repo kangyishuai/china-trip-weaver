@@ -1737,3 +1737,39 @@ ADR 0001–0015 对 rental/ferry/轮渡/租车 关键词 `git grep -il` 恰 0 �
 公开站名、官方购票渠道等公开事实，数值（价格、订单号、车牌）全部现编；
 另一个风险是「A 就够」类结论容易流于空泛，必须对「取还车/租期/费用/
 replan」四件事逐项给现有字段/函数的具体证据，不能只说一句「slots 够用」。
+
+任务 1（已完成）：新建 `docs/design/adr/0016-rental-car-and-ferry.md`，写完
+Context 节，7 个小节 28 条 `file:line` 证据（按 grep 计数 `^- \`` 恰 28 条，
+在 ≤40 行硬指标内）：按 travel_mode 分支的函数 8 条（journey.py:1341
+`_segment_connections`、matrix.py:11,61、planning.py:638,1365,1625,2062,2097
+五处只排除字面 `"flight"`、planning.py:210 `plan_trip`、providers/amap.py:
+261-270 `_route_source` 只映射 walk/transit/drive/ride 四种无 ferry、
+replan.py:333,361 只认字面 `"rail"`、scheduler/light.py:497,511 只认字面
+`"walk"`、validate_trip.py:318）；一等公民若要动的 schema 字段 7 条
+（trip.schema.json:553 travel_mode 枚举已含 drive/ferry、550-576
+transportLeg 全字段、444 parking_required 语义其实是「住宿要不要车位」非
+「是否自驾」、473-474 assumptions/constraints 两个 stringList 现有实例、
+497-499 slot.kind 枚举、248-251 budgetItem.category/price_type、journey.py:
+2077 `_journey_trace_deadline` 把 deadline 等同 depart_at/check_in、无
+「开售/预订截止日」概念——这是唯一无论选 A 选 B 都必须新增语义的地方）；
+生成函数 4 条（planning.py:1449 `_deep_link_leg` 是唯一 rail 生产者、
+planning.py:2044 `_schedule_problems` 的 transit 字面量只是日内调度参数非
+transport_legs 生产者、providers/flyai.py:94、mobility.py:124 `resolve` 的
+MODE_ALIASES 把 drive/ride 直通高德点到点路线，无租期/取还车/异地还车费
+概念）；渲染分区 2 条（render/html.py:484 与 journey_html.py:700 两个交通
+卡片函数都按 travel_mode 走同一模板+标签表、无按模式分支，journey_html.py:
+594,836 priority-actions 只读 `item["deadline"]` 一个字段）；replan 事件
+3 条（replan.py:21 五个事件类型、62-70 closure/weather 只换
+`days[].slots[]` 单条、从不碰 transport_legs/budget_ledger——正是任务书
+「为什么干」里「配 free 时段再手改 patch」这条工作流在代码里的原因、232
+`_apply_refresh` 是唯一同时改腿+health+账本三处的事件处理器、可作未来
+「船票停航」或「租车改期」事件的模板）；会红的测试 4 条（test_contracts.py:
+69-70 SCHEMA_VERSION 冻结断言、81-84 有效/无效示例数量断言、test_journey.py:
+1344 priority-actions 排序测试、test_replan.py:59,221 fixture 驱动的 CLI
+循环）。验收：随机抽 3 条（mobility.py:124、journey_html.py:700、
+test_contracts.py:81-84）`sed -n` 核对，三条均逐字命中。撰写时
+`schema/trip.schema.json:559-566` 首稿引错行号（那段其实是 group_refs
+数组定义，非完整属性列表），核对时自己发现并改成实测的 550-576，未留错误
+引用；同一轮还补全了首稿里三处漏写行号的 schema 字段引用（assumptions/
+constraints、slot.kind、budgetItem.category/price_type）。单独一次
+`git commit`。
