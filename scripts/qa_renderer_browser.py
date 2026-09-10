@@ -199,7 +199,7 @@ def console_errors(events: Sequence[Mapping[str, Any]]) -> List[str]:
     return errors
 
 
-def run_qa(html_path: Path, output: Path, chrome: Path, viewports: Sequence[Tuple[int, int]], sections: int = 12) -> Mapping[str, Any]:
+def run_qa(html_path: Path, output: Path, chrome: Path, viewports: Sequence[Tuple[int, int]], sections: int = 12, handshake_timeout: float = 30.0) -> Mapping[str, Any]:
     if not chrome.is_file():
         raise RuntimeError("Chrome executable is absent: %s" % chrome)
     output.mkdir(parents=True, exist_ok=True)
@@ -210,8 +210,15 @@ def run_qa(html_path: Path, output: Path, chrome: Path, viewports: Sequence[Tupl
     reports = []
     failures: List[str] = []
     screenshots: List[str] = []
+    handshake_attempts = 1
     try:
-        target_id = browser.command("Target.createTarget", {"url": "about:blank"})["targetId"]
+        try:
+            target_id = browser.command("Target.createTarget", {"url": "about:blank"}, timeout=handshake_timeout)["targetId"]
+        except TimeoutError:
+            browser.close()
+            handshake_attempts = 2
+            browser = ChromePipe(chrome, profile)
+            target_id = browser.command("Target.createTarget", {"url": "about:blank"}, timeout=handshake_timeout)["targetId"]
         session_id = browser.command("Target.attachToTarget", {"targetId": target_id, "flatten": True})["sessionId"]
         for method in ("Page.enable", "Runtime.enable", "Network.enable", "Log.enable"):
             browser.command(method, session_id=session_id)
@@ -275,6 +282,7 @@ def run_qa(html_path: Path, output: Path, chrome: Path, viewports: Sequence[Tupl
         "screenshots": screenshots,
         "print_pdf": str(output / "renderer-print.pdf"),
         "failures": failures,
+        "handshakeAttempts": handshake_attempts,
     }
     (output / "qa-report.json").write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return result
@@ -295,9 +303,10 @@ def main() -> int:
     parser.add_argument("--chrome", type=Path, default=None)
     parser.add_argument("--viewports", default=",".join("%dx%d" % item for item in DEFAULT_VIEWPORTS))
     parser.add_argument("--sections", type=int, default=12, help="expected [data-section] count for this page (Trip: 12, Journey: 15)")
+    parser.add_argument("--handshake-timeout", type=float, default=30.0, help="seconds to wait for the first CDP handshake (Target.createTarget) before retrying once")
     args = parser.parse_args()
     chrome = args.chrome or default_chrome()
-    result = run_qa(args.html.resolve(), args.output.resolve(), chrome, parse_viewports(args.viewports), args.sections)
+    result = run_qa(args.html.resolve(), args.output.resolve(), chrome, parse_viewports(args.viewports), args.sections, args.handshake_timeout)
     print(json.dumps(result, ensure_ascii=False, sort_keys=True))
     return 1 if result["failures"] else 0
 

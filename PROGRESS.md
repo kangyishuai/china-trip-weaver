@@ -1385,3 +1385,41 @@ candidates-import` 成功（远端已建 `candidates-import` 分支，PR 未开�
 `BLOCKED.md` 各一次独立 `git commit`（`f70df0f`/`2bba4ba`/`eef9bea`），
 `main` 分支未被本书触碰。硬指标一、二全部达成，止损轮次未触发（每项任务
 一次验收即通过，未出现连败），任务书结束，无遗留阻塞项。
+
+## 书 G：浏览器 QA 握手加固（2026-09-10，worktree `.tmp/wt-g` 分支 `qa-handshake`）
+
+任务 0（已完成）：`git worktree add .tmp/wt-g -b qa-handshake`，HEAD `df5712e`
+与任务书吻合；worktree 内复测 `Ran 565 tests` `OK` 0 skipped、
+`scan_secrets.py` 0 命中（370 文件）、pyflakes 0 行，与任务书数字一致。
+行号核对：`__init__`71、`command(...)`107（`timeout: float = 10.0`）、
+`run_qa`202、首条 `Target.createTarget`214、`validate_report` 检查字典
+173/174，全部精确吻合；唯一出入是任务书通篇称该类为 `Browser`，仓库内
+真实类名是 `ChromePipe`——判为描述性用词而非改名要求（不重写不相关代码），
+按真实类名 `ChromePipe` 实现，不算待裁决。额外发现
+`tests/test_journey.py:1430`（16 天 demo QA 测试）也用 `timeout=60` 调用
+同一脚本，不在本书白名单内，只记录不改动。
+理解的目标：给 `ChromePipe` 首次 CDP 握手（`Target.createTarget`）加
+30 秒超时并支持超时后重启 Chrome 重试一次，`validate_report` 判卷标准
+一字不动，消除 CI 偶发的握手超时抖动。
+顺序：任务 1（握手超时+一次重启+CLI 参数+硬指标一）→ 任务 2（打桩单测+
+反向验证+`test_keyless_e2e.py` timeout 改 150）→ 最终门+push。
+最大风险：重试逻辑只能包裹首条 `Target.createTarget`，其余命令仍用原有
+10 秒超时不变——不能把重启逻辑做成 `command()` 的通用行为，否则会静默
+改变其余 CDP 调用的失败语义（这些调用现在异常应直接向上抛出终止 `run_qa`）。
+
+任务 1（已完成）：`run_qa` 加 `handshake_timeout: float = 30.0` 形参；首条
+`Target.createTarget` 显式传 `timeout=handshake_timeout`，外层套一层
+`try/except TimeoutError`——超时则 `browser.close()`、`handshake_attempts`
+置 2、重新构造 `ChromePipe(chrome, profile)` 再发一次同样的命令，第二次
+异常不捕获、原样向上抛出；整段重试逻辑仍嵌在原有的外层 `try/finally`
+内，保证不管成功、重试后成功、还是两次都失败，最终存活的那个 `browser`
+实例都会走到 `finally` 的 `browser.close()`+清 profile 目录（两次都失败时
+第一个失败的 browser 已在 `except` 块内提前 `close()`，不会泄漏子进程）。
+`result` 字典加 `"handshakeAttempts": handshake_attempts`；CLI 加
+`--handshake-timeout`（`type=float, default=30.0`），透传给 `run_qa`。
+其余命令的 `timeout=10.0` 默认值一字未动。验收：真实 Chrome 跑
+`/usr/bin/python3 scripts/qa_renderer_browser.py demo/journey-16d/journey.html
+--output .tmp/qa --viewports 375x812,1440x900 --sections 15` → `failures:
+[]`、`handshakeAttempts: 1`；`git diff main -- scripts/qa_renderer_browser.py
+| grep -E '^[-+]' | grep -E 'validate_report|checks = \{|"[a-z ]+": report'`
+0 行（判卷字典未被触碰）；`py_compile`/pyflakes 均 0。
