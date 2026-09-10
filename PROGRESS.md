@@ -964,6 +964,24 @@ JOURNEY HTML VALID .../福建中秋国庆16天行程-0.9.html errors=0
 可与同目录下用户自己写的「易读版」（`福建中秋国庆16天行程-易读版.html`）
 手机对比。
 
+`git push` 后 `gh run list --limit 3` 首次显示本轮提交 `completed failure`：
+Python 3.9 矩阵里 `test_keyless_html_opens_offline_with_no_remote_requests`
+**与**本轮新增的 `test_checked_in_sixteen_day_demo_passes_offline_browser_qa`
+同时报 `TimeoutError: CDP pipe read timed out`（`scripts/qa_renderer_browser.py`
+起无头 Chrome 的第一条 CDP 命令 `Target.createTarget` 超时）；同一提交
+Python 3.13 矩阵全绿（`Ran 544 tests in 32.114s` `OK`，比 3.9 矩阵快一倍多）。
+`gh run rerun 34464539950 --failed` 第一次重跑仍是同一处超时失败，第二次
+重跑两条矩阵转 `success`。判断：与本轮渲染代码无关——失败点是 Chrome 自己的
+启动握手，不是渲染出的 HTML 或测试断言；两次触发失败的都是"起 headless
+Chrome 做离线 QA"这一类测试，`test_keyless_html_opens_offline_with_no_remote_
+requests` 是本轮完全未碰过的既有测试也同时中招，本机单独重跑两条测试均
+`ok`。这是这类测试第二次在 Python 3.9 矩阵上撞见同一超时（上一次见本文件
+"`书 A1b`"小节，`34447222187`，重跑一次即绿）；本轮重跑两次才转绿，比上次
+更顽固，记录在案供之后如果三度出现时立项（比如把 `ChromePipe.command()`
+默认 10s 超时对 `Target.createTarget` 单独放宽），本轮未动
+`qa_renderer_browser.py` 的超时逻辑——它已经因任务 2 的 `--sections` 参数
+改动过一次（见 BLOCKED.md），继续扩大改动面须另行裁决。
+
 `git status --short`（仓库内）在本任务前后均为空——渲染只写了仓库外的
 工作区目录，未触碰仓库任何文件，`china-trip-weaver.git` 本身不认识这个
 路径。真实数据核对（读文本，不摘抄进仓库）：16 张 day-card、"现在先处理"
