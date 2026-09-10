@@ -1773,3 +1773,53 @@ test_contracts.py:81-84）`sed -n` 核对，三条均逐字命中。撰写时
 引用；同一轮还补全了首稿里三处漏写行号的 schema 字段引用（assumptions/
 constraints、slot.kind、budgetItem.category/price_type）。单独一次
 `git commit`。
+
+任务 2（已完成）：ADR 补完 Options/Decision/Consequences 三节。Options
+按任务书四件事逐项给 A、B 两案的合成示例（全部虚构城市点位/价格/订单号，
+仅城市名、站名、`www.xmferry.com` 官网域名为公开事实），共 7 段 JSON
+（≤15 行/段，`python3 -c` 用 `json.loads` 逐段解析全部合法，行数
+12/6/8/10/15/7/5）：①取还车时段地点两案完全相同，直接复用现有
+transportLeg 字段；②租期规则 A 写进 `request.assumptions` 自由文本、B 假想
+新增 `rental_min_hours`/`one_way_fee_cny`/`one_way_fee_reason` 三字段；
+③费用与预订截止 A 用两条 `budgetItem`（`category="transport"`）+ 一条
+`field_path="/booking_deadline"` 的 claim 约定、B 假想新增 leg 级
+`booking_deadline` 字段；④停航/改期 replan 路径两案相同，示例为今天唯一
+可用的 `closure` 事件+手改 `replacement_slot`（不碰 transport_legs/
+budget_ledger，这正是任务书「为什么干」里「配 free 时段再手改 patch」的
+出处）。Decision 选 **方案 A**，逐维度证据：取还车/costs 两维不改 schema
+两案零差异；租期规则维度指出全仓库没有任何代码读取或校验「最低租期/异地
+还车费」这类假想字段（`mobility.py:124` 的 drive 别名只算点到点路线），
+空字段无消费者即为死字段；预订截止维度是唯一真缺口，但缺口在
+`journey_booking_checklist`（journey.py:1769-1790）硬编码
+`leg.get("depart_at")`——撰写中用 `git grep` 额外证实这不是租车/轮渡专属
+问题：`providers/rail12306.py:28` 定义 `PRESALE_DAYS = 15`、124 行产出
+「outside the 12306 15-day presale window」，说明火车票早就有「无法提前预订
+的边界」而 `journey_booking_checklist` 同样忽略它，修这个函数对 rail 同样
+有收益，且改哪个字段读（claim 约定 vs 新 leg 字段）都不省这个改动；史料
+证据：`git log -p --follow` 核实 `SCHEMA_VERSION` 自仓库第一个提交
+`4233792` 起、经 0.2.0 到 0.11.0 共 12 次发版从未变过 "1.0.0"（比首稿设想
+的“ADR-0007/0010/0012 先例”更直接，遂改用这条实测证据替换未核实的 ADR
+编号引用）；`BLOCKED.md` 里书 D（`tests/fixtures/providers/manifest.json`
+排除模式漏covered）与书 D2（`test_providers.py` fixture_count 76→78、
+`test_skills.py` 硬编码文案）两次真实发生的 fixture-shape 改动都在白名单外
+测试里炸出连带修改，schema 字段改动的影响面只会更大。Consequences 节给下一本
+执行书 6 条验收命令草案（含 `git diff main --stat -- plugins/china-trip-
+weaver/schema` 应为空、一条合成 Trip 通过未改 schema 的 `ctw validate`/
+`validate-html`、`journey_booking_checklist` 新测试、新 replan fixture、
+全量回归）。
+撰写中自查出两处引用错误并改正（记入 `BLOCKED.md`）：①渲染分区小节曾把
+priority-actions 的 deadline 来源写成 `_journey_trace_deadline`，实测后
+改为准确的 `journey_booking_checklist`（该 helper 只服务 unknown 类
+checklist 项，transport 类走的是 `journey_booking_checklist` 内联表达式）；
+②Decision 节引用测试排序逻辑时同一处引用一并改正。
+硬指标一实测：ADR 存在；Context 节 `grep -c '^- \`'` 恰 28 条（≤40）；
+Decision 明确选 A；`python3` 解析 7 段 JSON 全部合法（≥4 段）；
+`/usr/bin/python3 scripts/scan_secrets.py` → `secret scan: 0 finding(s)
+across 373 file(s)`。硬指标二实测：`git diff main --stat -- plugins tests
+README.md README.zh-CN.md` 空输出；`/usr/bin/python3 -m unittest discover
+-s tests` → `Ran 584 tests` `OK`（0 skipped，与任务书基线一致，73.6 秒）；
+`git diff main --stat`（全量）只有 `PROGRESS.md`、
+`docs/design/adr/0016-rental-car-and-ferry.md` 两个文件。`BLOCKED.md` 追加
+「无」条目（见上）。单独一次 `git commit`，随后 `git push -u origin
+rental-ferry-adr`。止损轮次未触发（任务 0/1/2 均一轮验收通过，未出现
+连败）。
