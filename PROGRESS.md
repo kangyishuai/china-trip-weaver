@@ -1702,3 +1702,38 @@ qa-handshake` 确认 `45ce40d`）。未开 PR（任务书只要求推分支、�
 需要处理的 CI 抖动。硬指标一、二全部达成，止损轮次未触发（两项任务
 各一次验收即通过），任务书结束，无遗留阻塞项（`test_journey.py:1430`
 的同款 timeout 隐患已记 `BLOCKED.md`，供领导定夺）。
+
+## 书 H：租车与轮渡 ADR（2026-09-10，worktree `.tmp/wt-h` 分支 `rental-ferry-adr`）
+
+任务 0（已完成）：`git worktree add .tmp/wt-h -b rental-ferry-adr`，HEAD
+`ec7c12d` 与任务书一致。任务书「现状与任务 0」列出的全部 file:line 断言
+逐条 `sed -n`/`git grep` 核对，无一处出入：schema 交通段 `travel_mode`
+枚举（trip.schema.json:553）含 drive/ferry，`matrix.py:11`/
+`render/html.py:28,59` 同步；生产者只有 rail（planning.py:1487）、
+transit（planning.py:2275）、flight（providers/flyai.py:94），
+`git grep ferry -- tests demo` 恰 0 行；行为分支认 flight（journey.py:1366
++ planning.py 广义 grep `flight` 恰 15 行）与 rail（planning.py:210,1487），
+drive 只是 `mobility.py:23-31` MODE_ALIASES 直通 `providers/amap.py:261-270`
+的高德驾车路线（无取还车/供应商/价格字段）；request 已有
+`parking_required`（trip.schema.json:444）；replan 事件恰
+`("closure","weather","delay","user_delete","refresh")`（replan.py:21）；
+priority-actions 的 `data-deadline` 只读 `item["deadline"]`
+（render/journey_html.py:836，594 为外层 `_priority_actions_section` 定义
+处）；`docs/design/01-product-scope.md:43-53` 非目标清单确未排除租车/轮渡；
+ADR 0001–0015 对 rental/ferry/轮渡/租车 关键词 `git grep -il` 恰 0 命中；
+`render/html.py:493-511` 的交通卡片按 `leg["travel_mode"]` 统一走同一张
+卡片模板 + `_enum_label` 文案表，无按模式分支的代码路径。全部吻合，不停工。
+
+理解的目标：产出 `docs/design/adr/0016-rental-car-and-ferry.md`，用任务 1
+盘清的现状证据，比较方案 A（不改 schema，用现有 slots kind 枚举 + claims +
+`request.assumptions` 表达租车与轮渡）与方案 B（改 schema 加结构化字段），
+就「取还车时段地点、租期规则、费用与预订截止、停航/变期的 replan 路径」
+四件事给出证据支持的选择，供下一本执行书直接依据。
+顺序：任务 1（列 Context 清单，≤40 行 file:line，先盘清现状作证据库）→
+任务 2（Options 四件事各给 ≤15 行合成 JSON、Decision 选边、Consequences
+列验收命令草案）→ 跑 `scan_secrets.py`/全量测试 → push 分支。
+最大风险：示例 JSON 必须是合成数据（不得含任何真实酒店名/供应商真实返回），
+容易在照抄现有 demo/fixture 结构时手滑带出真实痕迹——写示例时只挑城市名、
+公开站名、官方购票渠道等公开事实，数值（价格、订单号、车牌）全部现编；
+另一个风险是「A 就够」类结论容易流于空泛，必须对「取还车/租期/费用/
+replan」四件事逐项给现有字段/函数的具体证据，不能只说一句「slots 够用」。
