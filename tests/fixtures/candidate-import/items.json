@@ -1,0 +1,54 @@
+[
+  {
+    "kind": "poi",
+    "name": "合成博物馆",
+    "city": "上海",
+    "category": "museum",
+    "source_url": "https://example.invalid/poi/museum",
+    "provider": "official-web",
+    "duration_minutes": 120,
+    "opens_at": "2026-09-10T09:00:00+08:00",
+    "closes_at": "2026-09-10T17:00:00+08:00",
+    "opening_status": "verified",
+    "price_amount": 80
+  },
+  {
+    "kind": "poi",
+    "name": "合成公园",
+    "city": "上海",
+    "category": "park",
+    "source_url": "https://example.invalid/poi/park",
+    "provider": "official-web"
+  },
+  {
+    "kind": "poi",
+    "name": "合成古镇",
+    "city": "苏州",
+    "category": "old-town",
+    "source_url": "https://example.invalid/poi/old-town",
+    "provider": "host-web",
+    "duration_minutes": 180
+  },
+  {
+    "kind": "lodging",
+    "name": "合成酒店",
+    "city": "上海",
+    "area": "人民广场",
+    "check_in": "2026-09-10",
+    "check_out": "2026-09-11",
+    "source_url": "https://example.invalid/lodging/hotel",
+    "provider": "official-web",
+    "nightly_price": 600,
+    "includes_taxes": true
+  },
+  {
+    "kind": "lodging",
+    "name": "合成客栈",
+    "city": "苏州",
+    "area": null,
+    "check_in": "2026-09-11",
+    "check_out": "2026-09-12",
+    "source_url": "https://example.invalid/lodging/inn",
+    "provider": "host-web"
+  }
+]

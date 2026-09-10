@@ -139,6 +139,22 @@ def _add_candidates_parser(commands: Any) -> None:
     add_lodging.add_argument("--locked", action="store_true")
     add_lodging.add_argument("--queried-at", default=None)
 
+    candidates_import = candidate_commands.add_parser(
+        "import",
+        help="atomically import many researched POI and lodging candidates from one JSON list",
+    )
+    candidates_import.add_argument("path", type=Path)
+    candidates_import.add_argument(
+        "--items", type=Path, required=True,
+        help="JSON array of {\"kind\": \"poi\"|\"lodging\", ...} objects, "
+        "keys matching add_poi_candidate/add_lodging_candidate's own parameters",
+    )
+    candidates_import.add_argument("--queried-at", default=None)
+    candidates_import.add_argument(
+        "--dry-run", action="store_true",
+        help="validate every item without writing the candidates file",
+    )
+
     fix_names = candidate_commands.add_parser(
         "fix-names",
         help="report safe Trip or Journey name feedback; write only with --apply",
@@ -476,7 +492,9 @@ def _cmd_candidates(
         clock = FixedClock.from_iso(args.queried_at) if args.queried_at else SystemClock()
         if args.candidate_command == "add-poi":
             return _cmd_candidates_add_poi(args, clock, credential_path, poi_name_transport)
-        return _cmd_candidates_add_lodging(args, clock)
+        if args.candidate_command == "add-lodging":
+            return _cmd_candidates_add_lodging(args, clock)
+        return _cmd_candidates_import(args, clock)
     except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
         print("CANDIDATES_FAILED %s" % exc, file=sys.stderr)
         return 1
@@ -607,6 +625,25 @@ def _cmd_candidates_add_lodging(args: argparse.Namespace, clock: Any) -> int:
         locked=args.locked,
     )
     print("CANDIDATE_LODGING_ADDED %s id=%s" % (args.path, entity["lodging_id"]))
+    return 0
+
+
+def _cmd_candidates_import(args: argparse.Namespace, clock: Any) -> int:
+    from .candidates import CandidatesImportError, import_candidates
+
+    with args.items.open("r", encoding="utf-8") as handle:
+        items = json.load(handle)
+    if not isinstance(items, list):
+        raise ValueError("--items JSON document must be an array")
+    try:
+        result = import_candidates(args.path, items, clock, dry_run=args.dry_run)
+    except CandidatesImportError as exc:
+        print(
+            "CANDIDATES_IMPORT_FAILED item=%d reason=%s" % (exc.item_number, exc.reason),
+            file=sys.stderr,
+        )
+        return 1
+    print("CANDIDATES_IMPORT_COMPLETE pois=%d lodgings=%d" % (result.pois, result.lodgings))
     return 0
 
 

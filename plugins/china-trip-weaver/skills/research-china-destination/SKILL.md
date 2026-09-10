@@ -29,6 +29,14 @@ scripts/ctw validate-candidates candidates.json
 
 Use `--force` with `candidates init` only when replacement is intentional. Add commands preserve unknown values explicitly and generate `/pois/<index>/...` or `/lodgings/<index>/...` pointers from the actual append index; never substitute an entity ID for an array index.
 
+When many candidates are already researched, append them all in one atomic call instead of one `add-poi`/`add-lodging` subprocess per candidate:
+
+```bash
+scripts/ctw candidates import candidates.json --items items.json --queried-at 2026-09-10T12:00:00+08:00
+```
+
+`items.json` is a JSON array of `{"kind": "poi"|"lodging", ...}` objects; every other key matches `add-poi`'s or `add-lodging`'s own flags (snake_case, e.g. `source_url`, `duration_minutes`). Every item is checked (unrecognized kind, unknown key, missing required key, or wrong-typed value) before any is applied; a business-rule failure (bad dates, negative price, duplicate identity, ...) during the append itself also aborts the whole batch. Either way `candidates.json` is left byte-for-byte unchanged and the failing 1-based item number and reason are reported. Add `--dry-run` to validate the whole list without writing.
+
 After a Trip or Journey run reports AMap coordinate identity conflicts, review its bounded name feedback before editing the researched file. The first command is report-only and must leave `candidates.json` byte-for-byte unchanged; add `--apply` only after reviewing every automatic and manual item:
 
 ```bash

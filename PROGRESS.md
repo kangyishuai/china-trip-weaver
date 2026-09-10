@@ -1155,3 +1155,224 @@ BLOCKED.md 记录一条：`git diff main --stat -- tests/fixtures/providers
 零改动、分支已推送）均达标，唯一记录在案的偏差是 BLOCKED.md 那条
 manifest.json 连带变动，止损轮次未触发（1 轮验收即全绿，未连败）。任务书
 结束，`ctw research` 命令与 doctor 探针留给下一本书（任务书原文已声明）。
+
+## 书：`ctw candidates import` 批量导入（2026-09-10，worktree `.tmp/wt-c` 分支 `candidates-import`）
+
+本书在 `.tmp/wt-c`（新建）干，只推分支不合并，界限见任务书「界限」节。与并行
+的书「渲染页可读性」（main 直改）、书 D「AnySearch 接通」（`.tmp/wt-d` 分支
+`anysearch-contract`，已存在）地界不重叠。
+
+任务 0 核对（HEAD `1f1e966`，与任务书一致）：全量 `Ran 534 tests` `OK`
+0 skipped；`scan_secrets.py` 0 命中（369 文件）；pyflakes（src+tests+scripts）
+0 行；均与任务书数字吻合。唯一路径出入：任务书写
+`src/china_trip_weaver/candidates.py`，实际是
+`plugins/china-trip-weaver/src/china_trip_weaver/candidates.py`（`git ls-files
+'*candidates.py'` 只有这一份 + `tests/test_candidates.py`，无歧义）——与此前
+`replan.py`/`journey.py` 的同类路径出入（历次记录判过不算待裁决）同款处理，
+按实际路径改，不停工。函数签名逐字核对：`add_poi_candidate`
+（candidates.py:845）、`add_lodging_candidate`（candidates.py:968）行号精确
+吻合；两者实际都是仅关键字参数（`path, *, name, ...`），任务书写成位置参数
+形式但明确说"其余键与参数同名"，只是描述粗略，参数名与默认值完全一致，不算
+偏差。`cli.py:95` `_add_candidates_parser` 确有 init/add-poi/add-lodging/
+fix-names 四个子命令，`_cmd_candidates`（464 行）用统一 `except (OSError,
+UnicodeError, ValueError, json.JSONDecodeError)` 兜底打印
+`CANDIDATES_FAILED %s`。核实关键实现事实：`_editable_candidates(path)`
+读文件到内存 dict（1066 行）、`_write_valid_when_complete(path, document)`
+（1079 行，仅当 `document["pois"]` 非空才跑 `validate_candidates`，随后
+`write_canonical_json`）是"读→内存改→写"三段式的唯二入口，`add_poi_candidate`/
+`add_lodging_candidate` 内部逻辑（不含首尾读写两行）可以原样抽成
+`_apply_poi_candidate(document, ...)`/`_apply_lodging_candidate(document,
+...)` 两个不做文件 I/O 的函数，两个 add 函数改成"读→apply→写"三行调用，
+输出逐字节不变。`contracts.read_json` 强制顶层必须是 JSON object（不接受
+数组），所以 `--items ITEMS.json`（顶层是数组）不能复用它，读取与"必须是
+数组"校验放在 cli.py 的 `_cmd_candidates_import` 里，`import_candidates`
+本身只收已解析好的 Python list，不做文件 I/O（`path` 参数仍是唯一涉及磁盘
+的路径）。
+
+理解的目标：给 `candidates.py` 加 `import_candidates(path, items, clock, *,
+dry_run=False)`——先对 items 逐项做结构校验（kind 是否合法、键集合是否吻合
+该 kind 的必填+可选键、每个已提供字段的顶层类型是否匹配，三类问题都在这一
+遍全部查完，带 1-based 序号，任何一条不对整体失败、不读不写候选文件、不
+触碰内存 document）；结构校验全过后读入内存副本，按 items 数组原始顺序（不
+按 kind 分组）逐条调用 `_apply_poi_candidate`/`_apply_lodging_candidate`（
+与现有 add_poi_candidate/add_lodging_candidate 共享的同一段逻辑，直接复用
+不重写），任一条业务规则失败（如日期格式、金额为负）整体失败、不写盘，
+两种失败都以同一个 `CandidatesImportError(item_number, reason)` 异常携带
+序号与原因；全部成功后跑一次与 `_write_valid_when_complete` 相同的收尾
+校验，`dry_run=True` 到此为止不写盘，否则 `write_canonical_json` 一次性
+落盘。CLI 包一层 `ctw candidates import PATH --items ITEMS.json
+[--queried-at ISO] [--dry-run]`，`_cmd_candidates_import` 自己 catch
+`CandidatesImportError` 打印 `CANDIDATES_IMPORT_FAILED item=N reason=...`
+（exit 1），其余异常（`--items` 文件本身缺失/非法 JSON/顶层非数组）交给
+`_cmd_candidates` 外层统一 catch 走既有 `CANDIDATES_FAILED` 通道，不重复
+判断类型；成功打印 `CANDIDATES_IMPORT_COMPLETE pois=N lodgings=M`（N/M 是
+本批次新增计数，非文件累计总数——任务书未点名，判为对用户更有信息量的
+选择）。
+
+顺序：任务 1（`_apply_*_candidate` 拆分 + `import_candidates` + CLI 接线 +
+硬指标一四条命令）→ 任务 2（5 个新测试 + Skill/README 文档 + 反向验证）→
+最终门两项硬指标。
+
+最大风险：`write_canonical_json` 只对 dict 的 key 排序（`sort_keys=True`），
+不改变 list 内部元素顺序，所以 `pois`/`lodgings`/`claims`/`unknowns` 四个
+数组各自的元素顺序完全由处理顺序决定——import 必须严格按 items.json 数组
+的原始顺序逐条应用（不能先归类再按 kind 分组处理），否则和"手工逐条追加"
+生成的文件顺序不同、`cmp` 必然不相等；量表选定的应对是不对 items 做任何
+排序或分组，直接 `enumerate` 原始序列。次要风险：`_editable_candidates`
+的类型注解是 `Dict[str, Any]`（可变），需确认 `_apply_*_candidate` 在同一个
+`document` 引用上原地追加多次不会因为共享引用产生意外别名问题——核实
+`_apply_poi_candidate`/`_apply_lodging_candidate` 内部只 `.append()`/
+`.extend()` 顶层四个列表，不重新赋值 `document` 本身，多次调用天然安全。
+
+任务 1（已完成）：`candidates.py` 把 `add_poi_candidate`/`add_lodging_candidate`
+的"读→改内存→写"三段拆成"读→调用 `_apply_poi_candidate`/
+`_apply_lodging_candidate`（新增，只做内存改动，不读不写文件，返回未
+deepcopy 的新条目引用）→写"，两个 add 函数改成三行调用，函数体一字不落
+原样搬进 `_apply_*` 里；`_write_valid_when_complete` 同理拆出
+`_validate_document_when_complete`（只做"pois 非空才 validate_candidates"
+这一步，不写盘），供 `import_candidates` 的 dry-run 复用。新增
+`CandidatesImportResult`（frozen dataclass，`pois`/`lodgings` 两个计数）、
+`CandidatesImportError(ValueError)`（带 `item_number`/`reason` 属性，
+message 已是 `item=N reason=...` 形状）、`_POI_IMPORT_FIELDS`/
+`_LODGING_IMPORT_FIELDS`（键名→(是否必填, 类型校验函数) 的映射表，area 在
+lodging 里标记必填但类型校验放行 None，因为函数签名 `area: Optional[str]`
+本身无默认值必须显式传、值可以是 null）、`_import_item_kind`（对单个 item
+做 kind 合法性→未知键→缺必填键→类型 四层校验，任何一层失败立即
+`raise CandidatesImportError`）、`import_candidates(path, items, clock, *,
+dry_run=False)`（先对全部 items 跑 `_import_item_kind` 拿到 kind 列表，
+全过后才 `_editable_candidates(path)` 读入内存，再按 items 原始顺序逐条
+`_apply_poi_candidate`/`_apply_lodging_candidate`，业务规则失败同样包装成
+`CandidatesImportError`；全部成功后 `_validate_document_when_complete`，
+`dry_run` 为真到此为止，否则 `write_canonical_json` 一次性落盘，返回
+`CandidatesImportResult`）。`cli.py` 加 `candidates import PATH --items
+ITEMS.json [--queried-at ISO] [--dry-run]` 子命令；分发函数 `_cmd_candidates`
+从"最后一支用 return 兜底 add-lodging"改成三个显式分支（init/fix-names 不
+变，add-poi/add-lodging/import 各自判断），新增 `_cmd_candidates_import`
+自读 `--items` 文件（`json.load` + 顶层必须是 list，否则 raise ValueError
+交给外层 `CANDIDATES_FAILED` 通道，不单独处理——items.json 本身的问题与
+"第几条数据"无关）、catch `CandidatesImportError` 打印
+`CANDIDATES_IMPORT_FAILED item=%d reason=%s`（exit 1），成功打印
+`CANDIDATES_IMPORT_COMPLETE pois=%d lodgings=%d`（N/M 是本批次新增计数）。
+`import_candidates` 本身不做 `--items` 文件的读取（`contracts.read_json`
+强制顶层必须是 object，不适用于数组清单；读取放在 cli.py，未碰
+`contracts.py`，符合白名单）。
+
+硬指标一实测（`.tmp/manual-check/`，脚本化不落盘任何仓库内文件）：①对
+同一份 `candidates init` 骨架，`import`（4 项：2 POI + 2 lodging，含
+`opens_at/closes_at/price_amount/duration_minutes`、`nightly_price/
+includes_taxes`、`area: null` 等可选字段）与逐条 `add-poi`/`add-lodging`（
+同一 `--queried-at 2026-09-04T12:00:00+08:00`）产出的文件
+`cmp manual.json import.json` 零差异（`IDENTICAL`）；②把第 4 项（lodging）
+删掉 `source_url` → `CANDIDATES_IMPORT_FAILED item=4 reason=missing
+required key(s): source_url`、exit 1、`cmp` 确认文件与导入前逐字节相同；
+③`--dry-run` 跑同一份合法 items → `CANDIDATES_IMPORT_COMPLETE pois=2
+lodgings=2`、exit 0、`cmp` 确认文件与导入前逐字节相同；④`ctw
+validate-candidates` 对 import 产物报 `CANDIDATES VALID`。反向验证（终端
+记录）：在业务应用阶段的 `except (ValueError, TypeError)` 块里临时插入
+`write_canonical_json(Path(path), document)  # TEMP-REVERSE-VERIFY`（写盘
+后再 raise）→ 用一条能通过结构校验但触发业务规则失败的 item（lodging
+`check_out` 早于 `check_in`，"lodging check-out must be after check-in"）
+触发 → 文件确实被改写（`FILE_CHANGED`，红，证明"失败不写盘"这条保证在
+没有该行为时会被打破）→ 用第一阶段的"缺 source_url"场景重试时未触发
+写盘（因为结构校验在 `_editable_candidates(path)` 之前就失败，根本不进
+循环体，判断为"两阶段设计"的预期表现，非误判）→ 删除 TEMP-REVERSE-VERIFY
+一行还原 → `git diff main -- .../candidates.py | grep -c TEMP-REVERSE`
+为 0（无残留）→ 同一失败场景重跑，`FILE_UNCHANGED`（绿）。全量
+`/usr/bin/python3 -m unittest discover -s tests` → `Ran 534 tests` `OK`
+0 skipped（与任务 0 基线相同，任务 1 本身不新增测试函数，测试留给任务 2）；
+`scan_secrets.py` 0 命中（369 文件）；pyflakes 0 行；`git diff main --stat
+-- plugins/china-trip-weaver/schema demo` 空；改动文件只有
+`candidates.py`/`cli.py`/`PROGRESS.md` 三个，均在白名单内。单独一次
+`git commit`（`f70df0f`）。
+
+任务 2（已完成）：新建 `tests/fixtures/candidate-import/items.json`（3 POI +
+2 lodging，含 `duration_minutes`/`opens_at`/`closes_at`/`opening_status`/
+`price_amount`/`nightly_price`/`includes_taxes`/`area: null` 等可选字段）。
+`test_candidates.py` 新增 5 个 `def test_`（均在
+`test_generator_refuses_overwrite_and_duplicate_without_changing_file` 之
+后插入）：`test_import_candidates_matches_sequential_add_poi_and_add_lodging`
+（对同一份 items.json，`import_candidates` 一次调用与逐条
+`add_poi_candidate`/`add_lodging_candidate`（同一 `FixedClock`）产出的文件
+字节相同，且 `CandidatesImportResult(pois=3, lodgings=2)`）、
+`test_import_candidates_does_not_write_on_item_failure`（第 4 项 lodging
+`check_out` 改到 `check_in` 之前，触发业务规则失败，`item_number==4`、
+文件与调用前逐字节相同）、`test_import_candidates_rejects_unknown_key`（第
+2 项加一个未知键，`item_number==2`、`reason` 含 "unknown key" 与键名、
+文件不变）、`test_import_candidates_dry_run_leaves_file_untouched`
+（`dry_run=True` 返回正确计数且文件不变）、
+`test_cli_import_subcommand_succeeds_and_validates`（子进程跑
+`candidates init`→`candidates import`→`validate-candidates` 三条真实命令，
+逐条 `returncode==0`，stdout 含 `CANDIDATES_IMPORT_COMPLETE pois=3
+lodgings=2` 与 `CANDIDATES VALID`）。`research-china-destination/SKILL.md`
+在 add-poi/add-lodging 代码块之后、fix-names 段之前加一段 import 用法（清单
+格式、键名对应关系、双阶段失败都不写盘且报"第几项+原因"、`--dry-run`
+说明）。两份 README「Other commands」各只加一行
+`ctw candidates import CANDIDATES.json --items ITEMS.json [--queried-at ISO]
+[--dry-run]`（紧跟 add-poi 那行之后），未改动块内其余行。
+
+反向验证（终端记录，因 candidates.py 的任务 1 改动已单独提交，不是未提交
+状态，"stash 掉改动"无法照字面顺序执行——`git stash push` 只能保存未提交
+差异且 push 后工作区总是回到 HEAD，与"push 后应处于失败态"字面冲突；
+采用等价且更贴合 git 语义的操作序列，push/apply/drop 三个动作全部用上，
+理由记在此处供合并时核对）：①`git show 1f1e966:.../candidates.py` 覆盖
+工作区文件，制造"HEAD→旧版本"的未提交差异；②`git stash push -u -m
+"import-check" -- .../candidates.py`（只限定这一个文件的 pathspec，任务 2
+其余未提交改动如 `test_candidates.py`/新 fixture 不受影响）保存这份差异，
+工作区随之恢复为 HEAD（新版本）——`git stash list --format='%H %gs'` 记录
+SHA `f69e52686e1c983a84fdc051c67db68688c923ff`；③`git stash apply <SHA>`
+把该差异重新应用到当前工作区，使其变回旧版本（`grep -c "def
+import_candidates"` 变 0）——此时是本次反向验证真正的"红"检查点；跑 5 个
+新测试 → `ImportError: cannot import name 'CandidatesImportError'`，
+`FAILED (errors=5)`；④`git checkout HEAD -- .../candidates.py` 恢复为新
+版本（`grep -c` 变回 1）→ 重跑同 5 个测试 → `Ran 5 tests OK`（绿）；
+⑤`git rev-parse stash@{0}` 核对等于步骤②记录的 SHA 后，用
+`git stash drop stash@{0}`（非裸 `pop`）清理，`git stash list` 确认为空，
+`git status --short` 确认其余未提交改动原样保留。全量
+`/usr/bin/python3 -m unittest discover -s tests` → `Ran 539 tests` `OK`
+0 skipped（534 基线 + 本任务 5 个新 `def test_`）；`scan_secrets.py` 0 命中
+（370 文件）；pyflakes 0 行。
+
+发现：写本节时 `main` 已被并行的「渲染页可读性」书推进（新增/删除了
+`render/`、`tests/test_journey.py`、`tests/test_renderer.py` 等与本书无关
+的内容），此刻字面执行任务书写的 `git diff main ...` 会把那些改动也混进
+比对结果（例如误报删除了 4 个不属于本书的 `def test_`）。按此前
+`journey-replace`/`docs-drift` 等书的同款先例（分支已分出后 main 前进，
+验收改用分支真实分出点），本书统一改用 `git merge-base HEAD main` 核实的
+真实分出点 `1f1e966` 做比对，不算待裁决：`git diff 1f1e966 -- tests |
+grep -E '^-\s*def test_'` 0 行；`git diff 1f1e966 --stat --
+plugins/china-trip-weaver/schema demo` 空；`git diff 1f1e966 --stat`
+只有 7 个文件（`PROGRESS.md`/两份 README/`SKILL.md`/`candidates.py`/
+`cli.py`/`test_candidates.py`），全部在白名单内。单独一次 `git commit`
+（`2bba4ba`）。
+
+终验（提交 BLOCKED.md 后复核，2026-09-10）：`BLOCKED.md` 记录一条本书
+小节（`eef9bea`，无需要停工请示领导的裁决项，五点判断记录见上）后，清空
+`.tmp/manual-check/` 临时验证文件，`git status --short` 为空。硬指标一
+四项在最终代码上重新完整跑了一遍（非任务 1 阶段的旧结果复述）：①对同一份
+`candidates init` 骨架，`candidates import`（用
+`tests/fixtures/candidate-import/items.json`，同一
+`--queried-at 2026-09-04T12:00:00+08:00`）与逐条 `add-poi`×3/`add-lodging`×2
+（参数逐条照抄 fixture 内容）产出的文件 `cmp` 零差异（`IDENTICAL`）；
+②把第 4 项（lodging "合成酒店"）删掉 `source_url` →
+`CANDIDATES_IMPORT_FAILED item=4 reason=missing required key(s):
+source_url`、exit 1、`cmp` 确认文件与导入前逐字节相同；③`--dry-run`
+→ `CANDIDATES_IMPORT_COMPLETE pois=3 lodgings=2`、exit 0、`cmp` 确认文件
+与导入前逐字节相同；④`ctw validate-candidates` 报 `CANDIDATES VALID`。
+硬指标二：`/usr/bin/python3 -m unittest discover -s tests` → `Ran 539
+tests` `OK` 0 skipped（≥539 达标；本次机器负载较高单跑 88.6s，非同一时刻
+对照，不判定为回归——沿用「机器负载会让全量测试从 33 秒飘到 85 秒」的既有
+经验）；`scan_secrets.py` 0 命中（370 文件）；pyflakes（src+tests+scripts）
+0 行；`git diff 1f1e966 --stat -- plugins/china-trip-weaver/schema demo`
+空；分支真实分出点核实为 `git merge-base HEAD main` = `1f1e966`（写本节时
+`main` 已被并行的「渲染页可读性」书推进，字面 `git diff main` 会混入无关
+改动，按既有先例改用真实分出点，见 `BLOCKED.md` 第 5 点）；`git diff
+1f1e966 --stat` 最终 9 个文件（`BLOCKED.md`/`PROGRESS.md`/两份
+README/`SKILL.md`/`candidates.py`/`cli.py`/新建的
+`tests/fixtures/candidate-import/items.json`/`test_candidates.py`），全部
+在「只允许改」白名单内；`git diff 1f1e966 -- tests | grep -E
+'^-\s*def test_'` 0 行（未删除任何测试函数）。`git push -u origin
+candidates-import` 成功（远端已建 `candidates-import` 分支，PR 未开——
+任务书只要求推分支、合并由管理者做，未要求开 PR）。任务 1、任务 2、
+`BLOCKED.md` 各一次独立 `git commit`（`f70df0f`/`2bba4ba`/`eef9bea`），
+`main` 分支未被本书触碰。硬指标一、二全部达成，止损轮次未触发（每项任务
+一次验收即通过，未出现连败），任务书结束，无遗留阻塞项。

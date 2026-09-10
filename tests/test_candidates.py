@@ -22,10 +22,13 @@ sys.path.insert(0, str(SRC))
 import china_trip_weaver.candidates as candidate_module
 from china_trip_weaver.candidates import (
     CandidateNameOption,
+    CandidatesImportError,
+    CandidatesImportResult,
     _unique_candidate_name,
     add_lodging_candidate,
     add_poi_candidate,
     fix_candidate_names,
+    import_candidates,
     initialize_candidates,
     load_candidates_schema,
     validate_candidates,
@@ -46,6 +49,7 @@ from tests.test_providers import (
 
 E2E = ROOT / "tests" / "fixtures" / "e2e"
 NAME_FIX = ROOT / "tests" / "fixtures" / "candidate-name-fix"
+CANDIDATE_IMPORT = ROOT / "tests" / "fixtures" / "candidate-import"
 POI_IDENTITY_DECISIONS = (
     ROOT / "tests" / "fixtures" / "poi-identity-decision" / "dead-corners.json"
 )
@@ -313,6 +317,82 @@ class CandidateContractTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 add_poi_candidate(path, **arguments)
             self.assertEqual(populated, path.read_bytes())
+
+    def test_import_candidates_matches_sequential_add_poi_and_add_lodging(self):
+        items = load(CANDIDATE_IMPORT / "items.json")
+        clock = FixedClock.from_iso("2026-09-04T12:00:00+08:00")
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            imported_path = Path(temporary) / "imported.json"
+            manual_path = Path(temporary) / "manual.json"
+            initialize_candidates(imported_path)
+            initialize_candidates(manual_path)
+            result = import_candidates(imported_path, items, clock)
+            for item in items:
+                payload = {key: value for key, value in item.items() if key != "kind"}
+                if item["kind"] == "poi":
+                    add_poi_candidate(manual_path, clock=clock, **payload)
+                else:
+                    add_lodging_candidate(manual_path, clock=clock, **payload)
+            self.assertEqual(CandidatesImportResult(pois=3, lodgings=2), result)
+            self.assertEqual(manual_path.read_bytes(), imported_path.read_bytes())
+
+    def test_import_candidates_does_not_write_on_item_failure(self):
+        items = copy.deepcopy(load(CANDIDATE_IMPORT / "items.json"))
+        items[3]["check_out"] = "2026-09-09"  # before check_in; fails add_lodging_candidate's date rule
+        clock = FixedClock.from_iso("2026-09-04T12:00:00+08:00")
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            path = Path(temporary) / "candidates.json"
+            initialize_candidates(path)
+            before = path.read_bytes()
+            with self.assertRaises(CandidatesImportError) as failure:
+                import_candidates(path, items, clock)
+            self.assertEqual(4, failure.exception.item_number)
+            self.assertIn("check-out must be after check-in", failure.exception.reason)
+            self.assertEqual(before, path.read_bytes())
+
+    def test_import_candidates_rejects_unknown_key(self):
+        items = copy.deepcopy(load(CANDIDATE_IMPORT / "items.json"))
+        items[1]["unexpected_field"] = "not allowed"
+        clock = FixedClock.from_iso("2026-09-04T12:00:00+08:00")
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            path = Path(temporary) / "candidates.json"
+            initialize_candidates(path)
+            before = path.read_bytes()
+            with self.assertRaises(CandidatesImportError) as failure:
+                import_candidates(path, items, clock)
+            self.assertEqual(2, failure.exception.item_number)
+            self.assertIn("unknown key", failure.exception.reason)
+            self.assertIn("unexpected_field", failure.exception.reason)
+            self.assertEqual(before, path.read_bytes())
+
+    def test_import_candidates_dry_run_leaves_file_untouched(self):
+        items = load(CANDIDATE_IMPORT / "items.json")
+        clock = FixedClock.from_iso("2026-09-04T12:00:00+08:00")
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            path = Path(temporary) / "candidates.json"
+            initialize_candidates(path)
+            before = path.read_bytes()
+            result = import_candidates(path, items, clock, dry_run=True)
+            self.assertEqual(CandidatesImportResult(pois=3, lodgings=2), result)
+            self.assertEqual(before, path.read_bytes())
+
+    def test_cli_import_subcommand_succeeds_and_validates(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            path = Path(temporary) / "candidates.json"
+            commands = (
+                [str(CTW), "candidates", "init", str(path)],
+                [
+                    str(CTW), "candidates", "import", str(path),
+                    "--items", str(CANDIDATE_IMPORT / "items.json"),
+                    "--queried-at", "2026-09-04T12:00:00+08:00",
+                ],
+                [str(CTW), "validate-candidates", str(path)],
+            )
+            results = [subprocess.run(command, text=True, capture_output=True) for command in commands]
+            for result in results:
+                self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn("CANDIDATES_IMPORT_COMPLETE pois=3 lodgings=2", results[1].stdout)
+        self.assertIn("CANDIDATES VALID", results[-1].stdout)
 
     def test_cli_add_poi_name_check_reports_unique_and_writes_candidate(self):
         scenario = load(AMAP_SCENARIOS / "g3_identity_conflict.json")
