@@ -257,16 +257,34 @@ def _add_journey_parser(commands: Any) -> None:
     journey_extract.add_argument("--trip-id", required=True)
     journey_extract.add_argument("--output-json", type=Path, required=True)
     journey_assemble = journey_commands.add_parser(
-        "assemble", help="assemble complete standalone Trips into one validated Journey",
+        "assemble", help="assemble complete standalone Trips into one validated Journey, "
+        "or replace one Trip inside an existing Journey",
     )
-    journey_assemble.add_argument("--request", type=Path, required=True)
+    journey_assemble.add_argument("--request", type=Path, default=None)
     journey_assemble.add_argument(
-        "--trip", type=Path, action="append", required=True, dest="trips",
+        "--trip", type=Path, action="append", default=None, dest="trips",
         help="path to a complete standalone Trip JSON document; repeat for every segment",
     )
     journey_assemble.add_argument("--expected-segment-days", type=int, default=None)
     journey_assemble.add_argument("--fixed-clock", default=None)
     journey_assemble.add_argument("--output-json", type=Path, required=True)
+    journey_assemble.add_argument(
+        "--journey", type=Path, default=None,
+        help="replace-Trip mode: path to the existing Journey to update",
+    )
+    journey_assemble.add_argument(
+        "--replace-trip", type=Path, default=None, dest="replace_trip",
+        help="replace-Trip mode: path to the updated standalone Trip that replaces its trip_id in --journey",
+    )
+    journey_assemble.add_argument(
+        "--base-revision", type=int, default=None, dest="base_revision",
+        help="replace-Trip mode: the Journey revision number this replacement was built against",
+    )
+    journey_assemble.add_argument(
+        "--reason", default=None,
+        help="replace-Trip mode: reason recorded on the new Journey revision; "
+        "defaults to the replacement Trip's own latest revision reason",
+    )
 
 
 def _add_replan_parser(commands: Any) -> None:
@@ -759,18 +777,44 @@ def _cmd_journey_assemble(args: argparse.Namespace) -> int:
     import hashlib
 
     from .clock import FixedClock, SystemClock
-    from .journey import assemble_journey_from_trips
+    from .journey import assemble_journey_from_trips, replace_trip_in_journey
 
+    replace_mode = (
+        args.journey is not None or args.replace_trip is not None or args.base_revision is not None
+    )
+    build_mode = args.request is not None or args.trips is not None
     try:
-        request_value = read_json(args.request)
-        trips_value = [read_json(path) for path in args.trips]
+        if replace_mode and build_mode:
+            raise ValueError(
+                "--replace-trip mode (--journey/--replace-trip/--base-revision) and build mode "
+                "(--request/--trip) are mutually exclusive"
+            )
         clock = FixedClock.from_iso(args.fixed_clock) if args.fixed_clock else SystemClock()
-        journey = assemble_journey_from_trips(
-            trips_value,
-            request_value,
-            clock,
-            expected_segment_days=args.expected_segment_days,
-        )
+        if replace_mode:
+            if args.journey is None or args.replace_trip is None or args.base_revision is None:
+                raise ValueError(
+                    "--replace-trip mode requires --journey, --replace-trip, and --base-revision together"
+                )
+            journey_value = read_json(args.journey)
+            trip_value = read_json(args.replace_trip)
+            journey = replace_trip_in_journey(
+                journey_value,
+                trip_value,
+                args.base_revision,
+                clock,
+                reason=args.reason,
+            )
+        else:
+            if args.request is None or not args.trips:
+                raise ValueError("build mode requires --request and at least one --trip")
+            request_value = read_json(args.request)
+            trips_value = [read_json(path) for path in args.trips]
+            journey = assemble_journey_from_trips(
+                trips_value,
+                request_value,
+                clock,
+                expected_segment_days=args.expected_segment_days,
+            )
         args.output_json.parent.mkdir(parents=True, exist_ok=True)
         write_canonical_json(args.output_json, journey)
         trip_days = [len(item["days"]) for item in journey["trips"]]
