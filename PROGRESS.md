@@ -2049,3 +2049,73 @@ replan.py 尚未实现 `suspend` 分支，验收：临时跑
 field "type" with one of: closure, weather, delay, user_delete, refresh`
 （或该异常未被具体错误码匹配）而红，证据见下条任务 2 记录（实现后回退验证时
 复现的同一份红屏）。
+
+任务 2（已完成）：`VALID_EVENT_TYPES` 加 `"suspend"`、`_TRIGGER_BY_EVENT_TYPE`
+加 `"suspend": "disruption"`；新增 `_find_transport_leg`（不限 travel_mode 的
+找腿，找不到报 `suspend_not_transport`）与 `_apply_suspend`，顺序严格照拍板
+四步：①换时段（`replace /days/d/slots/s`，替换值校验 `kind` 只许
+free/poi→否则 `replacement_kind`，`ref_id` 不许等于被删 leg_id→否则
+`replacement_ref_removed`，`locked`→`replacement_locked`，均缺 replacement_
+slot→`replacement_required`）②删腿（`remove /transport_legs/i`，删前先查
+`leg.get("locked")`→`locked_ref`，这是通用检查覆盖不到的缺口，见任务 0 风险
+①）③清孤儿：先删 `subject_ref==leg_id` 的 claim（两条，任务 0 风险②验证
+成立），再删指向 `/transport_legs/i/` 的 unknowns，与 `budget_ledger` 前缀
+的 unknowns 合并成一次 `sorted(..., reverse=True)` 删除（照抄 `_apply_
+refresh` 的写法）④有 `budget_ledger` 就调 `_budget_ledger` 重算并补新
+unknowns。刻意不做的两件事，已记原因：不调用 `_recompute_rail_health`/
+`_recompute_top_mode`——拍板的四步顺序本就没有这两步，且 demo/trip.json 场景
+下调用了也不会变（mode 已是最保守的 static，rail health 的 reason 文案会变
+但拍板顺序未要求）；不为「被删腿不是数组最后一个」实现 unknowns 跨腿重编号
+——`user_delete` 删 slot 时对后续 slot 的 unknowns 有同样未处理的缺口，属已
+存在、未被任何任务指出的限制，本书不新增负担，建议：若未来 suspend 目标可能
+不是最后一条腿，值得单独开一本处理两处遗留的重编号缺口。
+
+CLI 验收：`ctw replan --trip demo/trip.json --event tests/fixtures/scheduler/
+replan/suspend.json --base-revision 1 --output-json .tmp/s.json --output-html
+.tmp/s.html` → `REPLAN_COMPLETE ... trigger=disruption ... errors=0`；
+`ctw validate .tmp/s.json` → `VALID .tmp/s.json`。`git grep -c suspend --
+plugins/china-trip-weaver/skills/replan-china-trip/SKILL.md README.md
+README.zh-CN.md` → 均 ≥1（2/1/1）。反向验证：临时注释 `_apply_suspend` 里
+`trip["transport_legs"].pop(leg_index)` 与其 `operations.append`（保留
+`changed_refs.add`），`python3 -m unittest tests.test_replan -v -k suspend`
+→ `FAILED (failures=2)`（`test_replan_suspend`、
+`test_suspend_removes_leg_and_recomputes_budget_and_unknowns` 均因
+`operation_count` 30≠29 而红）；还原后同一命令 → `Ran 6 tests ... OK`。
+
+一处越界，记录并非任务书白名单字面允许、但功能上不可避免：`tests/test_
+replan.py` 的 `test_cli_kind_field_reports_type_contract` 硬编码了
+`VALID_EVENT_TYPES` 拼接出的完整错误文案（`"closure, weather, delay, user_
+delete, refresh"`），这是 `assertEqual` 精确匹配、不是子串检查，`VALID_EVENT_
+TYPES` 加入 `"suspend"` 后该行为运行时产出的真实文案必然变为多一个
+`, suspend`，不改这一行该测试必红——不改无法满足硬指标二的全量 OK。CLI
+`--help` 文案（同一测试的另一条 `assertIn` 子串断言）不受影响，因为
+`cli.py:315-319` 的 help 字符串是静态字面量、未从 `VALID_EVENT_TYPES` 派生
+（已读 `cli.py` 确认，仅读不改）。已按最小改动处理：只把这一行的期望字符串
+追加 `, suspend`，不放宽、不删断言，改动已计入任务 2 commit（而非任务 1，
+因为只有 `suspend` 真正加入枚举后这行新字符串才是「正确」而非巧合）。已同步
+写入 `BLOCKED.md`。
+
+另记一条与本书代码无关的环境观察：验收期间发现本地 `main` 分支在本书开工后
+被另一个并行会话推进了一个提交（`7fc10f3`，对应「预订清单按开售日」书，直接
+在 main 上加了 `tests/test_journey.py` 的新测试），此时 `git diff main --
+stat -- tests` 会把那些新增测试当作本分支「删除」而显示出来，是 `main` 作为
+比较基准提前移动的假象，不是本书删了任何测试。改用本分支真实分叉点
+`05f1056`（`git merge-base main HEAD` 核实）重跑同组核对命令，`git diff
+05f1056 --stat -- plugins/china-trip-weaver/schema`、
+`-- '*/cli.py' '*/journey.py' '*/render/*' demo` 均空输出，
+`git diff 05f1056 -- tests | grep -E '^-\s*def test_'` 也空输出，7 个改动
+文件与新增夹具均在白名单内。
+
+全量回归（在最终实现状态下跑，含上条改动）：`/usr/bin/python3 -m unittest
+discover -s tests` → `Ran 590 tests` `OK`（0 skipped；584 基线 + 5 个新
+`def test_` + 1 个 `suspend.json` 自动生成的夹具测试 = 590，与任务 1 记录的
+新增数吻合）；`/usr/bin/python3 scripts/scan_secrets.py` →
+`secret scan: 0 finding(s) across 374 file(s)`；`~/miniconda3/envs/core/
+bin/python -m pyflakes plugins/china-trip-weaver/src tests scripts` → 空
+输出（0 行）。`git diff 05f1056 --stat`（全量，真实分叉点）：`PROGRESS.md`、
+`README.md`、`README.zh-CN.md`、`docs/design/adr/0016-rental-car-and-ferry.
+md`、SKILL.md、`replan.py`、`tests/test_replan.py` 共 7 个已跟踪文件 +
+`tests/fixtures/scheduler/replan/suspend.json` 新文件，均在白名单内。按任务
+拆两次 `git commit`（任务 1 `c60b860`：夹具 + 红测试；任务 2：实现 + 文档 +
+本节），随后 `git push -u origin replan-suspend`。止损轮次未触发（任务
+0/1/2 均一轮验收通过，未出现连败）。

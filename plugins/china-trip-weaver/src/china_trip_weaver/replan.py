@@ -18,8 +18,8 @@ class ReplanError(ValueError):
         super().__init__(message)
 
 
-VALID_EVENT_TYPES = ("closure", "weather", "delay", "user_delete", "refresh")
-_TRIGGER_BY_EVENT_TYPE = {"user_delete": "user_edit", "refresh": "provider_change"}
+VALID_EVENT_TYPES = ("closure", "weather", "delay", "user_delete", "refresh", "suspend")
+_TRIGGER_BY_EVENT_TYPE = {"user_delete": "user_edit", "refresh": "provider_change", "suspend": "disruption"}
 
 
 def replan_trip(
@@ -87,6 +87,8 @@ def replan_trip(
         _apply_refresh(
             trip, day_index, slot_index, event, rail_result, locked_refs, operations, changed_refs, now,
         )
+    elif event_type == "suspend":
+        _apply_suspend(trip, day_index, slot_index, event, locked_refs, operations, changed_refs)
 
     if not operations:
         raise ReplanError("empty_patch", "replan produced no operation")
@@ -394,4 +396,86 @@ def _recompute_top_mode(trip: Dict[str, Any], operations: List[Dict[str, Any]]) 
     if MODE_RANK[trip["mode"]] < MODE_RANK[conservative]:
         trip["mode"] = conservative
         operations.append({"op": "replace", "path": "/mode", "value": conservative})
+
+
+def _apply_suspend(
+    trip: Dict[str, Any],
+    day_index: int,
+    slot_index: int,
+    event: Mapping[str, Any],
+    locked_refs: Set[str],
+    operations: List[Dict[str, Any]],
+    changed_refs: Set[str],
+) -> None:
+    target_slot = trip["days"][day_index]["slots"][slot_index]
+    leg_index, leg = _find_transport_leg(trip, target_slot)
+    leg_id = leg["leg_id"]
+    if leg.get("locked"):
+        raise ReplanError("locked_ref", "event would modify a locked item without explicit unlock")
+
+    replacement = copy.deepcopy(event.get("replacement_slot"))
+    if not isinstance(replacement, dict):
+        raise ReplanError("replacement_required", "suspend requires a replacement_slot")
+    if replacement.get("locked"):
+        raise ReplanError("replacement_locked", "a provider replacement cannot create a lock")
+    if replacement.get("kind") not in ("free", "poi"):
+        raise ReplanError("replacement_kind", "suspend replacement_slot kind must be free or poi")
+    if replacement.get("ref_id") == leg_id:
+        raise ReplanError(
+            "replacement_ref_removed", "replacement_slot ref_id must not point to the removed leg",
+        )
+
+    slot_path = "/days/%d/slots/%d" % (day_index, slot_index)
+    trip["days"][day_index]["slots"][slot_index] = replacement
+    operations.append({"op": "replace", "path": slot_path, "value": copy.deepcopy(replacement)})
+    if replacement.get("ref_id"):
+        changed_refs.add(replacement["ref_id"])
+
+    leg_path = "/transport_legs/%d" % leg_index
+    trip["transport_legs"].pop(leg_index)
+    operations.append({"op": "remove", "path": leg_path})
+    changed_refs.add(leg_id)
+
+    claim_remove_indexes = sorted(
+        (index for index, claim in enumerate(trip["claims"]) if claim.get("subject_ref") == leg_id),
+        reverse=True,
+    )
+    for index in claim_remove_indexes:
+        operations.append({"op": "remove", "path": "/claims/%d" % index})
+        trip["claims"].pop(index)
+
+    leg_prefix = leg_path + "/"
+    has_budget = "budget_ledger" in trip
+    remove_indexes = sorted(
+        (
+            index for index, item in enumerate(trip["unknowns"])
+            if str(item.get("field_path", "")).startswith(leg_prefix)
+            or (has_budget and str(item.get("field_path", "")).startswith("/budget_ledger/"))
+        ),
+        reverse=True,
+    )
+    for index in remove_indexes:
+        operations.append({"op": "remove", "path": "/unknowns/%d" % index})
+        trip["unknowns"].pop(index)
+
+    if has_budget:
+        ledger, budget_unknowns = _budget_ledger(
+            trip["request"], trip["days"], trip["transport_legs"], trip["lodgings"], trip["pois"], trip["claims"],
+        )
+        trip["budget_ledger"] = ledger
+        operations.append({"op": "replace", "path": "/budget_ledger", "value": copy.deepcopy(ledger)})
+        for item in budget_unknowns:
+            trip["unknowns"].append(item)
+            operations.append({
+                "op": "add", "path": "/unknowns/%d" % (len(trip["unknowns"]) - 1), "value": copy.deepcopy(item),
+            })
+
+
+def _find_transport_leg(trip: Mapping[str, Any], target_slot: Mapping[str, Any]) -> Tuple[int, Mapping[str, Any]]:
+    ref_id = target_slot.get("ref_id")
+    if ref_id:
+        for index, item in enumerate(trip["transport_legs"]):
+            if item["leg_id"] == ref_id:
+                return index, item
+    raise ReplanError("suspend_not_transport", "suspend requires a transport leg")
 

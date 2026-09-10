@@ -391,7 +391,7 @@ class ReplanTests(unittest.TestCase):
         command = run_invalid_cli_event(self, event)
         self.assertEqual(
             'REPLAN_FAILED event_type event type must use the field "type" with one of: '
-            "closure, weather, delay, user_delete, refresh\n",
+            "closure, weather, delay, user_delete, refresh, suspend\n",
             command.stderr,
         )
 

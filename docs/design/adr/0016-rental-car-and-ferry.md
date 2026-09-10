@@ -1,6 +1,6 @@
 # ADR-0016: Rental cars and ferries as first-class transport
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-10
 
 ## Context
@@ -355,3 +355,5 @@ pure code, no schema edits):
    `_apply_refresh`'s all-or-nothing pattern.
 6. `/usr/bin/python3 -m unittest discover -s tests` → `OK` with the same
    skip count as this book's baseline (regression gate).
+
+**Implementation note (2026-09-10):** command 5's `_apply_XXX` handler shipped as `replan.py`'s `suspend` event (`_apply_suspend`), removing the leg, its `budget_ledger` line, and any now-orphaned claim in the same patch as the slot swap, with `trigger: "disruption"`; commands 2–4 (a synthetic rental/ferry Trip, `validate-html` on it, and the `journey_booking_checklist` booking-deadline fix) remain open for a future book, and no `trip.schema.json` field was added, confirming the Decision above.
