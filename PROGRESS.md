@@ -1773,4 +1773,6 @@ subTest）从 `AssertionError: 'identity_conflict' not found in
 因白名单只说"只许新增"而非强制）。
 
 最终门：硬指标一、二全部达成，无遗留阻塞项，止损轮次未触发（每步验收
-一次通过，仅两次反向验证候选文案挑选失误，非代码回归）。
+一次通过，仅两次反向验证候选文案挑选失误，非代码回归）。单次
+`git commit`（`e2804b1`）直接提交 main，`git push` 后 `gh run list
+--limit 3` 最新一条 `success`（run `34489413776`，1m13s），无需重跑。
