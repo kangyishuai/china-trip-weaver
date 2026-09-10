@@ -2163,4 +2163,20 @@ city_limit=false -> 5 条结果，新增一条 name="南平市站" cityname="南
 -- tests | grep -E '^-\s*def test_'` 0 行；`git diff 05f1056 --stat --
 tests/fixtures plugins/china-trip-weaver/schema '*/rail12306.py'
 '*/planning.py' '*/mobility.py'` 空输出。任务 2 单独一次 `git commit`
-（SHA 见下）。
+（`7d46d4a`）。
+
+交付前最终复核（2026-09-10）：实网 `ctw rail --date 2026-09-20 --from 福州
+--to 武夷山市 --output-json .tmp/s1-final-check.json` → `RAIL_COMPLETE
+... legs=10 status=ready error=none`；`git diff 05f1056 --stat` 只有
+`BLOCKED.md`/`PROGRESS.md`/`amap_http.py`/`mcp_stdio.py`/
+`station_distance.py`/`test_amap_live.py`/`test_rail_station_fallback.py`
+七个文件；`git diff 05f1056 -- tests | grep -E '^-\s*def test_'` 0 行；
+禁区 diff（`tests/fixtures`/`schema`/`rail12306.py`/`planning.py`/
+`mobility.py`）空输出；全量 `Ran 592 tests` `OK` 0 skipped（≥591 达标，
+584 基线 + 8 个新 `def test_`：任务 1 的 3 个 + 任务 2 的 `test_amap_live`
+1 个 + `RailStationNationwideDistanceTests` 4 个）；`scan_secrets.py`
+0 命中；pyflakes 0 行。硬指标一、硬指标二均达成，两个任务各一次反向验证
+（红→绿，终端记录见各自小节），止损轮次未触发（两个任务各遇到一次实测
+才暴露的问题——任务 1 的 `query` 字段与 `rail12306.py` 硬校验冲突、任务 2
+的额外 API 调用冲撞既有测试——均一次定位、一次修复、复测即绿，不构成
+「连败」）。分支推送记录见本节末尾。
