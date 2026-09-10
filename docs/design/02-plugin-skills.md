@@ -4,7 +4,7 @@
 
 ## 1. 插件包布局（阶段三设计稿，实现前所写）
 
-以下是写在实现之前的阶段三设计稿；实际布局与真实目录树已随 `0.7.0` 发布并可在本机 Codex 安装运行，一处与下方设计稿不同——真实包用单个 `providers/home_shim.cjs`（`CTW_ISOLATED_HOME` 环境变量）而非三个按 provider 拆分的 shim 文件。真实目录树见仓库根 `git ls-files plugins/china-trip-weaver`；已装校验见 `bash scripts/install_local_plugin.sh --check`。
+以下是写在实现之前的阶段三设计稿；实际布局与真实目录树已随 2026-09-08 的发布上线并可在本机 Codex 安装运行，一处与下方设计稿不同——真实包用单个 `providers/home_shim.cjs`（`CTW_ISOLATED_HOME` 环境变量）而非三个按 provider 拆分的 shim 文件。真实目录树见仓库根 `git ls-files plugins/china-trip-weaver`；已装校验见 `bash scripts/install_local_plugin.sh --check`。
 
 ```text
 marketplace-root/
@@ -242,7 +242,7 @@ policy:
 
 ## 9. 桌面应用本地安装验证路径（无 CLI）
 
-以下步骤写在实现之前，如今已是实际在跑的验收清单，而不是阶段三才做的事：现役版本见 [`docs/manual-acceptance.md`](../manual-acceptance.md)（英文）/[`docs/manual-acceptance.zh-CN.md`](../manual-acceptance.zh-CN.md)（中文），`0.7.0` 已按该清单在真实 Codex Desktop 上装机验收。下面按原始设计稿逐条保留，供与现役清单对照：[依据：官方规范核查 10](../research/01-codex-spec.md#10-桌面应用无-cli-时的本地安装与验证)
+以下步骤写在实现之前，如今已是实际在跑的验收清单，而不是阶段三才做的事：现役版本见 [`docs/manual-acceptance.md`](../manual-acceptance.md)（英文）/[`docs/manual-acceptance.zh-CN.md`](../manual-acceptance.zh-CN.md)（中文），2026-09-08 已按该清单在真实 Codex Desktop 上装机验收。下面按原始设计稿逐条保留，供与现役清单对照：[依据：官方规范核查 10](../research/01-codex-spec.md#10-桌面应用无-cli-时的本地安装与验证)
 
 1. 静态验证 package 中有 `.codex-plugin/plugin.json`、9 个 Skill 和 `.mcp.json`；9 个 name/目录匹配，8 个子 Skill policy 均为 `false`。
 2. 在 Plugins Directory 检查并禁用/卸载 `china-travel-assistant`；若不能确认，停止。

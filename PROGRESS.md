@@ -2,23 +2,29 @@
 
 唯一的当前进度记录。2026-09-03 到 09-06 的逐轮任务书、实测证据、验收记录已归档，见「历史索引」。
 
-## 现状速览（2026-09-08 实测）
+## 现状速览（2026-09-10 实测）
 
-- 版本：`0.7.0`，唯一来源是
+- 版本：`0.8.0`，唯一来源是
   `plugins/china-trip-weaver/.codex-plugin/plugin.json` 与
   `src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
-  位置一律引用这两处之一，不再有第三处字面量。
+  位置一律引用这两处之一，历史版本只以日期提及、不写字面值。
 - 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量
-  `Ran 507 tests`，`OK`，0 skipped；`scripts/scan_secrets.py` 0 命中。
-- 本机 Codex 与源码的差距：已装 `0.7.0`，`bash scripts/install_local_plugin.sh
-  --check` exit 0、零差异(2026-09-08 实测)。三个 provider 的
-  `*_home_shim.cjs` 已合并为 `providers/home_shim.cjs`(环境变量统一
-  `CTW_ISOLATED_HOME`);`ctw doctor` 报告新增 `runtime_root` 字段
-  (`_repo_root()`,源码里是仓库根,本地市场安装后是
-  `~/.codex/plugins/cache/china-trip-weaver-local`);仓库 `.npm-cache`/
-  `.tmp` 与已装缓存的同名目录(合计约 1 GB)已清空,`.tmp/.gitkeep` 保留,
-  下次实网调用会自动重建。今后每次升版本号都跑该脚本刷新本机 Codex,中间
-  环节不装。
+  `Ran 525 tests`，`OK`，0 skipped；`scripts/scan_secrets.py` 0 命中；
+  `~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src
+  tests scripts` 0 行。
+- 0.8.0 内容（三份任务书并行，2026-09-10）：`replan_trip` 新增 `refresh`
+  事件，用 `ctw rail --output-json` 的结果原地换掉一条火车腿（命令行
+  `--rail-result` 接线是下一本书）；`ctw journey extract` 与
+  `ctw journey assemble`（从完整 Trip 拼 Journey；替换模式是下一本书）；
+  设计文档与 schedule Skill 对齐 ADR-0014/0012/0010/0011 与现役代码；
+  站点距离的城市匹配接受 district；CONTRIBUTING 新增发版流程。发版流程
+  首次实跑：`install_local_plugin.sh` 装机、`git tag v0.8.0`、GitHub
+  Release；`0.7.0` 补打了 tag（无 Release）。
+- 并行惯例：一波里只有一份书在主检出 `main` 直改，其余各在 `.tmp/wt-<名>`
+  的 worktree 分支上干、只推分支，合并与冲突（PROGRESS/BLOCKED 末尾追加）
+  由管理者解决；worktree 里不跑 `install_local_plugin.sh`。
+- 本机 Codex 与源码的差距：以 `bash scripts/install_local_plugin.sh --check`
+  实时输出为准；`ctw doctor` 的 `runtime_root` 是缓存所在目录，可随时删除。
 
 ## 定位失败天花板
 
