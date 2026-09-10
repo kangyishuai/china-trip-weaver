@@ -2047,3 +2047,54 @@ generated_at 不挪」按字面理解为「不额外写 clamp 逻辑，让计算
 `'2026-09-17' != '2026-10-01T08:00:00+08:00'`）。单独一次 `git commit`
 只含 `tests/test_journey.py`（journey.py 尚未改动，属故意的红提交，后续
 任务 2 的提交会把它转绿）。
+
+任务 2（已完成）：`journey.py` 新增三个私有函数——
+`_journey_transport_leg_deadline(trip, leg)->(deadline, reason)`（顺序：腿
+`claim_ids` 里若有 `field_path=="/booking_deadline"` 的 claim → 用其 `value`
++ 「declared booking deadline (claim …)」reason；否则 `travel_mode=="rail"`
+→ `_journey_rail_presale_date` 算开售日 + 含 `PRESALE_DAYS`/开售日/出发日的
+英文 reason（原始数据里 `unknown`/`provider_health` 的 reason 字段全是英文，
+沿用这个既有约定而非任务书示例的中文措辞）；否则不变，`depart_at`+
+`reason=None`）、`_journey_leg_booking_deadline_claim`（按 `claim_ids` 精确
+匹配 `field_path`）、`_journey_rail_presale_date`（`depart_date -
+timedelta(days=PRESALE_DAYS-1)`，未写与 `generated_at` 比较/钳制的代码——
+「开售日早于 generated_at 不挪」按字面理解为「不额外 clamp，让裸算的过去
+日期自然排到列表最前」，没有可运行的场景能反证这个解读，未展开验证）。
+`journey_booking_checklist` 交通分支改调用新函数并把 `reason` 传给
+`_journey_action_item`；`_journey_trace_deadline` 的 `transport_leg` 分支
+改调用同一函数取 `[0]`（供 unknown/risk 项共用，行为已被红→绿测试①覆盖，
+因为 `/transport_legs/0/service_number` 等 unknown 正是走这条分支）。
+`import PRESALE_DAYS from .providers.rail12306`（顶层，无循环导入，
+`rail12306.py` 只依赖 `..clock`/`..contracts`/`..evidence`/`.base`/
+`.mcp_stdio`）。
+`/usr/bin/python3 scripts/build_renderer_fixtures.py` 重生成，`git status
+--short` 只有 `demo/journey-16d/journey.html` 变化（`tests/fixtures/
+renderer/` 与其余 demo 均字节不变，因为只有 journey-16d 含 rail 腿）。
+硬指标一实测：checklist 第一项
+`{"item_id":"checklist-594fdeeefab0fa08","kind":"transport",...,
+"deadline":"2026-09-17","reason":"12306 presale window is 15 days;
+tickets go on sale 2026-09-17 for departure 2026-10-01",...}`；
+`grep -o 'data-deadline="2026-09-17"' demo/journey-16d/journey.html | wc -l`
+→ 11；`plugins/china-trip-weaver/scripts/ctw journey validate-html demo/
+journey-16d/journey.html demo/journey-16d/journey.json` → `JOURNEY HTML
+VALID ... errors=0`；`/usr/bin/python3 scripts/qa_renderer_browser.py
+demo/journey-16d/journey.html --output .tmp/qa --viewports 375x812
+--sections 15` → `"failures": []`（`handshakeAttempts":1`，无抖动）。
+硬指标二实测：任务 1 的 4 个测试全绿；`tests.test_journey` 整模块
+`Ran 69 tests ... OK`；全仓 `/usr/bin/python3 -m unittest discover -s
+tests` → `Ran 588 tests ... OK` 0 skipped（584 基线+4 新测试，与「≥588」
+吻合）；`scan_secrets.py` → `0 finding(s) across 373 file(s)`；
+`~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/
+src tests scripts` 0 行；`git diff 05f1056 -- tests | grep -E '^-\s*def
+test_'` 0 行；`git diff 05f1056 --stat -- plugins/china-trip-weaver/schema
+'*/render/*' '*/replan.py' '*/planning.py' README.md` 空输出。
+反向验证：`_journey_rail_presale_date` 临时改成 `timedelta(days=0)` 并加
+`# TEMP-REVERSE-VERIFY` 标记 → 任务 1 的 4 个测试里 2 个转红
+（`test_rail_leg_booking_deadline_is_the_presale_open_date_with_a_reason`
+`AssertionError: '2026-09-17' != '2026-10-01'`、
+`test_checked_in_sixteen_day_demo_first_priority_action_is_the_earliest_
+rail_presale_date` 同款）→ 还原 → `git diff 05f1056 -- journey.py | grep -c
+TEMP-REVERSE-VERIFY` 为 0（标记已清零）→ 4 个测试重新全绿。
+`BLOCKED.md` 追加「无」条目。单独一次 `git commit` 只含 `journey.py`、
+`demo/journey-16d/journey.html`（把任务 1 的红测试转绿）。任务书结束，
+硬指标一、二全部达成，止损轮次未触发（任务 0/1/2 均一轮验收通过）。

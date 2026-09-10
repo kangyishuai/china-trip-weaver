@@ -42,6 +42,7 @@ from .providers.amap_http import (
     AMapRequestMemo,
     MAX_CALLS_PER_RUN,
 )
+from .providers.rail12306 import PRESALE_DAYS
 from .variflight_enrichment import VariFlightBackend
 
 
@@ -1781,16 +1782,18 @@ def journey_booking_checklist(
                 "transport_legs",
                 leg_index,
             )
+            deadline, reason = _journey_transport_leg_deadline(trip, leg)
             items.append(_journey_action_item(
                 "checklist",
                 "transport",
                 trip_index,
                 trip,
                 trace,
-                leg.get("depart_at") or trip["request"]["start_date"],
+                deadline,
                 None,
                 None,
                 leg.get("provider"),
+                reason=reason,
             ))
         for lodging_index, lodging in enumerate(trip["lodgings"]):
             trace = _journey_entity_trace(
@@ -1968,6 +1971,43 @@ def _journey_deadline_sort_key(value: str) -> Tuple[str, int, str]:
     return (value[:10], 0 if len(value) == 10 else 1, value)
 
 
+def _journey_transport_leg_deadline(
+    trip: Mapping[str, Any],
+    leg: Mapping[str, Any],
+) -> Tuple[str, Optional[str]]:
+    """Resolve when a transport leg must be booked by, with an explanation when it is not departure time."""
+    depart_at = leg.get("depart_at") or trip["request"]["start_date"]
+    claim = _journey_leg_booking_deadline_claim(trip, leg)
+    if claim is not None:
+        return str(claim["value"]), "declared booking deadline (claim %s)" % claim["claim_id"]
+    if leg.get("travel_mode") == "rail":
+        sale_date = _journey_rail_presale_date(depart_at)
+        return sale_date, (
+            "12306 presale window is %d days; tickets go on sale %s for departure %s"
+            % (PRESALE_DAYS, sale_date, depart_at[:10])
+        )
+    return depart_at, None
+
+
+def _journey_leg_booking_deadline_claim(
+    trip: Mapping[str, Any],
+    leg: Mapping[str, Any],
+) -> Optional[Mapping[str, Any]]:
+    claim_ids = set(leg.get("claim_ids") or ())
+    return next(
+        (
+            claim for claim in trip["claims"]
+            if claim["claim_id"] in claim_ids and claim["field_path"] == "/booking_deadline"
+        ),
+        None,
+    )
+
+
+def _journey_rail_presale_date(depart_at: str) -> str:
+    depart_date = date.fromisoformat(depart_at[:10])
+    return (depart_date - timedelta(days=PRESALE_DAYS - 1)).isoformat()
+
+
 def _journey_trace_context(trip: Mapping[str, Any]) -> Mapping[str, Any]:
     names: Dict[str, str] = {}
     request = trip["request"]
@@ -2080,7 +2120,7 @@ def _journey_trace_deadline(
 ) -> str:
     value = trace["source_value"]
     if trace["source_kind"] == "transport_leg":
-        return value.get("depart_at") or trip["request"]["start_date"]
+        return _journey_transport_leg_deadline(trip, value)[0]
     if trace["source_kind"] == "lodging":
         return value["check_in"]
     if trace["source_kind"] == "poi":
