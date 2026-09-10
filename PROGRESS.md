@@ -922,3 +922,13 @@ plugins/.../anysearch.py` 里不含 `URL: ` 残留→ 全量重跑
 BLOCKED.md 记录一条：`git diff main --stat -- tests/fixtures/providers
 ':!*/anysearch/*'` 按任务书原样跑**不为空**（`manifest.json` 28 行变
 动)，判断与取舍见 `BLOCKED.md` 本书条目。
+
+任务 1 单独一次 `git commit`（`745d35e`，19 files changed）。提交后复核
+生成器幂等性：`/usr/bin/python3 scripts/build_provider_fixtures.py` 重跑
+→ `git status --short -- tests/fixtures` 输出为空（硬指标一「生成器重跑
+零差异」达成）。`git push -u origin anysearch-contract` 成功。硬指标一
+（7 份夹具各有测试、全绿、生成器幂等、其他 provider 夹具零改动）与硬指标
+二（≥541 测试见上、secrets 0、pyflakes 0、schema/credentials.py/cli.py
+零改动、分支已推送）均达标，唯一记录在案的偏差是 BLOCKED.md 那条
+manifest.json 连带变动，止损轮次未触发（1 轮验收即全绿，未连败）。任务书
+结束，`ctw research` 命令与 doctor 探针留给下一本书（任务书原文已声明）。
