@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import socket
+import subprocess
 import sys
+import tempfile
 import unittest
 import urllib.error
 import urllib.parse
@@ -14,6 +16,7 @@ from typing import Any, Mapping
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "plugins" / "china-trip-weaver" / "src"
+CTW = ROOT / "plugins" / "china-trip-weaver" / "scripts" / "ctw"
 sys.path.insert(0, str(SRC))
 
 from china_trip_weaver.clock import FixedClock
@@ -298,6 +301,89 @@ class AnySearchFixtureTests(unittest.TestCase):
         self.assertNotIn("\x1b", name)
         self.assertIn("[REDACTED]", name)
         self.assertIn("详情", name)
+
+
+class AnySearchResearchCLITests(unittest.TestCase):
+    def test_cli_research_with_fixture_writes_items_and_succeeds(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            output = Path(temporary) / "r.json"
+            command = subprocess.run(
+                [
+                    str(CTW), "research",
+                    "--fixture", str(FIXTURES / "success.json"),
+                    "--city", "上海", "--query", "博物馆",
+                    "--fixed-clock", "2026-09-04T00:00:00+08:00",
+                    "--output-json", str(output),
+                ],
+                text=True, capture_output=True,
+            )
+            self.assertEqual(0, command.returncode, command.stdout + command.stderr)
+            self.assertIn("RESEARCH_COMPLETE", command.stdout)
+            payload = load(output)
+            self.assertGreaterEqual(len(payload["items"]), 1)
+            self.assertEqual("ready", payload["health"]["status"])
+            self.assertIsNone(payload["error_class"])
+
+    def test_cli_research_without_key_reports_missing_and_exits_two_with_no_network_events(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            home = Path(temporary) / "home"
+            home.mkdir()
+            output = Path(temporary) / "r2.json"
+            command = subprocess.run(
+                [
+                    str(CTW), "research",
+                    "--city", "上海", "--query", "博物馆",
+                    "--progress", "ndjson",
+                    "--output-json", str(output),
+                ],
+                env={"PATH": "/usr/bin:/bin", "HOME": str(home)},
+                text=True, capture_output=True,
+            )
+            self.assertEqual(2, command.returncode, command.stdout + command.stderr)
+            self.assertIn("RESEARCH_COMPLETE", command.stdout)
+            payload = load(output)
+            self.assertEqual("missing", payload["health"]["status"])
+            self.assertEqual("credential_missing", payload["error_class"])
+            self.assertEqual([], payload["items"])
+            self.assertTrue(command.stderr.strip(), "expected at least a completion progress line")
+            for line in command.stderr.splitlines():
+                if not line.strip():
+                    continue
+                event = json.loads(line)
+                self.assertNotIn(event.get("event"), ("query", "degrade", "retry"))
+
+    def test_cli_research_fixed_clock_without_fixture_fails(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            output = Path(temporary) / "r.json"
+            command = subprocess.run(
+                [
+                    str(CTW), "research",
+                    "--city", "上海", "--query", "博物馆",
+                    "--fixed-clock", "2026-09-04T00:00:00+08:00",
+                    "--output-json", str(output),
+                ],
+                text=True, capture_output=True,
+            )
+            self.assertEqual(1, command.returncode, command.stdout + command.stderr)
+            self.assertIn("RESEARCH_FAILED", command.stderr)
+            self.assertIn("--fixed-clock is allowed only with --fixture", command.stderr)
+            self.assertFalse(output.exists())
+
+    def test_cli_research_rejects_non_anysearch_fixture(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            output = Path(temporary) / "r.json"
+            command = subprocess.run(
+                [
+                    str(CTW), "research",
+                    "--fixture", str(ROOT / "tests" / "fixtures" / "providers" / "rail12306" / "success.json"),
+                    "--city", "上海", "--query", "博物馆",
+                    "--output-json", str(output),
+                ],
+                text=True, capture_output=True,
+            )
+            self.assertEqual(1, command.returncode, command.stdout + command.stderr)
+            self.assertIn("must be an anysearch provider fixture", command.stderr)
+            self.assertFalse(output.exists())
 
 
 if __name__ == "__main__":

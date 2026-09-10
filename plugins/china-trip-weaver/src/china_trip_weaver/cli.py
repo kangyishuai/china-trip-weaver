@@ -72,6 +72,7 @@ def _parser() -> argparse.ArgumentParser:
     _add_journey_parser(commands)
     _add_replan_parser(commands)
     _add_rail_parser(commands)
+    _add_research_parser(commands)
     _add_mobility_parser(commands)
     _add_lodging_parser(commands)
     _add_air_parser(commands)
@@ -348,6 +349,18 @@ def _add_rail_parser(commands: Any) -> None:
     rail.add_argument("--output-json", type=Path, default=None)
 
 
+def _add_research_parser(commands: Any) -> None:
+    research = commands.add_parser("research", help="query the pinned AnySearch MCP endpoint for sourced candidates")
+    _add_progress_argument(research)
+    research.add_argument("--city", required=True)
+    research.add_argument("--query", required=True)
+    research.add_argument("--max-results", type=int, default=10)
+    research.add_argument("--deadline", type=float, default=15.0)
+    research.add_argument("--fixture", type=Path, default=None)
+    research.add_argument("--fixed-clock", default=None)
+    research.add_argument("--output-json", type=Path, required=True)
+
+
 def _add_mobility_parser(commands: Any) -> None:
     mobility = commands.add_parser("mobility", help="build a bounded live AMap route matrix for candidates")
     _add_progress_argument(mobility)
@@ -455,6 +468,7 @@ def main(
         "lodging": lambda: _cmd_lodging_air(args, progress),
         "air": lambda: _cmd_lodging_air(args, progress),
         "rail": lambda: _cmd_rail(args, progress),
+        "research": lambda: _cmd_research(args, credential_path, progress),
         "replan": lambda: _cmd_replan(args),
         "render": lambda: _cmd_render(args),
         "validate-html": lambda: _cmd_validate_html(args),
@@ -1241,6 +1255,92 @@ def _cmd_rail(args: argparse.Namespace, progress: "_NDJSONProgress") -> int:
     except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
         _progress_failed(progress, "rail")
         print("RAIL_FAILED %s" % exc, file=sys.stderr)
+        return 1
+
+
+def _cmd_research(
+    args: argparse.Namespace,
+    credential_path: Optional[Path],
+    progress: "_NDJSONProgress",
+) -> int:
+    from .clock import FixedClock, SystemClock
+    from .contracts import ProviderRequest
+    from .credentials import resolve_credentials
+    from .errors import CTWError
+    from .providers.anysearch import AnySearchAdapter
+    from .providers.anysearch_http import AnySearchHTTPTransport
+    from .providers.base import ProviderContext, ReplayTransport, stable_id
+
+    try:
+        if args.deadline <= 0:
+            raise ValueError("--deadline must be positive")
+        if args.fixed_clock and args.fixture is None:
+            raise ValueError("--fixed-clock is allowed only with --fixture")
+        repo_root = _repo_root()
+        if args.fixture is not None:
+            fixture = read_json(args.fixture)
+            if fixture.get("provider") != "anysearch" or not isinstance(fixture.get("transport"), dict):
+                raise ValueError("--fixture must be an anysearch provider fixture")
+            clock = FixedClock.from_iso(args.fixed_clock or fixture["captured_at"])
+            transport = ReplayTransport(fixture["transport"], raw_ref=args.fixture.as_posix())
+            fixture_configured = fixture.get("credential_state") == "configured"
+            credentials = resolve_credentials(
+                {"ANYSEARCH_API_KEY": "ctw-fixture-anysearch-not-real"} if fixture_configured else {},
+                repo_root / ".tmp" / "research-no-credentials",
+            )
+        else:
+            clock = SystemClock()
+            try:
+                credentials = resolve_credentials(credential_path=credential_path)
+            except CTWError as exc:
+                print(canonical_json({
+                    "credential_error": {"code": exc.code, "status": exc.error_class},
+                }), file=sys.stderr)
+                return 1
+            transport = None
+            if credentials.get("ANYSEARCH_API_KEY"):
+                transport = AnySearchHTTPTransport(credentials)
+        _attach_progress(transport, progress)
+        request = ProviderRequest(
+            request_id=stable_id("research-query", args.city, args.query, args.max_results),
+            capability="research",
+            parameters={"city": args.city, "query": args.query, "max_results": args.max_results},
+            deadline_ms=int(args.deadline * 1000),
+            as_of=clock.now().date().isoformat(),
+            cache_policy="bypass",
+            trace={"stage": "research-cli"},
+        )
+        context = ProviderContext(clock=clock, credentials=credentials, transport=transport)
+        result = AnySearchAdapter().query(request, context)
+        output = {
+            "provider": result.provider,
+            "provider_version": result.provider_version,
+            "queried_at": result.queried_at,
+            "items": list(result.normalized_items),
+            "claims": list(result.claims),
+            "health": result.health,
+            "warnings": list(result.warnings),
+            "error_class": result.error_class,
+        }
+        args.output_json.parent.mkdir(parents=True, exist_ok=True)
+        write_canonical_json(args.output_json, output)
+        print("RESEARCH_COMPLETE output=%s items=%d status=%s error=%s" % (
+            args.output_json,
+            len(result.normalized_items),
+            result.health["status"],
+            result.error_class or "none",
+        ))
+        progress.emit({
+            "event": "completion", "command": "research", "provider": result.provider,
+            "status": "ok" if result.normalized_items else "degraded",
+            "items": len(result.normalized_items),
+        })
+        if result.normalized_items:
+            return 0
+        return 2 if result.error_class in ("no_results", "credential_missing") else 1
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        _progress_failed(progress, "research")
+        print("RESEARCH_FAILED %s" % exc, file=sys.stderr)
         return 1
 
 

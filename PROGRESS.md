@@ -1385,3 +1385,81 @@ candidates-import` 成功（远端已建 `candidates-import` 分支，PR 未开�
 `BLOCKED.md` 各一次独立 `git commit`（`f70df0f`/`2bba4ba`/`eef9bea`），
 `main` 分支未被本书触碰。硬指标一、二全部达成，止损轮次未触发（每项任务
 一次验收即通过，未出现连败），任务书结束，无遗留阻塞项。
+
+## 书 D2：`ctw research` 命令 + doctor 探针 + planning 健康行（2026-09-10，main 直改）
+
+任务 0 核对（HEAD `df5712e`）：565 测试 OK 0 skip、secrets 0、pyflakes 0，
+均与任务书吻合；逐条核实 `anysearch_http.py` 工具名写死 `search`
+（transport.py:68）、适配器用 `parameters["city"]`（anysearch.py:50）、
+`test_anysearch.py` 用 `RecordingOpener`、7 份夹具、`_doctor_probe_report`
+里 anysearch 只报 credential、`_probe_flyai`/`_probe_layers`/
+`_not_run_probe`/`_add_rail_parser`/`_cmd_rail` 样板、planning.py:2481
+健康行文案、两份 README 第 48 行、research SKILL 第 12 行，全部与任务书
+描述一致，不停工。
+理解的目标：`ctw research` 走 `ctw rail` 同款信封与退出码（有结果0/空结果
+或 Key missing 2/其他 1），Key missing 时不构造 `AnySearchHTTPTransport`；
+doctor 的 anysearch 改成 `credential`+`probe` 两键（探针用新增的
+`get_sub_domains`/`{"domain":"travel"}`，绕开只认「search」markdown 格式的
+`AnySearchAdapter.normalize()`，直接调 transport 拿 envelope 状态码分层）；
+`planning.py` 健康行按凭据配置与否二选一文案。
+顺序：任务 1（研究命令，先做）→ 任务 2（doctor 探针 + 2 份新夹具 +
+planning 健康行）→ 任务 3（文档）。
+最大风险（已定判断）：`plan_trip` 本身无 credentials 参数，其余 provider
+的健康行都靠专属 Backend 构造函数注入凭据、从不在库函数内部读环境；给
+anysearch 健康行判断真实凭据状态若比照此模式需要改 `plan_trip`/`_cmd_plan`
+签名（超出「只改健康行」的界限）。判断：改用 `resolve_credentials()`
+真实默认值（`os.environ`+`~/.config/china-trip-weaver/credentials.env`）在
+`_provider_health` 内部直接读，仅影响 anysearch 这一条目、不改函数签名；
+代价是这一条目的确定性从此依赖真实机器状态，与其余条目的纯函数注入模式不
+一致——已实测本机 `credentials.env` 现无 `ANYSEARCH_API_KEY`，
+`test_keyless_e2e.py` 的 `assertIn("no auto-registration...", ...)` 用
+`assertIn` 而非 `assertEqual`，只要 missing 分支文案字面不变就不受影响；
+若用户未来在全局 credentials.env 里添加该 Key，`ctw plan`/keyless 测试会
+如实把 anysearch 健康行显示为 configured（status 变化但不再匹配某个更严格
+的隐藏断言——已逐一排查 `provider_health`/`anysearch` 相关断言，见下文任务
+2 小节），判为可接受：该条目从不发起网络请求，「诚实反映真实凭据状态」
+优于「假装永远 missing」。
+
+任务 1（已完成）：`_add_research_parser`/`_cmd_research` 加在 `_cmd_rail`
+旁边，信封字段（`provider`/`provider_version`/`queried_at`/`items`/
+`claims`/`health`/`warnings`/`error_class`）与完成行格式
+`RESEARCH_COMPLETE ... items=%d status=%s error=%s`、失败行
+`RESEARCH_FAILED %s` 均照抄 `_cmd_rail`。`--fixture` 分支只取
+`fixture["transport"]`/`captured_at`（不取 `fixture["request"]`，与
+`_cmd_rail` 对 rail12306 夹具的处理方式一致——两者的夹具文件本身都带一份
+更完整的 `request` 子对象，是 `tests/test_anysearch.py` 等契约测试的固定
+格式，CLI 层统一不用它，请求参数永远来自命令行），并按
+`fixture["credential_state"]` 决定是否注入占位 Key，使 7 份夹具（不只
+success.json）都能通过 `--fixture` 正确回放。非 `--fixture` 分支：Key
+missing 时 `transport=None`（不构造 `AnySearchHTTPTransport`），交给
+`AnySearchAdapter().query()`（继承自 `BaseAdapter`）自身已有的
+credential-missing 短路产出 `health.status=missing`、
+`error_class=credential_missing`——`context.transport` 在这条路径上从未被
+引用，传 `None` 是安全的。退出码：有 items 恒 0；否则
+`error_class in ("no_results","credential_missing")` 为 2，其余为 1（严格
+按任务书「猜的」规则，未扩大范围到 rate_limited/timeout 等其他 error_class）。
+`--deadline`（默认 15s）任务书信号里未列但比照 rail/mobility/lodging/air
+每个 live 命令都有的既有模式补上，不算越界（不影响任何列出的验收命令）。
+硬指标一实测：`ctw research --fixture .../success.json --city 上海 --query
+博物馆 --fixed-clock 2026-09-04T00:00:00+08:00 --output-json .tmp/r.json`
+→ `RESEARCH_COMPLETE ... items=1 status=ready error=none`、exit 0；
+`env -u ANYSEARCH_API_KEY HOME=$(mktemp -d) ctw research --city 上海
+--query 博物馆 --progress ndjson --output-json .tmp/r2.json` → exit 2，
+进度流只有一行 `{"command":"research","event":"completion",...}`（无
+query/degrade/retry 任何 provider=anysearch 的网络事件），r2.json 的
+`health.status=missing`。反向验证（终端记录）：临时把
+`if credentials.get("ANYSEARCH_API_KEY"):` 改成
+`if True:  # TEMP-REVERSE-VERIFY`（无条件构造 transport）→ 写一个
+monkeypatch 驱动脚本对 `AnySearchHTTPTransport.__init__`/`execute` 计数
+（不让真实 `__init__`/urllib 执行，避免真的打网络）→ 同一 missing-key 场景
+下 `__init__` 被调用 1 次（证明短路移除后确实会构造传输层对象）、
+`execute` 仍 0 次（`BaseAdapter.query()` 自身的凭据检查是更深一层防线，
+两层防线独立生效）→ 还原短路 → `git diff -- cli.py | grep -c
+TEMP-REVERSE-VERIFY` 为 0 → 重跑同一驱动脚本，`__init__`/`execute` 均
+0 次。`tests/test_anysearch.py` 新增 `AnySearchResearchCLITests`
+（4 个 `def test_`，走 `subprocess.run([CTW, "research", ...])`，照抄
+`test_replan.py`/`test_plugin_conflicts.py` 的既有 CLI 子进程测试与
+`env={"PATH":..., "HOME":...}` 隔离凭据的写法）：fixture 成功、无 Key
+exit 2 且进度流零网络事件、`--fixed-clock` 无 `--fixture` 报错、
+非 anysearch 夹具报错。全量 `Ran 569 tests` `OK` 0 skipped（565+4）；
+pyflakes 0 行；secrets 0。`git commit` 单独一次提交任务 1。
