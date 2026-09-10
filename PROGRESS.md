@@ -2098,3 +2098,7 @@ TEMP-REVERSE-VERIFY` 为 0（标记已清零）→ 4 个测试重新全绿。
 `BLOCKED.md` 追加「无」条目。单独一次 `git commit` 只含 `journey.py`、
 `demo/journey-16d/journey.html`（把任务 1 的红测试转绿）。任务书结束，
 硬指标一、二全部达成，止损轮次未触发（任务 0/1/2 均一轮验收通过）。
+
+`git push origin main` 后 `gh run watch 34495461224 --exit-status`：两条矩阵
+（3.9 57s、3.13 1m42s）均全绿；`gh run list --limit 3` 最新一条
+`completed success`（`4809bb8`，1m48s），无需 rerun。
