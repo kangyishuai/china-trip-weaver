@@ -1151,7 +1151,7 @@ class KeylessE2ETests(unittest.TestCase):
                 [sys.executable, str(ROOT / "scripts" / "qa_renderer_browser.py"), str(html_path), "--output", str(folder / "qa"), "--viewports", "375x812,1440x900"],
                 text=True,
                 capture_output=True,
-                timeout=60,
+                timeout=150,
             )
             self.assertEqual(0, qa.returncode, qa.stdout + qa.stderr)
             report = load(folder / "qa" / "qa-report.json")

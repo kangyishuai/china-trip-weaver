@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import base64
 import copy
 import hashlib
+import importlib.util
 import json
 import re
 import subprocess
@@ -9,6 +11,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -341,3 +344,85 @@ class ProviderAttributionTests(unittest.TestCase):
         self.assertNotIn('data-attribution="1"', html)
         self.assertNotIn("地图与路线数据来源于高德地图", html)
         self.assertTrue(validate_html(html, trip).ok)
+
+
+def _load_qa_renderer_module():
+    module_path = ROOT / "scripts" / "qa_renderer_browser.py"
+    spec = importlib.util.spec_from_file_location("qa_renderer_browser_under_test", module_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class _StubHandshakeChromePipe:
+    """Stands in for ChromePipe so run_qa's retry logic can run without a real browser."""
+
+    instances = 0
+    pending_timeouts = 0
+
+    def __init__(self, chrome, profile):
+        type(self).instances += 1
+        self.events = []
+
+    def command(self, method, params=None, session_id=None, timeout=10.0):
+        if method == "Target.createTarget" and type(self).pending_timeouts > 0:
+            type(self).pending_timeouts -= 1
+            raise TimeoutError("stub handshake timeout")
+        if method == "Target.createTarget":
+            return {"targetId": "stub-target"}
+        if method == "Target.attachToTarget":
+            return {"sessionId": "stub-session"}
+        if method == "Runtime.evaluate":
+            return {"result": {"value": {}}}
+        if method in ("Page.captureScreenshot", "Page.printToPDF"):
+            return {"data": base64.b64encode(b"stub-bytes").decode("ascii")}
+        return {}
+
+    def wait_event(self, method, session_id=None, timeout=10.0):
+        return {}
+
+    def close(self):
+        pass
+
+
+class QaRendererHandshakeTests(unittest.TestCase):
+    """scripts/qa_renderer_browser.py's CDP handshake retry, exercised via a stubbed ChromePipe.
+
+    Only ChromePipe's startup is stubbed; run_qa and validate_report run unmodified.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.qa_module = _load_qa_renderer_module()
+
+    def setUp(self):
+        _StubHandshakeChromePipe.instances = 0
+        _StubHandshakeChromePipe.pending_timeouts = 0
+        patcher = mock.patch.object(self.qa_module, "ChromePipe", _StubHandshakeChromePipe)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _run_stub_qa(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            folder = Path(temporary)
+            html_path = folder / "trip.html"
+            html_path.write_text("<html><body>stub</body></html>", encoding="utf-8")
+            return self.qa_module.run_qa(
+                html_path, folder / "qa", Path(__file__), [(800, 600)], sections=1, handshake_timeout=0.01,
+            )
+
+    def test_handshake_retries_once_then_succeeds(self):
+        _StubHandshakeChromePipe.pending_timeouts = 1
+        result = self._run_stub_qa()
+        self.assertEqual(2, result["handshakeAttempts"])
+        self.assertEqual(2, _StubHandshakeChromePipe.instances)
+
+    def test_handshake_fails_twice_raises_timeout_error(self):
+        _StubHandshakeChromePipe.pending_timeouts = 2
+        with self.assertRaises(TimeoutError):
+            self._run_stub_qa()
+
+    def test_handshake_succeeds_first_try_constructs_once(self):
+        result = self._run_stub_qa()
+        self.assertEqual(1, result["handshakeAttempts"])
+        self.assertEqual(1, _StubHandshakeChromePipe.instances)

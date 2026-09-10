@@ -1590,3 +1590,97 @@ PROGRESS.md 里把 `anysearch_http.py:68` 误写成 `transport.py:68`（本节
 --limit 3` 终态三条全 `success`。任务书结束，无遗留阻塞项，止损轮次未
 触发（每项验收一次通过，两次 CI 波动均按任务书明文允许的「Chrome 握手
 超时可 rerun 一次」处理，非代码回归）。
+
+## 书 G：浏览器 QA 握手加固（2026-09-10，worktree `.tmp/wt-g` 分支 `qa-handshake`）
+
+任务 0（已完成）：`git worktree add .tmp/wt-g -b qa-handshake`，HEAD `df5712e`
+与任务书吻合；worktree 内复测 `Ran 565 tests` `OK` 0 skipped、
+`scan_secrets.py` 0 命中（370 文件）、pyflakes 0 行，与任务书数字一致。
+行号核对：`__init__`71、`command(...)`107（`timeout: float = 10.0`）、
+`run_qa`202、首条 `Target.createTarget`214、`validate_report` 检查字典
+173/174，全部精确吻合；唯一出入是任务书通篇称该类为 `Browser`，仓库内
+真实类名是 `ChromePipe`——判为描述性用词而非改名要求（不重写不相关代码），
+按真实类名 `ChromePipe` 实现，不算待裁决。额外发现
+`tests/test_journey.py:1430`（16 天 demo QA 测试）也用 `timeout=60` 调用
+同一脚本，不在本书白名单内，只记录不改动。
+理解的目标：给 `ChromePipe` 首次 CDP 握手（`Target.createTarget`）加
+30 秒超时并支持超时后重启 Chrome 重试一次，`validate_report` 判卷标准
+一字不动，消除 CI 偶发的握手超时抖动。
+顺序：任务 1（握手超时+一次重启+CLI 参数+硬指标一）→ 任务 2（打桩单测+
+反向验证+`test_keyless_e2e.py` timeout 改 150）→ 最终门+push。
+最大风险：重试逻辑只能包裹首条 `Target.createTarget`，其余命令仍用原有
+10 秒超时不变——不能把重启逻辑做成 `command()` 的通用行为，否则会静默
+改变其余 CDP 调用的失败语义（这些调用现在异常应直接向上抛出终止 `run_qa`）。
+
+任务 1（已完成）：`run_qa` 加 `handshake_timeout: float = 30.0` 形参；首条
+`Target.createTarget` 显式传 `timeout=handshake_timeout`，外层套一层
+`try/except TimeoutError`——超时则 `browser.close()`、`handshake_attempts`
+置 2、重新构造 `ChromePipe(chrome, profile)` 再发一次同样的命令，第二次
+异常不捕获、原样向上抛出；整段重试逻辑仍嵌在原有的外层 `try/finally`
+内，保证不管成功、重试后成功、还是两次都失败，最终存活的那个 `browser`
+实例都会走到 `finally` 的 `browser.close()`+清 profile 目录（两次都失败时
+第一个失败的 browser 已在 `except` 块内提前 `close()`，不会泄漏子进程）。
+`result` 字典加 `"handshakeAttempts": handshake_attempts`；CLI 加
+`--handshake-timeout`（`type=float, default=30.0`），透传给 `run_qa`。
+其余命令的 `timeout=10.0` 默认值一字未动。验收：真实 Chrome 跑
+`/usr/bin/python3 scripts/qa_renderer_browser.py demo/journey-16d/journey.html
+--output .tmp/qa --viewports 375x812,1440x900 --sections 15` → `failures:
+[]`、`handshakeAttempts: 1`；`git diff main -- scripts/qa_renderer_browser.py
+| grep -E '^[-+]' | grep -E 'validate_report|checks = \{|"[a-z ]+": report'`
+0 行（判卷字典未被触碰）；`py_compile`/pyflakes 均 0。单独一次
+`git commit`（`1a8943c`）。
+
+任务 2（已完成）：`tests/test_renderer.py` 用 `importlib.util.
+spec_from_file_location` 按路径把 `scripts/qa_renderer_browser.py` 加载成
+独立模块对象（模块不是包、无 `__init__.py`，仓库内首次这样用，未沿用
+subprocess 调用方式，因为要在同进程里打桩 `ChromePipe` 类）；新增
+`_StubHandshakeChromePipe`（只桩 `__init__`/`command`/`wait_event`/
+`close` 四个方法，`command` 对 `Target.createTarget` 按类变量
+`pending_timeouts` 决定抛 `TimeoutError` 还是返回假 `targetId`，其余方法
+返回让 `run_qa` 能跑完整流程所需的最小假数据）与
+`QaRendererHandshakeTests`（3 个 `def test_`：重试一次成功→
+`handshakeAttempts==2`+构造 2 次；两次都超时→`assertRaises(TimeoutError)`；
+首次即成功→只构造 1 次）。`_run_stub_qa` 故意传单一视口 `(800, 600)`
+（不在 375/1440 之列）跳过截图分支，只依赖 `Page.printToPDF` 返回合法
+base64；`validate_report`/`console_errors`/截图逻辑本身未被打桩、按真实
+代码路径跑，只是不深究检查项是否全过（本书打桩范围明写只许桩
+`ChromePipe` 的启动）。`tests/test_keyless_e2e.py:1154` 的子进程
+`timeout=60` 改 `150`（`test_journey.py:1430` 的另一处 16 天 demo QA
+子进程同款 `timeout=60` 不在本书白名单，只记录不改，见 `BLOCKED.md`）。
+验收：`~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-
+weaver/src tests scripts` 0 行；`scripts/scan_secrets.py` 0 命中（370
+文件）；`git diff main -- tests | grep -E '^-\s*def test_'` 0 行；全量
+`/usr/bin/python3 -m unittest discover -s tests` → `Ran 568 tests` `OK`
+0 skipped（565 基线 + 3 个新 `def test_`）；`git diff main --stat --
+plugins .github` 空；`git diff main --stat` 只有 `PROGRESS.md`/
+`scripts/qa_renderer_browser.py`/`tests/test_keyless_e2e.py`/
+`tests/test_renderer.py` 四个文件，均在白名单内。
+反向验证（终端记录）：临时把 `run_qa` 里的
+`try: target_id = ...\nexcept TimeoutError: ...重试...` 整段改回未加固
+前的单次调用（标 `# TEMP-REVERSE-VERIFY`）→
+`python3 -m unittest tests.test_renderer.QaRendererHandshakeTests -v` 报
+`FAILED (errors=1)`，恰好 `test_handshake_retries_once_then_succeeds`
+一个红（`TimeoutError: stub handshake timeout`，其余两个测试语义上仍
+成立故仍绿）→ 还原重试逻辑 → `git diff main -- scripts/
+qa_renderer_browser.py | grep -c TEMP-REVERSE-VERIFY` 为 0（残留标记已
+清零）→ 重跑同一条命令三个测试转 `OK`（绿）。任务 2 单独一次
+`git commit`。
+
+最终门（2026-09-10 实测）：任务 1、任务 2 提交后重新逐条复核——真实 Chrome
+`failures=[]`、`handshakeAttempts=1`；三个打桩测试 `OK`；全量 `Ran 568
+tests` `OK` 0 skipped；`scan_secrets.py` 0 命中；pyflakes 0 行；`git diff
+main --stat -- plugins .github` 空；`git diff main --stat` 只有
+`PROGRESS.md`/`BLOCKED.md`/`scripts/qa_renderer_browser.py`/
+`tests/test_keyless_e2e.py`/`tests/test_renderer.py`，均在白名单。
+`git push -u origin qa-handshake` 首次因本机 HTTP_PROXY/HTTPS_PROXY
+环境变量指向的本地代理（127.0.0.1:7897）到 GitHub 的 TLS 隧道失败
+（`SSL_ERROR_SYSCALL`）连续 13 次重试均未恢复；诊断发现
+`curl --noproxy '*' https://github.com` 直连返回 200——问题在代理本身
+到 GitHub 这条链路，不在网络或仓库；改用
+`env -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy -u https_proxy git push`
+绕开代理直连后一次成功，远程 `qa-handshake` 已建（`git ls-remote origin
+qa-handshake` 确认 `45ce40d`）。未开 PR（任务书只要求推分支、合并由
+管理者做），故 `gh run list --branch qa-handshake` 为空属预期，非本书
+需要处理的 CI 抖动。硬指标一、二全部达成，止损轮次未触发（两项任务
+各一次验收即通过），任务书结束，无遗留阻塞项（`test_journey.py:1430`
+的同款 timeout 隐患已记 `BLOCKED.md`，供领导定夺）。

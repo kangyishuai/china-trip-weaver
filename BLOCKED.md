@@ -796,3 +796,40 @@ china_trip_weaver/replan.py`）无歧义、按实际路径处理，不算待裁�
   （仍是三段顺序 `assertIn` + `index` 先后关系判断），不删用例。反向验证：
   改回旧字面量 → 该测试报出完整新 SKILL.md 正文证明确实改了（红）→ 改回
   新字面量 → 绿。终端记录见 `PROGRESS.md` 本书任务 3 小节。
+
+## 书 G：浏览器 QA 握手加固（2026-09-10，worktree `.tmp/wt-g` 分支 `qa-handshake`）
+
+无需要停工请示领导的裁决项。以下两点已按自身判断处理，均不影响硬指标，
+完整实测见 `PROGRESS.md` 本书小节：
+
+1. 任务书通篇称呼要打桩/加固的类为 `Browser`，仓库内真实类名是
+   `ChromePipe`——`__init__`/`command`/`run_qa`/首条 `Target.createTarget`/
+   `validate_report` 检查字典的行号（71/107/202/214/173）与方法签名
+   （`close()`/`command()`）全部与任务书描述精确吻合，只有类名字面不同。
+   判为任务书的描述性用词、不是要求真的把类改名为 `Browser`（改名是
+   任务书未要求的额外改动，且会牵连测试里对该名字的引用），按真实类名
+   `ChromePipe` 实现，任务 2 的打桩测试同样打在 `ChromePipe` 上。
+2. 顺手发现 `tests/test_journey.py:1430`
+   （`test_checked_in_sixteen_day_demo_passes_offline_browser_qa`）也用
+   `subprocess.run([...qa_renderer_browser.py...], timeout=60)` 调用同一
+   脚本。本书加固后握手最坏耗时约为原来的 6 倍（10 秒→30 秒握手超时 ×
+   最多 2 次尝试），若某次 CI 运行恰好触发一次重启，这个测试自身的
+   `timeout=60` 有可能先于脚本内部逻辑触发 `subprocess.TimeoutExpired`，
+   把"握手重试后成功"变成"外层子进程超时失败"，与本书要消除 CI 抖动的
+   目标背道而驰。`tests/test_journey.py` 不在本书「只允许改」白名单内
+   （白名单只列了 `tests/test_renderer.py`、`tests/test_keyless_e2e.py`
+   第 1154 行附近那一处），未改动，只记录供领导定夺是否需要单独一本书
+   把这个 `timeout=60` 也放宽（建议同样改成 150，与本书对
+   `test_keyless_e2e.py` 的改法一致）。
+3. （环境笔记，非代码判断）`git push -u origin qa-handshake` 首次直接
+   执行时连续失败：本机 `HTTP_PROXY`/`HTTPS_PROXY` 指向的本地代理
+   （`127.0.0.1:7897`，进程本身在监听）到 `github.com:443` 的 TLS 隧道
+   报 `SSL_ERROR_SYSCALL`，13 次自动重试（4 分钟窗口）均未恢复；
+   `curl --noproxy '*' https://github.com` 直连返回 200，证明问题在代理
+   到 GitHub 这条链路本身，不在网络整体或仓库状态。改用
+   `env -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy -u https_proxy git
+   push ...` 绕开代理直连后一次成功。记录供以后任何需要 `git push`/
+   `gh` 访问 GitHub 的任务书参考：这台机器上遇到同款 `SSL_ERROR_SYSCALL`
+   时，先用 `curl --noproxy '*' https://github.com` 探一次直连，通的话
+   同样用 `env -u HTTP_PROXY -u HTTPS_PROXY ...` 绕开代理即可，不必假设
+   是网络整体故障。
