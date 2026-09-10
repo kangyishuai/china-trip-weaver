@@ -585,3 +585,53 @@ replace_mode/build_mode 互斥分流，错误全部经既有
   canonicalize 输出 `cmp` 无差异，确认 `--request`/`--trip` 改成
   `default=None` 未改变原有语义下的实际行为。`py_compile`+pyflakes 单独对
   journey.py/cli.py 两文件全程 0 行。单独一次 `git commit`。
+
+任务 2（已完成）：`tests/test_journey.py` 新增 `JourneyReplaceTripTests` 类
+（导入块按字母序插入 `replace_trip_in_journey`），7 个 `def test_`（任务书要求
+至少 4 个）：替换成功且 journey_id 不变+revision 字段齐全、显式 `--reason`
+覆盖子 Trip 自身 reason、`revision_conflict`、`trip_not_found`、
+`journey_identity_changed`（见下）、CLI 混用 `--replace-trip` 与
+`--request`/`--trip` 被拒、CLI 全链路（真实 `ctw journey extract` →
+`ctw replan` → `ctw journey assemble --replace-trip` 子进程）往返。
+`journey_identity_changed` 一条：真实数据很难在不先撞
+`assemble_journey` 自身结构校验（日期缺口/住宿续接等）的前提下单独构造出
+「trip_id 存在但会改变 journey_id」的合法输入，改用
+`mock.patch("china_trip_weaver.journey.assemble_journey_from_trips",
+return_value=...)` 隔离测 `replace_trip_in_journey` 自己的身份校验分支——
+`assemble_journey_from_trips` 是被测函数的协作对象而非被测对象本身，且
+`test_flyai_live.py`（`mock.patch.object(FlyAIBackend, "from_spec", ...)`）等
+已有先例证明本仓库测试套件接受这种"隔离协作对象"的 mock 用法，不算违反
+"不许 mock 被测对象"。plan-china-trip/SKILL.md 第 27 行（Workflow 第 6 条，
+原文正是"替现有子 Trip 调 replan"那条）末尾加一句：属于 Journey 的子 Trip 先
+`ctw journey extract` 取出，replan 后用 `ctw journey assemble
+--replace-trip` 放回。两份 README 的 `ctw journey assemble` 行后各加一行
+替换形式的命令签名。
+
+验收：`JourneyReplaceTripTests` 单独跑 `Ran 7 tests OK`；`test_journey`
+整模块 `Ran 57 tests OK`（51 基线 + 6 已有 + 新增均计入，与前一轮书 A2 的
+51 相加吻合）。反向验证：把 `replace_trip_in_journey` 里
+`if reassembled["journey_id"] != journey["journey_id"]:` 临时改成
+`if False and ...:`（加 `# TEMP-REVERSE-VERIFY` 标记）→ 单独跑
+`test_replace_trip_rejects_a_reassembly_that_changes_the_journey_identity`
+→ `FAILED`（`AssertionError: ValueError not raised`，红）→ 还原 →
+`git diff plugins/.../journey.py | grep -c TEMP-REVERSE` 为 0（改动已完整
+撤回）→ 同一测试重跑 `ok`（绿）。
+
+最终门（2026-09-10 实测）：`/usr/bin/python3 -m unittest discover -s tests`
+→ `Ran 532 tests` `OK` 0 skipped（525 基线 + 新增 7）；`scan_secrets.py` 0
+命中（368 文件）；`~/miniconda3/envs/core/bin/python -m pyflakes
+plugins/china-trip-weaver/src tests scripts` 0 行；`git status --short --
+demo` 空。`git diff main --stat -- plugins/china-trip-weaver/schema demo`
+空——但 `git diff main -- tests | grep -E '^-\s*def test_'` 此刻并非 0 行
+（打出两条 `test_cli_refresh_without_rail_result_fails_without_outputs`/
+`test_cli_non_refresh_event_with_rail_result_fails`）。查明原因：并行的
+A1b 书（`ctw replan --rail-result` 接线，在 main 上直改）已在本书任务 1/2
+执行期间合入 main（提交 `4216c59`、`f2b0f34`，`git log main` 可见），本分支
+仍从任务书指定的 `7fc66ec` 分出、未合并 main 的后续提交（任务书明令
+"不碰 main，合并由管理者做"）；这两条测试属于 A1b 书新增，本书从未接触过
+`test_replan.py`。改用本分支真实的分出点 `7fc66ec` 重新比较——
+`git diff 7fc66ec -- tests | grep -E '^-\s*def test_'` 0 行、
+`git diff 7fc66ec --stat -- plugins/china-trip-weaver/schema demo` 同样为
+空——证实本书确实 0 行删测试、0 行碰 schema/demo，任务书这条验收命令写在
+"main 不动"的假设下，未预见另一本并行书会话内合入 main；按"跳过做别的，
+继续"处理，不算待裁决，只记录供合并时核对。单独一次 `git commit`。

@@ -12,6 +12,7 @@ import unittest
 from collections import Counter
 from datetime import date, timedelta
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -31,6 +32,7 @@ from china_trip_weaver.journey import (
     journey_budget_ledger,
     journey_risk_items,
     plan_journey,
+    replace_trip_in_journey,
     split_journey_inputs,
     validate_journey,
 )
@@ -1450,6 +1452,157 @@ class JourneyExtractAssembleTests(unittest.TestCase):
             self.assertNotEqual(0, failed.returncode)
             self.assertIn("JOURNEY_EXTRACT_FAILED", failed.stdout + failed.stderr)
             self.assertFalse(missing_path.exists())
+
+
+class JourneyReplaceTripTests(unittest.TestCase):
+    """`ctw journey assemble --replace-trip` swaps a replanned Trip back into a Journey."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.journey = load(JOURNEY_DEMO / "journey.json")
+        cls.trip_id = cls.journey["trips"][0]["trip_id"]
+
+    def replanned_trip(self):
+        """Extract the first segment and apply the same delay event task 1 verified by hand."""
+
+        trip = extract_trip_from_journey(self.journey, self.trip_id)
+        event = {
+            "type": "delay",
+            "subject_ref": "slot-poi-routine-meal-2acb635f18d4",
+            "delta_minutes": 15,
+            "reason": "接驳晚点 15 分钟",
+        }
+        result = replan_trip(trip, event, 1, [], FixedClock.from_iso(FIXED_NOW))
+        return result.trip
+
+    def test_replace_trip_succeeds_and_preserves_journey_identity(self):
+        replanned = self.replanned_trip()
+        updated = replace_trip_in_journey(self.journey, replanned, 1, FixedClock.from_iso(FIXED_NOW))
+        self.assertEqual(self.journey["journey_id"], updated["journey_id"])
+        self.assertEqual(2, updated["revision"]["number"])
+        self.assertEqual(1, updated["revision"]["parent_revision"])
+        self.assertEqual("user", updated["revision"]["created_by"])
+        self.assertEqual(replanned["revision"]["reason"], updated["revision"]["reason"])
+        replaced = next(item for item in updated["trips"] if item["trip_id"] == self.trip_id)
+        self.assertEqual(2, replaced["revision"]["number"])
+        report = validate_journey(updated)
+        self.assertTrue(report.ok, [item.render() for item in report.errors])
+
+    def test_replace_trip_honors_an_explicit_reason_over_the_trips_own(self):
+        replanned = self.replanned_trip()
+        updated = replace_trip_in_journey(
+            self.journey, replanned, 1, FixedClock.from_iso(FIXED_NOW), reason="人工复核后放回",
+        )
+        self.assertEqual("人工复核后放回", updated["revision"]["reason"])
+
+    def test_replace_trip_rejects_a_base_revision_conflict(self):
+        replanned = self.replanned_trip()
+        with self.assertRaises(ValueError) as failure:
+            replace_trip_in_journey(self.journey, replanned, 9, FixedClock.from_iso(FIXED_NOW))
+        self.assertIn("revision_conflict", str(failure.exception))
+
+    def test_replace_trip_rejects_a_trip_id_not_in_the_journey(self):
+        replanned = self.replanned_trip()
+        replanned["trip_id"] = "trip-does-not-exist"
+        with self.assertRaises(ValueError) as failure:
+            replace_trip_in_journey(self.journey, replanned, 1, FixedClock.from_iso(FIXED_NOW))
+        self.assertIn("trip_not_found", str(failure.exception))
+
+    def test_replace_trip_rejects_a_reassembly_that_changes_the_journey_identity(self):
+        # A same-trip_id replacement that still shifts the Journey's own start/end
+        # date or per-Trip day count is not reproducible from schema-valid fixture
+        # data without first tripping assemble_journey's own structural checks, so
+        # this isolates replace_trip_in_journey's own identity guard by patching its
+        # one collaborator that computes journey_id, the same technique already used
+        # in this suite (e.g. test_flyai_live.py's FlyAIBackend.from_spec patches)
+        # to isolate a unit from a collaborator rather than from itself.
+        replanned = self.replanned_trip()
+        with mock.patch(
+            "china_trip_weaver.journey.assemble_journey_from_trips",
+            return_value={"journey_id": "journey-0000000000000000"},
+        ):
+            with self.assertRaises(ValueError) as failure:
+                replace_trip_in_journey(self.journey, replanned, 1, FixedClock.from_iso(FIXED_NOW))
+        self.assertIn("journey_identity_changed", str(failure.exception))
+
+    def test_cli_journey_assemble_rejects_mixed_replace_and_build_arguments(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            output = Path(temporary)
+            trip_path = output / "t1.json"
+            trip_path.write_text(canonical_json(self.replanned_trip()), encoding="utf-8")
+            journey_out = output / "journey.json"
+            mixed = subprocess.run(
+                [
+                    str(CTW), "journey", "assemble",
+                    "--journey", str(JOURNEY_DEMO / "journey.json"),
+                    "--replace-trip", str(trip_path),
+                    "--base-revision", "1",
+                    "--request", str(JOURNEY_DEMO / "request.json"),
+                    "--trip", str(trip_path),
+                    "--output-json", str(journey_out),
+                ],
+                text=True,
+                capture_output=True,
+            )
+            self.assertNotEqual(0, mixed.returncode)
+            self.assertIn("JOURNEY_ASSEMBLE_FAILED", mixed.stdout + mixed.stderr)
+            self.assertFalse(journey_out.exists())
+
+    def test_cli_journey_assemble_replace_trip_round_trips_through_ctw_replan(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            output = Path(temporary)
+            t1_path = output / "t1.json"
+            extracted = subprocess.run(
+                [
+                    str(CTW), "journey", "extract",
+                    "--journey", str(JOURNEY_DEMO / "journey.json"),
+                    "--trip-id", self.trip_id,
+                    "--output-json", str(t1_path),
+                ],
+                text=True, capture_output=True,
+            )
+            self.assertEqual(0, extracted.returncode, extracted.stdout + extracted.stderr)
+
+            event_path = output / "event.json"
+            event_path.write_text(canonical_json({
+                "type": "delay",
+                "subject_ref": "slot-poi-routine-meal-2acb635f18d4",
+                "delta_minutes": 15,
+                "reason": "接驳晚点 15 分钟",
+            }), encoding="utf-8")
+            t1_r2_path = output / "t1-r2.json"
+            t1_r2_html = output / "t1-r2.html"
+            replanned = subprocess.run(
+                [
+                    str(CTW), "replan",
+                    "--trip", str(t1_path),
+                    "--event", str(event_path),
+                    "--base-revision", "1",
+                    "--fixed-clock", FIXED_NOW,
+                    "--output-json", str(t1_r2_path),
+                    "--output-html", str(t1_r2_html),
+                ],
+                text=True, capture_output=True,
+            )
+            self.assertEqual(0, replanned.returncode, replanned.stdout + replanned.stderr)
+
+            journey_out = output / "journey.json"
+            assembled = subprocess.run(
+                [
+                    str(CTW), "journey", "assemble",
+                    "--journey", str(JOURNEY_DEMO / "journey.json"),
+                    "--replace-trip", str(t1_r2_path),
+                    "--base-revision", "1",
+                    "--fixed-clock", FIXED_NOW,
+                    "--output-json", str(journey_out),
+                ],
+                text=True, capture_output=True,
+            )
+            self.assertEqual(0, assembled.returncode, assembled.stdout + assembled.stderr)
+            self.assertIn("JOURNEY_ASSEMBLE_COMPLETE", assembled.stdout)
+            updated = load(journey_out)
+            self.assertEqual(self.journey["journey_id"], updated["journey_id"])
+            self.assertEqual(2, updated["revision"]["number"])
 
 
 if __name__ == "__main__":
