@@ -361,5 +361,15 @@ src` 0 行输出；`git status --short` 只有本轮改的文件；`git diff c9c
 --stat -- plugins ':!*replan.py'` 空；`git diff c9c9c15 -- tests | grep -E
 '^-\s*def test_'` 0 行；既有 4 个金样（`closure`/`weather`/`delay`/`user-
 delete.json`）单独 `git diff c9c9c15 --stat` 为空，一字未改。任务 1、任务 2
-各一次 `git commit` 直接提交 main（任务 1 为 `c208ba0`，任务 2 见本次提交
-自身）。BLOCKED.md 本轮无新增待裁决条目。
+各一次 `git commit` 直接提交 main（任务 1 为 `c208ba0`，任务 2 为
+`f27989b`）。BLOCKED.md 本轮无新增待裁决条目。
+
+`git push` 后 `gh run list --limit 3` 首次显示 `f27989b` 那条
+`completed failure`：Python 3.9 矩阵在
+`test_keyless_html_opens_offline_with_no_remote_requests`
+（`test_keyless_e2e.py`，走 `scripts/qa_renderer_browser.py` 起无头
+Chrome 做离线 QA）上 `TimeoutError: CDP pipe read timed out`；同一提交的
+Python 3.13 矩阵全绿，本机单独重跑该测试也是 `ok`，且该测试与 `replan`/
+`refresh` 无任何依赖关系（不在本轮允许改动的文件之列）。判断为 CI runner
+偶发的无头浏览器启动超时，`gh run rerun 34447222187 --failed` 重跑后两条
+矩阵均转 `success`（`gh run list --limit 3` 三条全 `success`）。
