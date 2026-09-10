@@ -1,3 +1,40 @@
+## 书「Journey 逐日时间轴」任务 0/3：真实 journey 页"40 个 restapi.amap.com 链接"的口径澄清（2026-09-10，判断，非阻塞）
+
+任务书任务 0 写"真实 16 天 journey 渲染页含 40 个指向
+restapi.amap.com/v3/geocode/geo 的 href，来自 geocode claim 的 source_url"。
+任务 0 当时只核对了仓库内 `demo/` 与代码事实（均对上，见前面 PROGRESS.md
+任务 0 小节），没有条件去核对仓库外那份真实文件——任务 3 才第一次真正读它。
+任务 3 实测（`/Users/kangyishuai/Workspace/core/ChinaTripWeaver/
+fujian-2026-09-25-to-10-10/`）：
+
+- 旧的 journey 级渲染页 `福建中秋国庆16天行程.html`（本轮改动前就存在，
+  2026-09-07 生成）里 `grep -o 'href="https://restapi.amap.com[^"]*"' | wc -l`
+  为 **0**——journey 页面本来就没有"每条 claim 无条件转成链接"的机制
+  （那是 Trip 页 `_evidence_section` 独有的，journey 页只有
+  `journey_html.py:_source_link` 会给 checklist/risk 条目里带 `claim_id`
+  的那条转链接，而这批 geocode claim 都不落在 unknown/claim_conflict 分支
+  里，从未被链接过）。
+- 40 这个数字，实测精确等于 `journey.json` 里 `claims[].source_url` 主机为
+  `restapi.amap.com` 的条数（`Counter` 逐条数出 40），也是它作为纯文本字符串
+  出现在渲染页嵌入 `<script id="journey-data">` 里的次数——嵌入 JSON 按设计
+  必须原样保留完整数据（含 source_url），本轮改动没有也不应该碰它，这 40 次
+  文本命中不会因为本轮改动而消失，属预期。
+- 同目录三份 Trip 级中间产物（`trip-coast-r2-intermediate.html`、
+  `trip-coast-r3-intermediate.html`、`trip-coast-r3.html`，经过真正会无条件
+  链接每条 claim 的 `_evidence_section`）各自实测有 **14** 个真实可点击的
+  `href="https://restapi.amap.com..."`——"点开只有报错"这个动机描述，字面
+  精确对应的其实是 Trip 级渲染，任务 1 的修复对这三份文件才会产生
+  40→0（或 14→0）这种直观的前后对比；它们不在任务 3 的范围内（任务 3 明确
+  只要求渲染 `journey.json`），未重渲染，仅记录供参考。
+
+判断：不影响任务 3 完成——journey.json 重渲染出的 0.9 页真实 href 本来就是
+0（渲染前后一致），符合硬指标一"0 个接口地址链接"的字面要求；这条记录只是
+澄清"40"这个数字的真实出处（嵌入 JSON 文本命中数，不是 href 数），避免以后
+有人拿它去核对 journey 页面时对不上号。任务 1 的 `claim_source_html`/
+E106/JH106 修复本身经仓库内 `weekend-live.json`（含实际 restapi.amap.com
+href 的反向验证）与 journey 侧 `_source_link` 直接单测双重验证，代码路径本身
+无误，只是这份特定的真实 journey 数据没有走到会触发它的分支。
+
 ## 书「Journey 逐日时间轴」任务 2：`scripts/qa_renderer_browser.py` 不在白名单但被验收命令点名（2026-09-10，已按最小改动处理，非空白裁决）
 
 任务书「界限」只允许改 `scripts/build_renderer_fixtures.py` 这一个 scripts 文件；

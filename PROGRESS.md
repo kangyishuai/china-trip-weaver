@@ -942,3 +942,34 @@ src ':!*/render/*'` 空输出；`git diff 1f1e966 -- tests | grep -E
 '^-\s*def test_'` 空输出。真实截图（1440 宽）与页面全文本已人工核对：16
 天逐日卡片、5 条现在先处理、3 张跨城交通卡内容与顺序均与源数据一致，日期第
 16 天正确显示"本段无过夜住宿"。单独一次 `git commit`。
+
+## 书「Journey 逐日时间轴」任务 3：真实 16 天行程渲染给领导看（2026-09-10，完成）
+
+```
+$ plugins/china-trip-weaver/scripts/ctw journey validate \
+    /Users/kangyishuai/Workspace/core/ChinaTripWeaver/fujian-2026-09-25-to-10-10/journey.json
+JOURNEY VALID .../journey.json trips=3
+$ plugins/china-trip-weaver/scripts/ctw journey render \
+    /Users/kangyishuai/Workspace/core/ChinaTripWeaver/fujian-2026-09-25-to-10-10/journey.json \
+    --output "/Users/kangyishuai/Workspace/core/ChinaTripWeaver/fujian-2026-09-25-to-10-10/福建中秋国庆16天行程-0.9.html"
+JOURNEY_RENDERED .../福建中秋国庆16天行程-0.9.html sha256=fc5100be... errors=0
+$ plugins/china-trip-weaver/scripts/ctw journey validate-html \
+    ".../福建中秋国庆16天行程-0.9.html" .../journey.json
+JOURNEY HTML VALID .../福建中秋国庆16天行程-0.9.html errors=0
+```
+
+**给领导的路径（工作区外，未提交，权限与仓库内其余真实数据一致）：**
+`/Users/kangyishuai/Workspace/core/ChinaTripWeaver/fujian-2026-09-25-to-10-10/福建中秋国庆16天行程-0.9.html`
+（302733 字节，比旧版 207697 字节大约多 45%，符合"多了三个分区"的预期）。
+可与同目录下用户自己写的「易读版」（`福建中秋国庆16天行程-易读版.html`）
+手机对比。
+
+`git status --short`（仓库内）在本任务前后均为空——渲染只写了仓库外的
+工作区目录，未触碰仓库任何文件，`china-trip-weaver.git` 本身不认识这个
+路径。真实数据核对（读文本，不摘抄进仓库）：16 张 day-card、"现在先处理"
+5 条、"跨城交通" 3 张跨城交通卡（火车/轮渡等实际方式，价格口径正确显示），
+第 16 天正确显示无过夜住宿；真实 href（`grep -o 'href="https://restapi.amap.
+com[^"]*"'`）为 0——但这本来就是 journey 级渲染的既有事实、不是本轮改动
+带来的变化，详见 BLOCKED.md 对"40"这个数字真实出处的澄清（它是嵌入 JSON
+里的文本命中数，不是 href 数；真正含 14 个可点击 restapi.amap.com 链接的是
+同目录三份 Trip 级中间产物，不在本任务范围内，未动）。
