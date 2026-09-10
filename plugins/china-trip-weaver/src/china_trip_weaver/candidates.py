@@ -859,6 +859,41 @@ def add_poi_candidate(
     price_amount: Optional[float] = None,
 ) -> Mapping[str, Any]:
     document = _editable_candidates(path)
+    _apply_poi_candidate(
+        document,
+        name=name,
+        city=city,
+        category=category,
+        source_url=source_url,
+        provider=provider,
+        clock=clock,
+        confidence=confidence,
+        duration_minutes=duration_minutes,
+        opens_at=opens_at,
+        closes_at=closes_at,
+        opening_status=opening_status,
+        price_amount=price_amount,
+    )
+    _write_valid_when_complete(path, document)
+    return copy.deepcopy(document["pois"][-1])
+
+
+def _apply_poi_candidate(
+    document: Dict[str, Any],
+    *,
+    name: str,
+    city: str,
+    category: str,
+    source_url: str,
+    provider: str,
+    clock: Clock,
+    confidence: float = 0.55,
+    duration_minutes: Optional[int] = None,
+    opens_at: Optional[str] = None,
+    closes_at: Optional[str] = None,
+    opening_status: str = "tentative",
+    price_amount: Optional[float] = None,
+) -> Mapping[str, Any]:
     index = len(document["pois"])
     entity_name = _candidate_text(name, "POI name")
     entity_city = _candidate_text(city, "POI city")
@@ -961,8 +996,7 @@ def add_poi_candidate(
     })
     document["claims"].extend(claims)
     document["unknowns"].extend(unknowns)
-    _write_valid_when_complete(path, document)
-    return copy.deepcopy(document["pois"][-1])
+    return document["pois"][-1]
 
 
 def add_lodging_candidate(
@@ -982,6 +1016,41 @@ def add_lodging_candidate(
     locked: bool = False,
 ) -> Mapping[str, Any]:
     document = _editable_candidates(path)
+    _apply_lodging_candidate(
+        document,
+        name=name,
+        city=city,
+        area=area,
+        check_in=check_in,
+        check_out=check_out,
+        source_url=source_url,
+        provider=provider,
+        clock=clock,
+        confidence=confidence,
+        nightly_price=nightly_price,
+        includes_taxes=includes_taxes,
+        locked=locked,
+    )
+    _write_valid_when_complete(path, document)
+    return copy.deepcopy(document["lodgings"][-1])
+
+
+def _apply_lodging_candidate(
+    document: Dict[str, Any],
+    *,
+    name: str,
+    city: str,
+    area: Optional[str],
+    check_in: str,
+    check_out: str,
+    source_url: str,
+    provider: str,
+    clock: Clock,
+    confidence: float = 0.55,
+    nightly_price: Optional[float] = None,
+    includes_taxes: Optional[bool] = None,
+    locked: bool = False,
+) -> Mapping[str, Any]:
     index = len(document["lodgings"])
     entity_name = _candidate_text(name, "lodging name")
     entity_city = _candidate_text(city, "lodging city")
@@ -1059,8 +1128,142 @@ def add_lodging_candidate(
     })
     document["claims"].extend(claims)
     document["unknowns"].extend(unknowns)
-    _write_valid_when_complete(path, document)
-    return copy.deepcopy(document["lodgings"][-1])
+    return document["lodgings"][-1]
+
+
+@dataclass(frozen=True)
+class CandidatesImportResult:
+    """Counts of entities newly appended by one import_candidates() call."""
+
+    pois: int
+    lodgings: int
+
+
+class CandidatesImportError(ValueError):
+    """One 1-based item in an import list failed shape or business validation."""
+
+    def __init__(self, item_number: int, reason: str) -> None:
+        super().__init__("item=%d reason=%s" % (item_number, reason))
+        self.item_number = item_number
+        self.reason = reason
+
+
+def _import_is_text(value: Any) -> bool:
+    return isinstance(value, str)
+
+
+def _import_is_optional_text(value: Any) -> bool:
+    return value is None or isinstance(value, str)
+
+
+def _import_is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _import_is_optional_number(value: Any) -> bool:
+    return value is None or _import_is_number(value)
+
+
+def _import_is_optional_int(value: Any) -> bool:
+    return value is None or (isinstance(value, int) and not isinstance(value, bool))
+
+
+def _import_is_bool(value: Any) -> bool:
+    return isinstance(value, bool)
+
+
+def _import_is_optional_bool(value: Any) -> bool:
+    return value is None or isinstance(value, bool)
+
+
+_POI_IMPORT_FIELDS: Dict[str, Tuple[bool, Any]] = {
+    "name": (True, _import_is_text),
+    "city": (True, _import_is_text),
+    "category": (True, _import_is_text),
+    "source_url": (True, _import_is_text),
+    "provider": (True, _import_is_text),
+    "confidence": (False, _import_is_number),
+    "duration_minutes": (False, _import_is_optional_int),
+    "opens_at": (False, _import_is_optional_text),
+    "closes_at": (False, _import_is_optional_text),
+    "opening_status": (False, _import_is_text),
+    "price_amount": (False, _import_is_optional_number),
+}
+_LODGING_IMPORT_FIELDS: Dict[str, Tuple[bool, Any]] = {
+    "name": (True, _import_is_text),
+    "city": (True, _import_is_text),
+    "area": (True, _import_is_optional_text),
+    "check_in": (True, _import_is_text),
+    "check_out": (True, _import_is_text),
+    "source_url": (True, _import_is_text),
+    "provider": (True, _import_is_text),
+    "confidence": (False, _import_is_number),
+    "nightly_price": (False, _import_is_optional_number),
+    "includes_taxes": (False, _import_is_optional_bool),
+    "locked": (False, _import_is_bool),
+}
+
+
+def _import_item_kind(item_number: int, item: Any) -> str:
+    if not isinstance(item, dict):
+        raise CandidatesImportError(item_number, "item must be a JSON object")
+    kind = item.get("kind")
+    if kind not in ("poi", "lodging"):
+        raise CandidatesImportError(item_number, "kind must be 'poi' or 'lodging'")
+    fields = _POI_IMPORT_FIELDS if kind == "poi" else _LODGING_IMPORT_FIELDS
+    allowed = set(fields) | {"kind"}
+    unknown = sorted(set(item) - allowed)
+    if unknown:
+        raise CandidatesImportError(item_number, "unknown key(s): %s" % ", ".join(unknown))
+    missing = sorted(name for name, (required, _check) in fields.items() if required and name not in item)
+    if missing:
+        raise CandidatesImportError(item_number, "missing required key(s): %s" % ", ".join(missing))
+    for name, (_required, type_check) in fields.items():
+        if name in item and not type_check(item[name]):
+            raise CandidatesImportError(item_number, "field %s has the wrong type" % name)
+    return kind
+
+
+def import_candidates(
+    path: Path,
+    items: Sequence[Mapping[str, Any]],
+    clock: Clock,
+    *,
+    dry_run: bool = False,
+) -> CandidatesImportResult:
+    """Validate and append every item to path's candidates document in one atomic write.
+
+    Every item is shape-checked first (unknown keys before started applying anything, missing
+    required keys, and wrong-typed fields all fail with a 1-based item number). Only after every
+    item passes does this apply them in order, in memory, by reusing add_poi_candidate's and
+    add_lodging_candidate's own logic unchanged; a business-rule failure (bad dates, negative
+    amounts, duplicate identity, ...) also fails with its 1-based item number. The candidates file
+    on disk is untouched unless every item succeeds and dry_run is False.
+    """
+
+    if not isinstance(items, (list, tuple)):
+        raise ValueError("import items must be a JSON array")
+    kinds = [_import_item_kind(number, item) for number, item in enumerate(items, start=1)]
+
+    document = _editable_candidates(path)
+    poi_count = 0
+    lodging_count = 0
+    for number, (kind, item) in enumerate(zip(kinds, items), start=1):
+        payload = {key: value for key, value in item.items() if key != "kind"}
+        try:
+            if kind == "poi":
+                _apply_poi_candidate(document, clock=clock, **payload)
+                poi_count += 1
+            else:
+                _apply_lodging_candidate(document, clock=clock, **payload)
+                lodging_count += 1
+        except (ValueError, TypeError) as exc:
+            raise CandidatesImportError(number, str(exc)) from exc
+
+    _validate_document_when_complete(document)
+    if not dry_run:
+        write_canonical_json(Path(path), document)
+    return CandidatesImportResult(pois=poi_count, lodgings=lodging_count)
 
 
 def _editable_candidates(path: Path) -> Dict[str, Any]:
@@ -1077,13 +1280,17 @@ def _editable_candidates(path: Path) -> Dict[str, Any]:
 
 
 def _write_valid_when_complete(path: Path, document: Mapping[str, Any]) -> None:
+    _validate_document_when_complete(document)
+    write_canonical_json(Path(path), document)
+
+
+def _validate_document_when_complete(document: Mapping[str, Any]) -> None:
     if document["pois"]:
         report = validate_candidates(document)
         if not report.ok:
             raise ValueError("generated candidates are invalid: " + "; ".join(
                 issue.render() for issue in report.errors
             ))
-    write_canonical_json(Path(path), document)
 
 
 def _candidate_text(value: Any, label: str) -> str:
