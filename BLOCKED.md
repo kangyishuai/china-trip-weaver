@@ -1,3 +1,21 @@
+## 书 docs-drift 任务 2：`scripts/build_plan_fixtures.py` 不在白名单但被 pyflakes 点名（2026-09-10，已按最小改动处理，非空白裁决）
+
+任务书「界限」只允许改 `scripts/scan_secrets.py` 这一个 scripts 文件；但 pyflakes
+`plugins/china-trip-weaver/src tests scripts` 的 11 行里，`scripts/
+build_plan_fixtures.py:10: 'typing.Dict' imported but unused` 也在其中，而任务 2
+的验收明确要求这条命令整体为 0 行。白名单字面只列一个 scripts 文件，验收字面
+要求 scripts 目录全干净，两者直接冲突，无人可问。
+
+判断：比照书 B 任务 1（`tests/test_contracts.py` 越界修改）已定的先例——「验收
+明确要求的硬指标」优先于「白名单遗漏一个文件」，且改动本身与已批准的
+`scan_secrets.py` 那处是同一类最小改动（删一个未使用的 `typing` 导入名，不改
+其他任何字符），按此处理更接近「说的与代码一致」的第一优先级。已执行：
+`from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple` 删掉
+`Dict`，其余名字不动。验收：pyflakes 三目标合计 0 行；全量
+`/usr/bin/python3 -m unittest discover -s tests`：`Ran 507 tests`、`OK`、
+0 skipped；`git diff main -- tests | grep -E '^[-+]\s*def test_'` 0 行
+（本次改动未新增/删除任何测试函数）。
+
 ## 书 docs-drift 任务 0：pyflakes 全仓基线与任务书数字差 1 行（2026-09-10，判断，非空白裁决）
 
 任务书「现状与任务 0」写「`~/miniconda3/envs/core/bin/python -m pyflakes
