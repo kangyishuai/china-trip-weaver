@@ -45,7 +45,7 @@ FlyAI 是可选的尽力而为来源。它是飞猪服务的非官方第三方�
 plugins/china-trip-weaver/scripts/ctw doctor
 ```
 
-实网路径使用 `AMAP_WEBSERVICE_KEY`、`FLYAI_API_KEY` 和 `VARIFLIGHT_API_KEY`（`X_VARIFLIGHT_KEY` 保留读取兼容）。本版本中 AnySearch 保持关闭。每个 Node 服务商都有独立的临时／配置／缓存目录与各自隔离的 `os.homedir()`；这些目录与 npm 缓存都建在含 `plugins/` 的那一级目录下（本地市场安装后即已装插件所在的缓存目录），`ctw doctor` 以 `runtime_root` 字段报出该位置，可随时删除，下次实网调用会自动重建。
+实网路径使用 `AMAP_WEBSERVICE_KEY`、`FLYAI_API_KEY`、`VARIFLIGHT_API_KEY`（`X_VARIFLIGHT_KEY` 保留读取兼容）和 `ANYSEARCH_API_KEY`。AnySearch 只在显式调用 `ctw research` 命令与 `ctw doctor` 的探针时才会被访问；`ctw plan` 从不调用它。每个 Node 服务商都有独立的临时／配置／缓存目录与各自隔离的 `os.homedir()`；这些目录与 npm 缓存都建在含 `plugins/` 的那一级目录下（本地市场安装后即已装插件所在的缓存目录），`ctw doctor` 以 `runtime_root` 字段报出该位置，可随时删除，下次实网调用会自动重建。
 
 ## 安装或刷新到本机 Codex（自动化）
 
@@ -176,6 +176,7 @@ ctw candidates import CANDIDATES.json --items ITEMS.json [--queried-at ISO] [--d
 ctw candidates fix-names CANDIDATES.json --trip TRIP_OR_JOURNEY.json [--apply | --export-manual NAME-REVIEW.json | --apply-manual NAME-REVIEW.json]
 ctw canonicalize TRIP.json
 ctw rail --date YYYY-MM-DD --from CITY --to CITY --output-json rail-result.json
+ctw research --city CITY --query TEXT [--max-results N] --output-json research.json
 ctw mobility --candidates CANDIDATES.json --modes transit,walking --output-json mobility.json
 ctw lodging --city CITY --check-in YYYY-MM-DD --check-out YYYY-MM-DD --output-json lodging.json
 ctw air --origin CITY --destination CITY --date YYYY-MM-DD --output-json air.json

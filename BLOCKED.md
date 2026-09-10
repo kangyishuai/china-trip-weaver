@@ -784,3 +784,15 @@ china_trip_weaver/replan.py`）无歧义、按实际路径处理，不算待裁�
   相同 → 绿。`git diff df5712e -- tests | grep -E '^-\s*def test_'` 0 行
   （未删除任何测试函数，只改了一处断言数值、生成器新增内容触发的两个
   自动测试沿用生成器逻辑本身，非手写增减）。
+
+- **`tests/test_skills.py` 同样不在名单，任务 3 改 SKILL.md 第 12 行的
+  逐字文案后触发**：
+  `test_destination_research_contract_uses_host_first_then_anysearch_fallback`
+  硬编码 `fallback = "fall back to AnySearch with an already configured
+  key"` 逐字匹配旧文案（`self.assertIn(fallback, body)`）。任务书明确要求
+  把这一行改成「用 `ctw research --city --query` 取候选，把 health 报给
+  父 Skill」，字面文案变化后旧断言必然对不上。判断同上——按「仓库瘦身
+  第二轮」先例就地把硬编码字面量改成新文案对应子串，不改断言的逻辑与力度
+  （仍是三段顺序 `assertIn` + `index` 先后关系判断），不删用例。反向验证：
+  改回旧字面量 → 该测试报出完整新 SKILL.md 正文证明确实改了（红）→ 改回
+  新字面量 → 绿。终端记录见 `PROGRESS.md` 本书任务 3 小节。

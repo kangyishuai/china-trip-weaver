@@ -9,7 +9,7 @@ Return structured candidates and claim-level evidence, not an itinerary or prose
 
 - Use this search ladder in order and stop at the first available rung:
   1. Use the host's built-in network search first.
-  2. Only when host search is absent or unavailable, fall back to AnySearch with an already configured key and a passing contract probe; never create, request, print, or persist a key.
+  2. Only when host search is absent or unavailable, fall back to `scripts/ctw research --city CITY --query TEXT` (only when a key is already configured) and report its `health` to the parent Skill; never create, request, print, or persist a key.
   3. When neither search tool is available, use only material the user already pasted, mark destination research `degraded`, and leave unsupported facts unknown. Never silently skip evidence collection.
 - Return provider health separately to the parent Skill without adding it to `candidates.json`. Record the rung actually used in `provider` and `reason`: `host-web`, `anysearch`, or `user-pasted-only`; keep `mode`, `status`, and check time truthful.
 - Bind every query and result to the requested city and business dates. Prefer government, venue, operator, and other first-party pages.

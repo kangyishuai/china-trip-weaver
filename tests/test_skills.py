@@ -98,7 +98,7 @@ class SkillPackagingTests(unittest.TestCase):
     def test_destination_research_contract_uses_host_first_then_anysearch_fallback(self):
         body = (SKILLS / "research-china-destination" / "SKILL.md").read_text(encoding="utf-8")
         host = "Use the host's built-in network search first."
-        fallback = "fall back to AnySearch with an already configured key"
+        fallback = "fall back to `scripts/ctw research --city CITY --query TEXT` (only when a key is already configured)"
         degraded = "use only material the user already pasted, mark destination research `degraded`"
         self.assertIn(host, body)
         self.assertIn(fallback, body)

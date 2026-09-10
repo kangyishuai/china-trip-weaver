@@ -1529,3 +1529,48 @@ pyflakes 0 行；secrets 0（372 文件）；`git diff df5712e --stat --
 plugins/china-trip-weaver/schema '*/credentials.py' '*/render/*'` 空；
 `git diff df5712e -- tests | grep -E '^-\s*def test_'` 0 行。`git commit`
 单独一次提交任务 2（含 `test_providers.py` 的必要连带改动）。
+
+任务 3（已完成）：research SKILL 第 12 行改成「只在已配置 Key 时用
+`scripts/ctw research --city CITY --query TEXT`，把 `health` 报给父
+Skill」（原文「fall back to AnySearch with an already configured key and
+a passing contract probe」——「passing contract probe」这个占位说法现在
+有了真身，直接点名命令）。两份 README 第 48 行「AnySearch 保持关闭/stays
+disabled」改成「AnySearch 只在显式调用 `ctw research` 与 `ctw doctor`
+探针时才被访问，`ctw plan` 从不调用它」，`ANYSEARCH_API_KEY` 补进环境变量
+清单。两份「Other commands」代码块各加一行
+`ctw research --city CITY --query TEXT [--max-results N] --output-json
+research.json`（紧跟 `ctw rail` 之后，与 cli.py `_parser()` 里
+`_add_research_parser` 紧跟 `_add_rail_parser` 的注册顺序一致）。
+**再发现一处隐藏依赖（任务书未列，同一手法处理）**：`tests/test_skills.py`
+（不在「只允许改」名单）的
+`test_destination_research_contract_uses_host_first_then_anysearch_fallback`
+硬编码 `fallback = "fall back to AnySearch with an already configured
+key"` 逐字匹配 SKILL.md 原文，改字面文案后必然红；判断按任务 2 同款
+先例就地把这一行字面量改成新文案的对应子串
+（`"fall back to \`scripts/ctw research --city CITY --query TEXT\` (only
+when a key is already configured)"`），未改断言逻辑（仍是 `assertIn`
+逐字匹配 + 三段顺序判断），未删测试。反向验证（终端记录）：改回旧字面量
+→ `AssertionError: 'fall back to AnySearch with an already configured
+key' not found in '...'`（红，报出完整新文案证明确实改了）→ 用
+`cp` 备份还原为新字面量 → 绿。验收：`git grep -n 'stays disabled\|保持
+关闭' -- README.md README.zh-CN.md` 0 行（exit 1）。实网步骤（`只在
+credentials.env 已有 Key 时`）：本机 `~/.config/china-trip-weaver/
+credentials.env` 复核仍 0 处 `ANYSEARCH_API_KEY`（与任务 0 核对时一致），
+按任务书原文的条件从句跳过，非遗漏。
+全量 `Ran 577 tests` `OK` 0 skipped；pyflakes 0 行；secrets 0（372
+文件）；`git status --short` 只有 README.md/README.zh-CN.md/SKILL.md/
+test_skills.py 四个文件；`git diff df5712e --stat -- plugins/china-trip-
+weaver/schema '*/credentials.py' '*/render/*'` 空；`git diff df5712e --
+tests | grep -E '^-\s*def test_'` 0 行。`git commit` 单独一次提交任务 3
+（含 `test_skills.py` 的必要连带改动）。
+
+硬指标一、二逐条终验（2026-09-10）：`ctw research --fixture .../success.json
+...` exit 0 items=1；无 Key exit 2 零网络事件；`ctw doctor --probe` 的
+anysearch 恰 `{credential,probe}` 两键；全量 `Ran 577 tests` `OK` 0
+skipped（≥573 达标）；secrets 0；pyflakes 0 行；`git status --short`
+在三次任务提交之间均只含本书改动文件，提交后为空；
+`git diff df5712e --stat -- plugins/china-trip-weaver/schema
+'*/credentials.py' '*/render/*'` 空。三个任务各一次独立 `git commit`
+直接提交 main，止损轮次未触发（每项验收均一次通过，未出现连败）。
+BLOCKED.md 本轮追加两条判断记录（`test_providers.py`、`test_skills.py`
+的隐藏依赖），均按既有先例处理、不阻塞交付。任务书结束，无遗留阻塞项。

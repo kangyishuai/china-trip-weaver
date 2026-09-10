@@ -45,7 +45,7 @@ Credentials come from the launching environment first, then from `~/.config/chin
 plugins/china-trip-weaver/scripts/ctw doctor
 ```
 
-The live path uses `AMAP_WEBSERVICE_KEY`, `FLYAI_API_KEY`, and `VARIFLIGHT_API_KEY` (`X_VARIFLIGHT_KEY` remains read compatibility). AnySearch stays disabled in this release. Every Node provider gets its own temp/config/cache directories and an isolated `os.homedir()`; those and the npm cache live under the directory that contains `plugins/` (the installed plugin's cache directory when installed from the local marketplace). `ctw doctor` reports that location as `runtime_root`; it can be deleted at any time and is rebuilt automatically on the next live call.
+The live path uses `AMAP_WEBSERVICE_KEY`, `FLYAI_API_KEY`, `VARIFLIGHT_API_KEY` (`X_VARIFLIGHT_KEY` remains read compatibility), and `ANYSEARCH_API_KEY`. AnySearch is called only by the explicit `ctw research` command and `ctw doctor`'s probe; `ctw plan` never calls it. Every Node provider gets its own temp/config/cache directories and an isolated `os.homedir()`; those and the npm cache live under the directory that contains `plugins/` (the installed plugin's cache directory when installed from the local marketplace). `ctw doctor` reports that location as `runtime_root`; it can be deleted at any time and is rebuilt automatically on the next live call.
 
 ## Install or refresh into the local Codex (automated)
 
@@ -177,6 +177,7 @@ ctw candidates import CANDIDATES.json --items ITEMS.json [--queried-at ISO] [--d
 ctw candidates fix-names CANDIDATES.json --trip TRIP_OR_JOURNEY.json [--apply | --export-manual NAME-REVIEW.json | --apply-manual NAME-REVIEW.json]
 ctw canonicalize TRIP.json
 ctw rail --date YYYY-MM-DD --from CITY --to CITY --output-json rail-result.json
+ctw research --city CITY --query TEXT [--max-results N] --output-json research.json
 ctw mobility --candidates CANDIDATES.json --modes transit,walking --output-json mobility.json
 ctw lodging --city CITY --check-in YYYY-MM-DD --check-out YYYY-MM-DD --output-json lodging.json
 ctw air --origin CITY --destination CITY --date YYYY-MM-DD --output-json air.json
