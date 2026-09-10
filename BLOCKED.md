@@ -1,3 +1,21 @@
+## 书「拆 plan_trip 与 _schedule_problems」任务 0：直接调用 plan_trip 的测试处数 41→42（2026-09-10，判断，非阻塞）
+
+任务书「现状与任务 0」写"直接调用 plan_trip 的测试 41 处（test_keyless_e2e
+11、test_replan 14、test_journey 6、test_amap_live 6、test_flyai_live
+3……）"，句尾「……」已自陈是不完全列举。实测 `grep -rn "plan_trip(" tests/*.py`
+命中 7 个文件共 42 处：列出的 5 个文件之和 11+14+6+6+3=40 与任务书吻合，未列出
+的另外两个文件——`test_anysearch.py`（1 处，L502）、`test_variflight_live.py`
+（1 处，L424）——补满 42。逐一核对这两处均为真实的 `plan_trip(...)` 调用（非
+`replan_trip(` 等子串误命中），不是计数脚本的假阳性。
+
+判断：不停工。这条数字只是任务书给的背景色（帮助理解"改签名会牵连多少调用点"
+这个风险面），不在「完成条件」列出的硬指标之列（硬指标一是函数长度、硬指标二
+是快照哈希+语料零漂移+全量测试），且任务书自己用「……」标注了不完整，42 与
+「41……」并不矛盾，只是把省略号里的部分数出来了。真正约束拆分工作的锁点——
+`plan_trip`/`_schedule_problems` 签名与返回类型不变、`_schedule_problems` 在
+`tests/test_keyless_e2e.py:461` 的直接调用——已逐条核对与任务书完全一致，不
+受此计数影响。
+
 ## 书「Journey 逐日时间轴」任务 0/3：真实 journey 页"40 个 restapi.amap.com 链接"的口径澄清（2026-09-10，判断，非阻塞）
 
 任务书任务 0 写"真实 16 天 journey 渲染页含 40 个指向

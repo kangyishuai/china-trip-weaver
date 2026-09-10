@@ -1702,3 +1702,36 @@ qa-handshake` 确认 `45ce40d`）。未开 PR（任务书只要求推分支、�
 需要处理的 CI 抖动。硬指标一、二全部达成，止损轮次未触发（两项任务
 各一次验收即通过），任务书结束，无遗留阻塞项（`test_journey.py:1430`
 的同款 timeout 隐患已记 `BLOCKED.md`，供领导定夺）。
+
+## 书 R2：拆 plan_trip 与 _schedule_problems（2026-09-10，worktree `.tmp/wt-r2` 分支 `split-planning`）
+
+任务 0 核对（HEAD `ec7c12d`）：全量 `Ran 584 tests` OK 0 skipped、secrets 0、
+pyflakes 0 行；长度命令输出 `[(96, '_select_stays'), (110, '_resolve_rail'),
+(242, '_schedule_problems'), (266, 'plan_trip')]`；文件 2533 行、61 个顶层
+函数；`plan_trip` 起始行 131、`_schedule_problems` 起始行 2044；三个语料命令
+（README demo、`build_plan_fixtures.py`、`build_renderer_fixtures.py`）重跑
+后 `git status --short` 均空；`test_keyless_e2e.py:461` 直接调用
+`_schedule_problems` 属实。均与任务书逐字吻合。唯一出入：直接调用
+`plan_trip` 的测试实为 42 处（任务书「41……」漏计 `test_anysearch.py`、
+`test_variflight_live.py` 各 1 处），判断为背景信息非硬指标，记录不停工
+（见 BLOCKED.md）。
+
+理解的目标：`_schedule_problems`（242→≤100 行）与 `plan_trip`（266→≤100 行）
+按内部阶段拆成模块私有小函数，签名、返回类型、行为逐字节不变；全文件无函数
+超过 150 行。
+顺序：先拆 `_schedule_problems`（被 `plan_trip` 调用，内层先拆再拆外层）→
+再拆 `plan_trip`。
+最大风险：两百多行里任何条件、阈值、文案、字段顺序的手滑都会被三个语料命令
+的字节级 diff 与两个 e2e 用例的快照哈希放大成红；抽段必须是纯粹的「剪切—去
+缩进—把用到的局部变量改成参数」，不顺手合并重复代码、不简化任何判断分支。
+
+任务 1（已完成，不提交）：`.tmp/snapshot_plan.py` 照抄 `test_keyless_e2e.py`
+的 `run_direct` 写法（`E2E`/`FIXED_NOW`/`RailBackend.from_spec`/`load` 同款），
+对 `beijing-shanghai-3d`、`beijing-hangzhou-4d` 两个用例用
+`FixedClock.from_iso("2026-09-03T12:00:00+08:00")` 调 `plan_trip`，把
+`result.trip_sha256`/`result.html_sha256` 写入 JSON。验收：`.tmp/snap-
+before.json` 两个用例各两条哈希（`beijing-shanghai-3d` trip=`94c5a5c3...`
+html=`927f5ce6...`；`beijing-hangzhou-4d` trip=`bea36d23...`
+html=`70a7fa74...`）；连跑两次（`snap-before.json` 与 `snap-before-
+run2.json`）`diff` 空输出，逐字节相同，验证 `plan_trip` 在两个用例上确定性
+可复现，可作拆分前后的行为基线。
