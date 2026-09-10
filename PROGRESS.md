@@ -635,3 +635,13 @@ A1b 书（`ctw replan --rail-result` 接线，在 main 上直改）已在本书�
 空——证实本书确实 0 行删测试、0 行碰 schema/demo，任务书这条验收命令写在
 "main 不动"的假设下，未预见另一本并行书会话内合入 main；按"跳过做别的，
 继续"处理，不算待裁决，只记录供合并时核对。单独一次 `git commit`。
+
+终验（提交后复核，2026-09-10）：任务 1 的替换命令与两条反向验证全部重新
+跑了一遍（extract→replan→assemble --replace-trip→validate→render→
+validate-html，均 exit 0；`--base-revision 9` 与 trip_id 改错两条均
+exit 1、不产文件），结果与任务 1 首次验收逐字一致。全量
+`Ran 532 tests` `OK` 0 skipped、`scan_secrets.py` 0 命中（368 文件）、
+pyflakes 0 行、`git diff main --stat -- plugins/china-trip-weaver/schema
+demo` 与 `git diff 7fc66ec --stat`（分支真实分出点）均为空。`git push -u
+origin journey-replace` 成功（远端已建 `journey-replace` 分支）。硬指标
+一、二均达标，BLOCKED.md 随本次提交带一条非空白裁决记录，任务书结束。
