@@ -1275,7 +1275,7 @@ class JourneyContinuityTests(unittest.TestCase):
         journey = self.result.journey
         rendered = render_journey(journey)
         mutated = re.sub(
-            r'<li class="checklist-item".*?</li>',
+            r'<li class="checklist-item" data-checklist-id=.*?</li>',
             "",
             rendered,
             count=1,
@@ -1298,6 +1298,58 @@ class JourneyContinuityTests(unittest.TestCase):
         self.assertNotEqual(rendered, mutated)
         codes = {item.code for item in validate_journey_html(mutated, journey).errors}
         self.assertIn("JH203", codes)
+
+    def test_journey_html_rejects_a_missing_day_timeline_card(self):
+        journey = self.result.journey
+        rendered = render_journey(journey)
+        mutated = re.sub(
+            r'<article class="day-card".*?</article>',
+            "",
+            rendered,
+            count=1,
+            flags=re.DOTALL,
+        )
+        self.assertNotEqual(rendered, mutated)
+        codes = {item.code for item in validate_journey_html(mutated, journey).errors}
+        self.assertIn("JH201", codes)
+
+    def test_journey_html_rejects_a_missing_transport_overview_card(self):
+        journey = self.result.journey
+        rendered = render_journey(journey)
+        mutated = re.sub(
+            r'<article class="entity-card" data-transport-index=.*?</article>',
+            "",
+            rendered,
+            count=1,
+            flags=re.DOTALL,
+        )
+        self.assertNotEqual(rendered, mutated)
+        codes = {item.code for item in validate_journey_html(mutated, journey).errors}
+        self.assertIn("JH201", codes)
+
+    def test_journey_html_rejects_a_missing_priority_action(self):
+        journey = self.result.journey
+        rendered = render_journey(journey)
+        mutated = re.sub(
+            r'<li class="checklist-item" data-priority-id=.*?</li>',
+            "",
+            rendered,
+            count=1,
+            flags=re.DOTALL,
+        )
+        self.assertNotEqual(rendered, mutated)
+        codes = {item.code for item in validate_journey_html(mutated, journey).errors}
+        self.assertIn("JH201", codes)
+
+    def test_priority_actions_are_the_five_earliest_deadline_checklist_items(self):
+        journey = self.result.journey
+        checklist = journey_booking_checklist(journey)
+        rendered = render_journey(journey)
+        priority_ids = re.findall(r'data-priority-id="([^"]+)"', rendered)
+        self.assertEqual([item["item_id"] for item in checklist[:5]], priority_ids)
+        self.assertLessEqual(len(priority_ids), 5)
+        checklist_ids = {item["item_id"] for item in checklist}
+        self.assertTrue(set(priority_ids).issubset(checklist_ids))
 
     def test_journey_html_rejects_visible_internal_id(self):
         journey = self.result.journey
@@ -1370,6 +1422,24 @@ class JourneyContinuityTests(unittest.TestCase):
         self.assertEqual(render_journey(journey), rendered)
         report = validate_journey_html(rendered, journey)
         self.assertTrue(report.ok, [item.render() for item in report.errors])
+
+    def test_checked_in_sixteen_day_demo_passes_offline_browser_qa(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            qa = subprocess.run(
+                [
+                    sys.executable, str(ROOT / "scripts" / "qa_renderer_browser.py"),
+                    str(JOURNEY_DEMO / "journey.html"), "--output", str(Path(temporary) / "qa"),
+                    "--viewports", "375x812,1440x900", "--sections", "15",
+                ],
+                text=True,
+                capture_output=True,
+                timeout=60,
+            )
+            self.assertEqual(0, qa.returncode, qa.stdout + qa.stderr)
+            report = load(Path(temporary) / "qa" / "qa-report.json")
+            self.assertEqual([], report["failures"])
+            for viewport in report["viewports"]:
+                self.assertEqual(0, viewport["horizontalOverflow"])
 
 
 class JourneyExtractAssembleTests(unittest.TestCase):

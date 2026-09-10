@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from ..journey import (
@@ -16,9 +17,11 @@ from .html import (
     _field_label,
     _health_reason,
     _number,
+    _price,
     _provider_label,
+    _render_day_slots,
 )
-from .template import CSP, RENDERER_VERSION, attr, claim_source_html, embedded_json, external_link, renderer_css, text
+from .template import CSP, RENDERER_VERSION, attr, claim_source_html, dom_id, embedded_json, external_link, renderer_css, text
 
 
 JOURNEY_READABILITY_CSS = """
@@ -76,11 +79,13 @@ JOURNEY_READABILITY_CSS = """
 .route-stop h3,
 .checklist-item h3,
 .risk-item h3,
-.segment-card h3 { margin: 0; }
+.segment-card h3,
+.day-card h3 { margin: 0; }
 .route-stop p,
 .checklist-item p,
 .risk-item p,
-.segment-card p { margin: 0.35rem 0; }
+.segment-card p,
+.day-card p { margin: 0.35rem 0; }
 .metric-grid {
   display: grid;
   gap: 0.75rem;
@@ -99,13 +104,15 @@ JOURNEY_READABILITY_CSS = """
 .deadline-note { color: var(--muted); }
 .checklist-item,
 .risk-item,
-.segment-card {
+.segment-card,
+.day-card {
   border-top: 1px solid var(--line);
   padding-block: 1rem;
 }
 .checklist-item:first-child,
 .risk-item:first-child,
-.segment-card:first-child { border-top: 0; }
+.segment-card:first-child,
+.day-card:first-child { border-top: 0; }
 .deadline {
   color: var(--vermilion);
   display: block;
@@ -159,15 +166,24 @@ JOURNEY_SECTIONS = frozenset((
     "truth-banner",
     "journey-nav",
     "route-overview",
+    "day-timeline",
     "budget-summary",
+    "priority-actions",
     "booking-checklist",
     "risk-register",
     "segment-overview",
     "connection-overview",
+    "transport-overview",
     "provider-health",
     "journey-notes",
     "footer",
 ))
+
+
+WEEKDAY_LABELS = {
+    "en": ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"),
+    "zh-CN": ("周一", "周二", "周三", "周四", "周五", "周六", "周日"),
+}
 
 
 CAPABILITY_LABELS = {
@@ -211,6 +227,7 @@ def _render_journey(journey: Mapping[str, Any]) -> str:
     risks = journey_risk_items(journey)
     route = _journey_route(journey)
     origins = _journey_origins(journey)
+    flattened_days = _journey_days(journey)
     route_title = _route_title(origins, route)
     title_value = "%s · %s — %s" % (
         route_title,
@@ -245,14 +262,17 @@ def _render_journey(journey: Mapping[str, Any]) -> str:
         ),
         "</header>",
         _truth_banner(journey, checklist, risks, labels),
-        _journey_nav(labels),
+        _journey_nav(flattened_days, labels),
         '<main id="main-content">',
         _route_section(journey, route, origins, labels),
+        _day_timeline_section(flattened_days, labels),
         _budget_section(journey, labels),
+        _priority_actions_section(journey, checklist, labels),
         _checklist_section(journey, checklist, labels),
         _risk_section(journey, risks, labels),
         _segments_section(journey, labels),
         _connections_section(journey, labels),
+        _transport_overview_section(journey, labels),
         _provider_health_section(journey, labels),
         _notes_section(journey, labels),
         "</main>",
@@ -297,6 +317,11 @@ def _journey_labels(locale: str) -> Mapping[str, str]:
             "health_reason": "Status: %s. Technical detail is preserved in the page data.",
             "capabilities": "Capabilities", "constraint": "Constraints", "assumption": "Assumptions",
             "none": "None provided", "status": "Status",
+            "locked": "Kept fixed", "day_label": "Day %d",
+            "claim_evidence": "Supporting evidence", "no_claim": "No linked evidence",
+            "price_unknown": "Price unknown", "queried": "Checked",
+            "day_timeline": "Day-by-day plan", "priority_actions": "Priority actions",
+            "transport_overview": "Cross-city transport",
         }
     return {
         "locale": "zh-CN", "skip": "跳到全程总览", "travelers": "人数", "segments": "分段",
@@ -325,6 +350,11 @@ def _journey_labels(locale: str) -> Mapping[str, str]:
         "health_reason": "当前状态为“%s”；技术详情已保留在页面数据中。",
         "capabilities": "能力", "constraint": "硬约束", "assumption": "默认假设",
         "none": "无 / 未提供", "status": "状态",
+        "locked": "保持不变", "day_label": "第 %d 天",
+        "claim_evidence": "关联证据", "no_claim": "无关联证据",
+        "price_unknown": "价格未知 / 点击核验", "queried": "查询于",
+        "day_timeline": "逐日安排", "priority_actions": "现在先处理",
+        "transport_overview": "跨城交通",
     }
 
 
@@ -352,6 +382,29 @@ def _journey_origins(journey: Mapping[str, Any]) -> Sequence[str]:
         return tuple(group["origin"]["name"] for group in journey["traveler_groups"])
     origin = journey.get("origin")
     return (origin["name"],) if origin else ()
+
+
+def _journey_days(journey: Mapping[str, Any]) -> Sequence[Mapping[str, Any]]:
+    """Flatten every Trip's days into one Journey-wide, chronologically ordered list."""
+    result: List[Mapping[str, Any]] = []
+    for trip_index, trip in enumerate(journey["trips"]):
+        lodging_by_id = {item["lodging_id"]: item for item in trip["lodgings"]}
+        claims = {claim["claim_id"]: claim for claim in trip["claims"]}
+        for day in trip["days"]:
+            stay = lodging_by_id.get(day.get("stay_id"))
+            result.append({
+                "trip_index": trip_index,
+                "trip_id": trip["trip_id"],
+                "day": day,
+                "claims": claims,
+                "stay_name": stay["name"] if stay else None,
+                "anchor_id": dom_id("journey-day", "%s:%s" % (trip["trip_id"], day["day_id"])),
+            })
+    return tuple(result)
+
+
+def _weekday(date_value: str, labels: Mapping[str, str]) -> str:
+    return WEEKDAY_LABELS[labels["locale"]][date.fromisoformat(date_value).weekday()]
 
 
 def _route_title(
@@ -395,19 +448,26 @@ def _truth_banner(
     )
 
 
-def _journey_nav(labels: Mapping[str, str]) -> str:
+def _journey_nav(flattened_days: Sequence[Mapping[str, Any]], labels: Mapping[str, str]) -> str:
     links = (
         ("route-overview", labels["overview"]),
+        ("day-timeline", labels["day_timeline"]),
         ("budget-summary", labels["budget"]),
+        ("priority-actions", labels["priority_actions"]),
         ("booking-checklist", labels["checklist"]),
         ("risk-register", labels["risks"]),
         ("segment-overview", labels["segment_overview"]),
         ("connection-overview", labels["connections"]),
+        ("transport-overview", labels["transport_overview"]),
         ("provider-health", labels["health"]),
     )
-    return '<nav class="day-nav" data-section="journey-nav" aria-label="%s"><ul>%s</ul></nav>' % (
-        text(labels["segment_overview"]),
-        "".join('<li><a href="#%s">%s</a></li>' % (identifier, text(label)) for identifier, label in links),
+    section_items = "".join('<li><a href="#%s">%s</a></li>' % (identifier, text(label)) for identifier, label in links)
+    day_items = "".join(
+        '<li><a href="#%s">%s</a></li>' % (attr(entry["anchor_id"]), text(entry["day"]["date"]))
+        for entry in flattened_days
+    )
+    return '<nav class="day-nav" data-section="journey-nav" aria-label="%s"><ul>%s%s</ul></nav>' % (
+        text(labels["segment_overview"]), section_items, day_items,
     )
 
 
@@ -449,6 +509,30 @@ def _route_section(
     )
 
 
+def _day_timeline_section(
+    flattened_days: Sequence[Mapping[str, Any]],
+    labels: Mapping[str, str],
+) -> str:
+    cards = []
+    for index, entry in enumerate(flattened_days):
+        day = entry["day"]
+        stay_text = entry["stay_name"] or labels["no_lodging"]
+        cards.append(
+            '<article class="day-card" id="%s" data-day-index="%d" data-trip-index="%d" '
+            'data-date="%s" data-city="%s"><h3>%s · %s · %s</h3>'
+            '<p>%s · %s：%s</p>'
+            '<p class="trace-note"><a href="#segment-%d">%s</a></p>'
+            '<ol class="timeline">%s</ol></article>' % (
+                attr(entry["anchor_id"]), index, entry["trip_index"], attr(day["date"]), attr(day["city"]),
+                text(labels["day_label"] % (index + 1)), text(day["date"]), text(_weekday(day["date"], labels)),
+                text(day["city"]), text(labels["lodging"]), text(stay_text),
+                entry["trip_index"] + 1, text(labels["segment"] % (entry["trip_index"] + 1)),
+                _render_day_slots(day, entry["claims"], labels, anchored_claims=False),
+            )
+        )
+    return _section("day-timeline", labels["day_timeline"], "".join(cards), "panel panel-wide")
+
+
 def _budget_section(journey: Mapping[str, Any], labels: Mapping[str, str]) -> str:
     ledger = journey["budget_ledger"]
     total = ledger["total_range_cny"]
@@ -479,27 +563,45 @@ def _budget_section(journey: Mapping[str, Any], labels: Mapping[str, str]) -> st
     return _section("budget-summary", labels["budget"], body, "panel panel-wide")
 
 
+def _checklist_item_html(
+    journey: Mapping[str, Any],
+    item: Mapping[str, Any],
+    labels: Mapping[str, str],
+    prefix: str = "checklist",
+) -> str:
+    if item["kind"] == "transport":
+        heading = "%s · %s" % (labels["transport_action"], _display_source(item, labels))
+    elif item["kind"] == "lodging":
+        heading = "%s · %s" % (labels["lodging_action"], _display_source(item, labels))
+    else:
+        heading = "%s · %s" % (labels["unknown_action"], _display_source(item, labels))
+    detail = _checklist_detail(journey, item, labels)
+    return '<li class="checklist-item" %s><span class="deadline">%s</span><h3>%s</h3>%s%s</li>' % (
+        _trace_attributes(prefix, item), _deadline(item["deadline"], labels),
+        text(heading), detail, _trace_note(item, labels),
+    )
+
+
 def _checklist_section(
     journey: Mapping[str, Any],
     checklist: Sequence[Mapping[str, Any]],
     labels: Mapping[str, str],
 ) -> str:
-    items = []
-    for item in checklist:
-        if item["kind"] == "transport":
-            heading = "%s · %s" % (labels["transport_action"], _display_source(item, labels))
-        elif item["kind"] == "lodging":
-            heading = "%s · %s" % (labels["lodging_action"], _display_source(item, labels))
-        else:
-            heading = "%s · %s" % (labels["unknown_action"], _display_source(item, labels))
-        detail = _checklist_detail(journey, item, labels)
-        items.append(
-            '<li class="checklist-item" %s><span class="deadline">%s</span><h3>%s</h3>%s%s</li>' % (
-                _trace_attributes("checklist", item), _deadline(item["deadline"], labels),
-                text(heading), detail, _trace_note(item, labels),
-            )
-        )
+    items = [_checklist_item_html(journey, item, labels) for item in checklist]
     return _section("booking-checklist", labels["checklist"], '<ol class="checklist">%s</ol>' % "".join(items), "panel panel-wide")
+
+
+def _priority_actions_section(
+    journey: Mapping[str, Any],
+    checklist: Sequence[Mapping[str, Any]],
+    labels: Mapping[str, str],
+) -> str:
+    items = [_checklist_item_html(journey, item, labels, prefix="priority") for item in checklist[:5]]
+    body = (
+        '<ol class="checklist">%s</ol>' % "".join(items)
+        if items else '<p class="empty-state">%s</p>' % text(labels["none"])
+    )
+    return _section("priority-actions", labels["priority_actions"], body, "panel panel-wide")
 
 
 def _risk_section(
@@ -590,6 +692,35 @@ def _connections_section(journey: Mapping[str, Any], labels: Mapping[str, str]) 
     return _section(
         "connection-overview",
         labels["connections"],
+        "".join(cards) or '<p class="empty-state">%s</p>' % text(labels["none"]),
+        "panel panel-wide",
+    )
+
+
+def _transport_overview_section(journey: Mapping[str, Any], labels: Mapping[str, str]) -> str:
+    cards = []
+    index = 0
+    for trip_index, trip in enumerate(journey["trips"]):
+        names = _trip_reference_names(trip)
+        for leg in trip["transport_legs"]:
+            service = leg["service_number"] or labels["unknown"]
+            cards.append(
+                '<article class="entity-card" data-transport-index="%d" data-trip-index="%d" '
+                'data-leg-id="%s" data-travel-mode="%s"><h3>%s · %s · %s</h3>'
+                '<p>%s → %s</p><p>%s — %s</p>%s</article>' % (
+                    index, trip_index, attr(leg["leg_id"]), attr(leg["travel_mode"]),
+                    text(labels["segment"] % (trip_index + 1)),
+                    text(_enum_label(labels, "travel_mode", leg["travel_mode"])), text(service),
+                    text(names.get(leg["from_ref"], labels["unknown"])),
+                    text(names.get(leg["to_ref"], labels["unknown"])),
+                    _time_or_date(leg.get("depart_at"), labels), _time_or_date(leg.get("arrive_at"), labels),
+                    _price(leg["price"], leg["leg_id"], labels),
+                )
+            )
+            index += 1
+    return _section(
+        "transport-overview",
+        labels["transport_overview"],
         "".join(cards) or '<p class="empty-state">%s</p>' % text(labels["none"]),
         "panel panel-wide",
     )

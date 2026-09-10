@@ -825,3 +825,120 @@ restapi.amap.com/api.anysearch.com，任务书给的"40 条链接"是真实行�
 `/usr/bin/python3 -m unittest discover -s tests` → `Ran 539 tests` `OK` 0
 skipped；`scan_secrets.py` 0 命中（370 文件）；pyflakes（src tests scripts）
 0 行。单独一次 `git commit`。
+
+## 书「Journey 逐日时间轴」任务 2：Journey 页三个新分区（2026-09-10，完成）
+
+`JOURNEY_SECTIONS` 12→15，新增 `day-timeline`、`priority-actions`、
+`transport-overview`；`journey-nav` 除原 7 条分区链接外再加 16 个按日期的
+锚点。
+
+- **day-timeline**：`_journey_days(journey)` 把每个 Trip 的 `days` 按 Trip
+  顺序拍平成一条全程序列（16 天，不按分段重置计数），每天一张卡：全程第 N
+  天、日期、星期（自撰 `WEEKDAY_LABELS` 查表，不依赖 `strftime` 的系统
+  locale）、城市、当晚住宿名（`day["stay_id"]` 查不到时显示"本段无过夜住宿"
+  ——16 天数据里最后一天正是这种情况，已实测显示正确）、追溯链接回
+  `#segment-N`、当天槽位。槽位渲染按任务书要求"抽成共享函数"：把
+  `html.py:_days_section` 里原本内联的槽位循环体抽成
+  `html.py:_render_day_slots(day, claims, labels, *, anchored_claims=True)`，
+  `_days_section` 改调它，用 4 个 Trip demo 的 `render_trip()` 结果与已提交
+  `.html` 逐字节比对证明这一步抽取本身零输出变化。真正卡壳的一点：
+  `_render_day_slots` 内部经 `_claim_links` 给每个槽位的 claim 徽章生成
+  `href="#claim-<hash>"`，这个锚点只在 Trip 页的 `#evidence` 区块存在，
+  Journey 页从来没有——直接照抄会在 41/60 个真实带 claim_ids 的槽位上生成
+  "断链"，触发既有 `E004`/`JH004`（"broken internal anchor"）。改法：
+  `_claim_links` 加关键字参数 `anchored: bool = True`，`False` 时把
+  `<a href="#...">` 换成不带 `href` 的 `<span>`（徽章文字不变），
+  `_render_day_slots` 透传 `anchored_claims`；Journey 侧调用一律传
+  `anchored_claims=False`，Trip 侧两处既有调用（`_days_section`、间接经
+  `_render_day_slots`）不传，默认 `True` 保持原行为不变——同样用 4 个 Trip
+  demo 逐字节比对验证零变化。
+- **priority-actions**：把 `_checklist_section` 内联的单条 `<li>` 渲染逻辑
+  抽成 `_checklist_item_html(journey, item, labels, prefix="checklist")`
+  （`_checklist_section`/新写的 `_priority_actions_section` 共用，
+  后者传 `prefix="priority"` 换一套 `data-priority-*` 属性，避免和
+  `booking-checklist` 的 `data-checklist-*` 撞在同一份 DOM 里），取
+  `checklist[:5]`——`journey.py:_journey_checklist_sort_key` 已按截止时间
+  升序排序（源码读到，未改），切片即为"最早 5 条"，不需要另写排序。
+- **transport-overview**：按 Trip 顺序拍平 `transport_legs`，每条一张卡（方式、
+  出发到达时间、车次/航班号、价格），价格复用 `html.py:_price()`（新增
+  `journey_html.py` 的 `_journey_labels()` 两处 `price_unknown`/`queried`
+  两个键才能跑通，取值与 Trip 侧逐字相同）。
+
+CSS：`JOURNEY_READABILITY_CSS` 里 `.checklist-item,.risk-item,.segment-card`
+两组选择器各加 `.day-card`，复用已有 border-top 分隔样式，未新写布局规则；
+day-card 内部槽位列表就是 Trip 页同款 `.timeline`/`.timeline-item`，
+`renderer.css` 不用改。
+
+新增标签键（`_journey_labels()` 两个 locale 分支）：`locked`、`day_label`、
+`claim_evidence`、`no_claim`、`price_unknown`、`queried`（均与 Trip 侧
+`_labels()` 的对应值逐字相同，供 `_render_day_slots`/`_price` 复用）、
+`day_timeline`（"逐日安排"/"Day-by-day plan"）、`priority_actions`
+（"现在先处理"/"Priority actions"，直接取任务书原话）、
+`transport_overview`（"跨城交通"/"Cross-city transport"）。
+
+验证器 `validate_journey_html.py` 新增三段核对，代码复用既有 **`JH201`**
+（任务书正文写"按 JH201 同款新增核对"、反向验证原文明确写"报 JH201"，
+不是新起 JH206/207/208——起初按语义纯度另起了三个新码，跑完反向验证对照
+任务书原文发现字面要求就是 JH201，已改正，记在这里防止之后又改回去）：
+day-timeline 按拍平顺序核对张数、`data-date`/`data-city`；transport-overview
+核对张数与 `data-travel-mode`；priority-actions 复用既有
+`_validate_trace_nodes` 助手对 `checklist[:5]` 做逐条核对（天然蕴含
+"≤5 条"与"都在 checklist 里"，比字面要求更严）。
+
+反向验证（`ctw journey validate-html`，红→绿）：
+```
+$ python3 -c '...去掉第一张 day-card 写到 .tmp/journey-missing-day.html...'
+$ plugins/china-trip-weaver/scripts/ctw journey validate-html \
+    .tmp/journey-missing-day.html demo/journey-16d/journey.json
+JH004 broken internal anchor: #journey-day-a252675244
+JH201 day-timeline coverage differs from Journey Trip days
+JOURNEY HTML INVALID .tmp/journey-missing-day.html errors=2
+（JH004 是预期的连带反应：day-nav 里指向这张卡的日期锚点也跟着悬空了，
+证明锚点确实接上了，不是误报）
+$ plugins/china-trip-weaver/scripts/ctw journey validate-html \
+    demo/journey-16d/journey.html demo/journey-16d/journey.json
+JOURNEY HTML VALID demo/journey-16d/journey.html errors=0
+```
+transport-overview、priority-actions 同法（各删一张卡/一条 `<li>`）在 Python
+层单独复核，均只报 `JH201`；已固化为 3 个 `test_journey_html_rejects_a_
+missing_*` 回归测试，另加
+`test_priority_actions_are_the_five_earliest_deadline_checklist_items`
+断言渲染出的 `data-priority-id` 顺序与 `checklist[:5]` 的 `item_id` 逐条
+相等。
+
+`scripts/qa_renderer_browser.py` 不在白名单但被验收命令点名、需要最小改动
+才能通过——独立记在 `BLOCKED.md`（非空白裁决，加了向后兼容的 `--sections`
+参数，默认 12 不影响两处既有 Trip 页调用者）。
+
+意外收获的既有测试回归：`test_journey_html_rejects_missing_checklist_item`
+原来的 mutation 正则 `r'<li class="checklist-item".*?</li>'`（不挑
+`data-checklist-id` 还是 `data-priority-id`）在文档里第一次命中的现在是
+`priority-actions`（它排在 `booking-checklist` 前面），删掉后验证器正确报
+`JH201`（priority-actions 覆盖不对）而不是这条测试原本要的 `JH202`
+（booking-checklist 覆盖不对），`FAILED`。这不是断言变弱或误判，是选择器
+不够精确——测试名字叫"missing_checklist_item"，就该实际删 checklist 的那条，
+不该被同一 CSS class 的另一个新分区截胡。修法：正则加上
+`data-checklist-id=` 精确限定到 booking-checklist 的 `<li>`，断言
+（`self.assertIn("JH202", codes)`）一个字没动。
+
+验收：`/usr/bin/python3 scripts/build_renderer_fixtures.py` 后
+`git diff --stat -- demo/journey-16d/journey.json` 空输出（字节不变）；
+`ctw journey validate-html demo/journey-16d/journey.html
+demo/journey-16d/journey.json` → `errors=0`；
+`grep -c 'data-section="day-timeline"'` 为 1（该属性全文只出现一次，符合
+预期）；`grep -o 'class="day-card"' | wc -l` 16、
+`grep -o 'data-transport-index=' | wc -l` 3、
+`grep -o 'data-priority-id=' | wc -l` 5（`grep -c` 在这份单行 HTML 上不能
+数出现次数，只能数命中行数，任务书那条"grep -c...为 1"命中的恰好是只出现
+一次的属性名，数字本身对，但"day 卡 16 张"这条要用 `grep -o | wc -l` 才是
+真实次数，记录一下避免下次被 `grep -c` 的行为坑）；
+`/usr/bin/python3 scripts/qa_renderer_browser.py demo/journey-16d/journey.html
+--output .tmp/qa --viewports 375x812,1440x900 --sections 15` →
+`failures: []`，两个视口 `horizontalOverflow` 均为 0（`--sections 15`
+的必要性见上与 BLOCKED.md）。全量 `/usr/bin/python3 -m unittest discover
+-s tests` → `Ran 544 tests` `OK` 0 skipped（539+5 新增）；`scan_secrets.py`
+0 命中；pyflakes 0 行；`git diff 1f1e966 --stat -- plugins/china-trip-weaver/
+src ':!*/render/*'` 空输出；`git diff 1f1e966 -- tests | grep -E
+'^-\s*def test_'` 空输出。真实截图（1440 宽）与页面全文本已人工核对：16
+天逐日卡片、5 条现在先处理、3 张跨城交通卡内容与顺序均与源数据一致，日期第
+16 天正确显示"本段无过夜住宿"。单独一次 `git commit`。

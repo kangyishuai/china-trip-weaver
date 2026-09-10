@@ -533,8 +533,20 @@ def _lodging_section(
     return _section("lodging-summary", labels["lodging"], "".join(cards) or _empty(labels), "panel")
 
 
-def _render_day_slots(day: Mapping[str, Any], claims: Mapping[str, Any], labels: Mapping[str, str]) -> str:
-    """Render one day's slot timeline as ``<li>`` items; shared with the Journey day-timeline."""
+def _render_day_slots(
+    day: Mapping[str, Any],
+    claims: Mapping[str, Any],
+    labels: Mapping[str, str],
+    *,
+    anchored_claims: bool = True,
+) -> str:
+    """Render one day's slot timeline as ``<li>`` items; shared with the Journey day-timeline.
+
+    ``anchored_claims`` links each claim badge to its evidence card by default,
+    matching the Trip page's own ``#evidence`` section. The Journey overview has
+    no per-claim evidence anchors, so its day-timeline passes ``False`` to get
+    plain, unlinked badges instead of a dangling internal link.
+    """
     slots = []
     for slot in day["slots"]:
         lock = '<span class="lock-badge" data-locked="true">%s</span>' % text(labels["locked"]) if slot["locked"] else ""
@@ -548,7 +560,8 @@ def _render_day_slots(day: Mapping[str, Any], claims: Mapping[str, Any], labels:
                 attr(slot["start_at"]), attr(slot["end_at"]),
                 attr(slot["start_at"]), _clock(slot["start_at"]), attr(slot["end_at"]), _clock(slot["end_at"]),
                 text(slot["title"]), attr(slot["kind"]), text(_enum_label(labels, "kind", slot["kind"])),
-                _selection_badge(state, labels), lock, _claim_links(slot["claim_ids"], claims, labels),
+                _selection_badge(state, labels), lock,
+                _claim_links(slot["claim_ids"], claims, labels, anchored=anchored_claims),
             )
         )
     return "".join(slots) or '<li class="empty-state">%s</li>' % text(labels["none"])
@@ -746,13 +759,23 @@ def _section(identifier: str, heading: str, body: str, classes: str) -> str:
     )
 
 
-def _claim_links(claim_ids: Sequence[str], claims: Mapping[str, Any], labels: Mapping[str, str]) -> str:
+def _claim_links(
+    claim_ids: Sequence[str],
+    claims: Mapping[str, Any],
+    labels: Mapping[str, str],
+    *,
+    anchored: bool = True,
+) -> str:
     links = []
     for claim_id in claim_ids:
         claim = claims[claim_id]
-        links.append('<a class="claim-badge" data-claim-link="%s" href="#%s">%s</a>' % (
-            attr(claim_id), dom_id("claim", claim_id), text(_enum_label(labels, "claim_status", claim["status"])),
-        ))
+        status = text(_enum_label(labels, "claim_status", claim["status"]))
+        if anchored:
+            links.append('<a class="claim-badge" data-claim-link="%s" href="#%s">%s</a>' % (
+                attr(claim_id), dom_id("claim", claim_id), status,
+            ))
+        else:
+            links.append('<span class="claim-badge" data-claim-link="%s">%s</span>' % (attr(claim_id), status))
     return '<div class="claim-links" aria-label="%s">%s</div>' % (
         text(labels["claim_evidence"]), "".join(links) or '<span class="empty-state">%s</span>' % text(labels["no_claim"]),
     )

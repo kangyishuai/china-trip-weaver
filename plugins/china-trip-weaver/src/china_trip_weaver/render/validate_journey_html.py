@@ -117,6 +117,50 @@ def validate_journey_html(
             if any(health_nodes[index].get(key) != value for key, value in expected.items()):
                 add("JH201", "provider health facts differ at index %d" % index)
 
+    day_nodes = [
+        attrs for _, attrs in parser.all_attrs
+        if "data-day-index" in attrs
+    ]
+    expected_days = [
+        (trip_index, day)
+        for trip_index, trip in enumerate(journey["trips"])
+        for day in trip["days"]
+    ]
+    if len(day_nodes) != len(expected_days):
+        add("JH201", "day-timeline coverage differs from Journey Trip days")
+    else:
+        for index, (trip_index, day) in enumerate(expected_days):
+            expected = {
+                "data-day-index": str(index),
+                "data-trip-index": str(trip_index),
+                "data-date": day["date"],
+                "data-city": day["city"],
+            }
+            if any(day_nodes[index].get(key) != value for key, value in expected.items()):
+                add("JH201", "day-timeline facts differ at index %d" % index)
+
+    transport_nodes = [
+        attrs for _, attrs in parser.all_attrs
+        if "data-transport-index" in attrs
+    ]
+    expected_transport = [
+        (trip_index, leg)
+        for trip_index, trip in enumerate(journey["trips"])
+        for leg in trip["transport_legs"]
+    ]
+    if len(transport_nodes) != len(expected_transport):
+        add("JH201", "transport-overview coverage differs from Journey Trip transport legs")
+    else:
+        for index, (trip_index, leg) in enumerate(expected_transport):
+            expected = {
+                "data-transport-index": str(index),
+                "data-trip-index": str(trip_index),
+                "data-leg-id": leg["leg_id"],
+                "data-travel-mode": leg["travel_mode"],
+            }
+            if any(transport_nodes[index].get(key) != value for key, value in expected.items()):
+                add("JH201", "transport-overview facts differ at index %d" % index)
+
     checklist = journey_booking_checklist(journey)
     checklist_nodes = [
         attrs for _, attrs in parser.all_attrs
@@ -129,6 +173,12 @@ def validate_journey_html(
         "JH202",
         add,
     )
+
+    priority_nodes = [
+        attrs for _, attrs in parser.all_attrs
+        if attrs.get("data-priority-id")
+    ]
+    _validate_trace_nodes(priority_nodes, checklist[:5], "priority", "JH201", add)
 
     risks = journey_risk_items(journey)
     risk_nodes = [

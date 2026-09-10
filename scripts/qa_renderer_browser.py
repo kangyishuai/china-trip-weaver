@@ -170,14 +170,14 @@ def png_dimensions(path: Path) -> Tuple[int, int]:
     return struct.unpack(">II", data[16:24])
 
 
-def validate_report(report: Mapping[str, Any], width: int, errors: Sequence[str]) -> List[str]:
+def validate_report(report: Mapping[str, Any], width: int, errors: Sequence[str], sections: int) -> List[str]:
     checks = {
         "viewport width": report.get("viewportWidth") == width,
         "horizontal overflow": report.get("horizontalOverflow", 999) <= 1,
         "body font": report.get("bodyFontPx", 0) >= 16,
         "line height": report.get("bodyLineHeightPx", 0) / max(report.get("bodyFontPx", 1), 1) >= 1.45,
         "touch targets": report.get("minLinkHeight", 0) >= 44,
-        "12 sections": report.get("sectionCount") == 12 and report.get("nonEmptySections") == 12,
+        "%d sections" % sections: report.get("sectionCount") == sections and report.get("nonEmptySections") == sections,
         "heading order": report.get("headingJumps") == 0,
         "zero resource requests": report.get("resourceRequests") == [],
         "svg semantics": bool(report.get("svgSemantics")),
@@ -199,7 +199,7 @@ def console_errors(events: Sequence[Mapping[str, Any]]) -> List[str]:
     return errors
 
 
-def run_qa(html_path: Path, output: Path, chrome: Path, viewports: Sequence[Tuple[int, int]]) -> Mapping[str, Any]:
+def run_qa(html_path: Path, output: Path, chrome: Path, viewports: Sequence[Tuple[int, int]], sections: int = 12) -> Mapping[str, Any]:
     if not chrome.is_file():
         raise RuntimeError("Chrome executable is absent: %s" % chrome)
     output.mkdir(parents=True, exist_ok=True)
@@ -239,7 +239,7 @@ def run_qa(html_path: Path, output: Path, chrome: Path, viewports: Sequence[Tupl
             errors = console_errors(browser.events)
             report["requestedViewport"] = [width, height]
             report["consoleErrors"] = errors
-            failures.extend("%dx%d %s" % (width, height, item) for item in validate_report(report, width, errors))
+            failures.extend("%dx%d %s" % (width, height, item) for item in validate_report(report, width, errors, sections))
             reports.append(report)
 
             if width in (375, 1440):
@@ -294,9 +294,10 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--chrome", type=Path, default=None)
     parser.add_argument("--viewports", default=",".join("%dx%d" % item for item in DEFAULT_VIEWPORTS))
+    parser.add_argument("--sections", type=int, default=12, help="expected [data-section] count for this page (Trip: 12, Journey: 15)")
     args = parser.parse_args()
     chrome = args.chrome or default_chrome()
-    result = run_qa(args.html.resolve(), args.output.resolve(), chrome, parse_viewports(args.viewports))
+    result = run_qa(args.html.resolve(), args.output.resolve(), chrome, parse_viewports(args.viewports), args.sections)
     print(json.dumps(result, ensure_ascii=False, sort_keys=True))
     return 1 if result["failures"] else 0
 

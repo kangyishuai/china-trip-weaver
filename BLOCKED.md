@@ -1,3 +1,38 @@
+## 书「Journey 逐日时间轴」任务 2：`scripts/qa_renderer_browser.py` 不在白名单但被验收命令点名（2026-09-10，已按最小改动处理，非空白裁决）
+
+任务书「界限」只允许改 `scripts/build_renderer_fixtures.py` 这一个 scripts 文件；
+但任务 2 验收明确要求跑 `scripts/qa_renderer_browser.py demo/journey-16d/journey.html
+--output .tmp/qa --viewports 375x812,1440x900` 得到 `failures=[]`。实测该脚本
+`validate_report()` 里硬编码 `"12 sections": report.get("sectionCount") == 12
+and report.get("nonEmptySections") == 12`——这个 12 不是巧合，是 Trip 页
+`REQUIRED_SECTIONS`（validate_html.py）与 Journey 页原 `JOURNEY_SECTIONS`
+（journey_html.py）当时恰好都是 12 个分区，脚本本身对 Trip/Journey 通用、无
+从判断页面类型，就地写死了这个数。本书任务 2 把 Journey 分区从 12 加到 15
+后，用任务书给的原始命令跑：`failures: ["375x812 12 sections", "1440x900
+12 sections"]`——但同一条报告里 `sectionCount`/`nonEmptySections` 实测均为
+15、`horizontalOverflow` 均为 0，说明页面本身没有结构或溢出问题，纯粹是
+脚本的旧假设过期。
+
+判断：这是通用工具对旧结构的硬编码假设，不是本书刻意设的边界（界限小节从未
+提到"分区数固定 12"是不可变更的约束，反而任务 2 正文明确要求把 Journey
+分区数改成 15）；比照本文件已有先例（`test_contracts.py`/`SKILL.md`/
+`build_plan_fixtures.py` 三条：验收明确要求的硬指标优先于白名单遗漏一个
+文件，做最小改动）处理。已执行：`validate_report()`/`run_qa()`/`main()`
+加一个可选 `--sections`（默认 12，不传等于旧行为），把硬编码的 `12` 换成
+参数值，检查名同步显示实际期望值（如 `"15 sections"`），不改其他任何逻辑。
+本书对 Journey 的调用改传 `--sections 15`；Trip 页两处既有调用者
+（`tests/test_renderer.py::test_network_blocked_browser_viewports_and_print`、
+`tests/test_keyless_e2e.py::test_keyless_html_opens_offline_with_no_remote_
+requests`）都不传该参数，默认值 12 保证它们行为不变。
+
+验证：改动后 `/usr/bin/python3 scripts/qa_renderer_browser.py demo/
+journey-16d/journey.html --output .tmp/qa --viewports 375x812,1440x900
+--sections 15` → `failures: []`，两个视口 `horizontalOverflow` 均为 0；上述
+两个既有 Trip 页测试单独重跑均 `ok`（用默认 12，未受影响）；`tests/
+test_journey.py` 新增 `test_checked_in_sixteen_day_demo_passes_offline_
+browser_qa` 把这条命令固化为回归测试，防止分区数再变而没人发现。pyflakes
+对该文件 0 行。
+
 ## 书「ctw replan --rail-result」任务 2：硬指标二的 plugins diff 排除式与白名单本身冲突（2026-09-10，已按白名单执行，非空白裁决）
 
 任务书「界限」明确把 `skills/replan-china-trip/SKILL.md` 列入允许改动清单，
