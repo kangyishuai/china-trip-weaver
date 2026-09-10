@@ -1872,3 +1872,124 @@ kangyishuai/china-trip-weaver/pull/new/split-planning` 提示，未开 PR，按
 触发条件只认 `push: branches: [main]` 与 `pull_request`，非 main 分支 push
 后 `gh run list --branch split-planning` 为空属预期，非 CI 抖动。硬指标一、
 硬指标二全部达成，任务书结束，无遗留阻塞项。
+
+## 书 H：租车与轮渡 ADR（2026-09-10，worktree `.tmp/wt-h` 分支 `rental-ferry-adr`）
+
+任务 0（已完成）：`git worktree add .tmp/wt-h -b rental-ferry-adr`，HEAD
+`ec7c12d` 与任务书一致。任务书「现状与任务 0」列出的全部 file:line 断言
+逐条 `sed -n`/`git grep` 核对，无一处出入：schema 交通段 `travel_mode`
+枚举（trip.schema.json:553）含 drive/ferry，`matrix.py:11`/
+`render/html.py:28,59` 同步；生产者只有 rail（planning.py:1487）、
+transit（planning.py:2275）、flight（providers/flyai.py:94），
+`git grep ferry -- tests demo` 恰 0 行；行为分支认 flight（journey.py:1366
++ planning.py 广义 grep `flight` 恰 15 行）与 rail（planning.py:210,1487），
+drive 只是 `mobility.py:23-31` MODE_ALIASES 直通 `providers/amap.py:261-270`
+的高德驾车路线（无取还车/供应商/价格字段）；request 已有
+`parking_required`（trip.schema.json:444）；replan 事件恰
+`("closure","weather","delay","user_delete","refresh")`（replan.py:21）；
+priority-actions 的 `data-deadline` 只读 `item["deadline"]`
+（render/journey_html.py:836，594 为外层 `_priority_actions_section` 定义
+处）；`docs/design/01-product-scope.md:43-53` 非目标清单确未排除租车/轮渡；
+ADR 0001–0015 对 rental/ferry/轮渡/租车 关键词 `git grep -il` 恰 0 命中；
+`render/html.py:493-511` 的交通卡片按 `leg["travel_mode"]` 统一走同一张
+卡片模板 + `_enum_label` 文案表，无按模式分支的代码路径。全部吻合，不停工。
+
+理解的目标：产出 `docs/design/adr/0016-rental-car-and-ferry.md`，用任务 1
+盘清的现状证据，比较方案 A（不改 schema，用现有 slots kind 枚举 + claims +
+`request.assumptions` 表达租车与轮渡）与方案 B（改 schema 加结构化字段），
+就「取还车时段地点、租期规则、费用与预订截止、停航/变期的 replan 路径」
+四件事给出证据支持的选择，供下一本执行书直接依据。
+顺序：任务 1（列 Context 清单，≤40 行 file:line，先盘清现状作证据库）→
+任务 2（Options 四件事各给 ≤15 行合成 JSON、Decision 选边、Consequences
+列验收命令草案）→ 跑 `scan_secrets.py`/全量测试 → push 分支。
+最大风险：示例 JSON 必须是合成数据（不得含任何真实酒店名/供应商真实返回），
+容易在照抄现有 demo/fixture 结构时手滑带出真实痕迹——写示例时只挑城市名、
+公开站名、官方购票渠道等公开事实，数值（价格、订单号、车牌）全部现编；
+另一个风险是「A 就够」类结论容易流于空泛，必须对「取还车/租期/费用/
+replan」四件事逐项给现有字段/函数的具体证据，不能只说一句「slots 够用」。
+
+任务 1（已完成）：新建 `docs/design/adr/0016-rental-car-and-ferry.md`，写完
+Context 节，7 个小节 28 条 `file:line` 证据（按 grep 计数 `^- \`` 恰 28 条，
+在 ≤40 行硬指标内）：按 travel_mode 分支的函数 8 条（journey.py:1341
+`_segment_connections`、matrix.py:11,61、planning.py:638,1365,1625,2062,2097
+五处只排除字面 `"flight"`、planning.py:210 `plan_trip`、providers/amap.py:
+261-270 `_route_source` 只映射 walk/transit/drive/ride 四种无 ferry、
+replan.py:333,361 只认字面 `"rail"`、scheduler/light.py:497,511 只认字面
+`"walk"`、validate_trip.py:318）；一等公民若要动的 schema 字段 7 条
+（trip.schema.json:553 travel_mode 枚举已含 drive/ferry、550-576
+transportLeg 全字段、444 parking_required 语义其实是「住宿要不要车位」非
+「是否自驾」、473-474 assumptions/constraints 两个 stringList 现有实例、
+497-499 slot.kind 枚举、248-251 budgetItem.category/price_type、journey.py:
+2077 `_journey_trace_deadline` 把 deadline 等同 depart_at/check_in、无
+「开售/预订截止日」概念——这是唯一无论选 A 选 B 都必须新增语义的地方）；
+生成函数 4 条（planning.py:1449 `_deep_link_leg` 是唯一 rail 生产者、
+planning.py:2044 `_schedule_problems` 的 transit 字面量只是日内调度参数非
+transport_legs 生产者、providers/flyai.py:94、mobility.py:124 `resolve` 的
+MODE_ALIASES 把 drive/ride 直通高德点到点路线，无租期/取还车/异地还车费
+概念）；渲染分区 2 条（render/html.py:484 与 journey_html.py:700 两个交通
+卡片函数都按 travel_mode 走同一模板+标签表、无按模式分支，journey_html.py:
+594,836 priority-actions 只读 `item["deadline"]` 一个字段）；replan 事件
+3 条（replan.py:21 五个事件类型、62-70 closure/weather 只换
+`days[].slots[]` 单条、从不碰 transport_legs/budget_ledger——正是任务书
+「为什么干」里「配 free 时段再手改 patch」这条工作流在代码里的原因、232
+`_apply_refresh` 是唯一同时改腿+health+账本三处的事件处理器、可作未来
+「船票停航」或「租车改期」事件的模板）；会红的测试 4 条（test_contracts.py:
+69-70 SCHEMA_VERSION 冻结断言、81-84 有效/无效示例数量断言、test_journey.py:
+1344 priority-actions 排序测试、test_replan.py:59,221 fixture 驱动的 CLI
+循环）。验收：随机抽 3 条（mobility.py:124、journey_html.py:700、
+test_contracts.py:81-84）`sed -n` 核对，三条均逐字命中。撰写时
+`schema/trip.schema.json:559-566` 首稿引错行号（那段其实是 group_refs
+数组定义，非完整属性列表），核对时自己发现并改成实测的 550-576，未留错误
+引用；同一轮还补全了首稿里三处漏写行号的 schema 字段引用（assumptions/
+constraints、slot.kind、budgetItem.category/price_type）。单独一次
+`git commit`。
+
+任务 2（已完成）：ADR 补完 Options/Decision/Consequences 三节。Options
+按任务书四件事逐项给 A、B 两案的合成示例（全部虚构城市点位/价格/订单号，
+仅城市名、站名、`www.xmferry.com` 官网域名为公开事实），共 7 段 JSON
+（≤15 行/段，`python3 -c` 用 `json.loads` 逐段解析全部合法，行数
+12/6/8/10/15/7/5）：①取还车时段地点两案完全相同，直接复用现有
+transportLeg 字段；②租期规则 A 写进 `request.assumptions` 自由文本、B 假想
+新增 `rental_min_hours`/`one_way_fee_cny`/`one_way_fee_reason` 三字段；
+③费用与预订截止 A 用两条 `budgetItem`（`category="transport"`）+ 一条
+`field_path="/booking_deadline"` 的 claim 约定、B 假想新增 leg 级
+`booking_deadline` 字段；④停航/改期 replan 路径两案相同，示例为今天唯一
+可用的 `closure` 事件+手改 `replacement_slot`（不碰 transport_legs/
+budget_ledger，这正是任务书「为什么干」里「配 free 时段再手改 patch」的
+出处）。Decision 选 **方案 A**，逐维度证据：取还车/costs 两维不改 schema
+两案零差异；租期规则维度指出全仓库没有任何代码读取或校验「最低租期/异地
+还车费」这类假想字段（`mobility.py:124` 的 drive 别名只算点到点路线），
+空字段无消费者即为死字段；预订截止维度是唯一真缺口，但缺口在
+`journey_booking_checklist`（journey.py:1769-1790）硬编码
+`leg.get("depart_at")`——撰写中用 `git grep` 额外证实这不是租车/轮渡专属
+问题：`providers/rail12306.py:28` 定义 `PRESALE_DAYS = 15`、124 行产出
+「outside the 12306 15-day presale window」，说明火车票早就有「无法提前预订
+的边界」而 `journey_booking_checklist` 同样忽略它，修这个函数对 rail 同样
+有收益，且改哪个字段读（claim 约定 vs 新 leg 字段）都不省这个改动；史料
+证据：`git log -p --follow` 核实 `SCHEMA_VERSION` 自仓库第一个提交
+`4233792` 起、经 0.2.0 到 0.11.0 共 12 次发版从未变过 "1.0.0"（比首稿设想
+的“ADR-0007/0010/0012 先例”更直接，遂改用这条实测证据替换未核实的 ADR
+编号引用）；`BLOCKED.md` 里书 D（`tests/fixtures/providers/manifest.json`
+排除模式漏covered）与书 D2（`test_providers.py` fixture_count 76→78、
+`test_skills.py` 硬编码文案）两次真实发生的 fixture-shape 改动都在白名单外
+测试里炸出连带修改，schema 字段改动的影响面只会更大。Consequences 节给下一本
+执行书 6 条验收命令草案（含 `git diff main --stat -- plugins/china-trip-
+weaver/schema` 应为空、一条合成 Trip 通过未改 schema 的 `ctw validate`/
+`validate-html`、`journey_booking_checklist` 新测试、新 replan fixture、
+全量回归）。
+撰写中自查出两处引用错误并改正（记入 `BLOCKED.md`）：①渲染分区小节曾把
+priority-actions 的 deadline 来源写成 `_journey_trace_deadline`，实测后
+改为准确的 `journey_booking_checklist`（该 helper 只服务 unknown 类
+checklist 项，transport 类走的是 `journey_booking_checklist` 内联表达式）；
+②Decision 节引用测试排序逻辑时同一处引用一并改正。
+硬指标一实测：ADR 存在；Context 节 `grep -c '^- \`'` 恰 28 条（≤40）；
+Decision 明确选 A；`python3` 解析 7 段 JSON 全部合法（≥4 段）；
+`/usr/bin/python3 scripts/scan_secrets.py` → `secret scan: 0 finding(s)
+across 373 file(s)`。硬指标二实测：`git diff main --stat -- plugins tests
+README.md README.zh-CN.md` 空输出；`/usr/bin/python3 -m unittest discover
+-s tests` → `Ran 584 tests` `OK`（0 skipped，与任务书基线一致，73.6 秒）；
+`git diff main --stat`（全量）只有 `PROGRESS.md`、
+`docs/design/adr/0016-rental-car-and-ferry.md` 两个文件。`BLOCKED.md` 追加
+「无」条目（见上）。单独一次 `git commit`，随后 `git push -u origin
+rental-ferry-adr`。止损轮次未触发（任务 0/1/2 均一轮验收通过，未出现
+连败）。

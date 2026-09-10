@@ -857,3 +857,12 @@ china_trip_weaver/replan.py`）无歧义、按实际路径处理，不算待裁�
    时，先用 `curl --noproxy '*' https://github.com` 探一次直连，通的话
    同样用 `env -u HTTP_PROXY -u HTTPS_PROXY ...` 绕开代理即可，不必假设
    是网络整体故障。
+
+## 书 H：租车与轮渡 ADR（2026-09-10，worktree `.tmp/wt-h` 分支 `rental-ferry-adr`）
+
+无。任务 0 的全部 file:line 断言逐条核对均吻合，任务 1/2 撰写 ADR 过程中
+自查出的两处引用错误（`trip.schema.json` 行号引到了 `group_refs` 数组而非
+完整属性列表；`journey_html.py` 一处 deadline 来源函数引成了
+`_journey_trace_deadline`，实际主逻辑在 `journey_booking_checklist`）均已
+在撰写阶段自行发现并改正，未留待裁决项，详见 `PROGRESS.md` 本书任务 1/2
+小节的记录。
