@@ -1788,3 +1788,13 @@ tests/fixtures` 空输出；`git diff main --stat` 只有 `BLOCKED.md`/
 再跑一次全量测试确认仍是 `Ran 584 tests` `OK` 0 skipped。
 未触发止损（13 次抽取一次性全过，止损线是同一验收连败 3 次）。任务书结束，
 `BLOCKED.md` 本轮只有任务 0 的一条非阻塞记录，无新增待裁决项。
+
+终验：`git diff main --stat` 只有 `BLOCKED.md`/`PROGRESS.md`/`planning.py`
+三个文件，均在白名单（`tests/test_keyless_e2e.py` 本轮未改，无需新增测试就
+已覆盖）；两次 `git commit`（任务 0/1 docs 一次、任务 2 拆分一次）；
+`git push -u origin split-planning` 成功，远程分支已建（`https://github.com/
+kangyishuai/china-trip-weaver/pull/new/split-planning` 提示，未开 PR，按
+任务书「只推分支、合并由管理者做」不处理）；`.github/workflows/*.yml` 的
+触发条件只认 `push: branches: [main]` 与 `pull_request`，非 main 分支 push
+后 `gh run list --branch split-planning` 为空属预期，非 CI 抖动。硬指标一、
+硬指标二全部达成，任务书结束，无遗留阻塞项。
