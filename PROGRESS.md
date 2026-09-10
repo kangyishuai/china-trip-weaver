@@ -2002,3 +2002,50 @@ README.md README.zh-CN.md` 空输出；`/usr/bin/python3 -m unittest discover
 「无」条目（见上）。单独一次 `git commit`，随后 `git push -u origin
 rental-ferry-adr`。止损轮次未触发（任务 0/1/2 均一轮验收通过，未出现
 连败）。
+
+## F2「replan suspend 事件」（分支 replan-suspend，worktree .tmp/wt-f2）
+
+任务 0（已核对，全部吻合）：全量 `Ran 584 tests` OK；replan.py:21/22/62-70/
+133/232/329 各行内容与任务书描述逐字一致；demo/trip.json 10-18 回程腿是
+`leg-rail-fallback-e67d77f564f5`（slot_id
+`slot-leg-rail-fallback-e67d77f564f5`，day_index=2/day-3，budget_ledger 已有
+一条 `ref_id` 指向它的 transport 项）；tests/fixtures/scheduler/replan/ 确
+五份，`run_replan_fixture`/CLI 循环行号吻合。
+理解的目标：新增 `suspend` 事件——一次性把受影响时段换成 `replacement_slot`
+（kind 限 free/poi、ref_id 不许指向被删腿）、从 `transport_legs` 删对应腿、
+清掉指向该腿的 unknowns 与孤儿 claims、有 `budget_ledger` 就重算，trigger 用
+schema 已有的 `disruption`，其余天不动。顺序：任务 1 先写 `suspend.json` +
+≥4 个新测试（应先红）→ 任务 2 实现 `_apply_suspend`/`_find_transport_leg`
+（不限 travel_mode）接入 `VALID_EVENT_TYPES`/`_TRIGGER_BY_EVENT_TYPE` + 文档。
+最大风险：①replan.py:53 通用锁检查只比对 `subject_ref` 本身，腿被锁但传的是
+slot_id 时不触发，需在 `_apply_suspend` 里另查 `leg.get("locked")`；②删腿后
+leg_id 从 `all_refs` 消失，指向它的两条 claim（`/depart_at`、`/price`）会被
+V_CLAIM_SUBJECT 判孤儿，需随腿一起删（已用 demo/trip.json 实测核实：两条
+claim 的 subject_ref 均为该 leg_id）；③event 的 `reverify_claim_ids` 若不
+显式传空数组，默认值取自原 slot 的 claim_ids，会让 suspend.json 要求
+reverify 两条刚被删的 claim，自相矛盾，需显式覆盖。
+
+任务 1（已完成）：新建 `tests/fixtures/scheduler/replan/suspend.json`（base
+demo/trip.json，subject_ref 指向 `slot-leg-rail-fallback-e67d77f564f5`，
+replacement_slot 为 `kind=free`、`title="列车停运，改为市内活动"` 的时段，
+`reverify_claim_ids` 显式给空数组，理由见上条风险③）。`tests/test_replan.py`
+新增 `_suspend_event` 夹具助手 + 5 个 `def test_`：
+`test_suspend_removes_leg_and_recomputes_budget_and_unknowns`（在通用
+`run_replan_fixture` 之外直接断言腿不在 transport_legs、budget_ledger 不再
+引用该 leg_id、无残留 `/transport_legs/1/` unknowns、两条孤儿 claim 已删）、
+`test_suspend_requires_replacement_slot`（→`replacement_required`）、
+`test_suspend_rejects_replacement_kind_other_than_free_or_poi`
+（→`replacement_kind`）、
+`test_suspend_rejects_replacement_ref_id_pointing_to_removed_leg`
+（→`replacement_ref_removed`）、
+`test_suspend_locked_leg_rejected_even_when_subject_is_the_slot_id`（只锁腿不
+锁时段、subject_ref 传 slot_id，专门证明 replan.py:53 的通用检查覆盖不到这
+个组合，需要 `_apply_suspend` 自己查 `leg.get("locked")`→`locked_ref`）。CLI
+循环夹具元组加入 `"suspend.json"`，`assertEqual(5, ...)` 改 6。此时
+replan.py 尚未实现 `suspend` 分支，验收：临时跑
+`python3 -m unittest tests.test_replan -v -k suspend` 得
+`FAILED (failures=4, errors=2)`，6 个新测试（含自动生成的
+`test_replan_suspend` 夹具测试）全部因 `ReplanError: event type must use the
+field "type" with one of: closure, weather, delay, user_delete, refresh`
+（或该异常未被具体错误码匹配）而红，证据见下条任务 2 记录（实现后回退验证时
+复现的同一份红屏）。

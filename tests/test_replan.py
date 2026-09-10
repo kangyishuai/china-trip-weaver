@@ -184,6 +184,28 @@ def _refresh_event(**overrides) -> dict:
     return event
 
 
+def _suspend_event(**overrides) -> dict:
+    event = {
+        "type": "suspend",
+        "subject_ref": "slot-leg-rail-fallback-e67d77f564f5",
+        "reason": "列车停运",
+        "replacement_slot": {
+            "slot_id": "slot-day3-suspend-alt",
+            "start_at": "2026-10-18T16:00:00+08:00",
+            "end_at": "2026-10-18T21:00:00+08:00",
+            "kind": "free",
+            "ref_id": None,
+            "title": "列车停运，改为市内活动",
+            "locked": False,
+            "status": "tentative",
+            "claim_ids": [],
+        },
+        "reverify_claim_ids": [],
+    }
+    event.update(overrides)
+    return event
+
+
 class ReplanTests(unittest.TestCase):
     def test_revision_conflict_fails_without_rebase(self):
         base = load(ROOT / "tests/fixtures/trips/schema/valid/weekend-live.json")
@@ -228,9 +250,11 @@ class ReplanTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
             output = Path(temporary)
-            cli_fixture_names = ("closure.json", "delay.json", "refresh.json", "user-delete.json", "weather.json")
+            cli_fixture_names = (
+                "closure.json", "delay.json", "refresh.json", "suspend.json", "user-delete.json", "weather.json",
+            )
             fixture_paths = [FIXTURES / name for name in cli_fixture_names]
-            self.assertEqual(5, len(fixture_paths))
+            self.assertEqual(6, len(fixture_paths))
             for path in fixture_paths:
                 self.assertTrue(path.is_file(), path)
             for path in fixture_paths:
@@ -556,6 +580,85 @@ class ReplanTests(unittest.TestCase):
                 (_shift(original["start_at"], 10), _shift(original["end_at"], 10)),
                 (shifted["start_at"], shifted["end_at"]),
             )
+
+    def test_suspend_removes_leg_and_recomputes_budget_and_unknowns(self):
+        """Beyond the generic run_replan_fixture checks, assert directly on the leg,
+        budget_ledger, and unknowns the way test_replan_refresh_resolves_to_live_service
+        does for refresh."""
+
+        path = FIXTURES / "suspend.json"
+        run_replan_fixture(self, path)
+        fixture = load(path)
+        base = load(ROOT / fixture["base_fixture"])
+        removed_leg_id = "leg-rail-fallback-e67d77f564f5"
+        result = replan_trip(
+            base, fixture["event"], base_revision=base["revision"]["number"],
+            user_locked_refs=fixture["user_locked_refs"],
+            clock=FixedClock.from_iso("2026-10-15T12:00:00+08:00"),
+        )
+        leg_ids = [leg["leg_id"] for leg in result.trip["transport_legs"]]
+        self.assertNotIn(removed_leg_id, leg_ids)
+        budget_refs = [item["ref_id"] for item in result.trip["budget_ledger"]["items"]]
+        self.assertNotIn(removed_leg_id, budget_refs)
+        leg_unknowns = [
+            item for item in result.trip["unknowns"]
+            if str(item["field_path"]).startswith("/transport_legs/1/")
+        ]
+        self.assertEqual([], leg_unknowns)
+        claim_ids = [claim["claim_id"] for claim in result.trip["claims"]]
+        self.assertNotIn("claim-293577c203a0fe70", claim_ids)
+        self.assertNotIn("claim-98f1eeb25f5aeee7", claim_ids)
+
+    def test_suspend_requires_replacement_slot(self):
+        base = load(ROOT / "demo/trip.json")
+        event = _suspend_event()
+        del event["replacement_slot"]
+        with self.assertRaises(ReplanError) as raised:
+            replan_trip(
+                base, event, base_revision=base["revision"]["number"],
+                user_locked_refs=[], clock=FixedClock.from_iso("2026-10-15T12:00:00+08:00"),
+            )
+        self.assertEqual("replacement_required", raised.exception.code)
+
+    def test_suspend_rejects_replacement_kind_other_than_free_or_poi(self):
+        base = load(ROOT / "demo/trip.json")
+        event = _suspend_event()
+        event["replacement_slot"] = dict(event["replacement_slot"], kind="rest")
+        with self.assertRaises(ReplanError) as raised:
+            replan_trip(
+                base, event, base_revision=base["revision"]["number"],
+                user_locked_refs=[], clock=FixedClock.from_iso("2026-10-15T12:00:00+08:00"),
+            )
+        self.assertEqual("replacement_kind", raised.exception.code)
+
+    def test_suspend_rejects_replacement_ref_id_pointing_to_removed_leg(self):
+        base = load(ROOT / "demo/trip.json")
+        event = _suspend_event()
+        event["replacement_slot"] = dict(
+            event["replacement_slot"], kind="poi", ref_id="leg-rail-fallback-e67d77f564f5",
+        )
+        with self.assertRaises(ReplanError) as raised:
+            replan_trip(
+                base, event, base_revision=base["revision"]["number"],
+                user_locked_refs=[], clock=FixedClock.from_iso("2026-10-15T12:00:00+08:00"),
+            )
+        self.assertEqual("replacement_ref_removed", raised.exception.code)
+
+    def test_suspend_locked_leg_rejected_even_when_subject_is_the_slot_id(self):
+        """The generic subject_ref-in-locked_refs check (replan.py:53) only catches a
+        lock on the identifier actually passed as subject_ref; this proves the leg's
+        own lock is still honored when the caller instead names the slot_id."""
+
+        base = load(ROOT / "demo/trip.json")
+        for leg in base["transport_legs"]:
+            if leg["leg_id"] == "leg-rail-fallback-e67d77f564f5":
+                leg["locked"] = True
+        with self.assertRaises(ReplanError) as raised:
+            replan_trip(
+                base, _suspend_event(), base_revision=base["revision"]["number"],
+                user_locked_refs=[], clock=FixedClock.from_iso("2026-10-15T12:00:00+08:00"),
+            )
+        self.assertEqual("locked_ref", raised.exception.code)
 
 
 def _shift(value: str, minutes: int) -> str:
