@@ -137,6 +137,7 @@ def plan_trip(
     flyai_backend: Optional[FlyAIBackend] = None,
     variflight_backend: Optional[VariFlightBackend] = None,
     amap_lodging_backend: Optional[AMapLodgingBackend] = None,
+    anysearch_configured: bool = False,
 ) -> PlanResult:
     normalized_request = _normalize_request(request)
     normalized_candidates = _normalize_candidates(candidates, normalized_request)
@@ -361,6 +362,7 @@ def plan_trip(
                 amap_lodging.health if amap_lodging is not None else None,
             ),
             enrichment.health,
+            anysearch_configured,
         ),
         "unknowns": unknowns,
         "patches": [],
@@ -2471,6 +2473,7 @@ def _provider_health(
     flyai_health: Mapping[str, Any],
     amap_health: Mapping[str, Any],
     variflight_health: Mapping[str, Any],
+    anysearch_configured: bool = False,
 ) -> List[Mapping[str, Any]]:
     return [
         rail_health,
@@ -2478,12 +2481,14 @@ def _provider_health(
         copy.deepcopy(dict(flyai_health)),
         copy.deepcopy(dict(amap_health)),
         copy.deepcopy(dict(variflight_health)),
-        _anysearch_health(now),
+        _anysearch_health(now, anysearch_configured),
     ]
 
 
-def _anysearch_health(now: str) -> Mapping[str, Any]:
-    if resolve_credentials().get("ANYSEARCH_API_KEY"):
+def _anysearch_health(now: str, configured: bool) -> Mapping[str, Any]:
+    # An explicit input, never an implicit read of the machine's credentials:
+    # in-process callers stay deterministic and the offline demo regenerates identically everywhere.
+    if configured:
         return _health(
             "anysearch", "runtime-probe-v1", "static", "ready", now, ("research",),
             "configured; ctw plan does not call it, use `ctw research` to query it explicitly",

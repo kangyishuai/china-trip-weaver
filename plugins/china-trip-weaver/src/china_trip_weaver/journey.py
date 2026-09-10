@@ -214,6 +214,7 @@ def plan_journey(
     amap_lodging_backend: Optional[AMapLodgingBackend] = None,
     expected_segment_days: Optional[int] = None,
     amap_total_max_calls: Optional[int] = None,
+    anysearch_configured: bool = False,
 ) -> JourneyPlanResult:
     """Plan lodging-aligned units, merge logical Trips, then assemble a Journey."""
 
@@ -267,6 +268,7 @@ def plan_journey(
                 flyai_backend,
                 variflight_backend,
                 segment_amap_lodging,
+                anysearch_configured=anysearch_configured,
             )
             atomic_trips.append(copy.deepcopy(dict(result.trip)))
             calls.extend(result.business_calls)

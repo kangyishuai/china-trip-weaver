@@ -933,6 +933,13 @@ def _cmd_journey_plan(args: argparse.Namespace, progress: "_NDJSONProgress") -> 
         variflight_backend = VariFlightBackend.from_spec(
             aviation_mode, repo_root, deadline_seconds=args.variflight_deadline,
         )
+        # The plan never calls AnySearch; its health line only reports whether `ctw research` could.
+        # --offline-fixture never consults credentials so the checked-in demos regenerate identically.
+        anysearch_configured = False
+        if not args.offline_fixture:
+            from .credentials import resolve_credentials
+
+            anysearch_configured = bool(resolve_credentials().get("ANYSEARCH_API_KEY"))
         for backend in (
             rail_backend, mobility_backend, flyai_backend,
             amap_lodging_backend, variflight_backend,
@@ -949,6 +956,7 @@ def _cmd_journey_plan(args: argparse.Namespace, progress: "_NDJSONProgress") -> 
             amap_lodging_backend,
             expected_segment_days=args.expected_segment_days,
             amap_total_max_calls=args.amap_total_max_calls,
+            anysearch_configured=anysearch_configured,
         )
         args.output_json.parent.mkdir(parents=True, exist_ok=True)
         write_canonical_json(args.output_json, result.journey)
@@ -1011,6 +1019,13 @@ def _cmd_plan(args: argparse.Namespace, progress: "_NDJSONProgress") -> int:
         variflight_backend = VariFlightBackend.from_spec(
             aviation_mode, repo_root, deadline_seconds=args.variflight_deadline,
         )
+        # The plan never calls AnySearch; its health line only reports whether `ctw research` could.
+        # --offline-fixture never consults credentials so the checked-in demos regenerate identically.
+        anysearch_configured = False
+        if not args.offline_fixture:
+            from .credentials import resolve_credentials
+
+            anysearch_configured = bool(resolve_credentials().get("ANYSEARCH_API_KEY"))
         for backend in (
             rail_backend, mobility_backend, flyai_backend,
             amap_lodging_backend, variflight_backend,
@@ -1019,6 +1034,7 @@ def _cmd_plan(args: argparse.Namespace, progress: "_NDJSONProgress") -> int:
         result = plan_trip(
             request_value, candidates_value, clock, rail_backend, mobility_backend,
             flyai_backend, variflight_backend, amap_lodging_backend,
+            anysearch_configured=anysearch_configured,
         )
         args.output_json.parent.mkdir(parents=True, exist_ok=True)
         args.output_html.parent.mkdir(parents=True, exist_ok=True)

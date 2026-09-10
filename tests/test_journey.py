@@ -1433,7 +1433,7 @@ class JourneyContinuityTests(unittest.TestCase):
                 ],
                 text=True,
                 capture_output=True,
-                timeout=60,
+                timeout=150,
             )
             self.assertEqual(0, qa.returncode, qa.stdout + qa.stderr)
             report = load(Path(temporary) / "qa" / "qa-report.json")

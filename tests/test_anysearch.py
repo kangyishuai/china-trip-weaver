@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -479,3 +480,61 @@ class AnySearchResearchCLITests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+E2E_CASE = ROOT / "tests" / "fixtures" / "e2e" / "beijing-shanghai-3d"
+E2E_FIXED_NOW = "2026-09-03T12:00:00+08:00"
+PLAN_OFFLINE_ARGS = (
+    "--request", str(E2E_CASE / "request.json"),
+    "--candidates", str(E2E_CASE / "candidates.json"),
+    "--rail", "fixture:" + str(E2E_CASE / "rail.json"),
+    "--mobility", "off", "--lodging", "off", "--aviation", "off",
+)
+
+
+class AnySearchPlanHealthTests(unittest.TestCase):
+    """The plan's anysearch health line is an explicit input, never an implicit read of machine credentials."""
+
+    def _anysearch_health(self, **kwargs: Any) -> Mapping[str, Any]:
+        from china_trip_weaver.planning import RailBackend, plan_trip
+
+        backend = RailBackend.from_spec("fixture:" + str(E2E_CASE / "rail.json"), ROOT)
+        result = plan_trip(
+            load(E2E_CASE / "request.json"), load(E2E_CASE / "candidates.json"),
+            FixedClock.from_iso(E2E_FIXED_NOW), backend, **kwargs,
+        )
+        return {item["provider"]: item for item in result.trip["provider_health"]}["anysearch"]
+
+    def test_plan_trip_ignores_machine_credentials_by_default(self):
+        with mock.patch.dict(os.environ, {"ANYSEARCH_API_KEY": "ctw-canary-anysearch-not-real"}):
+            health = self._anysearch_health()
+        self.assertEqual("missing", health["status"])
+        self.assertIn("no auto-registration or business call was made", health["reason"])
+
+    def test_plan_trip_reports_configured_only_when_told(self):
+        health = self._anysearch_health(anysearch_configured=True)
+        self.assertEqual(("ready", "static"), (health["status"], health["mode"]))
+        self.assertIn("ctw research", health["reason"])
+
+    def _run_plan(self, folder: Path, *extra: str) -> Mapping[str, Any]:
+        env = {"PATH": "/usr/bin:/bin", "HOME": str(folder), "ANYSEARCH_API_KEY": "ctw-canary-anysearch-not-real"}
+        completed = subprocess.run(
+            [str(CTW), "plan", *PLAN_OFFLINE_ARGS, *extra,
+             "--output-json", str(folder / "trip.json"), "--output-html", str(folder / "trip.html")],
+            text=True, capture_output=True, env=env, timeout=120,
+        )
+        self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
+        self.assertNotIn("ctw-canary-anysearch-not-real", completed.stdout + completed.stderr)
+        trip = load(folder / "trip.json")
+        self.assertNotIn("ctw-canary-anysearch-not-real", json.dumps(trip))
+        return {item["provider"]: item for item in trip["provider_health"]}["anysearch"]
+
+    def test_offline_fixture_plan_never_consults_credentials(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            health = self._run_plan(Path(temporary), "--offline-fixture", "--fixed-clock", E2E_FIXED_NOW)
+        self.assertEqual("missing", health["status"])
+
+    def test_live_plan_reports_a_configured_key_without_calling_anysearch(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            health = self._run_plan(Path(temporary))
+        self.assertEqual(("ready", "static"), (health["status"], health["mode"]))
