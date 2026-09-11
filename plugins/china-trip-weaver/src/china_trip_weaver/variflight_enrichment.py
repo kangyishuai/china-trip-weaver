@@ -43,6 +43,10 @@ CITY_IATA = {
 }
 
 
+PRICE_CONFLICT_MIN_DELTA = 20.0
+PRICE_CONFLICT_RATIO = 0.05
+
+
 @dataclass(frozen=True)
 class VariFlightEnrichmentResult:
     flights: Tuple[Mapping[str, Any], ...]
@@ -50,6 +54,7 @@ class VariFlightEnrichmentResult:
     health: Mapping[str, Any]
     business_calls: Tuple[str, ...]
     warnings: Tuple[str, ...] = ()
+    conflict_claim_ids: Tuple[str, ...] = ()
 
 
 class VariFlightBackend:
@@ -134,12 +139,18 @@ class VariFlightBackend:
         calls: List[str] = []
         errors: List[str] = []
         runtime_warnings: List[str] = []
+        conflict_claim_ids: List[str] = []
         for route in routes:
-            self._enrich_route(route, copied_flights, adapter, context, claims, calls, errors, runtime_warnings)
+            self._enrich_route(
+                route, copied_flights, adapter, context,
+                claims, calls, errors, runtime_warnings, conflict_claim_ids,
+            )
 
         self._backfill_claim_ids(copied_flights, claims)
 
-        return self._summarize_health(copied_flights, claims, calls, errors, runtime_warnings, now)
+        return self._summarize_health(
+            copied_flights, claims, calls, errors, runtime_warnings, conflict_claim_ids, now,
+        )
 
     def _enrich_route(
         self,
@@ -151,6 +162,7 @@ class VariFlightBackend:
         calls: List[str],
         errors: List[str],
         runtime_warnings: List[str],
+        conflict_claim_ids: List[str],
     ) -> None:
         dep_city = CITY_IATA.get(route.from_place.get("city") or route.from_place.get("name"))
         arr_city = CITY_IATA.get(route.to_place.get("city") or route.to_place.get("name"))
@@ -214,6 +226,45 @@ class VariFlightBackend:
                     selected["service_number"], route.travel_date,
                 ),
             ))
+        if not candidate_mode:
+            self._enrich_price(
+                route, dep_city, arr_city, selected, adapter, context,
+                claims, calls, errors, runtime_warnings, conflict_claim_ids,
+            )
+
+    def _enrich_price(
+        self,
+        route: Any,
+        dep_city: str,
+        arr_city: str,
+        selected: Mapping[str, Any],
+        adapter: VariFlightAdapter,
+        context: ProviderContext,
+        claims: List[Mapping[str, Any]],
+        calls: List[str],
+        errors: List[str],
+        runtime_warnings: List[str],
+        conflict_claim_ids: List[str],
+    ) -> None:
+        price_request = self._build_price_request(route, dep_city, arr_city, selected)
+        price = adapter.query(price_request, context)
+        calls.append("variflight.price:%s:%s:%s" % (route.travel_date, dep_city, arr_city))
+        if price.error_class:
+            errors.append(price.error_class)
+            runtime_warnings.extend(_runtime_failure_warnings(
+                price.error_class,
+                (selected["leg_id"],),
+                "flight@%s->%s" % (
+                    route.from_place["ref_id"], route.to_place["ref_id"],
+                ),
+                "service=%s;date=%s;action=price" % (
+                    selected["service_number"], route.travel_date,
+                ),
+            ))
+        elif price.claims and _price_conflict(selected["price"]["amount"], price.claims[0]["value"]):
+            price.claims[0]["status"] = "conflict"
+            conflict_claim_ids.append(selected["price"]["claim_id"])
+        claims.extend(copy.deepcopy(list(price.claims)))
 
     def _build_search_request(
         self,
@@ -282,6 +333,30 @@ class VariFlightBackend:
             trace={"stage": "variflight-comfort"},
         )
 
+    def _build_price_request(
+        self,
+        route: Any,
+        dep_city: str,
+        arr_city: str,
+        selected: Mapping[str, Any],
+    ) -> ProviderRequest:
+        return ProviderRequest(
+            request_id=stable_id("variflight-price", dep_city, arr_city, route.travel_date, selected["service_number"]),
+            capability="flight",
+            parameters={
+                "action": "price",
+                "dep_city": dep_city,
+                "arr_city": arr_city,
+                "date": route.travel_date,
+                "flight_no": selected["service_number"],
+                "subject_ref": selected["leg_id"],
+            },
+            deadline_ms=int(self.deadline_seconds * 1000),
+            as_of=route.travel_date,
+            cache_policy="bypass",
+            trace={"stage": "variflight-price"},
+        )
+
     def _backfill_claim_ids(
         self,
         copied_flights: List[Mapping[str, Any]],
@@ -301,6 +376,7 @@ class VariFlightBackend:
         calls: List[str],
         errors: List[str],
         runtime_warnings: List[str],
+        conflict_claim_ids: List[str],
         now: str,
     ) -> VariFlightEnrichmentResult:
         status_claims = sum(item["field_path"] == "/status" for item in claims)
@@ -321,7 +397,19 @@ class VariFlightBackend:
             ),
             tuple(calls),
             tuple(runtime_warnings),
+            tuple(conflict_claim_ids),
         )
+
+
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _price_conflict(flyai_amount: Any, variflight_amount: Any) -> bool:
+    if not _is_number(flyai_amount) or not _is_number(variflight_amount):
+        return False
+    threshold = max(PRICE_CONFLICT_MIN_DELTA, abs(flyai_amount) * PRICE_CONFLICT_RATIO)
+    return abs(variflight_amount - flyai_amount) > threshold
 
 
 def _runtime_failure_warnings(

@@ -151,6 +151,12 @@ def _tool_call(request: ProviderRequest) -> Tuple[str, Mapping[str, Any]]:
             "fnum": _flight_number(request.parameters, "flight_no"),
             "date": _date(request.parameters, "date"),
         }
+    if action == "price":
+        return "getFlightPriceByCities", {
+            "dep_city": _iata(request.parameters, "dep_city"),
+            "arr_city": _iata(request.parameters, "arr_city"),
+            "dep_date": _date(request.parameters, "date"),
+        }
     raise ContractMismatch("unsupported VariFlight action")
 
 

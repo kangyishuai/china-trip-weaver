@@ -6024,3 +6024,112 @@ valid`（`False is not true`）。其余 147 项已绿（含既有 10 项
 weaver/src tests scripts` 0 行；`scan_secrets.py` → `0 finding(s)
 across 383 file(s)`；`git status --short` 只列出「界限」允许的 7 个
 文件加新增的 `tests/fixtures/providers/variflight/price.json`。
+
+任务 2（实现）：`providers/variflight_mcp.py` `_tool_call` 加
+`action=="price"` 分支 → `getFlightPriceByCities`，出参
+`dep_city`/`arr_city`/`dep_date`（真实字段名，任务 0 已核对）。
+`providers/variflight.py`：`normalize` 首分支元组加
+`"getFlightPriceByCities"`（与 search/comfort 共用 `_live_payload`
+统一的 `code`/`data`/`error_code` 判定，错误对象自动复用既有
+`_live_error_class` 三档降级，无需新增错误处理）；`_live_payload` 加
+`tool == "getFlightPriceByCities"` 分支转 `_live_price`；新增
+`_live_price()`：按 `flightno==flight_no` 过滤、只取
+`cabinclass=="Y"` 的 `price`、取 `min()`，产出
+`subject_ref=<传入 subject_ref>`、`status="partial"` 的 `/price`
+claim；找不到匹配时返回空（无 claim，与 `_live_comfort` 未命中时的
+处理方式一致）。
+
+`variflight_enrichment.py`：模块级 `PRICE_CONFLICT_MIN_DELTA=20.0`／
+`PRICE_CONFLICT_RATIO=0.05` 与 `_is_number`/`_price_conflict`
+（`max(20, |flyai价|×5%)` 阈值，非数值一律判不冲突）；
+`VariFlightEnrichmentResult` 加 `conflict_claim_ids: Tuple[str,
+...] = ()`；`enrich`/`_enrich_route`/`_summarize_health` 新增参数
+线程 `conflict_claim_ids` 累加列表；`_enrich_route` 在 comfort 之后、
+仅当 `not candidate_mode`（真有 FlyAI 航班腿可比）时调用新增
+`_enrich_price()`：发第三次业务调用、拿到 VariFlight `/price`
+claim 后与 `selected["price"]["amount"]`（FlyAI 已挂的价）比较，
+超阈值则把 **刚拿到的 VariFlight claim 自己**标 `status="conflict"`
+（enrichment 手上直接改，赶在 `copy.deepcopy` 并入 `claims` 列表
+之前，保证深拷贝带着改后的状态走）、并把
+`selected["price"]["claim_id"]`（FlyAI 那条的 ID）记进
+`conflict_claim_ids`；新增 `_build_price_request()`（`action="price"`，
+`subject_ref=selected["leg_id"]`、`flight_no=selected["service_
+number"]`，与 `_build_comfort_request` 同构）。`planning.py` 在
+L206（`claims.extend(copy.deepcopy(list(inventory.claims)))`）之后
+插两行：遍历 `claims`、`claim_id` 落在 `enrichment.conflict_claim_
+ids` 里的改 `status="conflict"`——此刻 `inventory.claims`（含 FlyAI
+那条价格 claim）刚被并入 `claims`，而 `enrichment.claims`（含
+VariFlight 自己已经改好状态的那条）还没并入（L209 之后才发生），
+两条 claim 分别在各自恰当的时机被标记，互不遗漏也不重复处理。
+
+跑
+`/usr/bin/python3 -m unittest tests.test_providers tests.test_
+variflight_live tests.test_keyless_e2e` → `Ran 152 tests` `OK`
+（五处红全部转绿，其余 147 项未受影响）。
+`~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-
+weaver/src tests scripts` 0 行。`git diff --stat -- plugins/china-
+trip-weaver/src/china_trip_weaver/planning.py` → `1 file changed, 2
+insertions(+)`，与「界限」的「只加两行」逐字符合。全量
+`/usr/bin/python3 -m unittest discover -s tests` → `Ran 650 tests`
+`OK` 0 skipped（650=646 基线+2 新测试(test_variflight_live)+1 新测试
+(test_keyless_e2e)+1 因新增 `price.json` 夹具而由 `fixture_paths()`
+自动生成的 `test_fixture_variflight_price`，达成硬指标二「≥649」）。
+两份 README 夹具计数 81→82；`build_provider_fixtures.py` 重跑第二次
+→ `git status --short -- tests/fixtures/providers` 空输出，证明夹具
+生成是确定性的、语料零差异。
+
+真实 Key 验证（合成路线 昆明→福州，city 字段而非 name，2026-09-19，
+经真实 `VariFlightBackend.enrich()`，未经 fixture）：先用真实 API 探到
+该路线当天的真实候选，取一个真实航班号 `DR6577`；构造一条 FlyAI
+侧合成航班（`price.amount=1000.0`，与该航班真实经济舱票价无关的
+假设值，用来触发比价）喂给 `enrich([flight], [route], CLOCK)`。
+结果：`business_calls=('variflight.search:...', 'variflight.
+comfort:...', 'variflight.price:...')` 三次调用；3 条 claim
+（`/status` verified、`/comfort` verified、`/price` **conflict**，
+真实经济舱价 `412`）；`conflict_claim_ids=('claim-flyai-kmg-foc-
+price',)`——FlyAI 那条虽在这个独立脚本里没有真的走 planning.py 的两行
+兜底（脚本没有调用 `plan_trip`），但 `conflict_claim_ids` 本身携带
+了正确的 claim_id，证明 enrichment 侧的判定与回传链路对真实数据成立；
+plan_trip 端到端的标记链路已由 `test_variflight_price_conflict_
+marks_the_flyai_claim_and_keeps_trip_valid`（夹具驱动）与本节的
+真实数据独立验证共同覆盖。原始脚本留在会话 scratchpad，未落进仓库。
+
+反向验证：临时把 `PRICE_CONFLICT_MIN_DELTA`/`PRICE_CONFLICT_RATIO`
+改成 `0.0`/`0.0`（`sed` 改、保留 `.bak` 备份）→
+`test_price_conflict_above_threshold_marks_both_claims_conflict_and_
+within_threshold_marks_neither` 重新变红：`AssertionError: 'partial'
+!= 'conflict'`（阈值内的那一半断言先前预期 `partial`，阈值改 0 后
+任何非零价差都被判冲突，测试按预期失败）→ 用备份文件还原（`mv
+*.bak` 覆盖回去，而非手工重打字，避免误差）→
+`/usr/bin/python3 -m unittest tests.test_variflight_live` → `Ran 14
+tests` `OK`；`git diff --stat -- .../variflight_enrichment.py` 显示
+还原后与改动前实现的差异仍是「任务 2 净增的那部分」，无 `.bak` 残留
+（`git status --short` 确认）。随后又跑了一遍全量
+`Ran 650 tests OK` 确认这次往返没有留下任何字节级差异（见上，已在
+本节前段记录）。
+
+`git diff 560eeeb --stat`：
+
+```
+ PROGRESS.md                                        | 119 +++++++++++++++
+ README.md                                          |   2 +-
+ README.zh-CN.md                                    |   2 +-
+ .../src/china_trip_weaver/planning.py              |   2 +
+ .../src/china_trip_weaver/providers/variflight.py  |  39 ++++-
+ .../china_trip_weaver/providers/variflight_mcp.py  |   6 ++
+ .../src/china_trip_weaver/variflight_enrichment.py |  92 +++++++-
+ scripts/build_provider_fixtures.py                 |  22 ++
+ tests/fixtures/providers/manifest.json             |   6 +-
+ tests/fixtures/providers/variflight/price.json     |  63 ++++
+ tests/fixtures/variflight_mcp_server.py            |  34 ++
+ tests/test_keyless_e2e.py                          |  56 ++++
+ tests/test_providers.py                            |  11 +-
+ tests/test_variflight_live.py                      |  58 ++++
+ 14 files changed, 504 insertions(+), 8 deletions(-)
+```
+
+全部落在「界限」允许的文件清单内（含 `tests/fixtures/providers/` 下两个
+只经脚本重生成的文件）；`git diff 560eeeb -- tests | grep -E
+'^-\s*def test_'` 0 行；`planning.py` 净增 2 行，未超过「≤3 行」的
+硬性上限；未发现冲突标记（`git grep -c '^<<<<<<< ' -- PROGRESS.md
+BLOCKED.md` 无命中）。硬指标一、二均达成，一轮内完成，未触发止损。
