@@ -458,6 +458,8 @@ def _apply_suspend(
         operations.append({"op": "remove", "path": "/unknowns/%d" % index})
         trip["unknowns"].pop(index)
 
+    _reindex_transport_leg_unknowns(trip["unknowns"], leg_index, operations)
+
     if has_budget:
         ledger, budget_unknowns = _budget_ledger(
             trip["request"], trip["days"], trip["transport_legs"], trip["lodgings"], trip["pois"], trip["claims"],
@@ -469,6 +471,25 @@ def _apply_suspend(
             operations.append({
                 "op": "add", "path": "/unknowns/%d" % (len(trip["unknowns"]) - 1), "value": copy.deepcopy(item),
             })
+
+
+def _reindex_transport_leg_unknowns(
+    unknowns: List[Dict[str, Any]], removed_leg_index: int, operations: List[Dict[str, Any]],
+) -> None:
+    prefix = "/transport_legs/"
+    for index, item in enumerate(unknowns):
+        field_path = str(item.get("field_path", ""))
+        if not field_path.startswith(prefix):
+            continue
+        leg_number_text, _, rest = field_path[len(prefix):].partition("/")
+        if not leg_number_text.isdigit():
+            continue
+        leg_number = int(leg_number_text)
+        if leg_number <= removed_leg_index:
+            continue
+        new_path = "%s%d/%s" % (prefix, leg_number - 1, rest)
+        item["field_path"] = new_path
+        operations.append({"op": "replace", "path": "/unknowns/%d/field_path" % index, "value": new_path})
 
 
 def _find_transport_leg(trip: Mapping[str, Any], target_slot: Mapping[str, Any]) -> Tuple[int, Mapping[str, Any]]:
