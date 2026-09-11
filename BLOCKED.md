@@ -1173,3 +1173,23 @@ Fri Sep 11 15:22:28 CST 2026
 不属于「拿不准」。记录在此仅为下次续跑提供依据：2026-09-12（含）之后
 重新进入本任务时，直接复用已建好并推送的 worktree `.tmp/wt-z3`（分支
 `refresh-drill`），从任务 0 第二步（`ctw doctor`）继续即可。
+
+## 书 AA1「拆 variflight_enrichment.enrich」（2026-09-11，main 直接干）：无待裁决项
+
+任务 0/1/2 全部按任务书字面执行，未发现任何 bug 或需要改逻辑之处——
+`enrich` 原有 167 行行为在拆分前后完全保留，30 组合快照（见 PROGRESS.md
+本书小节）逐字节相同，未触发「只拆不改，发现问题记 BLOCKED、代码保持
+原样」这条规则。
+
+唯一值得记录的判断：任务书「让步顺序」允许在拆得清楚与拆得彻底之间取舍，
+本书选择不新增测试（与先例书「拆 validate_trip.semantic_issues」不同，
+那本书发现全仓没有一处精确比对三元组、判断为真实覆盖缺口才补测试）。
+本书检查后确认现有 10 个 `test_variflight_live` 用例 + 全仓所有不显式传
+`variflight_backend` 的 `plan_trip` 调用（隐式走 `VariFlightBackend.
+from_spec("off", ...)` 分支）已覆盖拆分触及的每一条分支，`git grep`
+`'VariFlightBackend("off"\|VariFlightBackend\.from_spec("off"'` 在
+`tests/` 下 0 命中，确认 off 分支的测试覆盖确实是"隐式通过 e2e"而非
+显式断言，但该分支从未被拆分改动过（`_early_exit_result` 里 off 分支
+与原代码逐字节一致），且 30 组合快照已包含 6 组 off 模式记录并连跑两次
+逐字节相同，判断不构成需要补测试的覆盖缺口。硬指标不要求新增测试，
+`tests/test_variflight_live.py` 本轮零改动。止损轮次未触发。

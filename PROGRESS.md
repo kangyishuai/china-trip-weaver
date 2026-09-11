@@ -3866,3 +3866,73 @@ claims=4`）、既有 service_number 匹配模式（`ready,live,calls=2,claims=2
 成功但 0 结果→no_matching_flight，从不调用 comfort"分支
 （`degraded,calls=1,warnings=1`，未支持城市组合 `calls=0`）。
 
+任务 2（已完成）：按开工笔记的六步顺序增量抽取，每步跑一次
+`test_variflight_live`（10 项）均一次全绿——①`_early_exit_result`（off
+模式+无 Key 探针，`enrich` 顶部改调用该方法并按返回值是否为 None 决定
+是否早退）②`_backfill_claim_ids`+`_summarize_health`（循环之后的
+claim_ids 回填与健康行汇总）③`_build_search_request`（search
+`ProviderRequest` 构造）④`_build_comfort_request`（comfort `ProviderRequest`
+构造）⑤`_select_flight`（candidate_mode 与既有 service_number 匹配两路
+选航班，含 `copied_flights.extend()` 副作用）⑥`_enrich_route`（把整条
+路线的处理——城市解析、航班过滤、调用①②③⑤构造好的子步骤——收进一个
+新方法，`enrich` 循环体收窄成一行 `self._enrich_route(...)`）。
+`CITY_IATA` 始终按模块级 `.get(...)` 现查，未在任何新方法里缓存快照，
+两处既有 `mock.patch.dict` 测试不受影响（②⑥两步测试均含这两条用例，
+全绿）。`errors`/`calls`/`claims`/`runtime_warnings`/`copied_flights`
+全部按参数引用传入子方法原地 `.append`/`.extend`，追加顺序与原代码
+逐行对应，未重排。
+
+硬指标一实测：
+```
+$ /usr/bin/python3 -c "import ast;...sorted(...)"
+[(10, '_health'), (10, '_runtime_failure_warnings'), (11, '_backfill_claim_ids'),
+ (14, '__init__'), (15, '_build_comfort_request'), (18, '_select_flight'),
+ (21, 'from_spec'), (24, '_early_exit_result'), (24, 'enrich'),
+ (28, '_summarize_health'), (31, '_build_search_request'), (73, '_enrich_route')]
+```
+`enrich` 24 行（≤60 达标，原 167 行）；全文件最长函数 `_enrich_route` 73
+行（≤80 达标）。
+
+硬指标二实测：
+```
+$ /usr/bin/python3 .tmp/snapshot_variflight.py snap-after.json
+wrote 30 records
+$ diff .tmp/snap-before.json .tmp/snap-after.json
+（空输出，IDENTICAL）
+```
+语料三命令零差异——README demo（`ctw plan ... --aviation off ...`）打印
+`trip_sha256=7ea7888f5478bb949e2d565e653212dfb67ff8be041ee61f0d45386a2d9c788c`/
+`html_sha256=c2d07708cb0cc088afab02331642f91e40c58ef3c45db3862b45c480a8bca927`，
+`scripts/build_plan_fixtures.py`（`wrote 3 plan cases...`），
+`scripts/build_renderer_fixtures.py` 打印
+`journey_sha256=7ada91c09a6ef253a23f930b454a2d13510d9a4326f906f6299337ec0ce7628e`——
+三个哈希与书 Z1/Y1 记录的历史基线完全一致；`git status --short` 重跑
+三命令前后均只有 `PROGRESS.md`/`variflight_enrichment.py` 两个文件，
+`demo/` 下无残留差异。全量 `/usr/bin/python3 -m unittest discover -s
+tests` → `Ran 629 tests` `OK`（92.7s，0 skipped）；`scan_secrets.py`
+`0 finding(s) across 378 file(s)`；pyflakes（`~/miniconda3/envs/core/bin/python
+-m pyflakes plugins/china-trip-weaver/src tests scripts`）0 行。
+
+反向验证：在新方法 `_enrich_route` 里把 search 错误路径的 warning 模板
+`"route=%s->%s;date=%s;action=search"` 改成
+`"route=%s->%s;date=%s;action=searchX"`（多一个 `X`）→ 快照重跑
+`diff .tmp/snap-before.json .tmp/snap-reverse.json` 非空（3 处差异，
+`empty_search` 三条组合记录里的 `no_results:...action=search` 全变成
+`...action=searchX`）→ `test_variflight_live`
+`Ran 10 tests ... FAILED (failures=2)`，恰是
+`test_search_no_results_keeps_empty_candidates_with_exact_warning_and_health`
+与 `test_search_rate_limit_keeps_empty_candidates_with_exact_warning_and_health`
+两项精确断言变红、其余 8 项绿 → 精确还原 `searchX`→`search` →
+`git diff -- .../variflight_enrichment.py | grep -c searchX` 为 0
+（残留标记清零）→ 快照重跑 `diff .tmp/snap-before.json
+.tmp/snap-after-revert.json` 空输出（IDENTICAL AGAIN）→ 全量
+`Ran 629 tests` `OK` 0 skipped（全绿）。
+
+界限检查：`git diff d11c2cb -- tests | grep -E '^-\s*def test_'` 空输出
+（0 行，`tests/test_variflight_live.py` 本轮零改动，理由见 BLOCKED.md
+本书小节）；`git diff d11c2cb --stat -- . ':!plugins/china-trip-weaver/
+src/china_trip_weaver/variflight_enrichment.py' ':!tests/
+test_variflight_live.py' ':!PROGRESS.md' ':!BLOCKED.md'` 空输出；
+`git diff d11c2cb --stat` 只有 `PROGRESS.md`/`BLOCKED.md`/
+`variflight_enrichment.py` 三个白名单文件。止损轮次未触发（六步增量抽取
++终验一次到位，未遇连败）。
