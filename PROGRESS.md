@@ -2800,3 +2800,39 @@ tests` `OK` 0 skipped；`scan_secrets.py` 0 命中；pyflakes 0 行；长度命�
 一次红→绿（终端记录见任务 2 小节），止损轮次未触发（全程一次到位，未遇
 连败）。BLOCKED.md 有一条任务 0 的判断记录（call-site 计数方法与 `:156`
 标注核对，非阻塞），无待裁决项。分支推送记录见下。
+
+## 书「拆 validate_journey_html」（2026-09-11，main 直接干）
+
+任务 0 核对：HEAD `bf53f72` 与任务书一致；612 测试 OK 0 skip、secrets 0、
+pyflakes 0（须用 `~/miniconda3/envs/core/bin/python -m pyflakes`，系统
+`/usr/bin/python3` 没装 pyflakes 模块）；文件结构、JH 码计数（44/15）、
+`test_journey.py` 调用计数（12/8）均与任务书吻合，唯一 1 行总行数出入
+（428→427）记入 BLOCKED.md、判断不阻塞。
+理解的目标：`_shared_document_issues`（JH001/002/004/005/101/102/103/
+104/105/106/204，末尾再一次 JH001）与 `validate_journey_html`
+（JH201×6 段覆盖率+trace/JH202/JH203/JH204/JH205）都是「一串独立检查顺序
+调用」，天然按 JH 码分类切段，无需重排逻辑。
+顺序：照抄书 W3（`render/validate_html.py` 现有的 `_check_*` +
+`add: Callable[[str,str],None]` 闭包范式）——先写快照脚本固定行为基线，
+再从上到下按段抽取，每抽一段跑 `test_journey`，最后长度/快照/JH 码/语料/
+全量五项终验+反向验证。
+最大风险：两处局部变量跨越拆分边界必须显式穿针引线、不能重算或漏传——
+`_shared_document_issues` 内的 `css`（安全合同段算出，末尾无障碍合同段
+复用）；`validate_journey_html` 内的 `checklist`/`risks`（trace 校验段
+算出，末尾 information-hygiene 段的 `internal_ids` 复用）与 `visible`
+（route-city/origin 段算出，同一 information-hygiene 段复用）。
+
+任务 1（已完成）：`.tmp/snapshot_journey_validate.py`（不提交）用
+`demo/journey-16d/journey.html`/`journey.json` 原样做基线，加照抄
+`test_journey.py` 8 个 `test_journey_html_rejects_*` 的同款突变（字面复制
+其 `replace`/`re.sub` 表达式，未使用 `journey_sixteen_day_case()`+
+`plan_journey` 重新生成 journey/rendered，因为 demo 语料本就由同一
+`render_journey` 产出、含全部突变目标的类名/属性各恰好 1 处，直接复用更快
+更稳，且不改变各测试断言的字面逻辑），共 9 条记录，逐条含
+`case_id`/`ok`/`errors`（`item.render()` 列表）/`warnings`。验收实测：
+`wrote 9 records`；连跑两次 `diff` 空输出（IDENTICAL）；自检 8 个突变命中
+的 JH 码与对应测试断言的 `assertIn` 逐一相符（JH102/JH202/JH203/JH201
+（day-card 一条额外带 JH004，是移除整个 `<article>` 破坏内部锚点引用的
+真实级联，不是脚本错误）/JH201/JH201/JH205/JH106）；baseline 记录
+`ok=True`、0 errors。另存 `.tmp/jh-before.txt`（15 行计数，与任务 0 的
+`grep -o` 结果一致）。

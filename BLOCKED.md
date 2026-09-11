@@ -1012,9 +1012,20 @@ if query != request.parameters.get(parameter_name):
 就没被 `_checklist_item_html`/`_trace_attributes` 引用过，grep demo html 确认
 0 命中；后者是防止我改坏 `_journey_action_item` 的 identity 计算的回归哨兵，
 改动前 identity 计算完全没碰过，自然相等）。
-判断：不删这两条、不放宽断言凑「全红」的字面——任务书任务 1 原文明确要求
+判断：不删这两条、不放宽断言凑「全红」的字面——任务书原文明确要求
 这 5 条断言都要有对应测试，删掉两条等于减少任务书自己要求的覆盖面，属于更
 糟的选择；且"全红"的精神是防止我写出对新旧代码都通过的空测试，这两条是
 `KeyError`/字段缺失以外的另一类必要保障（防止实现阶段引入新泄漏或改坏
 identity），不是偷懒判定。5 个测试的完整红/绿输出见 `PROGRESS.md` 本书任务 1
 小节。
+
+## 书「拆 validate_journey_html」任务 0：文件总行数与任务书差 1 行（2026-09-11，判断，非阻塞）
+
+任务书写「validate_journey_html.py 共 428 行」，`wc -l` 实测 427 行；3 个
+顶层函数的起始行号、各自长度（`validate_journey_html` L26 225 行、
+`_validate_trace_nodes` L253 30 行、`_shared_document_issues` L285 143 行）、
+JH 码字面量计数（44 个、15 种）、`tests/test_journey.py` 里
+`validate_journey_html(` 调用计数（12 处）与 `test_journey_html_rejects_*`
+计数（8 个）全部逐字吻合。判断：428→427 的 1 行出入不影响任何硬指标或
+拆分方案，大概率是任务书写作时的计数笔误（例如文件末尾换行符的计入方式
+不同），不是「对不上」的实质性分歧，不停工。
