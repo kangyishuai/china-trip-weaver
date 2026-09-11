@@ -2,17 +2,27 @@
 
 唯一的当前进度记录。2026-09-03 到 09-06 的逐轮任务书、实测证据、验收记录已归档，见「历史索引」。
 
-## 现状速览（2026-09-11 实测，0.13.0）
+## 现状速览（2026-09-11 实测，0.14.0）
 
-- 版本：`0.13.0`，唯一来源是
+- 版本：`0.14.0`，唯一来源是
   `plugins/china-trip-weaver/.codex-plugin/plugin.json` 与
   `src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
   位置一律引用这两处之一，历史版本只以日期提及、不写字面值。
-- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 612 tests`，`OK`，0 skipped；
+- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 623 tests`，`OK`，0 skipped；
   `scripts/scan_secrets.py` 0 命中；
   `~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src
   tests scripts` 0 行。带假 Key（`ANYSEARCH_API_KEY=... unittest`）跑全量同样
-  612 OK，README 的 demo 重生成在有无 Key 两种环境下都零差异。
+  623 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+- 0.14.0（第八波三份并行书）：12306 站点第四层——三层加剥后缀重试仍空且有
+  AMap Key 时，用地名中心 50 公里内的火车站（AMap `/v5/place/around`，
+  types 150200，新 capability `poi_around`）回查 12306 站码，候选带真实距离，
+  warnings 加 `station_nearby_fallback`，查不到站码的丢弃、从不猜站（实网
+  `--to 鼓浪屿` 从 no_results 变为 厦门 5.6 km / 厦门北 21.4 km 两个候选的
+  ambiguous；无 Key 或三层命中时行为不变）；`validate_journey_html` 与
+  `_shared_document_issues` 拆成 18 个 `_check_*`（本体 37/27 行，管理者用
+  bf53f72 旧 worktree 回放 11 组页面突变，报告逐字节相同）；新增合成夹具
+  `tests/fixtures/trips/schema/valid/rental-ferry.json`（轮渡腿 + 租车腿）
+  三关全过，ADR-0016 验收命令 2、3 标记完成；夹具总数 79。
 - 0.13.0（第七波三份并行书）：Journey 清单项带 `deadline_kind`
   （presale_open/declared/departure/check_in/other），优先事项与清单卡片按种类
   措辞——「开售日 2026-09-12 · 当天就买 · 09-26 出发」「预订截止」「出发前确认」
