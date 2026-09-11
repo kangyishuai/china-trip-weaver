@@ -2,17 +2,27 @@
 
 唯一的当前进度记录。2026-09-03 到 09-06 的逐轮任务书、实测证据、验收记录已归档，见「历史索引」。
 
-## 现状速览（2026-09-11 实测，0.15.1）
+## 现状速览（2026-09-11 实测，0.15.2）
 
-- 版本：`0.15.1`，唯一来源是
+- 版本：`0.15.2`，唯一来源是
   `plugins/china-trip-weaver/.codex-plugin/plugin.json` 与
   `src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
   位置一律引用这两处之一，历史版本只以日期提及、不写字面值。
-- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 629 tests`，`OK`，0 skipped；
+- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 630 tests`，`OK`，0 skipped；
   `scripts/scan_secrets.py` 0 命中；
   `~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src
   tests scripts` 0 行。带假 Key（`ANYSEARCH_API_KEY=... unittest`）跑全量同样
-  629 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+  630 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+- 0.15.2（第十一波，两本纯重构，行为零变化）：`VariFlightBackend.enrich` 167 行
+  拆成 `_early_exit_result`/`_enrich_route`/`_build_search_request`/`_select_flight`/
+  `_build_comfort_request`/`_backfill_claim_ids`/`_summarize_health`（本体 24 行，
+  文件内最长 73 行；管理者用 d11c2cb 旧 worktree 对 6 种后端 × 3 种航班列表 × 3 种
+  路线共 54 条记录回放，返回值与异常逐字节相同）；`journey._validate_connection`
+  134 行拆成 `_check_connection_refs`/`_check_connection_lodging`/
+  `_check_connection_transport`（本体 12 行；管理者对示例 16 天、six-city、
+  sixteen-day 离线规划与真实 16 天行程各叠加 22 种段缝突变共 180 条记录回放，
+  报告逐字节相同；执行者补了一条精确比对 `(code, path, message)` 的测试）；
+  真实行程刷新实战同日第二次派发仍止步于日期门槛，9/12 起再发。
 - 0.15.1（第十波三份并行书，行为零变化）：`validate_trip.semantic_issues` 197 行
   拆成 `_build_reference_context` + 11 个 `_check_*`（本体 16 行，文件内最长
   76 行是原有的 `_validate`；管理者用 404248e 旧 worktree 对 3 valid + 4 invalid
