@@ -4260,41 +4260,6 @@ tests scripts` 0 行；base.py 437 行；AST 长度命令输出
 `Ran 95 tests OK`（16 个显式 `def test_` + 79 个动态测试，与任务书
 「16 + 79」逐字吻合）。全部核对通过，无出入。
 
-## 书「地图与图片 ADR-0018」任务 0：核对通过（2026-09-11，worktree `.tmp/wt-ac1` 分支 `adr-map-images`，第十三波三份并行书之一）
-
-HEAD 核对：`git rev-parse HEAD` = `9d984b8`，与任务书一致。全量
-`/usr/bin/python3 -m unittest discover -s tests` → `Ran 632 tests in
-43.956s` `OK`（`grep -i skip` 命中的 3 行都是测试方法名本身含
-"skip" 字样、结果均 `ok`，非真实跳过，0 skipped）；
-`scripts/scan_secrets.py` → `secret scan: 0 finding(s) across 378
-file(s)`；`~/miniconda3/envs/core/bin/python -m pyflakes .` 0 行（系统
-`/usr/bin/python3` 无 pyflakes 模块，改用 CLAUDE.md 指定的 conda
-`core` 环境）。
-
-任务书现状段列出的每条 file:line/条款逐一 `git grep`/`sed -n` 核对，
-全部命中（路径是项目内简写，省略了
-`plugins/china-trip-weaver/src/china_trip_weaver/` 前缀，这是本仓库
-任务书的一贯写法，不算出入）：`render/html.py:627` 确是
-`_location_svg` 定义；`render/journey_html.py` 对
-`_location_svg`/`<svg` 的 `git grep -c` 均 exit 1（零命中）；
-07-renderer.md L63/L70/L76-95 逐字命中；THIRD_PARTY_NOTICES.md L16
-高德条款 3.5/7.7/3.2.2/3.4 逐字命中；provider-contracts.md L26 "R1 is
-disabled and no provider response is cached today" 命中；
-demo/trip.html 88906 字节、demo/journey-16d/journey.html 287673 字节
-精确命中；docs/research/05-open-questions.md L82 Q12 标题命中。全部
-核对通过，无出入，进入任务 1。
-
-理解的目标／顺序／最大风险（≤10 行）：目标是对「交互地图／静态图／
-图片字段／Journey 页位置示意」四个问题各给一个有 file:line 或条款
-出处支持的明确答案，写成 ADR-0018，不改代码。顺序：先在任务 1 把
-Context 要用的全部证据实测列清单（含用 `render_trip()` 实际渲染
-测试夹具来测量 `_location_svg` 的字节体量，而不是空猜），再在任务
-2 里对着证据写三个 Option 与 Decision，最后自查 file:line 与真实
-姓名过滤。最大风险：demo 里的 trip/journey 夹具全部 0 坐标（合成
-数据故意不带真实坐标），无法直接从 demo 产物测出 `_location_svg`
-的真实字节体量，需要另找带坐标的测试夹具实测，避免把「未验证的
-假设」当成「已实测的数字」写进 Context。
-
 任务 0 额外发现（非出入，是设计输入）：`providers/rail12306.py:47` 的
 `Rail12306Adapter.query` 覆写了 `query`，内部调用 `super().query(request,
 context)` 后检查 `"station_resolution_ambiguous" in result.warnings`
@@ -4467,3 +4432,38 @@ exceededX plugins/.../base.py` 为 0，残留清零）→ 快照重跑
 `git diff 0cc7d55 --stat` 只有两个白名单文件（`base.py` 126 行变化、
 `test_providers.py` +15 行）。止损轮次未触发（一次性按四阶段+一个
 额外助手方法拆分，每步验证均一次通过，未遇连败）。
+
+## 书「地图与图片 ADR-0018」任务 0：核对通过（2026-09-11，worktree `.tmp/wt-ac1` 分支 `adr-map-images`，第十三波三份并行书之一）
+
+HEAD 核对：`git rev-parse HEAD` = `9d984b8`，与任务书一致。全量
+`/usr/bin/python3 -m unittest discover -s tests` → `Ran 632 tests in
+43.956s` `OK`（`grep -i skip` 命中的 3 行都是测试方法名本身含
+"skip" 字样、结果均 `ok`，非真实跳过，0 skipped）；
+`scripts/scan_secrets.py` → `secret scan: 0 finding(s) across 378
+file(s)`；`~/miniconda3/envs/core/bin/python -m pyflakes .` 0 行（系统
+`/usr/bin/python3` 无 pyflakes 模块，改用 CLAUDE.md 指定的 conda
+`core` 环境）。
+
+任务书现状段列出的每条 file:line/条款逐一 `git grep`/`sed -n` 核对，
+全部命中（路径是项目内简写，省略了
+`plugins/china-trip-weaver/src/china_trip_weaver/` 前缀，这是本仓库
+任务书的一贯写法，不算出入）：`render/html.py:627` 确是
+`_location_svg` 定义；`render/journey_html.py` 对
+`_location_svg`/`<svg` 的 `git grep -c` 均 exit 1（零命中）；
+07-renderer.md L63/L70/L76-95 逐字命中；THIRD_PARTY_NOTICES.md L16
+高德条款 3.5/7.7/3.2.2/3.4 逐字命中；provider-contracts.md L26 "R1 is
+disabled and no provider response is cached today" 命中；
+demo/trip.html 88906 字节、demo/journey-16d/journey.html 287673 字节
+精确命中；docs/research/05-open-questions.md L82 Q12 标题命中。全部
+核对通过，无出入，进入任务 1。
+
+理解的目标／顺序／最大风险（≤10 行）：目标是对「交互地图／静态图／
+图片字段／Journey 页位置示意」四个问题各给一个有 file:line 或条款
+出处支持的明确答案，写成 ADR-0018，不改代码。顺序：先在任务 1 把
+Context 要用的全部证据实测列清单（含用 `render_trip()` 实际渲染
+测试夹具来测量 `_location_svg` 的字节体量，而不是空猜），再在任务
+2 里对着证据写三个 Option 与 Decision，最后自查 file:line 与真实
+姓名过滤。最大风险：demo 里的 trip/journey 夹具全部 0 坐标（合成
+数据故意不带真实坐标），无法直接从 demo 产物测出 `_location_svg`
+的真实字节体量，需要另找带坐标的测试夹具实测，避免把「未验证的
+假设」当成「已实测的数字」写进 Context。
