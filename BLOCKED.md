@@ -1,3 +1,23 @@
+## 书 W2 遗留：`user_delete` 删时段后 `/days/d/slots/s` 路径的同款缺口（2026-09-11，任务书明确排除在外，只记录不处理）
+
+任务书「我替领导拍的板」第三条明确裁定这不在本书范围：`user_delete` 事件
+（`replan.py:73-76`）删时段时只 `pop` 该下标的 slot 并 `remove` 对应路径，
+不重编号同一天内后续 slot 的下标——与本书修复的 `suspend` 腿重编号是同一类
+缺口，但发生在 `/days/d/slots/s` 而非 `/transport_legs/N`。按任务书指示只记
+录、不实现。
+
+补充核实（任务书未要求但有助于评估实际影响）：全仓搜索
+`field_path.*days|"/days/%d` 未在 `planning.py`/`journey.py` 找到任何会写入
+`unknowns[].field_path` 的 `/days/%d/slots/%d/...` 生产者——当前代码里没有
+unknown 条目会以这种位置型路径指向某个 slot，所以这条缺口目前是潜在的（结构
+性地存在于 `user_delete` 的实现方式里），而非已有可复现的错指数据这一点上
+与本书修复前的 `suspend` 不同（`suspend` 有 `planning.py:1397/1403` 两个
+现役生产者）。若未来任何模块开始往 `unknowns`/其他结构里写入
+`/days/d/slots/s` 形式的位置型引用，这条缺口才会变得可观测，届时需要一本
+新任务书专门处理（做法可照抄本书 `_reindex_transport_leg_unknowns` 的模式：
+删 slot 后，对同一天内 `field_path`/类似字段里下标大于被删位置的引用整体
+减一）。
+
 ## 书 W2「suspend 删非末尾腿的 unknowns 重编号」（2026-09-11，已按先例处理，非空白裁决）
 
 任务书「规矩」要求 `git diff main --stat -- plugins/china-trip-weaver/schema
