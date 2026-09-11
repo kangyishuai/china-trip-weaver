@@ -398,6 +398,267 @@ class KeylessE2ETests(unittest.TestCase):
         self.assertIn('"required_buffer_minutes":60', str(raised.exception))
         self.assertIn('"actual_buffer_minutes":59', str(raised.exception))
 
+    def test_g6_meeting_falls_back_to_a_compliant_flight_when_rail_misses_the_buffer(self):
+        request, candidates = synthetic_grouped_meeting_input(meet_by="2026-09-10T12:30:00+08:00")
+        request["traveler_groups"] = [{
+            "group_id": "family-kunming",
+            "travelers": 2,
+            "origin": {"ref_id": "city-kunming", "name": "昆明", "city": "昆明"},
+        }]
+        rail_backend = RailBackend("fixture", ROOT, fixture={
+            "provider": "rail12306",
+            "transport": {
+                "body": {
+                    "calls": [
+                        {
+                            "arguments": {"citys": "昆明|上海"},
+                            "name": "get-station-code-of-citys",
+                            "result": {"content": [{"type": "text", "text": json.dumps({
+                                "上海": {"station_code": "SHX", "station_name": "上海示例站"},
+                                "昆明": {"station_code": "KMX", "station_name": "昆明示例站"},
+                            }, ensure_ascii=False)}]},
+                        },
+                        {
+                            "arguments": {
+                                "date": "2026-09-10", "format": "json", "fromStation": "KMX",
+                                "limitedNum": 1, "toStation": "SHX", "trainFilterFlags": "GD",
+                            },
+                            "name": "get-tickets",
+                            "result": {"content": [{"type": "text", "text": json.dumps([{
+                                "arrive_date": "2026-09-10", "arrive_time": "13:00",
+                                "dw_flag": ["示例编组"], "from_station": "昆明示例站", "from_station_telecode": "KMX",
+                                "lishi": "05:00",
+                                "prices": [{"discount": 100, "num": "有", "price": 300, "seat_name": "二等座", "seat_type_code": "O", "short": "ze"}],
+                                "start_date": "2026-09-10", "start_time": "08:00", "start_train_code": "G9001",
+                                "to_station": "上海示例站", "to_station_telecode": "SHX", "train_no": "SYNTHETIC-G9001",
+                            }], ensure_ascii=False)}]},
+                        },
+                    ],
+                    "protocol_version": "2025-06-18",
+                    "server_info": {"name": "12306-mcp", "version": "0.3.10"},
+                    "tools": [
+                        "get-current-date", "get-stations-code-in-city", "get-station-code-of-citys",
+                        "get-station-code-by-names", "get-station-by-telecode", "get-tickets",
+                        "get-interline-tickets", "get-train-route-stations",
+                    ],
+                },
+                "headers": {},
+                "kind": "response",
+                "status_code": 200,
+            },
+        })
+        flyai_backend = FlyAIBackend(
+            "live",
+            resolve_credentials({}, ROOT / ".tmp" / "g6-flight-fallback-no-flyai-key"),
+            ReplayTransport({
+                "body": {
+                    "cliVersion": "1.0.16",
+                    "commands": ["search-hotel", "search-flight"],
+                    "data": {"itemList": [{
+                        "journeys": [{
+                            "journeyType": "直达",
+                            "segments": [{
+                                "arrCityName": "上海", "arrDateTime": "2026-09-10 11:00:00", "arrStationName": "上海示例机场",
+                                "depCityName": "昆明", "depDateTime": "2026-09-10 08:40:00", "depStationName": "昆明示例机场",
+                                "duration": "140", "marketingTransportName": "示例航空", "marketingTransportNo": "XX9001",
+                                "seatClassName": "经济舱",
+                            }],
+                            "totalDuration": "140",
+                        }],
+                        "jumpUrl": "https://www.fliggy.com/flight/search",
+                        "ticketPrice": "980.00",
+                        "totalDuration": "140",
+                    }]},
+                    "message": "success",
+                    "probe": {"command": "search-flight", "flags": ["--origin", "--destination", "--dep-date", "--journey-type"]},
+                    "status": 0,
+                    "systemMessage": "synthetic fixture; no provider request was made",
+                },
+                "headers": {},
+                "kind": "response",
+                "status_code": 200,
+            }),
+        )
+
+        result = plan_trip(
+            request, candidates, FixedClock.from_iso(FIXED_NOW), rail_backend,
+            flyai_backend=flyai_backend,
+        )
+
+        legs = result.trip["transport_legs"]
+        self.assertEqual(1, len(legs))
+        leg = legs[0]
+        self.assertEqual("flight", leg["travel_mode"])
+        self.assertEqual("2026-09-10T11:00:00+08:00", leg["arrive_at"])
+        self.assertEqual(["family-kunming"], leg["group_refs"])
+        trip_report = validate_trip(result.trip)
+        self.assertTrue(trip_report.ok, [item.render() for item in trip_report.errors])
+        html_report = validate_html(result.html, result.trip)
+        self.assertTrue(html_report.ok, [item.render() for item in html_report.errors])
+
+    def test_g6_meeting_buffer_insufficient_reports_earliest_known_arrival_across_rail_and_flight(self):
+        request, candidates = synthetic_grouped_meeting_input(meet_by="2026-09-10T12:30:00+08:00")
+        request["traveler_groups"] = [{
+            "group_id": "family-kunming",
+            "travelers": 2,
+            "origin": {"ref_id": "city-kunming", "name": "昆明", "city": "昆明"},
+        }]
+        rail_backend = RailBackend("fixture", ROOT, fixture={
+            "provider": "rail12306",
+            "transport": {
+                "body": {
+                    "calls": [
+                        {
+                            "arguments": {"citys": "昆明|上海"},
+                            "name": "get-station-code-of-citys",
+                            "result": {"content": [{"type": "text", "text": json.dumps({
+                                "上海": {"station_code": "SHX", "station_name": "上海示例站"},
+                                "昆明": {"station_code": "KMX", "station_name": "昆明示例站"},
+                            }, ensure_ascii=False)}]},
+                        },
+                        {
+                            "arguments": {
+                                "date": "2026-09-10", "format": "json", "fromStation": "KMX",
+                                "limitedNum": 1, "toStation": "SHX", "trainFilterFlags": "GD",
+                            },
+                            "name": "get-tickets",
+                            "result": {"content": [{"type": "text", "text": json.dumps([{
+                                "arrive_date": "2026-09-10", "arrive_time": "13:00",
+                                "dw_flag": ["示例编组"], "from_station": "昆明示例站", "from_station_telecode": "KMX",
+                                "lishi": "05:00",
+                                "prices": [{"discount": 100, "num": "有", "price": 300, "seat_name": "二等座", "seat_type_code": "O", "short": "ze"}],
+                                "start_date": "2026-09-10", "start_time": "08:00", "start_train_code": "G9001",
+                                "to_station": "上海示例站", "to_station_telecode": "SHX", "train_no": "SYNTHETIC-G9001",
+                            }], ensure_ascii=False)}]},
+                        },
+                    ],
+                    "protocol_version": "2025-06-18",
+                    "server_info": {"name": "12306-mcp", "version": "0.3.10"},
+                    "tools": [
+                        "get-current-date", "get-stations-code-in-city", "get-station-code-of-citys",
+                        "get-station-code-by-names", "get-station-by-telecode", "get-tickets",
+                        "get-interline-tickets", "get-train-route-stations",
+                    ],
+                },
+                "headers": {},
+                "kind": "response",
+                "status_code": 200,
+            },
+        })
+        flyai_backend = FlyAIBackend(
+            "live",
+            resolve_credentials({}, ROOT / ".tmp" / "g6-flight-fallback-no-flyai-key"),
+            ReplayTransport({
+                "body": {
+                    "cliVersion": "1.0.16",
+                    "commands": ["search-hotel", "search-flight"],
+                    "data": {"itemList": [{
+                        "journeys": [{
+                            "journeyType": "直达",
+                            "segments": [{
+                                "arrCityName": "上海", "arrDateTime": "2026-09-10 12:00:00", "arrStationName": "上海示例机场",
+                                "depCityName": "昆明", "depDateTime": "2026-09-10 08:40:00", "depStationName": "昆明示例机场",
+                                "duration": "140", "marketingTransportName": "示例航空", "marketingTransportNo": "XX9001",
+                                "seatClassName": "经济舱",
+                            }],
+                            "totalDuration": "140",
+                        }],
+                        "jumpUrl": "https://www.fliggy.com/flight/search",
+                        "ticketPrice": "980.00",
+                        "totalDuration": "140",
+                    }]},
+                    "message": "success",
+                    "probe": {"command": "search-flight", "flags": ["--origin", "--destination", "--dep-date", "--journey-type"]},
+                    "status": 0,
+                    "systemMessage": "synthetic fixture; no provider request was made",
+                },
+                "headers": {},
+                "kind": "response",
+                "status_code": 200,
+            }),
+        )
+
+        with self.assertRaisesRegex(ValueError, "MEETING_BUFFER_INSUFFICIENT") as raised:
+            plan_trip(
+                request, candidates, FixedClock.from_iso(FIXED_NOW), rail_backend,
+                flyai_backend=flyai_backend,
+            )
+
+        message = str(raised.exception)
+        self.assertIn('"group_ref":"family-kunming"', message)
+        self.assertIn('"arrival_at":"2026-09-10T12:00:00+08:00"', message)
+        self.assertIn('"required_buffer_minutes":60', message)
+        self.assertIn('"actual_buffer_minutes":30', message)
+
+    def test_g6_meeting_rail_candidates_are_filtered_by_buffer_before_taking_the_earliest_arrival(self):
+        request, candidates = synthetic_grouped_meeting_input(meet_by="2026-09-10T12:30:00+08:00")
+        request["traveler_groups"] = [{
+            "group_id": "family-kunming",
+            "travelers": 2,
+            "origin": {"ref_id": "city-kunming", "name": "昆明", "city": "昆明"},
+        }]
+        rail_backend = RailBackend("fixture", ROOT, fixture={
+            "provider": "rail12306",
+            "transport": {
+                "body": {
+                    "calls": [
+                        {
+                            "arguments": {"citys": "昆明|上海"},
+                            "name": "get-station-code-of-citys",
+                            "result": {"content": [{"type": "text", "text": json.dumps({
+                                "上海": {"station_code": "SHX", "station_name": "上海示例站"},
+                                "昆明": {"station_code": "KMX", "station_name": "昆明示例站"},
+                            }, ensure_ascii=False)}]},
+                        },
+                        {
+                            "arguments": {
+                                "date": "2026-09-10", "format": "json", "fromStation": "KMX",
+                                "limitedNum": 1, "toStation": "SHX", "trainFilterFlags": "GD",
+                            },
+                            "name": "get-tickets",
+                            "result": {"content": [{"type": "text", "text": json.dumps([
+                                {
+                                    "arrive_date": "2026-09-10", "arrive_time": "12:00",
+                                    "dw_flag": ["示例编组"], "from_station": "昆明示例站", "from_station_telecode": "KMX",
+                                    "lishi": "05:00",
+                                    "prices": [{"discount": 100, "num": "有", "price": 300, "seat_name": "二等座", "seat_type_code": "O", "short": "ze"}],
+                                    "start_date": "2026-09-10", "start_time": "07:00", "start_train_code": "G9002",
+                                    "to_station": "上海示例站", "to_station_telecode": "SHX", "train_no": "SYNTHETIC-G9002",
+                                },
+                                {
+                                    "arrive_date": "2026-09-10", "arrive_time": "11:00",
+                                    "dw_flag": ["示例编组"], "from_station": "昆明示例站", "from_station_telecode": "KMX",
+                                    "lishi": "04:30",
+                                    "prices": [{"discount": 100, "num": "有", "price": 320, "seat_name": "二等座", "seat_type_code": "O", "short": "ze"}],
+                                    "start_date": "2026-09-10", "start_time": "06:30", "start_train_code": "G9003",
+                                    "to_station": "上海示例站", "to_station_telecode": "SHX", "train_no": "SYNTHETIC-G9003",
+                                },
+                            ], ensure_ascii=False)}]},
+                        },
+                    ],
+                    "protocol_version": "2025-06-18",
+                    "server_info": {"name": "12306-mcp", "version": "0.3.10"},
+                    "tools": [
+                        "get-current-date", "get-stations-code-in-city", "get-station-code-of-citys",
+                        "get-station-code-by-names", "get-station-by-telecode", "get-tickets",
+                        "get-interline-tickets", "get-train-route-stations",
+                    ],
+                },
+                "headers": {},
+                "kind": "response",
+                "status_code": 200,
+            },
+        })
+
+        result = plan_trip(request, candidates, FixedClock.from_iso(FIXED_NOW), rail_backend)
+
+        legs = result.trip["transport_legs"]
+        self.assertEqual(1, len(legs))
+        leg = legs[0]
+        self.assertEqual("rail", leg["travel_mode"])
+        self.assertEqual("2026-09-10T11:00:00+08:00", leg["arrive_at"])
+        self.assertEqual("G9003", leg["service_number"])
+
     def test_grouped_and_legacy_traveler_representations_are_rejected_together(self):
         request, candidates = synthetic_grouped_meeting_input()
         request["origin"] = {"ref_id": "city-beijing", "name": "北京", "city": "北京"}

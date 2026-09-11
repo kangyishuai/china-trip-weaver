@@ -5905,3 +5905,60 @@ pyflakes，改用 miniconda 环境，二者只是解释器不同，检查的是�
 一、二均达成，一轮内完成，未触发止损。BLOCKED.md 记了一条非阻塞判断
 （day-card h3 的 6px 不是断行问题、CSS 治不了，见上）。分支待
 `git push -u origin journey-title-wrap`。
+
+## 书「汇合腿铁路赶不上时取合规航班」任务 0：核对通过（2026-09-12，main 直改）
+
+核对：全量 646 OK、secrets 0、pyflakes 0，与任务书现状一致。用
+`synthetic_grouped_meeting_input` 改 1 组（family-kunming）+ 自建
+rail12306/FlyAI 夹具（铁路 13:00 到、航班 11:00 到、meet_by 12:30）复现，
+`plan_trip` 抛
+`MEETING_BUFFER_INSUFFICIENT actual_buffer_minutes:-30`——航班从未被看见，
+与任务书描述一致。
+
+- 目标：`_validate_meeting_anchor` 现在早于 L204-205 的 FlyAI/VariFlight
+  解析就被调用（看不到 `enrichment.flights`）；必须把它挪到 L205 之后才能
+  在铁路不合规时改判一班合规航班当汇合腿。
+- 顺序：先写 3 条红测试（复用 `synthetic_grouped_meeting_input` 改单组 +
+  自建 rail/flyai 夹具，不新增模块级 helper），再实现。
+- 最大风险：①`_is_meeting_arrival_leg` 去掉"排除 flight"后，同路线的其他
+  航班比价条目会同样structurally匹配、误判 `MEETING_LEG_AMBIGUOUS`——解法
+  是给"被选中的汇合航班"打一个 `leg-meeting-flight-` 前缀 leg_id
+  （`stable_id` 的既有惯例），其余比价航班原样保留不受影响；②挪走的铁路腿
+  与被提升的航班原条目一旦从 `transport_legs` 删除，其 `claims` 若不同步
+  处理会被 `validate_trip._check_claim_subjects` 判定悬空引用——解法是同时
+  重写/剔除对应 claim。`_resolve_rail` 的候选选择本身经证明（filter-then-min
+  与 min-then-check 在"最早到达=按缓冲单调"下逐场景等价）不需要改动，留空
+  不碰，判断记于本节，不再复述。
+
+## 书「汇合腿铁路赶不上时取合规航班」任务 1：三条新测试（2026-09-12）
+
+三条测试写成完全自包含的 `def test_`（各自内联 rail12306/FlyAI 夹具，不
+新增任何非 `def test_` 的辅助方法——最初写了 4 个 `_kunming_meeting_*`
+私有方法复用搭建代码，回读界限"只许新增 def test_"字面更严格，改成三份
+接受重复的自包含实现）。跑三条测试对照现状（代码未动）：
+
+```
+$ /usr/bin/python3 -m unittest tests.test_keyless_e2e.KeylessE2ETests.test_g6_meeting_falls_back_to_a_compliant_flight_when_rail_misses_the_buffer tests.test_keyless_e2e.KeylessE2ETests.test_g6_meeting_buffer_insufficient_reports_earliest_known_arrival_across_rail_and_flight tests.test_keyless_e2e.KeylessE2ETests.test_g6_meeting_rail_candidates_are_filtered_by_buffer_before_taking_the_earliest_arrival -v
+test_g6_meeting_falls_back_to_a_compliant_flight_when_rail_misses_the_buffer ... ERROR
+test_g6_meeting_buffer_insufficient_reports_earliest_known_arrival_across_rail_and_flight ... FAIL
+test_g6_meeting_rail_candidates_are_filtered_by_buffer_before_taking_the_earliest_arrival ... ok
+Ran 3 tests in 0.023s
+FAILED (failures=1, errors=1)
+```
+
+①`ERROR`：`_validate_meeting_anchor` 在看到航班前直接对铁路 13:00 抛
+`MEETING_BUFFER_INSUFFICIENT`，符合预期的红。②`FAIL`：确实抛了
+`MEETING_BUFFER_INSUFFICIENT`（这点碰巧"对"），但
+`arrival_at`/`actual_buffer_minutes` 只反映铁路自己的 13:00/-30，不是
+"铁路航班两者里最早"的航班 12:00/30，符合预期的红。③`ok`——与任务书
+"此刻选错"的预判不符，是绿的，不是红的。
+
+核查原因：`_resolve_rail` 现状的候选选择本就是"当天同日期候选里
+`min(arrive_at, depart_at)`"，与 buffer 是否合规无关；而"先按 buffer 过滤
+再取最早到达"在"合规是到达时间的单调函数"这一前提下，与"直接取最早到达"
+逐场景结果相同（最早到达的候选要么合规——两种算法都选它；要么不合规——
+则按定义没有更晚到达的候选会合规，两种算法都得空）。用两班铁路（12:00、
+11:00 到，meet_by 12:30）在改动前实测确实已经选中 11:00（G9003），如上
+`ok`。这条测试仍有效——它锁定"重构后这个已经正确的场景不能被我的改动
+弄坏"——只是它不满足"硬指标一"字面的"三条新测试先红后绿"，如实记录，
+不伪造一个不相关的失败来凑红。
