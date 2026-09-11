@@ -1656,6 +1656,52 @@ class JourneyContinuityTests(unittest.TestCase):
             for viewport in report["viewports"]:
                 self.assertEqual(0, viewport["horizontalOverflow"])
 
+    def test_location_overview_renders_a_located_svg_for_a_located_poi(self):
+        journey = copy.deepcopy(self.result.journey)
+        reference_poi = load(VALID_TRIP)["pois"][0]
+        journey["trips"][0]["pois"][0]["coordinates"] = copy.deepcopy(reference_poi["coordinates"])
+
+        rendered = render_journey(journey)
+
+        matches = re.findall(r'<svg class="location-svg".*?</svg>', rendered, flags=re.DOTALL)
+        self.assertEqual(1, len(matches))
+        svg_bytes = len(matches[0].encode("utf-8"))
+        self.assertTrue(400 <= svg_bytes <= 700, svg_bytes)
+        report = validate_journey_html(rendered, journey)
+        self.assertTrue(report.ok, [item.render() for item in report.errors])
+
+    def test_location_overview_shows_unverified_placeholder_for_every_uncoordinated_city(self):
+        journey = self.result.journey
+        rendered = render_journey(journey)
+
+        self.assertIn('data-section="location-overview"', rendered)
+        expected_cities = 0
+        for trip in journey["trips"]:
+            cities = []
+            for day in trip["days"]:
+                if day["city"] not in cities:
+                    cities.append(day["city"])
+            for item in list(trip["lodgings"]) + list(trip["pois"]):
+                if item["city"] not in cities:
+                    cities.append(item["city"])
+            expected_cities += len(cities)
+        self.assertEqual(expected_cities, rendered.count("位置未核验"))
+
+    def test_location_overview_removal_is_flagged_as_a_missing_required_section(self):
+        journey = self.result.journey
+        rendered = render_journey(journey)
+
+        mutated = re.sub(
+            r'<section class="panel panel-wide" id="location-overview".*?</section>',
+            "",
+            rendered,
+            count=1,
+            flags=re.DOTALL,
+        )
+        self.assertNotEqual(rendered, mutated)
+        codes = {item.code for item in validate_journey_html(mutated, journey).errors}
+        self.assertIn("JH005", codes)
+
 
 class JourneyExtractAssembleTests(unittest.TestCase):
     """`ctw journey extract` / `ctw journey assemble` round trip the checked-in demo."""

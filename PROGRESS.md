@@ -5213,3 +5213,43 @@ mtime=Sep 7 14:20、`candidates.json` mtime=Sep 6 19:34，均早于本会话
 `shasum -a 256`（本轮未采集动工前基线，此处只作为下一轮复核的参照）：
 `request.json`=`676d639a55810bdf75280232a30f4a0edd634ab9eb16009da550c582b7afca20`、
 `candidates.json`=`a1beaa0ebf5d839fc44daef9f350304d48480ff0efeaad8216c536ed47d7f25b`。
+
+## 书 AD3「Journey 页位置示意」（2026-09-11，worktree `.tmp/wt-ad3` 分支 `journey-location-svg`，第十四波三份并行书之一）
+
+任务 0 核对（HEAD `fd2e618`）：全量 `/usr/bin/python3 -m unittest discover -s
+tests` → `Ran 632 tests` `OK` 0 skipped（39.6s）；`scripts/scan_secrets.py` →
+`0 finding(s) across 380 file(s)`；journey_html.py L13-22 从 `.html` 导入 9 个
+名字（`PROVIDER_ATTRIBUTION`/`RendererError`/7 个私有函数，任务书说「9 个私有
+函数」略有出入但总数对，不停工）、L24 从 `.template` 导入含 attr/dom_id/text；
+`_render_journey` 分区调用列表在 L267-277（`_route_section` 是第一项）；
+`git grep -c '<svg\|_location_svg' render/journey_html.py` 确认零命中；
+`JOURNEY_SECTIONS`（L164-180）15 项、`validate_journey_html.py:46` 已用
+`required_sections=JOURNEY_SECTIONS` 参数化——加分区名不用改这个校验器文件。
+`html.py` 的 `_location_section`/`_location_svg` 在 L581/L627，标签键
+locations/location_unverified/location_note/location_title/location_desc 在
+`_labels()` 的 en L245-255、zh L268-279，逐字与任务书对上。实测复现 ADR-0018
+的字节测量：对 `multicity-static.json`/`weekend-live.json`/`rental-ferry.json`
+跑 `render_trip` 取 `<svg class="location-svg".*?</svg>`（不含后面的
+schematic-note 段落）得 464/666/458+463 字节，与 ADR 原文四个数字逐一相同，
+确认「字节数 400–700」量的是 svg 标签本身。
+
+理解的目标：给 Journey 页加 `_location_overview_section(journey, labels)`，
+从 `.html` 多导入一个 `_location_svg`（不复制代码），按每个 trip 内
+`day["city"]` 顺序 ∪ lodging/poi 城市顺序去重分组（照抄 `_location_section`
+L581-601 的分组/CRS 选择），每城一个 `<h3>`「第 N 段 · 城市」+ `_location_svg`
+或「位置未核验」空态；用局部 `_section()`（L975，已存在，同 html.py 版本）
+包一层 `data-section="location-overview"`；分区名加进 `JOURNEY_SECTIONS`
+即自动变必需分区，`validate_journey_html.py` 不用动。
+顺序：任务 1 先写 3 条红测试，复用 `JourneyContinuityTests.self.result.journey`
+（`journey_sixteen_day_case()`，3 段各 1 城、pois/lodgings 坐标全部
+`None`——实测验证过，正好对应任务书「三段城市数之和」=3）→ 任务 2 实现、
+07-renderer.md §10 补一句、重生成示例与全部夹具、跑全量与浏览器 QA、反向
+验证。
+最大风险：`_location_svg` 用 `group_index` 拼城市名做 `dom_id`；html.py 单
+Trip 页每次调用只有一个 trip，`enumerate(cities)` 从 0 重置没问题，但
+Journey 页有多个 segment，若照抄「每 trip 重置计数」，两个不同 segment
+恰好同名城市时会撞出重复 DOM id（触发 `JH004`）——对策是用一个跨全部
+segment 单调递增、不按 trip 重置的计数器；决定不把每城分组包成嵌套
+`<section>`（改用 `<div class="location-group">`，CSS 类名沿用 html.py 的
+`.location-group` 规则，靠 class 选择器不看 tag），避免任务 1 第③条测试用
+非贪婪正则删整个分区时被内部嵌套 `</section>` 提前截断。
