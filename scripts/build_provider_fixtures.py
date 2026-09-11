@@ -589,6 +589,27 @@ def vari_live_comfort() -> Mapping[str, Any]:
     }
 
 
+def vari_live_price(flight_no: str = "XX1001", economy_price: Any = 1300.0) -> Mapping[str, Any]:
+    return {
+        "flightno": flight_no,
+        "flightcompany": "示例航空",
+        "flightdepcode": "BJS",
+        "flightarrcode": "SHA",
+        "depcitycode": "BJS",
+        "arrcitycode": "SHA",
+        "cabins": [
+            {
+                "cabinclass": "C", "cabincode": "Q", "classname": "公务舱",
+                "price": 3000, "stprice": 6000, "discount": 0.5, "seatnum": 5,
+            },
+            {
+                "cabinclass": "Y", "cabincode": "Y", "classname": "经济舱",
+                "price": economy_price, "stprice": 1200, "discount": 0.85, "seatnum": 20,
+            },
+        ],
+    }
+
+
 def vari_flight(number: str = "XX1002", price: Any = 1002.0) -> Mapping[str, Any]:
     return {
         "flight_no": number,
@@ -797,6 +818,7 @@ def build() -> List[Dict[str, Any]]:
         fixture("variflight", "tools_fingerprint", vari_req, response(dict(vari_body("flights", {"items": []}), probe={"tool_count": 9})), error_class="no_results"),
         fixture("variflight", "weather", weather_req, response(vari_body("weather", {"summary": "小雨，18°C"})), item_count=0),
         fixture("variflight", "comfort", request("flight", {"action": "comfort", "flight_no": "XX1001", "date": "2026-09-10", "subject_ref": "leg-flight"}), response(vari_live_body("flightHappinessIndex", [vari_live_comfort()])), source=VARIFLIGHT_SOURCE, captured_at=VARIFLIGHT_CAPTURED_AT),
+        fixture("variflight", "price", request("flight", {"action": "price", "dep_city": "BJS", "arr_city": "SHA", "date": "2026-09-10", "flight_no": "XX1001", "subject_ref": "leg-flight"}), response(vari_live_body("getFlightPriceByCities", [vari_live_price()])), source=VARIFLIGHT_SOURCE, captured_at=VARIFLIGHT_CAPTURED_AT),
         fixture("variflight", "raw_price", vari_req, response(vari_body("raw_price", {"items": [vari_flight("XX1003", 1003.0)]})), item_count=1, schema_refs=[SCHEMA_REFS["leg"]]),
         fixture("variflight", "forbidden", vari_req, response({"error": "balance disabled"}, 403), health="forbidden", error_class="forbidden"),
         fixture("variflight", "any_wrong_shape", vari_req, response({"tools": VARIFLIGHT_TOOLS, "content": [{"type": "text", "text": "[]"}]}), health="contract_mismatch", error_class="contract_mismatch"),

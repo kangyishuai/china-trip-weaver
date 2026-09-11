@@ -297,6 +297,10 @@
       "sha256": "b0f4c8b941b3a5aaae981ee7cd1700bdbae345c01e86887d8e3e11192a874895"
     },
     {
+      "path": "variflight/price.json",
+      "sha256": "6f579aaac5d6f2aa7cbdce31508e26fe62628340c29a6d9427de3927adc17a92"
+    },
+    {
       "path": "variflight/rate_limit.json",
       "sha256": "35d1556f3fd353870964e5fdb456b76c976c34d56b439d0754faafce5c049c54"
     },
@@ -325,7 +329,7 @@
       "sha256": "46fd6e92dfa195da7d89386332f94ba20a9279229c78bec2ec1eaf2296321f2e"
     }
   ],
-  "fixture_count": 81,
+  "fixture_count": 82,
   "generated_by": "scripts/build_provider_fixtures.py",
   "manifest_version": 1
 }

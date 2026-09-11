@@ -5905,3 +5905,122 @@ pyflakes，改用 miniconda 环境，二者只是解释器不同，检查的是�
 一、二均达成，一轮内完成，未触发止损。BLOCKED.md 记了一条非阻塞判断
 （day-card h3 的 6px 不是断行问题、CSS 治不了，见上）。分支待
 `git push -u origin journey-title-wrap`。
+
+## 书 AF1「VariFlight 城市间票价接到 FlyAI 航班腿」（2026-09-11，worktree `.tmp/wt-af1` 分支 `variflight-cross-price`，第十六波两份并行书之一）
+
+任务 0 核对（HEAD `560eeeb`）：全量 `Ran 646 tests` `OK` 0 skipped
+（42.8s）；`scan_secrets.py` → `0 finding(s) across 382 file(s)`；
+pyflakes 0 行；`test_providers.py` L117 `assertEqual(81, ...)`、两份
+README 夹具计数均为 81，与任务书一致。`_tool_call` 实际在
+variflight_mcp.py L141-154（任务书写 141-155，误差 1 行不影响）；
+`normalize`/`_live_payload` 分发在 variflight.py L35-117；FlyAI 航班腿
+`/price` claim 在 flyai.py L82-86；`_enrich_route` 在
+variflight_enrichment.py L144-216，comfort 请求借 `selected["leg_id"]`
+在 L269-283；`CITY_IATA` 现为 24 城（0.16.1 已扩容，任务书仍写「5
+城」是旧描述，price 步骤复用 route 已解出的 dep_city/arr_city，与表
+条目数无关，不影响设计）；夹具服务器 `tests/fixtures/
+variflight_mcp_server.py` 目前只答 search/comfort，与任务书一致。
+
+真实 Key 抓取：本沙箱 `HTTP_PROXY=127.0.0.1:7897` 已在 shell 环境里
+配置好，`VariFlightMCPTransport` 子进程直接继承 `os.environ` 时不需要
+（书 AE1 那次要子类化 `_environment()` 透传，这次不需要，差异记录见
+下）——按 `_environment()` 的 `SAFE_PROCESS_ENV` 白名单，子进程本不该拿到
+代理变量，但探针脚本仍连上了，判断是本机代理软件监听 127.0.0.1 且
+子进程继承了 shell 的系统级网络配置（非 `SAFE_PROCESS_ENV` 传递），
+与书 AE1 记录的「该沙箱直连拿不到出网」是两台不同机器/不同网络环境，
+如实记录差异，不影响本书设计（探针脚本本就只允许留在 scratchpad，不
+落进仓库）。`_session("getFlightPriceByCities", {"dep_city":"BJS",
+"arr_city":"SHA","dep_date":"2026-09-18"}, 20.0)` → `code=200
+message=Success`，**data 69 条**（与管理者原文「BJS→SHA 69 条」逐字
+吻合）；**第一条键名**（29 个，全小写）：`arraptccity`/`arraptcname`/
+`arrcitycode`/`arrdate`/`cabins`/`depaptccity`/`depaptcname`/
+`depcitycode`/`depdate`/`distance`/`flightarrcode`/
+`flightarrtimeplandate`/`flightcompany`/`flightdepcode`/
+`flightdeptimeplandate`/`flighthterminal`/`flightno`/`flightterminal`/
+`food`/`generic`/`oilfee`/`shareflag`/`shareflightno`/
+`stopairportcode`/`stopairportname`/`stopcity`/`stopcityname`/
+`stopflag`/`tax`（与 search/comfort 两个既有工具的大写驼峰
+`FlightNo`/`FlightDepcode` 命名风格不同，且 `flightdeptimeplandate` 是
+UNIX 时间戳整数而非字符串——本次实现不解析该字段，只用
+`flightno`/`cabins`，不受影响）；**cabins 第一项键名**（7 个）：
+`cabinclass`/`cabincode`/`classname`/`discount`/`price`/`seatnum`/
+`stprice`；额外探得 `cabinclass` 取值只有 `C`（公务舱）/`F`（头等舱）/
+`Y`（经济舱、超级经济舱、明珠经济舱三种舱名共用同一个 `cabinclass:
+"Y"`）三档，69 条里 `flightno` 唯一不重复。原始响应存于
+`.tmp/vf-price-capture/bjs-sha-raw.json`（未提交，探针脚本留在会话
+scratchpad，未改任何仓库文件）。与管理者猜测的「入参
+dep_city/arr_city/dep_date、返回 flightno + cabins[cabinclass/price]」
+完全吻合，按此设计，不停工。
+
+理解的目标：`getFlightPriceByCities` 接进 `_tool_call`/`normalize`，
+`_enrich_route` 在 comfort 之后按已选航班 `service_number` 过滤
+`flightno` 再取 `cabinclass=="Y"` 最低 `price`，与 FlyAI 已挂在该腿的
+`price.amount` 比较；超阈值 `max(20, flyai价*5%)` 时把 VariFlight 自己
+新产的 `/price` claim 直接标 conflict（enrichment 手上就有），FlyAI
+那条经 `conflict_claim_ids` 回传给 planning.py 补标（enrichment 拿不到
+`inventory.claims` 的最终副本）。
+顺序：夹具服务器+build_provider_fixtures 学会 price → 两模块各写红
+测试 → 实现四处 → 阈值改 0 反向验证 → 全量 → 两份 README → 收尾。
+最大风险：price 第三次调用是否该在 VariFlight 自产候选（candidate_mode，
+该路线 FlyAI 本无航班、`selected["price"]["amount"]` 恒为 None）时也打
+——决定仅在 `not candidate_mode`（真有 FlyAI 价可比）时才发，偏离任务书
+「每条路线 3 次调用」的猜测措辞，理由：候选场景没有 FlyAI 价可比对，
+硬指标一原文只要求「已选航班腿」两条 claim，且此举不影响现有 7 个
+candidate_mode 测试的 `business_calls` 断言（已逐条核对），风险可控。
+
+任务 1（先写红）：`tests/fixtures/variflight_mcp_server.py` 新增
+`price(depcity, arrcity)`，合成 XX1001（经济舱 1300）/XX1002（经济舱
+50，flightno 不匹配的诱饵，防止实现偷懒不按 flightno 过滤）各两舱
+（C 先 Y 后，逼真实实现必须按 `cabinclass=="Y"` 过滤而非误取
+`cabins[0]`），`tools/call` 分支挂 `getFlightPriceByCities`。
+`build_provider_fixtures.py` 新增 `vari_live_price()`（沿用真实抓包的
+小写字段名）与 `fixture("variflight", "price", ...)`（紧跟 "comfort"
+之后，风格与其一致，`request()` 用 `action="price"` + `dep_city`/
+`arr_city`/`date`/`flight_no`/`subject_ref`）；顺手把
+`test_variflight_synthetic_responses_emit_status_and_comfort_claims`
+的 subTest 元组与末尾断言也扩到 "price"（任务书未要求，但同一测试
+已有 success/comfort 两个同构断言，补上第三个只是保持一致，属可选
+强化，不改变任何既有断言）。跑
+`/usr/bin/python3 scripts/build_provider_fixtures.py` → `wrote 82
+provider fixtures and 5 AMap scenarios`。
+
+`tests/test_variflight_live.py` 新增两条：
+`test_matched_flight_gets_a_variflight_price_claim_with_flyai_leg_
+subject`（已选航班 FlyAI 价 1250 vs 夹具经济舱价 1300，只断言新增
+claim 的 subject_ref/value/provider，不断言 conflict）；
+`test_price_conflict_above_threshold_marks_both_claims_conflict_and_
+within_threshold_marks_neither`（同一 `enrich()` 两次跑，FlyAI 价分别
+取 1260——diff 40 ≤ max(20,63)=63，阈值内——与 700——diff 600 >
+max(20,35)=35，超阈值——断言 `result.conflict_claim_ids` 与新
+claim 的 `status` 两头都对）。`tests/test_keyless_e2e.py` 新增
+`test_variflight_price_conflict_marks_the_flyai_claim_and_keeps_trip_
+valid`，复用 beijing-shanghai-3d e2e 夹具跑完整 `plan_trip`（FlyAI
+"normal" 模式固定价 1001.00，VariFlight "require-key" 模式固定经济舱
+1300，diff 299 必超阈值）——写测试时发现该 e2e 请求有往返两段航班腿
+（10/16 出、10/18 回），且 FlyAI 的 `/price` claim 与住宿的
+`/price` claim 共用同一个 `field_path`，最初按「provider==flyai and
+field_path==/price」过滤断言 `1 != 3`（多算了一条住宿价）；改为先从
+`result.trip["transport_legs"]` 收集 `travel_mode=="flight"` 的
+`leg_id` 集合、再用它限定 claims 过滤，断言两条航班腿的 FlyAI/
+VariFlight 价格 claim 各 2 条、全部 `conflict`，`validate_trip(...).ok`
+为真。加了 `FlyAISubprocessTransport` 导入与 `FLYAI_SERVER` 常量
+（该文件此前没有起过 FlyAI 真实子进程夹具，只有 VariFlight 的）。
+
+五处此刻红，`/usr/bin/python3 -m unittest tests.test_providers
+tests.test_variflight_live tests.test_keyless_e2e` → `Ran 152 tests`
+`FAILED (failures=5)`：`test_fixture_variflight_price`
+（`'ready' != 'contract_mismatch'`，新工具未接入 `_live_payload` 分发，
+落进不存在 `kind` 字段的旧分支报 `ContractMismatch`）、
+`test_variflight_synthetic_responses_emit_status_and_comfort_claims`
+（`price.claims` 为空）、`test_matched_flight_gets_a_variflight_
+price_claim_with_flyai_leg_subject`（`1 != 0`）、
+`test_price_conflict_above_threshold_marks_both_claims_conflict_and_
+within_threshold_marks_neither`（`1 != 0`）、
+`test_variflight_price_conflict_marks_the_flyai_claim_and_keeps_trip_
+valid`（`False is not true`）。其余 147 项已绿（含既有 10 项
+`test_variflight_live` 与既有 43 项 `test_keyless_e2e`），证明新增
+测试与夹具本身没有破坏任何既有断言，红的都是「功能未实现」。
+`~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-
+weaver/src tests scripts` 0 行；`scan_secrets.py` → `0 finding(s)
+across 383 file(s)`；`git status --short` 只列出「界限」允许的 7 个
+文件加新增的 `tests/fixtures/providers/variflight/price.json`。

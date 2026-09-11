@@ -116,6 +116,64 @@ class VariFlightLiveTests(unittest.TestCase):
         self.assertNotIn(resolved.get("VARIFLIGHT_API_KEY"), diagnostics)
         self.assertEqual(2, transport.business_calls)
 
+    def matched_flight(self, flyai_amount):
+        return {
+            "leg_id": "leg-flight", "travel_mode": "flight", "from_ref": "city-beijing",
+            "to_ref": "city-shanghai", "depart_at": "2026-09-10T22:00:00+08:00",
+            "service_number": "XX1001", "claim_ids": ["claim-flyai-price"],
+            "price": {"amount": flyai_amount, "claim_id": "claim-flyai-price"},
+        }
+
+    def matched_route(self):
+        return SimpleNamespace(
+            from_place={"name": "北京", "ref_id": "city-beijing"},
+            to_place={"name": "上海", "ref_id": "city-shanghai"},
+            travel_date="2026-09-10",
+        )
+
+    def test_matched_flight_gets_a_variflight_price_claim_with_flyai_leg_subject(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            resolved = credentials(True)
+            transport = self.transport(temporary, resolved, "require-key")
+            backend = VariFlightBackend("auto", resolved, transport)
+            result = backend.enrich([self.matched_flight(1250.0)], [self.matched_route()], CLOCK)
+        price_claims = [
+            item for item in result.claims
+            if item["provider"] == "variflight" and item["field_path"] == "/price"
+        ]
+        self.assertEqual(1, len(price_claims))
+        self.assertEqual("leg-flight", price_claims[0]["subject_ref"])
+        self.assertEqual(1300, price_claims[0]["value"])
+        self.assertEqual("partial", price_claims[0]["status"])
+        self.assertEqual((), result.conflict_claim_ids)
+        self.assertEqual(3, transport.business_calls)
+
+    def test_price_conflict_above_threshold_marks_both_claims_conflict_and_within_threshold_marks_neither(self):
+        def run(flyai_amount):
+            with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+                resolved = credentials(True)
+                transport = self.transport(temporary, resolved, "require-key")
+                backend = VariFlightBackend("auto", resolved, transport)
+                return backend.enrich([self.matched_flight(flyai_amount)], [self.matched_route()], CLOCK)
+
+        within = run(1260.0)
+        within_price_claims = [
+            item for item in within.claims
+            if item["provider"] == "variflight" and item["field_path"] == "/price"
+        ]
+        self.assertEqual(1, len(within_price_claims))
+        self.assertEqual("partial", within_price_claims[0]["status"])
+        self.assertEqual((), within.conflict_claim_ids)
+
+        beyond = run(700.0)
+        beyond_price_claims = [
+            item for item in beyond.claims
+            if item["provider"] == "variflight" and item["field_path"] == "/price"
+        ]
+        self.assertEqual(1, len(beyond_price_claims))
+        self.assertEqual("conflict", beyond_price_claims[0]["status"])
+        self.assertEqual(("claim-flyai-price",), beyond.conflict_claim_ids)
+
     def test_independent_search_emits_price_less_verify_on_click_candidate(self):
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
             resolved = credentials(True)

@@ -39,6 +39,7 @@ from china_trip_weaver.planning import (
     plan_trip,
 )
 from china_trip_weaver.providers.base import ProviderTimeout, ReplayTransport
+from china_trip_weaver.providers.flyai_cli import FlyAISubprocessTransport
 from china_trip_weaver.providers.variflight_mcp import VariFlightMCPTransport
 from china_trip_weaver.render import render_trip, validate_html
 from china_trip_weaver.validate_trip import validate_trip
@@ -51,6 +52,7 @@ CASES = ("beijing-shanghai-3d", "shanghai-weekend-2d", "beijing-hangzhou-4d")
 CTW = PLUGIN / "scripts" / "ctw"
 FIXED_NOW = "2026-09-03T12:00:00+08:00"
 VARIFLIGHT_SERVER = ROOT / "tests" / "fixtures" / "variflight_mcp_server.py"
+FLYAI_SERVER = ROOT / "tests" / "fixtures" / "flyai_cli_server.py"
 
 
 def load(path: Path):
@@ -930,6 +932,60 @@ class KeylessE2ETests(unittest.TestCase):
         self.assertIn("occupancy", unknown_reasons)
         self.assertIn("rooms", unknown_reasons)
         self.assertIn("cancellation_policy", unknown_reasons)
+        self.assertTrue(validate_trip(result.trip).ok)
+
+    def test_variflight_price_conflict_marks_the_flyai_claim_and_keeps_trip_valid(self):
+        folder = E2E / "beijing-shanghai-3d"
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            temporary_path = Path(temporary)
+            flyai_credentials = resolve_credentials({}, temporary_path / "no-flyai-key")
+            flyai_transport = FlyAISubprocessTransport(
+                flyai_credentials,
+                cache_dir=temporary_path / "flyai-npm-cache",
+                temp_root=temporary_path / "flyai-home",
+                command=(sys.executable, str(FLYAI_SERVER), "normal"),
+                cwd=ROOT,
+            )
+            flyai = FlyAIBackend("live", flyai_credentials, flyai_transport)
+            variflight_credentials = resolve_credentials(
+                {"VARIFLIGHT_API_KEY": "ctw-canary-variflight-price-not-real"},
+                temporary_path / "no-variflight-file",
+            )
+            variflight_transport = VariFlightMCPTransport(
+                variflight_credentials,
+                cache_dir=temporary_path / "npm-cache",
+                temp_root=temporary_path / "variflight-home",
+                command=(sys.executable, str(VARIFLIGHT_SERVER), "require-key"),
+                cwd=ROOT,
+            )
+            variflight = VariFlightBackend("auto", variflight_credentials, variflight_transport)
+            rail = RailBackend.from_spec("fixture:" + str(folder / "rail.json"), ROOT)
+            result = plan_trip(
+                load(folder / "request.json"),
+                load(folder / "candidates.json"),
+                FixedClock.from_iso(FIXED_NOW),
+                rail,
+                flyai_backend=flyai,
+                variflight_backend=variflight,
+            )
+        flight_leg_ids = {
+            leg["leg_id"] for leg in result.trip["transport_legs"]
+            if leg["travel_mode"] == "flight"
+        }
+        self.assertEqual(2, len(flight_leg_ids))
+        flyai_price_claims = [
+            item for item in result.trip["claims"]
+            if item["provider"] == "flyai" and item["field_path"] == "/price"
+            and item["subject_ref"] in flight_leg_ids
+        ]
+        self.assertEqual(2, len(flyai_price_claims))
+        self.assertTrue(all(item["status"] == "conflict" for item in flyai_price_claims))
+        variflight_price_claims = [
+            item for item in result.trip["claims"]
+            if item["provider"] == "variflight" and item["field_path"] == "/price"
+        ]
+        self.assertEqual(2, len(variflight_price_claims))
+        self.assertTrue(all(item["status"] == "conflict" for item in variflight_price_claims))
         self.assertTrue(validate_trip(result.trip).ok)
 
     def test_two_direct_runs_are_canonical_and_byte_deterministic(self):
