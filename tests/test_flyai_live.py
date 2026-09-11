@@ -480,6 +480,26 @@ class FlyAIBackendEntityFailureTests(unittest.TestCase):
         )
         return result, transport
 
+    def test_flight_query_and_call_log_use_city_when_display_name_differs(self):
+        fixture = load(ROOT / "tests" / "fixtures" / "providers" / "flyai" / "empty.json")
+        transport = ReplayTransport(fixture["transport"])
+        route = SimpleNamespace(
+            from_place={"name": "合成起城机场", "city": "合成起城", "ref_id": "city-synthetic-origin"},
+            to_place={"name": "合成终城高铁站", "city": "合成终城", "ref_id": "city-synthetic-destination"},
+            travel_date="2026-09-10",
+        )
+        result = FlyAIBackend("live", self.resolved_credentials(), transport).resolve(
+            {
+                "start_date": "2026-09-10",
+                "end_date": "2026-09-10",
+                "destinations": [{"city": "合成终城"}],
+                "travelers": 2,
+            },
+            (route,),
+            CLOCK,
+        )
+        self.assertEqual(("flyai.flight:2026-09-10:合成起城:合成终城",), result.business_calls)
+
     def test_lodging_no_results_keeps_empty_inventory_with_ready_health_warning(self):
         transport = ReplayTransport({
             "kind": "response",

@@ -2,17 +2,29 @@
 
 唯一的当前进度记录。2026-09-03 到 09-06 的逐轮任务书、实测证据、验收记录已归档，见「历史索引」。
 
-## 现状速览（2026-09-11 实测，0.15.4）
+## 现状速览（2026-09-11 实测，0.16.0）
 
-- 版本：`0.15.4`，唯一来源是
+- 版本：`0.16.0`，唯一来源是
   `plugins/china-trip-weaver/.codex-plugin/plugin.json` 与
   `src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
   位置一律引用这两处之一，历史版本只以日期提及、不写字面值。
-- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 632 tests`，`OK`，0 skipped；
+- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 641 tests`，`OK`，0 skipped；
   `scripts/scan_secrets.py` 0 命中；
   `~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src
   tests scripts` 0 行。带假 Key（`ANYSEARCH_API_KEY=... unittest`）跑全量同样
-  632 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+  641 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+- 0.16.0（第十四波，三本都改行为）：跨城路线的火车查询、机票查询、12306 深链
+  与 VariFlight 城市码一律用地点的 `city` 而不是展示名 `name`（`planning.RouteSpec`
+  五处消费者，缺 `city` 时回退 `name`；管理者用 fd2e618 旧代码对真实 16 天行程
+  离线回放，差异只在两条汇合腿的深链 `fs`/`ts` 与随之变化的 claim id）；FlyAI
+  返回 `status=1、data=null` 且 message 不含「结果为空」时按 `upstream_5xx`/
+  degraded 降级、不再判 `contract_mismatch`（真因是空结果关键词白名单过窄，书
+  AC3 猜的价格解析过严被真实抓取推翻），`ctw doctor --probe` 对 FlyAI 增加
+  flight 探针并报 `capabilities` 子对象，夹具 80；Journey 页新增必需分区
+  `location-overview`（每段每城一张离线位置示意，复用 `render/html.py`
+  `_location_svg`，示例页 +728 字节，真实 16 天行程页渲染出 8 张）。管理者补
+  一条锁住机票查询用 `city` 的测试。已知：真实行程页在 375px 宽度有 8 像素
+  横向溢出，示例页没有，0.13 的页面就有，与本轮无关，待查。
 - 0.15.4（第十三波，两份 ADR 加一次真实行程实网体检，代码零改动）：ADR-0018
   「地图与图片」（Proposed）裁定交互地图、静态图、图片字段都不做，Journey 页
   补上 Trip 页已有的离线位置示意 SVG（复用 `render/html.py` `_location_svg`，
