@@ -142,6 +142,7 @@ fix-names` 会把它们列为人工项。
 - 2026-09-03/04 越界事实的唯一记录：`BLOCKED.md`（面向公众的产品未决问题，
   Open 区已于 2026-09-06 清零，现为存档）。
 
+<<<<<<< HEAD
 ## 书 Y1「拆 journey._merge_segment_trips」（2026-09-11，main 直改，第九波三份并行书之一）
 
 任务 0 核对（HEAD `cab411f`）：全量 `/usr/bin/python3 -m unittest discover -s
@@ -289,6 +290,75 @@ fixtures demo plugins/china-trip-weaver/schema '*/planning.py'
 无需 rerun。提交后 `git status --short` 为空。任务书结束，硬指标一、二
 全部达成，`BLOCKED.md` 已随两次提交追加两条「判断，非阻塞」记录（任务 0
 行数差 1 行；任务 2 反向验证新增测试），无待领导裁决项。
+=======
+## 书 Y2「站点 POI 查询加 types=150200、page_size 5→25」（2026-09-11，worktree `.tmp/wt-y2` 分支 `station-poi-types`，已完成）
+
+任务 0 核对（HEAD `cab411f`）：全部与任务书数字吻合——623 测试 OK 0
+skipped、secrets 0（377 文件）、pyflakes 0 行；`station_distance.py`
+`_station_point`（:310-387）两遍请求确无 `types`、`page_size` 均为 5，
+`_place_centre`（:224-281）`page_size` 同为 5；`amap_http.py`
+`_request_contract` 的 `poi` 分支（:367-384）只读
+keywords/city/city_limit/page_size/page_num，`poi_around` 分支（:385-401）
+已有必填 `types`；`test_rail_station_fallback.py:355/356` 确为
+`page_size == 5`/`page_num == 1` 两行断言。理解的目标：给 `poi`
+合同加可选 `types`（默认不传，语义不变），`_station_point` 两遍都传
+`types="150200"`、`page_size=25`，`_place_centre` 不动。最大风险是
+`StationAMapFixtureTransport`/`ConfigurableStationPoiTransport` 等测试夹具
+按 `request.parameters[...]` 直接取值、不校验参数集合，新增键不会破坏其他
+既有测试，但要留意 `find_nearby_stations` 发出的 `poi_around` 请求本就没
+`page_num` 键，写新夹具时不能对它硬取。
+
+任务 1（已完成）：`amap_http.py` 的 `_request_contract` `poi` 分支加可选
+`types`——`"types" in values` 时才用 `_required_text` 校验并原样进查询串，
+不传则合同行为完全不变（跟 `poi_around` 分支的必填 `types` 共享
+`_required_text`，但 `poi` 分支是可选)。`test_amap_live.py` 新增
+`test_poi_types_when_provided_reaches_the_query_string`（传
+`types="150200"` 时查询串 `types=150200`）与
+`test_poi_types_when_omitted_is_absent_from_the_query_string`（不传时查询串
+没有 `types` 键），两个仿照既有
+`test_poi_city_limit_false_reaches_the_query_string_for_a_nationwide_search`
+写成，直接过 `AMapHTTPTransport.execute()`。验收：这两个新测试与
+`AMapHTTPTransportTests` 全类 13 项 OK；全量 625 测试 OK 0 skipped。
+
+任务 2（已完成）：`_station_point` 两遍（`city_limit=true`/`false`）的
+`parameters` 都加 `"types": "150200"` 并把 `page_size` 从 5 改 25，
+`page_num` 不变；`_place_centre` 未动。`test_rail_station_fallback.py`
+改动：①`:355`（原
+`test_multiple_city_stations_are_returned_sorted_and_classified_ambiguous`
+里的 `page_size == 5`）改 25，并新增一行 `types == "150200"` 断言，
+`page_num == 1` 那行未动；②`RailStationNationwideDistanceTests` 新增
+`test_both_poi_passes_carry_the_train_station_type_and_full_page_size`，
+复用既有 `ConfigurableStationPoiTransport`+`_from_candidates` 让
+city-limited 与 nationwide 两次 `poi` 请求都发生，断言两者的
+`types`/`page_size` 都是 `150200`/`25`；③`RailStationNearbyFallbackTests`
+新增 `test_place_centre_lookup_has_no_types_while_the_nearby_search_keeps_it`，
+本地定义一个最小 `poi`+`poi_around` 双能力夹具直接调
+`find_nearby_stations("鼓浪屿", ...)`，断言 `_place_centre` 发出的 `poi`
+请求没有 `types` 键（`page_size` 仍 5），而随后的 `poi_around` 请求
+`types` 仍是 `"150200"`（未受影响）。新增这个测试时发现
+`find_nearby_stations` 的 `poi_around` 请求本身不带 `page_num` 键（合同层
+默认成 1），夹具改用 `.get("page_num", 1)` 后通过，不算对不上任务书、不
+停工。验收：`test_rail_station_fallback.py` 全文件 39 项 OK；全量 `Ran
+627 tests` OK 0 skipped；pyflakes 0 行；secrets 0（377 文件）。实网
+`plugins/china-trip-weaver/scripts/ctw rail --date 2026-09-22 --from 福州
+--to 鼓浪屿 --output-json .tmp/g.json` 仍是 `ambiguous`，候选带
+`distance_meters`（厦门 5563m、厦门北 21416m，量级与 2026-09-10 记录的
+5.6km/21.4km 一致），warnings 含 `station_nearby_fallback`——第四层
+（`_place_centre`+`poi_around`，本书未改）不受影响；这条命令不经过
+`_station_point`，对它的验证由上面三个新/改测试与下面的反向验证覆盖，
+未额外发真实请求（当前没有真实的同城多站歧义案例可复现，历史记录里这
+条路径也是靠合成夹具锁定）。反向验证：临时删掉 `_station_point`
+parameters 里的 `"types": "150200"` 一行 →
+`test_both_poi_passes_carry_the_train_station_type_and_full_page_size`
+与 `test_multiple_city_stations_are_returned_sorted_and_classified_ambiguous`
+都变红（`KeyError: 'types'`）→ 还原（`git diff` 与改动前逐字节一致）→
+两个测试转绿、全量 627 仍 OK。
+
+硬指标复核：`git diff main -- tests | grep -E '^-\s*def test_'` 0 行；
+`git diff main --stat -- tests/fixtures plugins/china-trip-weaver/schema
+'*/mcp_stdio.py' '*/rail12306.py' '*/amap.py'` 为空；未新增依赖、未跑
+`install_local_plugin.sh`、未改版本号或 CI。
+>>>>>>> station-poi-types
 
 ## 书 X3「租车与轮渡合成 Trip 夹具」（2026-09-11，worktree `.tmp/wt-x3` 分支 `rental-ferry-fixture`）
 

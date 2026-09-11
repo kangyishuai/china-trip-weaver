@@ -352,8 +352,9 @@ class RailStationFallbackTests(unittest.TestCase):
             {request.parameters["keywords"] for request in amap.requests[1:]},
         )
         self.assertTrue(all(request.parameters["city"] == "多站城" for request in amap.requests))
-        self.assertTrue(all(request.parameters["page_size"] == 5 for request in amap.requests[1:]))
+        self.assertTrue(all(request.parameters["page_size"] == 25 for request in amap.requests[1:]))
         self.assertTrue(all(request.parameters["page_num"] == 1 for request in amap.requests[1:]))
+        self.assertTrue(all(request.parameters["types"] == "150200" for request in amap.requests[1:]))
         self.assertNotIn("get-tickets", self._calls(diagnostics))
 
     def test_nonmatching_poi_does_not_guess_or_remove_the_station(self):
@@ -1001,6 +1002,73 @@ class RailStationNearbyFallbackTests(unittest.TestCase):
         self.assertEqual((), nearby)
         self.assertEqual([], amap.requests)
 
+    def test_place_centre_lookup_has_no_types_while_the_nearby_search_keeps_it(self):
+        class PlaceCentreThenEmptyNearbyTransport:
+            def __init__(self):
+                self.requests = []
+
+            def execute(self, provider, request):
+                self.requests.append(request)
+                if provider != "amap":
+                    raise AssertionError("station fixture is restricted to amap")
+                if request.capability == "poi":
+                    return ProviderEnvelope(200, {
+                        "status": "1",
+                        "info": "OK",
+                        "infocode": "10000",
+                        "count": "1",
+                        "api": "poi-v5",
+                        "page_size": request.parameters["page_size"],
+                        "page_num": request.parameters["page_num"],
+                        "pois": [{
+                            "id": "SYNTHETIC-PLACE-CENTRE",
+                            "name": request.parameters["keywords"],
+                            "location": "118.067000,24.446900",
+                            "pname": "合成省",
+                            "cityname": "合成市",
+                            "adname": "合成区",
+                            "address": "合成岛路1号",
+                            "adcode": "990001",
+                            "type": "风景名胜;风景名胜相关;旅游景点",
+                        }],
+                    }, {})
+                if request.capability == "poi_around":
+                    return ProviderEnvelope(200, {
+                        "status": "1",
+                        "info": "OK",
+                        "infocode": "10000",
+                        "count": "0",
+                        "api": "around-v5",
+                        "page_size": request.parameters["page_size"],
+                        "page_num": request.parameters.get("page_num", 1),
+                        "pois": [],
+                    }, {})
+                raise AssertionError("unexpected AMap fixture capability")
+
+        amap = PlaceCentreThenEmptyNearbyTransport()
+        enricher = RailStationFallbackTests._amap_enricher(amap)
+        nearby = enricher.find_nearby_stations(
+            "鼓浪屿",
+            ProviderRequest(
+                request_id="place-centre-no-types",
+                capability="rail",
+                parameters={},
+                deadline_ms=2000,
+                as_of="2026-09-10",
+                cache_policy="bypass",
+                trace={"stage": "station-poi-types-test"},
+            ),
+        )
+
+        self.assertEqual((), nearby)
+        place_centre_requests = [call for call in amap.requests if call.capability == "poi"]
+        self.assertEqual(1, len(place_centre_requests))
+        self.assertNotIn("types", place_centre_requests[0].parameters)
+        self.assertEqual(5, place_centre_requests[0].parameters["page_size"])
+        around_requests = [call for call in amap.requests if call.capability == "poi_around"]
+        self.assertEqual(1, len(around_requests))
+        self.assertEqual("150200", around_requests[0].parameters["types"])
+
 
 class ConfigurableStationPoiTransport:
     """Synthetic AMap transport with per-keyword control of both POI passes.
@@ -1154,6 +1222,27 @@ class RailStationNationwideDistanceTests(unittest.TestCase):
         nationwide = self._nationwide_requests(amap, "邻城甲站")
         self.assertEqual(1, len(nationwide))
         self.assertEqual("false", nationwide[0].parameters["city_limit"])
+
+    def test_both_poi_passes_carry_the_train_station_type_and_full_page_size(self):
+        near_location = "100.200000,20.000000"
+        amap = ConfigurableStationPoiTransport(
+            centre_city="邻城市",
+            stations={
+                "邻城甲站": {
+                    "city_pass": {"location": "100.001000,20.000000", "cityname": "别处市"},
+                    "nationwide_pass": [near_location],
+                },
+            },
+        )
+        self._from_candidates(amap, ["邻城甲站", "邻城乙站"], "nationwide-types")
+
+        poi_requests = [call for call in amap.requests if call.capability == "poi"]
+        city_limited = [call for call in poi_requests if call.parameters["city_limit"] == "true"]
+        nationwide = [call for call in poi_requests if call.parameters["city_limit"] == "false"]
+        self.assertTrue(city_limited)
+        self.assertTrue(nationwide)
+        self.assertTrue(all(call.parameters["types"] == "150200" for call in poi_requests))
+        self.assertTrue(all(call.parameters["page_size"] == 25 for call in poi_requests))
 
     def test_same_named_neighboring_station_beyond_threshold_stays_unknown(self):
         far_location = "101.000000,20.000000"

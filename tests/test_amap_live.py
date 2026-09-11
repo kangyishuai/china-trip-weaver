@@ -317,6 +317,34 @@ class AMapHTTPTransportTests(unittest.TestCase):
         self.assertEqual(["false"], query["city_limit"])
         self.assertEqual("poi-v5", envelope.body["api"])
 
+    def test_poi_types_when_provided_reaches_the_query_string(self):
+        opener = RecordingOpener()
+        budget = AMapCallBudget(max_calls=20, qps=1000000)
+        transport = AMapHTTPTransport(credentials(), budget=budget, opener=opener)
+        envelope = transport.execute(
+            "amap",
+            request("poi", {"keywords": "武夷山站", "city": "武夷山", "types": "150200"}),
+        )
+        http_request, _ = opener.requests[-1]
+        parsed = urllib.parse.urlsplit(http_request.full_url)
+        query = urllib.parse.parse_qs(parsed.query)
+        self.assertEqual(["150200"], query["types"])
+        self.assertEqual("poi-v5", envelope.body["api"])
+
+    def test_poi_types_when_omitted_is_absent_from_the_query_string(self):
+        opener = RecordingOpener()
+        budget = AMapCallBudget(max_calls=20, qps=1000000)
+        transport = AMapHTTPTransport(credentials(), budget=budget, opener=opener)
+        envelope = transport.execute(
+            "amap",
+            request("poi", {"keywords": "武夷山站", "city": "武夷山"}),
+        )
+        http_request, _ = opener.requests[-1]
+        parsed = urllib.parse.urlsplit(http_request.full_url)
+        query = urllib.parse.parse_qs(parsed.query)
+        self.assertNotIn("types", query)
+        self.assertEqual("poi-v5", envelope.body["api"])
+
     def test_poi_around_reaches_the_query_string_with_expected_parameters(self):
         opener = RecordingOpener()
         budget = AMapCallBudget(max_calls=20, qps=1000000)

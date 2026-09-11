@@ -370,16 +370,19 @@ def _request_contract(request: ProviderRequest) -> Tuple[str, Dict[str, Any], st
         city_limit = values.get("city_limit", "true")
         if city_limit not in ("true", "false"):
             raise ContractMismatch("AMap city_limit must be true or false")
+        parameters: Dict[str, Any] = {
+            "keywords": _required_text(values, "keywords"),
+            "region": _required_text(values, "city"),
+            "city_limit": city_limit,
+            "page_size": page_size,
+            "page_num": page_num,
+            "show_fields": "business",
+        }
+        if "types" in values:
+            parameters["types"] = _required_text(values, "types")
         return (
             AMAP_ORIGIN + "/v5/place/text",
-            {
-                "keywords": _required_text(values, "keywords"),
-                "region": _required_text(values, "city"),
-                "city_limit": city_limit,
-                "page_size": page_size,
-                "page_num": page_num,
-                "show_fields": "business",
-            },
+            parameters,
             "poi-v5",
         )
     if request.capability == "poi_around":
