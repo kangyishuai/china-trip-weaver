@@ -2897,3 +2897,10 @@ all <= 120: True
 plugins/china-trip-weaver/schema '*/journey_html.py' '*/validate_html.py'
 '*/journey.py'` 空输出（禁区未碰）；`git status --short` 只剩两个白名单
 文件。止损轮次未触发（两步拆分+终验一次到位，未遇连败）。
+
+最终门（2026-09-11 实测，提交后复核）：`git log --oneline bf53f72..HEAD`
+两个提交（`6b3e076` 任务0+1 文档checkpoint、`fcf0625` 任务2 拆分+新测试）；
+`git push origin main` 成功（`bf53f72..fcf0625 main -> main`）；`gh run
+list --limit 3` 最新一条 `completed success`（run 34557408020，1m10s）；
+`git status --short` 空（工作区干净）。硬指标一、硬指标二全部达成。
+BLOCKED.md 有一条判断记录（428→427 行数笔误，非阻塞），无待裁决项。
