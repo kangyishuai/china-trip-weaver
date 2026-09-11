@@ -3498,3 +3498,71 @@ trip.json 全 `ok=True` 0 issues，4 份 schema-invalid 各 1 条 `S_*`（脚本
 与书 W3 记录的「9 份里 4 份 reject-trip」完全对应。另存
 `grep -o '"V_[A-Z_]*"' ... | sort | uniq -c` 到 `.tmp/v-before.txt`（33 个
 V 码，与任务 0 一致）。
+
+任务 2（已完成）：按 12 段空行边界抽出 `_build_reference_context`（引用映射
++all_refs 构建）、`_check_date_range_and_day_count`、`_check_day_slots`、
+`_check_claim_references`、`_check_claim_subjects`、`_check_transport_legs`、
+`_check_prices`、`_check_coordinates`、`_check_top_mode`、
+`_check_revision_and_patches`、`_check_unknowns`、
+`_check_secrets_and_credentials`，分 3 批抽取（①前三个，状态最重②claim/
+transport/price 四个③coordinate/mode/revision/unknowns/secret 五个），每批
+跑一次 `test_contracts`+`test_keyless_e2e`（56 项）均一次全绿。`semantic_issues`
+收窄成「建映射→11 个按序调用」共 16 行；两处按开工笔记预判的纯移动——
+`request = trip["request"]` 提到 `semantic_issues` 顶部供两个函数共用、
+`slot_ids: Set[str] = set()` 挪进 `_check_day_slots` 内部（原地不曾被后续
+代码使用，非跨段变量，移动比继续返回更直接）；`day_map`/`health_map`
+两个映射在 `_build_reference_context` 内建好即弃（`health_map` 保留原有
+`del` 语句，只搬运不改写法）。
+硬指标一实测：
+```
+_build_reference_context -> 29 lines; _check_day_slots -> 53 lines
+其余 9 个新函数 4~24 行; semantic_issues -> 16 lines
+max function in file: (76, '_validate')（拆分前已存在，未改动）
+all <= 120: True
+```
+硬指标二实测：`.tmp/snap-after.json` 与 `.tmp/snap-before.json` `diff` 空
+输出；`grep -o '"V_[A-Z_]*"' ... | sort | uniq -c` 前后 `diff` 空输出（33
+个 V 码计数逐一相同）；三条语料命令——README demo（`ctw plan ...
+--output-json demo/trip.json --output-html demo/trip.html` 打印
+`trip_sha256=7ea7888f...`/`html_sha256=c2d07708...`）、
+`scripts/build_plan_fixtures.py`、`scripts/build_renderer_fixtures.py`
+（`journey_sha256=7ada91c0...` 与书 R2 记录的历史基线完全一致）——重跑后
+`git status --short -- demo/` 空输出，`demo/multicity-5d`/
+`grouped-departures`/`guangzhou-shenzhen` 三份未被上述命令直接覆盖的
+trip.json 由同一轮 `test_keyless_e2e`（重新规划后与磁盘比对）覆盖，全部
+56 项已在批次验证里过绿；全量 `/usr/bin/python3 -m unittest discover -s
+tests` → `Ran 629 tests` `OK` 0 skipped（628 基线+1 个新 `def test_`）；
+`scan_secrets.py` 0 命中（378 文件）；pyflakes（`~/miniconda3/envs/core/bin/python
+-m pyflakes plugins/china-trip-weaver/src tests scripts`）0 行。
+反向验证前先补一条新测试
+`test_semantics_pin_exact_error_tuples_across_split_check_functions`
+（`tests/test_contracts.py`，白名单允许新增 `def test_`）：全仓库既有
+`validate_trip`/`codes = {issue.code ...}` 断言只查 code 集合成员关系，
+没有一处精确比对 `(code, path, message)`，这条防线拆分前就不存在——补 5
+个代表性 mutation 各自 `assertEqual` 精确单元素集合，覆盖 5 个不同的新
+`_check_*` 落点：`V_DATE_RANGE`（`_check_date_range_and_day_count`，
+`weekend-live.json` 改 `end_date`）、`V_ENDPOINT_REF`
+（`_check_transport_legs`，`multicity-static.json` 改 `from_ref`）、
+`V_UNKNOWN_PATH`（`_check_unknowns`，改 `unknowns[0].field_path`）、
+`V_DUPLICATE_ID`（`_build_reference_context`→`_id_map`，复刻既有夹具
+`duplicate-day-id.json` 的 day_id 改动）、`V_SECRET`
+（`_check_secrets_and_credentials`，复刻既有夹具 `fake-secret.json` 的
+`pasted_notes` 改动）——后两个特意选与快照语料重合的 mutation，让反向
+验证能同时触发「快照 diff 非空」与「测试变红」两个条件。
+反向验证（终端记录）：把 `_check_secrets_and_credentials` 里
+`"credential-shaped value is forbidden"` 改成
+`"credential-shaped value is forbiddenn"`（多一个 `n`）→ 快照重跑
+`diff .tmp/snap-before.json .tmp/snap-reverse2.json` 非空（`renderer-trip/
+fake-secret.json` 记录第 150 行 `forbidden`→`forbiddenn`，红）→
+`test_contracts` `Ran 20 tests` `FAILED (failures=1)`，恰是新增测试的
+`code='V_SECRET'` 子测试红、其余 19 项（含同一新测试的另外 4 个 subTest）
+绿 → 精确还原 `forbiddenn`→`forbidden` → `git diff -- .../validate_trip.py
+| grep -c forbiddenn` 为 0（残留标记清零）→ 快照重跑 `diff` 空输出
+（IDENTICAL AGAIN）→ 全量 `Ran 629 tests` `OK` 0 skipped（全绿）。
+`git diff 404248e --stat`：只有 `BLOCKED.md`/`PROGRESS.md`/
+`validate_trip.py`/`test_contracts.py` 四个白名单文件；
+`git diff 404248e -- tests | grep -E '^-\s*def test_'` 与禁区 diff
+（`git diff 404248e --stat -- tests/fixtures demo
+plugins/china-trip-weaver/schema '*/planning.py' '*/journey.py'
+'*/replan.py' '*/render/*'`）均空输出；`git status --short` 只剩四个
+白名单文件。止损轮次未触发（3 批抽取+终验一次到位，未遇连败）。

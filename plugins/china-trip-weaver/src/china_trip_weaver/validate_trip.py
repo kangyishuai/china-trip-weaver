@@ -274,8 +274,9 @@ def _resolve_pointer(document: Any, pointer: str) -> Any:
     return value
 
 
-def semantic_issues(trip: Mapping[str, Any]) -> List[ValidationIssue]:
-    issues: List[ValidationIssue] = []
+def _build_reference_context(
+    trip: Mapping[str, Any], request: Mapping[str, Any], issues: List[ValidationIssue]
+) -> Tuple[Dict[str, Mapping[str, Any]], Dict[str, Mapping[str, Any]], Dict[str, Mapping[str, Any]], Dict[str, Mapping[str, Any]], Set[str], List[Mapping[str, Any]]]:
     day_map = _id_map(trip["days"], "day_id", "/days", issues)
     leg_map = _id_map(trip["transport_legs"], "leg_id", "/transport_legs", issues)
     lodging_map = _id_map(trip["lodgings"], "lodging_id", "/lodgings", issues)
@@ -284,13 +285,11 @@ def semantic_issues(trip: Mapping[str, Any]) -> List[ValidationIssue]:
     health_map = _id_map(trip["provider_health"], "provider", "/provider_health", issues)
     del health_map
 
-    slot_ids: Set[str] = set()
     all_refs: Set[str] = {trip["trip_id"], "request"}
     all_refs.update(day_map)
     all_refs.update(leg_map)
     all_refs.update(lodging_map)
     all_refs.update(poi_map)
-    request = trip["request"]
     origins = [
         group["origin"]
         for group in (request.get("traveler_groups") or ())
@@ -303,6 +302,12 @@ def semantic_issues(trip: Mapping[str, Any]) -> List[ValidationIssue]:
         all_refs.add(meeting_anchor["location"]["ref_id"])
     all_refs.update(place["ref_id"] for place in request["destinations"])
 
+    return leg_map, lodging_map, poi_map, claim_map, all_refs, origins
+
+
+def _check_date_range_and_day_count(
+    trip: Mapping[str, Any], request: Mapping[str, Any], origins: List[Mapping[str, Any]], issues: List[ValidationIssue]
+) -> None:
     start_date = date.fromisoformat(request["start_date"])
     end_date = date.fromisoformat(request["end_date"])
     if end_date < start_date:
@@ -318,6 +323,16 @@ def semantic_issues(trip: Mapping[str, Any]) -> List[ValidationIssue]:
     if (len(request["destinations"]) > 1 or any(leg["travel_mode"] in ("rail", "flight") for leg in trip["transport_legs"])) and not origins:
         _add(issues, "V_ORIGIN_REQUIRED", "/request/origin", "cross-city travel requires an origin")
 
+
+def _check_day_slots(
+    trip: Mapping[str, Any],
+    poi_map: Mapping[str, Mapping[str, Any]],
+    leg_map: Mapping[str, Mapping[str, Any]],
+    lodging_map: Mapping[str, Mapping[str, Any]],
+    all_refs: Set[str],
+    issues: List[ValidationIssue],
+) -> None:
+    slot_ids: Set[str] = set()
     for day_index, day_item in enumerate(trip["days"]):
         previous_end: Optional[datetime] = None
         for slot_index, slot in enumerate(day_item["slots"]):
@@ -363,14 +378,20 @@ def semantic_issues(trip: Mapping[str, Any]) -> List[ValidationIssue]:
                 if windows and not any(_parse_datetime(window["start_at"]) <= start and end <= _parse_datetime(window["end_at"]) for window in windows):
                     _add(issues, "V_OPENING_WINDOW", slot_path, "scheduled visit is outside every usable opening window")
 
+
+def _check_claim_references(trip: Mapping[str, Any], claim_map: Mapping[str, Any], issues: List[ValidationIssue]) -> None:
     for path, claim_id in _iter_claim_ids(trip):
         if claim_id not in claim_map:
             _add(issues, "V_CLAIM_REF", path, "claim_id does not exist")
 
+
+def _check_claim_subjects(trip: Mapping[str, Any], all_refs: Set[str], issues: List[ValidationIssue]) -> None:
     for index, claim in enumerate(trip["claims"]):
         if claim["subject_ref"] not in all_refs:
             _add(issues, "V_CLAIM_SUBJECT", "/claims/%d/subject_ref" % index, "claim subject does not exist")
 
+
+def _check_transport_legs(trip: Mapping[str, Any], all_refs: Set[str], issues: List[ValidationIssue]) -> None:
     for index, leg in enumerate(trip["transport_legs"]):
         path = "/transport_legs/%d" % index
         if leg["from_ref"] not in all_refs:
@@ -385,6 +406,8 @@ def semantic_issues(trip: Mapping[str, Any]) -> List[ValidationIssue]:
             elif leg["duration_minutes"] is not None and int((arrive - depart).total_seconds() // 60) != leg["duration_minutes"]:
                 _add(issues, "V_DURATION", path + "/duration_minutes", "duration does not match timestamps")
 
+
+def _check_prices(trip: Mapping[str, Any], claim_map: Mapping[str, Any], issues: List[ValidationIssue]) -> None:
     for group in ("transport_legs", "lodgings", "pois"):
         for index, item in enumerate(trip[group]):
             price = item.get("price")
@@ -398,6 +421,8 @@ def semantic_issues(trip: Mapping[str, Any]) -> List[ValidationIssue]:
                     if claim and claim["subject_ref"] != item_id:
                         _add(issues, "V_PRICE_CLAIM", price_path + "/claim_id", "price claim belongs to another subject")
 
+
+def _check_coordinates(trip: Mapping[str, Any], issues: List[ValidationIssue]) -> None:
     for group in ("lodgings", "pois"):
         for index, item in enumerate(trip[group]):
             coordinates = item["coordinates"]
@@ -422,6 +447,8 @@ def semantic_issues(trip: Mapping[str, Any]) -> List[ValidationIssue]:
             if coordinates["conversion"]["status"] == "converted" and not derived:
                 _add(issues, "V_COORDINATE_DERIVED", path + "/conversion/derived_fields", "converted coordinates must name a derived field")
 
+
+def _check_top_mode(trip: Mapping[str, Any], issues: List[ValidationIssue]) -> None:
     component_modes: List[str] = []
     component_modes.extend(leg["data_mode"] for leg in trip["transport_legs"])
     component_modes.extend(claim["mode"] for claim in trip["claims"])
@@ -429,6 +456,8 @@ def semantic_issues(trip: Mapping[str, Any]) -> List[ValidationIssue]:
     if component_modes and MODE_RANK[trip["mode"]] < max(MODE_RANK[mode] for mode in component_modes):
         _add(issues, "V_TOP_MODE", "/mode", "top mode is less conservative than a component mode")
 
+
+def _check_revision_and_patches(trip: Mapping[str, Any], issues: List[ValidationIssue]) -> None:
     revision = trip["revision"]
     patches = trip["patches"]
     if revision["number"] == 1:
@@ -451,6 +480,8 @@ def semantic_issues(trip: Mapping[str, Any]) -> List[ValidationIssue]:
             if operation["op"] == "move" and "from" not in operation:
                 _add(issues, "V_PATCH_FROM", "%s/operations/%d" % (path, op_index), "move requires from")
 
+
+def _check_unknowns(trip: Mapping[str, Any], claim_map: Mapping[str, Any], issues: List[ValidationIssue]) -> None:
     for index, unknown in enumerate(trip["unknowns"]):
         path = "/unknowns/%d" % index
         if unknown["claim_id"] is not None and unknown["claim_id"] not in claim_map:
@@ -460,6 +491,8 @@ def semantic_issues(trip: Mapping[str, Any]) -> List[ValidationIssue]:
         except (KeyError, IndexError, ValueError):
             _add(issues, "V_UNKNOWN_PATH", path + "/field_path", "unknown path does not resolve")
 
+
+def _check_secrets_and_credentials(trip: Mapping[str, Any], issues: List[ValidationIssue]) -> None:
     for path, value in _walk(trip):
         if isinstance(value, str):
             for pattern in SECRET_PATTERNS:
@@ -470,6 +503,22 @@ def semantic_issues(trip: Mapping[str, Any]) -> List[ValidationIssue]:
             if parsed and (parsed.username or parsed.password):
                 _add(issues, "V_URL_CREDENTIAL", path, "URL credentials are forbidden")
 
+
+def semantic_issues(trip: Mapping[str, Any]) -> List[ValidationIssue]:
+    issues: List[ValidationIssue] = []
+    request = trip["request"]
+    leg_map, lodging_map, poi_map, claim_map, all_refs, origins = _build_reference_context(trip, request, issues)
+    _check_date_range_and_day_count(trip, request, origins, issues)
+    _check_day_slots(trip, poi_map, leg_map, lodging_map, all_refs, issues)
+    _check_claim_references(trip, claim_map, issues)
+    _check_claim_subjects(trip, all_refs, issues)
+    _check_transport_legs(trip, all_refs, issues)
+    _check_prices(trip, claim_map, issues)
+    _check_coordinates(trip, issues)
+    _check_top_mode(trip, issues)
+    _check_revision_and_patches(trip, issues)
+    _check_unknowns(trip, claim_map, issues)
+    _check_secrets_and_credentials(trip, issues)
     return sorted(set(issues))
 
 

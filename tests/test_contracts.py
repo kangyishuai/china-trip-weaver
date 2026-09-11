@@ -151,6 +151,41 @@ class ContractTests(unittest.TestCase):
         codes = {issue.code for issue in validate_trip(trip).errors}
         self.assertIn("V_SECRET", codes)
 
+    def test_semantics_pin_exact_error_tuples_across_split_check_functions(self):
+        cases = {
+            "V_DATE_RANGE": (
+                VALID / "weekend-live.json",
+                lambda trip: trip["request"].update(end_date="2020-01-01"),
+                {("V_DATE_RANGE", "/request/end_date", "end_date precedes start_date")},
+            ),
+            "V_ENDPOINT_REF": (
+                VALID / "multicity-static.json",
+                lambda trip: trip["transport_legs"][0].update(from_ref="does-not-exist"),
+                {("V_ENDPOINT_REF", "/transport_legs/0/from_ref", "transport endpoint does not exist")},
+            ),
+            "V_UNKNOWN_PATH": (
+                VALID / "multicity-static.json",
+                lambda trip: trip["unknowns"][0].update(field_path="/transport_legs/0/does_not_exist"),
+                {("V_UNKNOWN_PATH", "/unknowns/0/field_path", "unknown path does not resolve")},
+            ),
+            "V_DUPLICATE_ID": (
+                VALID / "weekend-live.json",
+                lambda trip: trip["days"][1].update(day_id="day-1"),
+                {("V_DUPLICATE_ID", "/days/1/day_id", "duplicate id day-1")},
+            ),
+            "V_SECRET": (
+                VALID / "weekend-live.json",
+                lambda trip: trip["request"].update(pasted_notes="gh" + "p_" + "0" * 32),
+                {("V_SECRET", "/request/pasted_notes", "credential-shaped value is forbidden")},
+            ),
+        }
+        for code, (path, mutate, expected) in cases.items():
+            with self.subTest(code=code):
+                trip = load(path)
+                mutate(trip)
+                actual = {(issue.code, issue.path, issue.message) for issue in validate_trip(trip).errors}
+                self.assertEqual(expected, actual)
+
     def test_error_taxonomy_has_all_frozen_classes(self):
         expected = {
             "invalid_request", "credential_missing", "credential_expired", "forbidden",
