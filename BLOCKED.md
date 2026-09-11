@@ -1582,3 +1582,78 @@ QA 的「horizontal overflow」判失败项不受影响）。仍按任务书要�
 对现有 7 个 candidate_mode 测试零影响的核对已写进 PROGRESS.md 本书
 「理解的目标」与「任务 2」两处，判断依据充分，未构成需要停工等待的
 分叉。
+
+## 书 Z3「真实行程火车票刷新实战」任务 1：两条链路缺陷（2026-09-12，只诊断不修）
+
+真实数据刷新 `fujian-2026-north` trip 的 `north-2-rail`（9/26 福州→
+武夷山）时发现，代码与真实数据本轮一行未改，供领导裁决是否要修。
+
+### 1. refresh 事件不指定 service_number 时，默认选车逻辑不检查与既有时段表的可行性，失败即整体失败、不会退而选下一个候选
+
+`replan.py` 的 `_select_refresh_service`（约 L340-359）在事件不带
+`service_number` 时，只按 `min(same_day, key=lambda item:
+(item["arrive_at"], item["depart_at"]))` 取当天到达最早的一班，完全
+不看这班车的发车时间是否晚于前一个已排定时段的结束时间；随后
+`_apply_refresh`（约 L255-258）才检查
+`selected["depart_at"] < previous_slot["end_at"]`，一旦为真就
+`raise ReplanError("refresh_overlap", ...)`，整个 `replan` 调用直接
+失败，不会自动尝试第二早、第三早的候选。
+
+复现（真实数据）：`north-2-rail` 前一个时段 `north-2-checkout` 于
+`07:45` 结束；`ctw rail --date 2026-09-26 --from 福州 --to 武夷山`
+当天返回的 10 条候选里到达最早的是 `G1644`（`06:52→07:54`），发车
+`06:52` 早于 `07:45`，不指定 `service_number` 的 `refresh` 事件
+100% 复现 `REPLAN_FAILED refresh_overlap`。10 条候选里只有 1 条
+（`G1902`，`07:50` 发车）满足「发车 ≥ 07:45」，本轮已改用显式
+`service_number=G1902` 绕过（详见 PROGRESS.md 本节任务 1 记录），
+链路最终走通，但这不是「默认路径」自己找到的解。
+
+供裁决：这不是解析错误或数据错误，是「默认选车」这个功能本身的
+覆盖范围问题——真实世界里「当天到达最早的车」经常发车更早，与
+前一晚/前一段行程的收尾时段冲突是常态而非例外（本次 10 条候选里
+9 条都撞了）。若领导认为这个功能应该继续保留「失败就报错、把车次
+决定权交回人」的行为，不用动；若希望默认路径本身具备「取到达最早
+且不违反前序时段」的能力（例如在同一批候选里过滤掉不可行的再取
+`min`），需要改 `_select_refresh_service`，本轮按「只诊断不修」的
+界限未动这处代码。
+
+### 2. 12306-mcp 对同一天同一车次号返回了两条 leg_id 完全相同但到达时间/时长/价格不同的记录，导致该车次的 claims 被重复写入
+
+`ctw rail --date 2026-09-26 --from 福州 --to 武夷山` 返回的
+`transport_legs` 里，`service_number=G1902` 出现两条记录，`leg_id`
+都是 `leg-rail-28bfe4157e41`、`depart_at` 都是
+`2026-09-26T07:50:00+08:00`，但 `arrive_at`/`duration_minutes`/
+二等座价格不同：一条 `09:30`／`100` 分钟／`128.5` 元，另一条
+`09:15`／`85` 分钟／`112.5` 元。`claims` 数组里对应
+`subject_ref=leg-rail-28bfe4157e41` 的 claim 也有两组共 6 条
+（`/depart_at`/`/price`/`/availability` 各 2 条，值与上述两条记录
+一一对应），而不是正常情况下一条 leg 对应的 3 条。
+
+同一天同一车次号本身重复出现是正常的（`G1756`/`G2374` 也各出现两次，
+但它们的两条记录各有独立的 `leg_id`，互不冲突，猜测对应不同的
+`fs`/`ts` 站点组合或余票批次）；异常的是 `G1902` 这两条记录共享了
+同一个 `leg_id`，这本该是每条候选记录的唯一标识。
+
+影响（真实复现）：`replan --event`（`service_number=G1902`，不带
+能区分这两条记录的字段）解析时，`_select_refresh_service` 的
+`matches = [item for item in same_day if item.get("service_number")
+== service_number]` 会命中两条，`matches[0]` 取 `rail_result
+["transport_legs"]` 原始顺序里排在前面的那条（本次是 `arrive=09:30`
+那条，取决于 12306-mcp 返回顺序、不是「更优」或「更早」排序的结果）；
+`_apply_refresh` 复制 claim 时按 `claim.get("subject_ref") ==
+selected.get("leg_id")` 过滤，两条记录的 6 条 claim 因为
+`subject_ref` 相同全部被复制进 `trip.claims`，其中 3 条
+（未被选中的 `09:15` 那组）不会被任何时段的 `claim_ids` 引用、成为
+游离 claim；`ctw journey validate`/`validate-html` 都未对「存在未被
+引用的 claim」报错（复现见本轮 `journey-r3.json`，`errors=0`）。
+
+供裁决：不确定这是 12306-mcp 适配器（`providers/rail12306*.py`）的
+`leg_id` 生成逻辑漏了区分字段（比如只按 `service_number`+
+`depart_at` 生成、没把 `arrive_at` 或余票批次编号纳入），还是 12306
+真实接口本身对同一车次在同一次查询里返回了两条本该合并、字段却不
+完全一致的记录（本轮没有抓到该接口的原始返回做进一步比对，不猜测
+是哪一层的问题）。若领导认为「同 leg_id 必须唯一标识一条候选」是
+硬约束，需要在适配器层加去重或让 `leg_id` 生成把 `arrive_at` 纳入；
+若这种重复本身就是真实数据的常态、下游能容忍，则只需要考虑要不要让
+`replan` 在遇到 claim 数量与 leg 数量不匹配时报警（而不是静默接受
+游离 claim），本轮均未动代码。

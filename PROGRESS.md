@@ -6346,3 +6346,267 @@ tests` `OK`；`git diff --stat -- .../variflight_enrichment.py` 显示
 '^-\s*def test_'` 0 行；`planning.py` 净增 2 行，未超过「≤3 行」的
 硬性上限；未发现冲突标记（`git grep -c '^<<<<<<< ' -- PROGRESS.md
 BLOCKED.md` 无命中）。硬指标一、二均达成，一轮内完成，未触发止损。
+
+## 书 Z3「真实行程火车票刷新实战」任务 0：日期门槛已过，核对通过（2026-09-12）
+
+worktree `.tmp/wt-z3` 分支 `refresh-drill`，从 main HEAD `12e3a92`（0.17.0）
+新建（此前两次止步的 worktree/分支已按任务书「旧的已删，重新建」处理，
+本轮不是断点续跑）。检查 PROGRESS.md/BLOCKED.md 确认此前两条「书 Z3」
+记录（2026-09-11 15:22、16:22）都止步在任务 0 第一步（日期检查），未进入
+任务 1/2，本轮从任务 0 第二步开始。
+
+理解的目标／顺序／最大风险：目标是把真实行程目录（工作区根目录下，相对
+名 `fujian-2026-09-25-to-10-10/`）north 段 9/26 福州→武夷山这条 12306
+深链占位（`north-2-rail`）换成真实车次；顺序按链路 `ctw rail`→`journey
+extract`→refresh 事件→`replan --rail-result`→`journey assemble
+--replace-trip`→`journey render`→两道 validate；产出
+`journey-r3.json`/`福建中秋国庆16天行程-r3.html` 放回原目录、不覆盖原
+文件。最大风险：链路此前从未在真实行程上跑通过完整一遍，`replan` 默认
+选车（当天最早到达）与 `assemble --replace-trip` 的 revision 冲突处理
+是否如文档所写均待验证；其次真实行程目录只许新增文件、不许改动，写
+产物前先建好全部文件的基线哈希。
+
+任务 0 实测：
+```
+$ date "+%Y-%m-%d"
+2026-09-12
+```
+达到任务书门槛「2026-09-12（含）之后」。
+
+```
+$ plugins/china-trip-weaver/scripts/ctw doctor
+{"plugin_version":"0.17.0","providers":{"amap":"configured","anysearch":
+"missing","flyai":"configured","variflight":"configured"},"python":
+"3.13.12","schema_exists":true,"schema_version":"1.0.0","skill_conflicts":
+{"conflicts":{},"status":"clear"}}
+```
+AMAP 为 configured。
+
+```
+$ plugins/china-trip-weaver/scripts/ctw rail --date 2026-09-26 --from 福州 \
+  --to 武夷山 --output-json .tmp/rail.json
+RAIL_COMPLETE output=.tmp/rail.json legs=10 status=ready error=none
+```
+legs=10 ≥1 且 status=ready，达到任务 0 的继续条件；`rail.json` 内
+`health.status`=`ready`、`provider`=`12306-mcp`、`provider_version`=
+`0.3.10`、`error_class`=null、`transport_legs` 共 10 条、`warnings` 为
+空。
+
+真实行程目录基线：对 `fujian-2026-09-25-to-10-10/` 下全部 45 个文件
+（含 `providers/` 子目录）跑 `find . -type f | sort | xargs shasum -a
+256`，结果存进会话 scratchpad（不入仓库），供任务 2 完成后逐文件比对
+字节未变；`journey.json` 当前 sha256：
+`56b6059455703fc24c4c7c97169e0d56018ada26dab57422d26d240a5b341056`。
+
+任务 0 全部检查通过，进入任务 1。
+
+## 书 Z3「真实行程火车票刷新实战」任务 1：north 段第一条 rail 腿刷新完成（2026-09-12）
+
+按链路逐步执行，全部在 worktree `.tmp/` 下产出，最后才复制进真实目录。
+
+步骤 1（已在任务 0 做过，直接复用同一份 `.tmp/rail.json`，未重新查询）：
+`ctw rail --date 2026-09-26 --from 福州 --to 武夷山 --output-json .tmp/rail.json`
+→ `legs=10 status=ready`（见任务 0 记录）。
+
+步骤 2：
+```
+$ plugins/china-trip-weaver/scripts/ctw journey extract --journey \
+  fujian-2026-09-25-to-10-10/journey.json --trip-id fujian-2026-north \
+  --output-json .tmp/north.json
+JOURNEY_EXTRACT_COMPLETE json=.tmp/north.json trip_id=fujian-2026-north
+```
+提取出的 `north.json` revision=1，两条 rail 腿均为 `12306-deep-link`
+占位：`leg-fuzhou-wuyi`（9/26）、`leg-wuyi-fuzhou`（9/29，本轮不碰）。
+
+步骤 3（第一次尝试，按「我替领导拍的板」不指定 `service_number`）：
+```
+$ plugins/china-trip-weaver/scripts/ctw replan --trip .tmp/north.json \
+  --event .tmp/refresh-event.json --rail-result .tmp/rail.json \
+  --base-revision 1 --output-json .tmp/north-r2.json \
+  --output-html .tmp/north-r2.html
+REPLAN_FAILED refresh_overlap refreshed service departs before the previous slot ends
+```
+排查：`north.json` 里 9/26 当天 `north-2-rail`（`ref_id=leg-fuzhou-wuyi`）
+前一个时段是 `north-2-checkout`，`07:15→07:45` 结束；`replan.py`
+`_select_refresh_service` 不指定 `service_number` 时按
+`min(same_day, key=(arrive_at, depart_at))` 全局取到达最早的一班，
+本次是 `G1644`（06:52→07:54），发车 06:52 早于前一时段结束 07:45，
+`_apply_refresh` 里 `selected["depart_at"] < previous_slot["end_at"]`
+判真，直接 `raise ReplanError("refresh_overlap", ...)`——**默认选车
+逻辑只按到达时间排序，不检查与既有时段表的可行性，失败时也不会退而
+选下一个候选，是链路本身的限制（记入 BLOCKED.md，不改代码）**。
+把 `.tmp/rail.json` 里当天全部 10 条候选按 `depart_at` 逐条核对：
+仅 `G1902`（07:50 发车）满足「发车 ≥ 07:45」，其余 9 条全部早于
+07:45。因此改用「我替领导拍的板」里预留的口子——显式指定
+`service_number`——选 `G1902`，符合「让步顺序：链路走通 > 车次选得
+好」；这不是违反「只允许/不许」条款，是任务书自己标了「（猜的）」的
+那句假设被真实数据推翻后的合理替代，原因已写进下面的事件文件并在此
+记录。
+
+步骤 3（第二次，指定 `service_number=G1902`）：
+`.tmp/refresh-event.json` 内容：
+```json
+{
+  "type": "refresh",
+  "subject_ref": "north-2-rail",
+  "service_number": "G1902",
+  "reason": "12306 presale opened 2026-09-12 for the 2026-09-26 Fuzhou to Wuyishan leg; the default earliest-arrival pick (G1644, departs 06:52) failed refresh_overlap against the north-2-checkout slot ending 07:45, so selecting G1902 (departs 07:50, the only same-day candidate at or after 07:45) explicitly",
+  "reverify_claim_ids": []
+}
+```
+```
+$ plugins/china-trip-weaver/scripts/ctw replan --trip .tmp/north.json \
+  --event .tmp/refresh-event.json --rail-result .tmp/rail.json \
+  --base-revision 1 --output-json .tmp/north-r2.json \
+  --output-html .tmp/north-r2.html
+REPLAN_COMPLETE json=.tmp/north-r2.json html=.tmp/north-r2.html revision=2
+patch=patch-1-2 trigger=provider_change reverify=0
+trip_sha256=9dda7670efdad8f9eff786abcfe7f90d061a7d73024e7d289433c6983c59e9dd
+html_sha256=e3f737072448ad200d45e2bc927cce9c88af845b43f88f8c5d721ca1cfd97ee8
+errors=0
+```
+`trigger=provider_change`、`errors=0`，达到任务 1 验收第一条。刷新后
+`leg-fuzhou-wuyi`：`provider=12306-mcp`、`service_number=G1902`、
+`depart_at=2026-09-26T07:50:00+08:00`、`arrive_at=2026-09-26T09:30:00+08:00`
+（100 分钟）、`price.amount=128.5`（二等座，CNY）、`data_mode=live`。
+
+claims 去向：刷新前 `leg-fuzhou-wuyi` 只有 2 条 claim
+（`claim-leg-fuzhou-wuyi-time`/`-price`，均 `hypothesis`/`unknown`、
+`provider=12306-deep-link`）——`_apply_refresh` 不会移除旧 claim，
+两条原样留在 `trip.claims` 里，与新 claim 共存（这是既有实现行为，
+不是本轮引入）。新增 6 条 `provider=12306-mcp` 的 `verified` claim（预期
+应为 3 条：`/depart_at`、`/price`、`/availability`），原因见下方
+BLOCKED.md 记录的第二条链路异常（`rail.json` 里 `G1902` 当天的两条
+候选记录共享同一个 `leg_id`，各自的 3 条 claim 因此都被收进来）；
+`north-2-rail` 时段的 `claim_ids` 只引用了其中 3 条（`arrive=09:30`
+那组），另外 3 条（`arrive=09:15` 那组）留在 `trip.claims` 里但未被
+任何时段引用。`ctw journey validate`/`validate-html` 均未对这 3 条
+游离 claim 报错。
+
+账本变化：无变化。`journey-r3.json` 顶层 `budget_ledger.known_cost_cny`
+刷新前后都是 `0`、`remaining_known_budget_cny` 都是 `null`、
+`status` 都是 `unbudgeted`——三个子 trip（north/coast/south）都不带
+各自的 `budget_ledger` 键，journey 级账本对每个子 trip 只有一条
+「Trip does not contain a budget ledger」占位条目，价格刷新不会传到
+这一层（既有设计行为，非本轮改动引入，未见相关 ADR 提及，供领导
+知悉）。
+
+健康行与 unknowns：north trip 的 `12306-mcp` `provider_health`
+`reason` 从（推断）「2 of 2 rail leg(s)」改为
+「dated deep-link fallback used for 1 of 2 rail leg(s)」，`status`
+仍是 `degraded`（9/29 回程腿本轮未碰，仍是深链）；`unknowns` 数组
+7→5，精确移除了 `leg-fuzhou-wuyi` 的 `service_number`/`price` 两条
+「已解决」占位，其余 5 条与本腿无关，未被触碰。
+
+步骤 4：
+```
+$ plugins/china-trip-weaver/scripts/ctw journey assemble --journey \
+  fujian-2026-09-25-to-10-10/journey.json --replace-trip .tmp/north-r2.json \
+  --base-revision 2 --reason "12306 presale opened 2026-09-12; \
+  replaced north-2-rail deep-link placeholder with live G1902 service" \
+  --output-json .tmp/journey-r3.json
+JOURNEY_ASSEMBLE_COMPLETE json=.tmp/journey-r3.json trips=3 days=16
+journey_sha256=ffa44e239f5c96134d5f1cc0d69935dcf028edb230ba8b4ac8bc2328d217b96a
+errors=0
+```
+`journey-r3.json` revision=3、`fujian-2026-north` trip revision=2，
+`fujian-2026-coast`（3）/`fujian-2026-south`（1）revision 未变，
+达到任务 1 验收第二条。
+
+步骤 5：
+```
+$ plugins/china-trip-weaver/scripts/ctw journey render .tmp/journey-r3.json \
+  --output ".tmp/福建中秋国庆16天行程-r3.html"
+JOURNEY_RENDERED .tmp/福建中秋国庆16天行程-r3.html
+sha256=00ce79d9de30f5e1c73dddb46d864cb026e0c5e3b47f5a39da47335e238f0f0b
+errors=0
+
+$ plugins/china-trip-weaver/scripts/ctw journey validate .tmp/journey-r3.json
+JOURNEY VALID .tmp/journey-r3.json trips=3
+
+$ plugins/china-trip-weaver/scripts/ctw journey validate-html \
+  ".tmp/福建中秋国庆16天行程-r3.html" .tmp/journey-r3.json
+JOURNEY HTML VALID .tmp/福建中秋国庆16天行程-r3.html errors=0
+```
+三项全部 `errors=0`，达到任务 1 验收第三、四条。
+
+`grep -o 'G[0-9]\{3,4\}' 页面 | sort -u` → `G1644`、`G1902` 两个。
+核对 `G1644` 出处：仅出现在 `patches[].reason` 字段里（我在步骤 3
+写的事件 `reason` 原文被 `replan`/`assemble` 原样保留进了修订历史，
+随后被页面某个把 patch 历史原样吐出的区块展示了出来），不是被当作
+真实车次展示；`north-2-rail` 时段本体渲染的车次号只有 `G1902` 一个，
+9/29 `north-5-rail`、10/6 `south-2-rail` 两条本轮未碰的深链占位腿在
+页面里都不带车次号，核对无误。
+
+```
+$ /usr/bin/python3 scripts/qa_renderer_browser.py \
+  ".tmp/福建中秋国庆16天行程-r3.html" --output .tmp/qa \
+  --viewports 375x812 --sections 16
+{"failures": [], "handshakeAttempts": 1, ...,
+"viewports": [{"horizontalOverflow": 0, "internalOverflow": 12,
+"nonEmptySections": 16, "sectionCount": 16, "consoleErrors": [], ...}]}
+```
+`failures=[]`、`horizontalOverflow=0`、`sectionCount=16`，达到任务 1
+验收第五条。`internalOverflow=12` 与 CLAUDE.md 已记录的已知非阻塞
+问题（day-card h3 CJK 括号度量）数字一致，本轮渲染器未改，不是新
+回归。
+
+反向验证：
+```
+$ plugins/china-trip-weaver/scripts/ctw journey assemble --journey \
+  fujian-2026-09-25-to-10-10/journey.json --replace-trip .tmp/north-r2.json \
+  --base-revision 1 --reason "reverse-check: wrong base revision..." \
+  --output-json .tmp/journey-r3-wrongbase.json
+JOURNEY_ASSEMBLE_FAILED revision_conflict: Journey is at revision 2, not 1
+
+$ plugins/china-trip-weaver/scripts/ctw journey assemble --journey \
+  fujian-2026-09-25-to-10-10/journey.json --replace-trip .tmp/north-r2.json \
+  --base-revision 2 --reason "12306 presale opened 2026-09-12; ..." \
+  --output-json .tmp/journey-r3-recheck.json
+JOURNEY_ASSEMBLE_COMPLETE ... errors=0
+```
+错误 base-revision 正确触发 `revision_conflict`，换回 2 后恢复成功；
+`diff <(python3 -m json.tool journey-r3.json) <(python3 -m json.tool
+journey-r3-recheck.json)` 只有 `generated_at`/`revision.created_at`
+两处时间戳不同，其余字节完全一致，证明确定性、达到任务 1 验收第六条
+（反向验证）。硬指标一全部达成。
+
+产物落地（只新增，复制前确认目标文件不存在，复制后逐字节核对与
+worktree 内 `.tmp/` 源文件一致）：
+```
+$ cp .tmp/journey-r3.json fujian-2026-09-25-to-10-10/journey-r3.json
+$ cp ".tmp/福建中秋国庆16天行程-r3.html" \
+  "fujian-2026-09-25-to-10-10/福建中秋国庆16天行程-r3.html"
+$ shasum -a 256 两边
+journey-r3.json:
+  103907b0f883e0f05819e2376c1b443475e15893daac939c191c71c47066e5f0（两边一致）
+福建中秋国庆16天行程-r3.html:
+  00ce79d9de30f5e1c73dddb46d864cb026e0c5e3b47f5a39da47335e238f0f0b（两边一致）
+```
+对真实行程目录跑 `shasum -a 256 -c` 核对任务 0 建立的 45 个文件基线：
+全部 `OK`，0 处 FAILED；`comm -13` 比对新增文件清单，只多出
+`journey-r3.json`、`福建中秋国庆16天行程-r3.html` 两个，硬指标二「原
+文件字节不变」达成。
+
+耗时（据产物文件 mtime 还原，非逐命令秒表计时）：`rail.json`
+00:58:08（任务 0，含此前 doctor/date 检查）→ `north.json` 01:01:17
+（中间 3 分钟主要是我读 `journey.json` 结构核对 `north-2-rail`↔
+`leg-fuzhou-wuyi` 对应关系）→ 第一次 `replan` 失败、排查
+`refresh_overlap`、核对 10 条候选、重写事件文件到 01:03:08 →
+第二次 `replan` 成功 01:03:11（命令本身秒级）→ `assemble` 01:03:28
+→ `render` 01:03:38 → 浏览器 QA 完成 01:04:11。全程约 6 分钟，
+链路里每条 `ctw` 子命令本身都是秒级完成，耗时大头是排查
+`refresh_overlap` 报错与读 `replan.py` 源码确认 `subject_ref`
+解析、默认选车规则的人工核对时间。
+
+坑：见 BLOCKED.md 本轮新增的两条链路缺陷记录（默认选车不检查前序
+时段可行性；`12306-mcp` 对同车次号返回重复 `leg_id`）。
+
+提交粒度说明：任务书「规矩」要求「每个任务一次 git commit」，但任务 1
+的验收全部是命令输出（revision/errors/QA），没有独立于 PROGRESS.md
+记录之外的可提交产物；任务 2「记录」要求的选中车次/claims 去向/
+账本变化/耗时/坑，本身就是任务 1 执行过程中同步写进 PROGRESS.md 的
+同一批内容，拆成两次机械提交只会把一次连续记录切断。参照本文件里
+此前两次「书 Z3」止步记录的先例（`8961bad`/`19f9a36`，均是单次
+session 单次提交），本轮任务 0＋1＋2 只提交一次，commit message 里
+写清覆盖范围。
