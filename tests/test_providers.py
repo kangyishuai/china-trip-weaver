@@ -114,7 +114,7 @@ class ProviderCorpusTests(unittest.TestCase):
         manifest = load(FIXTURES / "manifest.json")
         listed = {entry["path"] for entry in manifest["files"]}
         actual = {path.relative_to(FIXTURES).as_posix() for path in fixture_paths()}
-        self.assertEqual(81, manifest["fixture_count"])
+        self.assertEqual(82, manifest["fixture_count"])
         self.assertEqual(listed, actual)
         for entry in manifest["files"]:
             data = (FIXTURES / entry["path"]).read_bytes()
@@ -301,7 +301,11 @@ class ProviderCorpusTests(unittest.TestCase):
         self.assertEqual("live", exact.normalized_items[0]["price"]["price_type"])
 
     def test_variflight_synthetic_responses_emit_status_and_comfort_claims(self):
-        for case, tool in (("success", "searchFlightsByDepArr"), ("comfort", "flightHappinessIndex")):
+        for case, tool in (
+            ("success", "searchFlightsByDepArr"),
+            ("comfort", "flightHappinessIndex"),
+            ("price", "getFlightPriceByCities"),
+        ):
             with self.subTest(case=case):
                 fixture = load(FIXTURES / "variflight" / (case + ".json"))
                 self.assertIn("synthetic VariFlight-shaped response", fixture["source"])
@@ -314,8 +318,11 @@ class ProviderCorpusTests(unittest.TestCase):
                 self.assertNotIn("X_VARIFLIGHT_KEY", encoded)
         status = run_fixture_value(FIXTURES / "variflight" / "success.json")
         comfort = run_fixture_value(FIXTURES / "variflight" / "comfort.json")
+        price = run_fixture_value(FIXTURES / "variflight" / "price.json")
         self.assertEqual(["/status"], [item["field_path"] for item in status.claims])
         self.assertEqual(["/comfort"], [item["field_path"] for item in comfort.claims])
+        self.assertEqual(["/price"], [item["field_path"] for item in price.claims])
+        self.assertEqual(1300, price.claims[0]["value"])
 
 
 def _make_fixture_test(path: Path):

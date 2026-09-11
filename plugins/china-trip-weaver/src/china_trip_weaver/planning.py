@@ -203,6 +203,8 @@ def _plan_resolve_candidates(
     enrichment = active_variflight.enrich(inventory.flights, routes, clock)
     transport_legs.extend(_assign_transport_group_refs(enrichment.flights, routes))
     claims.extend(copy.deepcopy(list(inventory.claims)))
+    for claim in claims:
+        claim["status"] = "conflict" if claim["claim_id"] in enrichment.conflict_claim_ids else claim["status"]
     if amap_lodging is not None:
         claims.extend(copy.deepcopy(list(amap_lodging.claims)))
     claims.extend(copy.deepcopy(list(enrichment.claims)))

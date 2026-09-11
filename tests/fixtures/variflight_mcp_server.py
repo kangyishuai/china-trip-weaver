@@ -42,6 +42,32 @@ def flight(date, depcity, arrcity):
     }
 
 
+def price(depcity, arrcity):
+    def row(flightno, business_price, economy_price):
+        return {
+            "flightno": flightno,
+            "flightcompany": "示例航空",
+            "flightdepcode": depcity,
+            "flightarrcode": arrcity,
+            "depcitycode": depcity,
+            "arrcitycode": arrcity,
+            "cabins": [
+                {
+                    "cabinclass": "C", "cabincode": "Q", "classname": "公务舱",
+                    "price": business_price, "stprice": business_price * 2,
+                    "discount": 0.5, "seatnum": 5,
+                },
+                {
+                    "cabinclass": "Y", "cabincode": "Y", "classname": "经济舱",
+                    "price": economy_price, "stprice": int(economy_price * 1.1),
+                    "discount": 0.85, "seatnum": 20,
+                },
+            ],
+        }
+
+    return [row("XX1001", 3000, 1300), row("XX1002", 4000, 50)]
+
+
 def comfort(date):
     return {
         "FlightNo": "XX1001",
@@ -116,6 +142,14 @@ def main():
                     "code": 200,
                     "message": "Success",
                     "data": [comfort(arguments["date"])],
+                    "request_id": "fixture",
+                    "timestamp": 0,
+                }
+            elif name == "getFlightPriceByCities":
+                payload = {
+                    "code": 200,
+                    "message": "Success",
+                    "data": price(arguments["dep_city"], arguments["arr_city"]),
                     "request_id": "fixture",
                     "timestamp": 0,
                 }

@@ -40,7 +40,7 @@ class VariFlightAdapter(BaseAdapter):
             raise ContractMismatch("VariFlight content is not text JSON")
         payload = json.loads(content[0]["text"])
         tool = body.get("tool")
-        if tool in ("searchFlightsByDepArr", "flightHappinessIndex"):
+        if tool in ("searchFlightsByDepArr", "flightHappinessIndex", "getFlightPriceByCities"):
             return self._live_payload(tool, payload, request, clock)
         if not isinstance(payload, dict) or not isinstance(payload.get("kind"), str):
             raise ContractMismatch("VariFlight payload kind is missing")
@@ -113,6 +113,8 @@ class VariFlightAdapter(BaseAdapter):
             raise ContractMismatch("VariFlight live data is not a list")
         if tool == "flightHappinessIndex":
             return self._live_comfort(rows, request, clock)
+        if tool == "getFlightPriceByCities":
+            return self._live_price(rows, request, clock)
         if request.parameters.get("candidate_mode") is True:
             return self._live_candidates(rows, request, clock)
 
@@ -277,6 +279,41 @@ class VariFlightAdapter(BaseAdapter):
             provider=self.provider,
             status="verified",
             confidence=0.8,
+            mode="live",
+            clock=clock,
+        )
+        return Normalization((), (claim,))
+
+    def _live_price(
+        self,
+        rows: List[Any],
+        request: ProviderRequest,
+        clock: Clock,
+    ) -> Normalization:
+        subject_ref = request.parameters.get("subject_ref")
+        flight_no = request.parameters.get("flight_no")
+        if not isinstance(subject_ref, str) or not isinstance(flight_no, str):
+            raise ContractMismatch("VariFlight price subject is missing")
+        economy_prices: List[float] = []
+        for raw in rows:
+            if not isinstance(raw, dict) or raw.get("flightno") != flight_no:
+                continue
+            for cabin in raw.get("cabins", ()):
+                if not isinstance(cabin, dict) or cabin.get("cabinclass") != "Y":
+                    continue
+                amount = cabin.get("price")
+                if isinstance(amount, (int, float)) and not isinstance(amount, bool):
+                    economy_prices.append(amount)
+        if not economy_prices:
+            return Normalization((), ())
+        claim = make_claim(
+            subject_ref=subject_ref,
+            field_path="/price",
+            value=min(economy_prices),
+            source_url="https://mcp.variflight.com/",
+            provider=self.provider,
+            status="partial",
+            confidence=0.7,
             mode="live",
             clock=clock,
         )
