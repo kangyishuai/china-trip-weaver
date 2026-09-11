@@ -4432,3 +4432,79 @@ exceededX plugins/.../base.py` 为 0，残留清零）→ 快照重跑
 `git diff 0cc7d55 --stat` 只有两个白名单文件（`base.py` 126 行变化、
 `test_providers.py` +15 行）。止损轮次未触发（一次性按四阶段+一个
 额外助手方法拆分，每步验证均一次通过，未遇连败）。
+
+## 书 AC3「真实行程实网复核」任务 0：环境核实与实网复跑（2026-09-11）
+
+理解的目标／顺序／最大风险（动工前记录）：目标是给福建 16 天真实行程
+最新一轮（0.15.3）的每条坐标/名字 unknown、每行非 ready 的
+provider_health 找到人能懂的成因，unknown 按「真歧义／地名写法／服务商
+无数据／疑似缺陷」归类，health 按「预期降级／服务商变化／疑似缺陷」
+归类；疑似代码缺陷只记 BLOCKED，代码与真实数据一行不改。顺序按任务书
+0→1→2：先核对环境与数字对上基线，再逐条归因，最后汇总记录。最大风险
+是归因流于"看起来像"而没有证据——本轮原则是能用源码/数据精确定位判断
+分支的就引用文件:行号与实测输出，定位不到的诚实标注为推测，不臆断。
+
+环境核实（worktree `.tmp/wt-ac3`，分支 `live-recheck`，HEAD 9d984b8，
+从仓库根 `git worktree add .tmp/wt-ac3 -b live-recheck` 新建）：
+
+```
+$ date
+Fri Sep 11 18:03:08 CST 2026
+$ plugins/china-trip-weaver/scripts/ctw doctor
+{"plugin_version":"0.15.3","providers":{"amap":"configured","anysearch":"missing","flyai":"configured","variflight":"configured"},...}
+```
+
+amap/flyai/variflight 均 configured；anysearch missing（预期，credentials.env
+未配，任务书范围外）。
+
+实网命令与结果：
+
+```
+$ time plugins/china-trip-weaver/scripts/ctw journey plan \
+  --request .../fujian-2026-09-25-to-10-10/request.json \
+  --candidates .../fujian-2026-09-25-to-10-10/candidates.json \
+  --mobility live --lodging live --aviation auto \
+  --output-json .tmp/journey-live.json
+```
+
+末行：`JOURNEY_PLAN_COMPLETE ... trips=3 days=16 max_trip_days=6 ...
+journey_sha256=44059a3b480827245ef7877b87e4de96dc9daafd9ab62a24e2abf9169e36611d
+errors=0`。耗时 `2:49.70 total`（`time` 实测 real 值），与管理者"约 2 分半"
+一致。产物存于 worktree 的 `.tmp/journey-live.json`（346371 字节，被
+`.gitignore` 挡住，不提交）。
+
+统计口径：对 `.tmp/journey-live.json` 逐 trip 的 `pois`/`lodgings`/
+`unknowns` 用 Python 脚本按 `field_path` 精确匹配
+`^/(pois|lodgings)/\d+/coordinates$` 与 `^/(pois|lodgings)/\d+/name$`
+统计，非目测估算，且用 `有坐标数 + 坐标unknown数 == 实体数` 做了自检
+（80 == 80 通过）：
+
+| trip | 日期范围 | pois | lodgings | 实体数 | 有坐标 | 坐标 unknown | 名字 unknown |
+|---|---|---|---|---|---|---|---|
+| 0（北，福州/武夷山） | 9/25–9/29 | 21 | 4 | 25 | 21 | 4 | 1 |
+| 1（中，平潭/泉州） | 9/30–10/5 | 27 | 4 | 31 | 22 | 9 | 3 |
+| 2（南，厦门/南靖） | 10/6–10/10 | 20 | 4 | 24 | 19 | 5 | 3 |
+| 合计 | — | 68 | 12 | 80 | 62 | 18 | 7 |
+
+与管理者 2026-09-11 数字（80／62／18／7）逐项差值为 0，在任务书"±3 以内
+算正常"的门槛内，未触发"记 BLOCKED"条件。与 09-06 基线（78／60／12／6，
+CLAUDE.md「定位失败的实网天花板」）的差异主要是输入行程本身变了（78→80
+个地点、地点构成不同——09-06 是 `fujian-2026-trip/` 那套已废弃输入，本轮
+是 `fujian-2026-09-25-to-10-10/` 这套现役输入），两组基线不是同一批地点，
+差异不代表回归，任务书本身也注明"输入不同只作参考"。
+
+provider_health（6 provider × 3 trip 逐条读取 JSON 字段，非目测）：
+
+| provider | trip0 | trip1 | trip2 |
+|---|---|---|---|
+| 12306-mcp | degraded | degraded | degraded |
+| host-web | ready | ready | ready |
+| flyai | contract_mismatch | ready | contract_mismatch |
+| amap | degraded | degraded | degraded |
+| variflight | degraded | degraded | degraded |
+| anysearch | missing | missing | missing |
+
+与管理者描述（AMap 三段 degraded、FlyAI 两段 contract_mismatch 一段
+ready、12306-mcp 全部 degraded、variflight 全部 degraded、anysearch
+missing）逐项一致。host-web 恒 ready 不需要归因，下同。核对通过，转入
+任务 1。
