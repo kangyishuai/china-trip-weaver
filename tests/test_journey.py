@@ -1311,12 +1311,17 @@ class JourneyContinuityTests(unittest.TestCase):
         self.assertNotIn("presale window is", rendered)
 
     def test_deadline_kind_addition_does_not_change_checklist_item_ids(self):
+        # Digest of the checklist item_id list captured from HEAD d22e3e6 (.tmp/ids-before.json,
+        # not committed) before deadline_kind/depart_at were added to _journey_action_item.
         journey = load(JOURNEY_DEMO / "journey.json")
         checklist = journey_booking_checklist(journey)
-        snapshot_path = ROOT / ".tmp" / "ids-before.json"
-        with open(snapshot_path, encoding="utf-8") as handle:
-            before = json.load(handle)
-        self.assertEqual(before["checklist"], [item["item_id"] for item in checklist])
+        ids_digest = hashlib.sha256(
+            canonical_json([item["item_id"] for item in checklist]).encode("utf-8")
+        ).hexdigest()
+        self.assertEqual(
+            "4053d3dbc43d9ed33b9118d520af165d9485133d6ca884041c776f7e533c8438",
+            ids_digest,
+        )
 
     def test_risks_cover_every_missing_or_degraded_capability_conflict_and_unknown(self):
         journey = copy.deepcopy(self.result.journey)

@@ -2524,3 +2524,27 @@ validate-html .tmp/journey-mutated.html demo/journey-16d/journey.json` →
 `BLOCKED.md`/`PROGRESS.md`/`demo/journey-16d/journey.html`/`journey.py`/
 `render/journey_html.py`/`render/validate_journey_html.py`/
 `tests/test_journey.py` 七个，全部在白名单内。
+
+`git push` 后 `gh run list --limit 3` 首次报 `10f1e00` 那条
+`completed failure`：两条矩阵里 3.9 只有 1 个 `ERROR`——
+`test_deadline_kind_addition_does_not_change_checklist_item_ids` 的
+`FileNotFoundError: .../.tmp/ids-before.json`，我把「本机验证用的快照
+文件」错写成了测试运行时依赖——`.tmp/ids-before.json` 按任务书原文
+「不提交」，CI 检出后这个文件天然不存在（`.tmp/` 目录本身靠已提交的
+`.tmp/.gitkeep` 存在，只是这一个文件缺失）；3.13 额外多 1 个 `ERROR`
+（`test_node_preload_redirects_homedir_without_home_variable`，
+`subprocess.TimeoutExpired`，Node 子进程 5 秒超时)——与本轮改动的三个
+文件（journey.py/journey_html.py/validate_journey_html.py）无关、3.9 那条
+矩阵未复现，判为 CI runner 偶发抖动，记入「已知短板/已知抖动」，等 push
+后重跑一次矩阵观察是否消失。
+修复：该测试改为算 `hashlib.sha256(canonical_json(ids)).hexdigest()` 与
+一个写死在测试里的十六进制摘要比对，不再运行时读任何外部文件；摘要值来自
+`.tmp/ids-before.json`（已用 `ids == before["checklist"]` 核对逐项相同后
+才固化）。验证：把 `.tmp/ids-before.json` 挪开（只挪这一个文件，不挪整个
+`.tmp/` 目录——整个目录挪开会连带炸掉 `test_variflight_live.py` 等既有
+用例对 `tempfile.TemporaryDirectory(dir=ROOT/".tmp")` 的既有依赖，那是
+这个目录本身的既有惯例、与本次改动无关）→ 全量 `Ran 607 tests` `OK` 0
+skipped（正确复现了 CI 检出状态）→ 挪回。pyflakes/secrets 仍 0。
+教训写入 auto-memory：任何新测试如果要靠此前任务书要求的临时快照做断言，
+必须把断言方式改成不依赖那个文件本身存在（如算好的摘要值写死），因为
+`.tmp/` 下的文件从不进 git、CI 检出后必然缺失。
