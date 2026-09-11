@@ -2410,3 +2410,56 @@ tests/fixtures plugins/china-trip-weaver/schema '*/rail12306.py'
 才暴露的问题——任务 1 的 `query` 字段与 `rail12306.py` 硬校验冲突、任务 2
 的额外 API 调用冲撞既有测试——均一次定位、一次修复、复测即绿，不构成
 「连败」）。分支推送记录见本节末尾。
+
+## 书 W3「拆 validate_html」（2026-09-11，worktree `.tmp/wt-w3` 分支 `split-validate-html`）
+
+任务 0 核对：HEAD `d22e3e6` 与任务书一致；602 测试 OK 0 skip、secrets 0、
+pyflakes 0；`validate_html.py` 434 行 4 个顶层函数、`validate_html` L153-410
+（258 行）、E 码计数 48，均与任务书吻合；fixtures 12 html+9 trip=manifest 21
+条、字段名、`build_renderer_fixtures.py` 重跑零差异、README demo 命令，均
+吻合。调用点计数改用 `grep "validate_html("` 后 11/7/2 逐字吻合，唯一出入
+（:156 标注对不上具体测试体）判断为无关紧要的笔误，记录见 BLOCKED.md 顶部，
+不停工。
+理解的目标：把 258 行的 `validate_html` 拆成约 13 个模块私有的 `_check_*`
+函数，每个只管一类检查（文档头 E001、trip-data 脚本 E002、渲染事实 E003、
+DOM 结构 E004/E005、安全合同 E101、CSP E102、链接与来源
+E103/E105/E106、密钥模式 E104、模式徽标 E201、动态事实覆盖 E202、坐标与
+示意图 E203、交易动作 E204、信息卫生 E205、无障碍/样式合同 E001-末尾），
+`validate_html` 本体收窄成一串按原顺序调用的分发（约 28 行）；条件、E 码、
+消息文案、`add()` 调用顺序逐字不动，只搬运代码块、按需新增函数签名与
+`return`。
+顺序：任务 1 快照脚本（先固定行为基线）→ 任务 2 分约 5 批按原文件从上到下的
+顺序抽函数，每批跑一次 `test_renderer` → 长度/快照/E 码/语料/全量五项终验
+→ 反向验证 → 各任务一次 `git commit` → push。
+最大风险：4 个局部变量跨越原函数内的空行段落边界，必须显式当参数/返回值
+穿针引线，不能重算或漏传——`trip_scripts`（E002 段算出，E103 的
+`</script` 检查在 306 行复用）、`claim_nodes`（E003 段算出，E205 的证据
+折叠与风险排序检查复用）、`css`（E101 段算出，末尾 E001 的 CSS 合同检查
+复用）、`visible`（E201 段算出，E204、E205 都复用）；另外 E101 那个
+`for tag, attrs in parser.all_attrs` 循环在命中第一个违规标签/事件处理器时
+整体 `break`，必须留在同一个函数里整体搬移，不能拆成每条件一个独立循环
+（否则会在原代码从未遍历到的后续元素上多算出违规）。
+
+任务 1（已完成）：`.tmp/snapshot_validate.py`（不提交，`.tmp/` 本就被
+`.gitignore` 挡住）照抄 `tests/test_renderer.py` 的 `mutate_trip`/
+`run_trip_mutation`/`run_html_mutation` 回放逻辑，对 9 份 trip 夹具、12 份
+html 夹具、4 份 demo trip（`demo/trip.json`+`multicity-5d`+
+`grouped-departures`+`guangzhou-shenzhen`）各产出一条记录，写到
+`.tmp/snap-before.json`。唯一需要处理的分叉：9 份 trip 夹具里有 4 份
+`expected.outcome=="reject-trip"`（`dangerous-scheme`/`duplicate-day-id`/
+`fake-secret`/`url-credentials`）——`run_trip_mutation` 对这类夹具的
+断言是 `render_trip` 本身抛 `RendererError`、`validate_html` 根本不会被
+调用（trip 在渲染前就被 `validate_trip` 拦下，没有 HTML 可验）；快照脚本
+照抄同一分支，对这 4 份只记录「`render_trip` 是否抛出 `RendererError`」而
+非伪造一份 `validate_html` 报告。12（html）+9（trip，含 4 份
+render_error 标记）+4（demo）＝25，恰好落在任务书「≥25 条记录」的下限——
+说明任务书原本按「每份输入一条记录」而非「每次 validate_html 成功调用一条
+记录」计数，两种读法在这组夹具上给出不同结果（后者只有 21 条），已用前者
+（与「照 test_renderer.py 回放夹具的写法」的字面要求一致，且是唯一能达标
+≥25 的读法），不算对不上、不停工。验收实测：`wrote 25 records`；连跑两次
+`diff .tmp/snap-before.json .tmp/snap-before-2.json` 空输出（`IDENTICAL`）；
+抽查内容合理（trip 夹具全部 `ok=True` 0 issues——这批本就是测
+`render_trip` 转义安全、不是测 `validate_html` 拦截；html 夹具各带 1 条
+预期 E 码，如 `authorization-bearer`→E104、`csp-loosened`→E102、
+`interface-endpoint-link`→E106，与夹具名字义相符）。另存 E 码计数
+`.tmp/e-before.txt`（16 个 E 码、合计 48，与任务 0 的 `grep -c` 结果一致）。

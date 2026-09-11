@@ -1,3 +1,22 @@
+## 书 W3「拆 validate_html」任务 0：call-site 计数方法与 :156 标注核对（2026-09-11，判断，非阻塞）
+
+任务书「现状与任务 0」写「test_renderer.py 11 处调用 `validate_html`（含
+:156 `test_renderer_fixture_manifest`）、test_keyless_e2e.py 7 处、
+test_replan.py 2 处」。裸 `grep -n "validate_html"` 三个文件分别命中
+13/8/3 行，与任务书数字不吻合；改用 `grep -n "validate_html("`（只数带左括号
+的出现，与「调用点」更贴切）分别命中 11/7/2 行，逐字吻合任务书三个数字——
+判断任务书的计数方法就是后者，验证通过。唯一仍对不上的是括注
+「含 :156 `test_renderer_fixture_manifest`」：`test_renderer.py:156` 确是
+`def test_renderer_fixture_manifest(self):`，但该测试体本身只读
+`manifest.json` 核对哈希，不调用 `validate_html`（`grep -n "validate_html("`
+命中的 11 行里离 156 最近的是 145 行 `test_cli_render_and_validate_html`，
+经子进程调 CLI 的 `validate-html` 子命令，而非直接函数调用，含连字符不含
+下划线不在这个 grep 的匹配范围内）。判断：不停工。三个总数（11/7/2）已逐字
+核对通过，是本任务书唯一会影响「不破坏任何既有调用方」这一验收面的数字；
+`:156` 只是一处定位标注的笔误（大概率想指 145 行或单纯说「156 行之前」），
+对拆分方案、白名单、验收命令均无影响，按以往「路径写得粗略」「用……标注不
+完整」同款先例记录后继续。
+
 ## 书 F1「预订清单按开售日」（2026-09-10，无待裁决项）
 
 任务 0/1/2 全部按任务书字面执行，全程无需停工的冲突。两处需要自行判断的
