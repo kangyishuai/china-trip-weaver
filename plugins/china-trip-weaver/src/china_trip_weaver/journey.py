@@ -856,20 +856,30 @@ def _rewrite_candidate_unknown(
     return rewritten
 
 
-def _merge_segment_trips(
+_SEGMENT_MERGE_GROUPS: Tuple[Tuple[str, str, str], ...] = (
+    ("transport_legs", "leg_id", "leg"),
+    ("lodgings", "lodging_id", "stay"),
+    ("pois", "poi_id", "poi"),
+)
+
+
+def _merge_segment_requests(
     trips: Sequence[Mapping[str, Any]],
     segment: JourneySegmentInput,
-) -> Dict[str, Any]:
-    """Merge lodging-aligned planning units into one complete logical Trip."""
-
-    if len(trips) < 2:
-        return copy.deepcopy(dict(trips[0]))
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     parts = [copy.deepcopy(dict(item)) for item in trips]
     request = copy.deepcopy(dict(segment.request))
     for part in parts:
         for assumption in part["request"]["assumptions"]:
             if assumption not in request["assumptions"]:
                 request["assumptions"].append(assumption)
+    return parts, request
+
+
+def _merge_segment_trip_id(
+    parts: Sequence[Mapping[str, Any]],
+    request: Mapping[str, Any],
+) -> Tuple[str, List[Dict[str, str]]]:
     trip_id = "trip-" + hashlib.sha256(canonical_json({
         "request": request,
         "planning_units": [item["trip_id"] for item in parts],
@@ -877,7 +887,14 @@ def _merge_segment_trips(
     ref_maps: List[Dict[str, str]] = [
         {str(part["trip_id"]): trip_id} for part in parts
     ]
+    return trip_id, ref_maps
 
+
+def _merge_segment_days(
+    parts: Sequence[Mapping[str, Any]],
+    trip_id: str,
+    ref_maps: List[Dict[str, str]],
+) -> Tuple[List[Mapping[str, Any]], List[int], List[Dict[int, int]]]:
     days: List[Mapping[str, Any]] = []
     day_sources: List[int] = []
     day_index_maps: List[Dict[int, int]] = [dict() for _ in parts]
@@ -902,16 +919,22 @@ def _merge_segment_trips(
                 ref_maps[part_index][old_slot_id] = new_slot_id
             days.append(day_item)
             day_sources.append(part_index)
+    return days, day_sources, day_index_maps
 
-    group_specs = (
-        ("transport_legs", "leg_id", "leg"),
-        ("lodgings", "lodging_id", "stay"),
-        ("pois", "poi_id", "poi"),
-    )
+
+def _merge_segment_entity_groups(
+    parts: Sequence[Mapping[str, Any]],
+    trip_id: str,
+    ref_maps: List[Dict[str, str]],
+) -> Tuple[
+    Dict[str, List[Mapping[str, Any]]],
+    Dict[str, List[int]],
+    Dict[str, List[Dict[int, int]]],
+]:
     entity_values: Dict[str, List[Mapping[str, Any]]] = {}
     entity_sources: Dict[str, List[int]] = {}
     entity_index_maps: Dict[str, List[Dict[int, int]]] = {}
-    for group, id_key, prefix in group_specs:
+    for group, id_key, prefix in _SEGMENT_MERGE_GROUPS:
         merged_items: List[Mapping[str, Any]] = []
         merged_sources: List[int] = []
         source_indexes: List[Dict[int, int]] = [dict() for _ in parts]
@@ -943,8 +966,14 @@ def _merge_segment_trips(
         entity_values[group] = merged_items
         entity_sources[group] = merged_sources
         entity_index_maps[group] = source_indexes
+    return entity_values, entity_sources, entity_index_maps
 
-    provider_health, provider_index_maps = _merge_provider_health(parts)
+
+def _merge_segment_claims(
+    parts: Sequence[Mapping[str, Any]],
+    trip_id: str,
+    ref_maps: Sequence[Mapping[str, str]],
+) -> Tuple[List[Mapping[str, Any]], List[Dict[str, str]], List[Dict[int, int]]]:
     claims: List[Mapping[str, Any]] = []
     claim_maps: List[Dict[str, str]] = [dict() for _ in parts]
     claim_index_maps: List[Dict[int, int]] = [dict() for _ in parts]
@@ -976,8 +1005,18 @@ def _merge_segment_trips(
                 claims.append(claim)
             claim_maps[part_index][old_claim_id] = new_claim_id
             claim_index_maps[part_index][old_index] = new_index
+    return claims, claim_maps, claim_index_maps
 
-    for group, _, _ in group_specs:
+
+def _rewrite_segment_references(
+    entity_values: Mapping[str, Sequence[Mapping[str, Any]]],
+    entity_sources: Mapping[str, Sequence[int]],
+    days: Sequence[Mapping[str, Any]],
+    day_sources: Sequence[int],
+    claim_maps: Sequence[Mapping[str, str]],
+    ref_maps: Sequence[Mapping[str, str]],
+) -> None:
+    for group, _, _ in _SEGMENT_MERGE_GROUPS:
         for item, part_index in zip(entity_values[group], entity_sources[group]):
             _rewrite_claim_references(item, claim_maps[part_index])
     for day_item, part_index in zip(days, day_sources):
@@ -990,6 +1029,15 @@ def _merge_segment_trips(
                 slot["ref_id"] = ref_maps[part_index].get(slot_ref, slot_ref)
             _rewrite_claim_references(slot, claim_maps[part_index])
 
+
+def _merge_segment_unknowns(
+    parts: Sequence[Mapping[str, Any]],
+    entity_index_maps: Mapping[str, List[Dict[int, int]]],
+    day_index_maps: List[Dict[int, int]],
+    claim_index_maps: List[Dict[int, int]],
+    provider_index_maps: List[Dict[int, int]],
+    claim_maps: Sequence[Mapping[str, str]],
+) -> List[Mapping[str, Any]]:
     unknowns: List[Mapping[str, Any]] = []
     unknown_keys = set()
     all_index_maps: Dict[str, List[Dict[int, int]]] = dict(entity_index_maps)
@@ -1014,7 +1062,19 @@ def _merge_segment_trips(
             if encoded not in unknown_keys:
                 unknowns.append(unknown)
                 unknown_keys.add(encoded)
+    return unknowns
 
+
+def _assemble_merged_segment_trip(
+    parts: Sequence[Mapping[str, Any]],
+    trip_id: str,
+    request: Mapping[str, Any],
+    days: List[Mapping[str, Any]],
+    entity_values: Mapping[str, List[Mapping[str, Any]]],
+    claims: List[Mapping[str, Any]],
+    provider_health: List[Mapping[str, Any]],
+    unknowns: List[Mapping[str, Any]],
+) -> Dict[str, Any]:
     mode_rank = {"live": 0, "cached": 1, "static": 2, "mock": 3}
     mode = max((str(item["mode"]) for item in parts), key=lambda item: mode_rank[item])
     merged: Dict[str, Any] = {
@@ -1052,6 +1112,45 @@ def _merge_segment_trips(
             merged["days"],
             merged["transport_legs"],
         )
+    return merged
+
+
+def _merge_segment_trips(
+    trips: Sequence[Mapping[str, Any]],
+    segment: JourneySegmentInput,
+) -> Dict[str, Any]:
+    """Merge lodging-aligned planning units into one complete logical Trip."""
+
+    if len(trips) < 2:
+        return copy.deepcopy(dict(trips[0]))
+    parts, request = _merge_segment_requests(trips, segment)
+    trip_id, ref_maps = _merge_segment_trip_id(parts, request)
+
+    days, day_sources, day_index_maps = _merge_segment_days(parts, trip_id, ref_maps)
+
+    entity_values, entity_sources, entity_index_maps = _merge_segment_entity_groups(
+        parts, trip_id, ref_maps,
+    )
+
+    provider_health, provider_index_maps = _merge_provider_health(parts)
+    claims, claim_maps, claim_index_maps = _merge_segment_claims(parts, trip_id, ref_maps)
+
+    _rewrite_segment_references(
+        entity_values, entity_sources, days, day_sources, claim_maps, ref_maps,
+    )
+
+    unknowns = _merge_segment_unknowns(
+        parts,
+        entity_index_maps,
+        day_index_maps,
+        claim_index_maps,
+        provider_index_maps,
+        claim_maps,
+    )
+
+    merged = _assemble_merged_segment_trip(
+        parts, trip_id, request, days, entity_values, claims, provider_health, unknowns,
+    )
     ledger, budget_unknowns = _budget_ledger(
         request,
         merged["days"],

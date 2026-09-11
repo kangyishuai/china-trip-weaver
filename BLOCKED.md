@@ -1,3 +1,22 @@
+## 书 Y1「拆 journey._merge_segment_trips」（2026-09-11，main 直改，已按先例处理，非空白裁决）
+
+任务 0 的 1 行行数出入（2574→2573）已单独记在本文件靠后位置，不再重复。
+本条记录任务 2 反向验证环节的判断：任务书要求「取反某个新抽出函数里的
+一条去重条件 → 快照 diff 非空且 test_journey 至少一项红」；实测对
+`_merge_segment_entity_groups`/`_merge_segment_unknowns`/
+`_merge_segment_claims` 三处去重条件逐一取反，均能让 six-city 快照哈希
+改变（证明三处去重逻辑均真实生效），但 `test_journey`（75 项）三次都
+保持全绿——现有测试套件对这类内部合并去重的具体效果本来就缺乏精确断言。
+按「验收明确要求的硬指标优先」的既有先例（「书 docs-drift 任务 2」「书
+『ctw replan --rail-result』任务 2」），新增 1 个断言性质的测试
+`test_six_city_merge_dedupes_a_poi_and_claim_revisited_within_one_
+segment`（`tests/test_journey.py`，任务书「界限」明确允许新增
+`def test_`）来让反向验证的「红→绿」有真实证据，而非放弃这条验收或
+用测试之外的方式蒙混过关。完整的实测过程（含发现三处去重条件均无法
+触发红的探索、诊断脚本定位真实合并点、以及一次「探索时机不对导致数错
+基线（20 vs 正确的 19）、随后自我纠正」的记录）见 PROGRESS.md 本书任务 2
+小节，不构成需要领导裁决的阻塞项。
+
 ## 书 X2「12306 站点最近火车站回查」（2026-09-11，worktree `.tmp/wt-x2` 分支 `station-nearby`）：无待裁决项
 
 本书全程未遇到需要领导裁决、又拿不准该怎么办的分叉。任务 0 核对到的一处

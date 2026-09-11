@@ -380,6 +380,22 @@ class JourneySplitTests(unittest.TestCase):
             self.assertIn(selected["candidate_ref"], {item["lodging_id"] for item in candidates}, night)
             self.assertIn(night, selected["selected_nights"])
 
+    def test_six_city_merge_dedupes_a_poi_and_claim_revisited_within_one_segment(self):
+        case = journey_six_city_lodging_chain_case()
+        result = plan_journey(
+            case["request"],
+            case["candidates"],
+            FixedClock.from_iso(FIXED_NOW),
+            RailBackend.from_spec("off", ROOT),
+        )
+        trip = result.journey["trips"][0]
+        poi_ids = [item["poi_id"] for item in trip["pois"]]
+        claim_ids = [item["claim_id"] for item in trip["claims"]]
+        self.assertEqual(1, poi_ids.count("poi-j16-six-city-synthetic-a"))
+        self.assertEqual(1, claim_ids.count("claim-j16-six-city-synthetic-a-hours"))
+        self.assertEqual(12, len(trip["pois"]))
+        self.assertEqual(19, len(trip["claims"]))
+
     def test_lodging_chain_gap_reports_date_city_and_nearest_candidate(self):
         case = journey_six_city_lodging_chain_case()
         case["candidates"]["lodgings"][1]["check_out"] = "2026-09-28"

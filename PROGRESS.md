@@ -192,6 +192,97 @@ trip_id、合并 days、合并 transport_legs/lodgings/pois、合并 provider_he
 与快照的 `journey-16d` 逐字节相同，`git status --short` 为空（该哈希也与
 PROGRESS.md「书 R2」反向验证记录的基线值 `7ada91c0...` 吻合，交叉印证）。
 
+任务 2（已完成）：先把函数体第 906 行的局部 `group_specs` 提升为模块级常量
+`_SEGMENT_MERGE_GROUPS`（两处引用点值与顺序不变，跑一次
+`tests.test_journey` 确认无影响），再按内部阶段自上而下逐段抽出 8 个私有
+辅助函数，每抽一段单独跑一次 `python3 -m unittest tests.test_journey`
+（75 项，全部一次通过，无需回退重来）：`_merge_segment_requests`（11 行，
+合并 request/assumptions）→ `_merge_segment_trip_id`（12 行，生成
+trip_id+初始化 ref_maps）→ `_merge_segment_days`（30 行，day_id/slot_id
+重编号）→ `_merge_segment_entity_groups`（45 行，transport_legs/lodgings/
+pois 去重合并）→ `_merge_segment_claims`（37 行，claims 去重合并+
+subject_ref 重写）→ `_rewrite_segment_references`（20 行，原地重写
+entity/day/slot 里的 claim_ids 与 ref_id/stay_id 引用，无返回值）→
+`_merge_segment_unknowns`（33 行，unknowns 去重+field_path 重写）→
+`_assemble_merged_segment_trip`（48 行，组装 merged 字典+mock_notice+
+traveler_groups/transport_pricing）。全部 9 次抽取均为「剪切—去缩进—把
+用到的局部变量改成参数」，未合并任何重复代码、未简化任何判断分支、
+未改变字段顺序或文案；`ref_maps`/`entity_values`/`days` 等可变容器按原有
+语义以参数形式原地修改，不新增返回值。
+
+硬指标一（长度命令）：
+```
+(866, 876, 11, '_merge_segment_requests')
+(879, 890, 12, '_merge_segment_trip_id')
+(893, 922, 30, '_merge_segment_days')
+(925, 969, 45, '_merge_segment_entity_groups')
+(972, 1008, 37, '_merge_segment_claims')
+(1011, 1030, 20, '_rewrite_segment_references')
+(1033, 1065, 33, '_merge_segment_unknowns')
+(1068, 1115, 48, '_assemble_merged_segment_trip')
+(1118, 1170, 53, '_merge_segment_trips')
+```
+主体 53 行（≤60）、8 个新函数 11-48 行（均 ≤80）；顶层函数数 71→79
+（恰好新增 8 个）；文件总行数 2573→2672。
+
+硬指标二：拆分后重跑 `.tmp/snapshot_journey.py` 得到的
+`snap-after.json` 与 `snap-before.json` `diff` 空输出，两条哈希逐字节
+相同；`scripts/build_renderer_fixtures.py`/`build_plan_fixtures.py`
+重跑后 `git status --short` 只有 `journey.py`（后来加测试后变为
+`journey.py`+`test_journey.py`），`demo/`、`tests/fixtures/`
+零改动，两个脚本打印的 `journey_sha256`/`html_sha256` 均与拆分前一致；
+全量 `/usr/bin/python3 -m unittest discover -s tests` → `Ran 624 tests`
+`OK` 0 skipped（623 基线+1 个新增 `def test_`，见下）；
+`scripts/scan_secrets.py` → `0 finding(s) across 377 file(s)`；pyflakes
+（`plugins/china-trip-weaver/src tests scripts`）0 行；`git status --short`
+提交前只有 `journey.py`/`test_journey.py`/`PROGRESS.md`/`BLOCKED.md` 四个
+文件（见下方 `git diff cab411f --stat`）。
+
+反向验证（实测记录，含一次自我纠错）：任务书原文要求「取反某个新抽出
+函数里的一条去重条件 → 快照 diff 非空且 test_journey 至少一项红」。先后
+对三处去重条件（`_merge_segment_entity_groups`/`_merge_segment_unknowns`/
+`_merge_segment_claims` 各自的 `canonical_json(...) == canonical_json(...)`
+或 `not in` 判断）逐一取反，三次都能让 `synthetic-six-city-16d` 的快照
+哈希改变（证明三处去重逻辑均在真实生效、不是死代码），但 `test_journey`
+（75 项）三次都保持全绿——现有测试套件对 `_merge_segment_trips` 内部合并
+去重的具体效果（是否真的把跨 segment 内容相同的条目合并成一条，而非生成
+冗余的新 id）缺乏精确断言，只有全局快照能感知差异。为满足任务书「test_
+journey 至少一项红」这条完成条件（且「界限」明确允许「tests/test_
+journey.py 只许新增 def test_」），新增 1 个断言：
+`test_six_city_merge_dedupes_a_poi_and_claim_revisited_within_one_segment`
+——用诊断脚本（临时加 print，验证后已清除，`git diff | grep -c TEMP-
+REVERSE-VERIFY` 为 0）定位到 six-city 夹具第一个 segment 里「合成甲城」
+被两次到访，触发了 `poi-j16-six-city-synthetic-a`/`claim-j16-six-city-
+synthetic-a-hours` 的真实去重合并，断言合并后 `trip["pois"]`/
+`trip["claims"]` 长度分别恰为 12/19、且两个 id 各只出现一次。过程中一次
+计数失误：最初误以为 claims 应为 20，是因为那次探索性统计恰好是在
+claims 去重条件仍处于取反状态时跑的，未及时区分「诊断」与「已还原」两个
+状态；连续 5 次独立进程重跑正常代码并核对 `journey_sha256` 前缀
+`ad80e1cc3e486599`（与快照基线一致）后确认正确基线是 19，写断言前已
+修正，此处如实记录而非隐去。红→绿证据：分别取反 entity_groups 条件
+（`==`→`!=`）→ 新测试 `AssertionError: 12 != 13`（红）→ 改回 → 新测试
+`ok`（绿）；再取反 claims 条件（`==`→`!=`）→ 新测试 `AssertionError:
+19 != 20`（红）→ 改回 → 新测试 `ok`（绿）；两次改回后
+`git diff -- .../journey.py | grep -c TEMP-REVERSE-VERIFY` 均为 0，快照
+重新与 `snap-before.json` 逐字节相同。
+
+判断记录（非阻塞，供核对）：新增这 1 个测试并非任务书任务 2 正文列出的
+明文步骤（正文只写「每抽一段跑一次 tests.test_journey」），而是为了
+让「完成条件」里「反向验证的红→绿」这条硬指标有真实証据而主动补充；
+按 PROGRESS.md 既有先例（「书 docs-drift 任务 2」「书『ctw replan
+--rail-result』任务 2」：验收明确要求的硬指标优先于白名单/正文未列出
+的细节）处理，未放宽任何断言、未删除任何测试、方法名全新不与既有测试
+冲突，`git diff cab411f -- tests | grep -E '^-\s*def test_'` 0 行。
+
+终验：`git diff cab411f --stat` 只有 `BLOCKED.md`/`PROGRESS.md`/
+`journey.py`/`test_journey.py` 四个文件；`git diff cab411f -- tests |
+grep -E '^-\s*def test_'` 空输出；`git diff cab411f --stat -- tests/
+fixtures demo plugins/china-trip-weaver/schema '*/planning.py'
+'*/render/*'` 空输出。任务书止损未触发（任务 0/1/2 均一轮或数轮内验收
+通过，反向验证换了三处去重条件才找到能触发 test_journey 变红的组合，
+不计入「同一验收连败 3 次」——每次都是「快照能感知但测试不能感知」这一
+稳定、可解释的结果，不是失败重试）。
+
 ## 书 X3「租车与轮渡合成 Trip 夹具」（2026-09-11，worktree `.tmp/wt-x3` 分支 `rental-ferry-fixture`）
 
 任务 0 核对（HEAD `bf53f72`）：全部与任务书数字吻合——612 测试 OK 0 skip、secrets
