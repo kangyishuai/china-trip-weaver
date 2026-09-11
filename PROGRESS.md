@@ -2800,3 +2800,47 @@ tests` `OK` 0 skipped；`scan_secrets.py` 0 命中；pyflakes 0 行；长度命�
 一次红→绿（终端记录见任务 2 小节），止损轮次未触发（全程一次到位，未遇
 连败）。BLOCKED.md 有一条任务 0 的判断记录（call-site 计数方法与 `:156`
 标注核对，非阻塞），无待裁决项。分支推送记录见下。
+
+## 书 X2：12306 站点最近火车站回查（2026-09-11，worktree `.tmp/wt-x2` 分支 `station-nearby`）
+
+任务 0（已完成）：HEAD `bf53f72` 与任务书吻合；全量 `/usr/bin/python3 -m
+unittest discover -s tests` → `Ran 612 tests` `OK` 0 skipped；
+`scripts/scan_secrets.py` 0 命中；`~/miniconda3/envs/core/bin/python -m
+pyflakes plugins/china-trip-weaver/src tests scripts` 0 行，均与任务书一致。
+逐条核对：`mcp_stdio.py:577` `_resolve_rail_stations`（三层+591-599 一带剥
+后缀重试）、:623 `_resolve_station_candidates`、:409
+`_best_effort_station_distances` 持有 `station_distance_enricher` 吻合；
+`station_distance.py:152` `_city_centre` 吻合；`amap_http.py`
+`_request_contract` 现有 geocode/poi/route 三分支、`AMapAdapter.capabilities
+=("poi","geocode","route")` 吻合；`rail12306.py:270`
+`query != request.parameters.get(parameter_name)` 硬校验、:280 候选白名单
+`{station_code,station_name,distance_meters}`、:322 派生状态硬比对均吻合；
+`tests/test_providers.py:117` `assertEqual(78, ...)` 吻合；SKILL.md:18 文案
+逐字吻合。唯一需要澄清的一点：`tests/test_amap_live.py`/
+`tests/test_rail_station_fallback.py` 任务书括注写「新增」，但两份文件早已
+存在且分别有 2146/1042 行内容——核对后判断这不是对不上：括注句式与
+`test_providers.py（只改计数）`/`rail12306.py（只加 warnings 文案）`一致，
+「新增」在此限定的是「只许新增 def test_、不许改删既有测试」，不是「新建
+文件」，不算矛盾，不停工。credentials.env 已配置 AMAP Key，实网核对留到
+任务交付前最后做，避免中途改动源码期间消耗真实调用。
+
+理解的目标：三层+剥后缀重试仍空、且有 AMap Key 时加第四层——用端点原名
+`_city_centre` 取中心点，`/v5/place/around`（50km、types 150200、
+sortrule=distance）找火车站，站名剥尾字「站」后交 12306
+`get-station-code-by-names` 反查站码，查到的才成候选（distance_meters 直接
+取 around 响应自带的 distance，不用 haversine 重算，因为该值已是 AMap 真实
+返回值）；`mcp_stdio.py` 里第四层挂在与现有 ambiguous 距离填充同一个
+`station_distance_enricher` 实例上（新增方法，不加新构造参数），且必须在
+`with client:` 内跑（还要再调一次 12306 工具，不能像现有距离填充那样等
+subprocess 关闭后再做）；`amap_http.py`/`amap.py` 新增 `poi_around` 能力
+（指纹 `around-v5`，归一化复用 `_pois`，因此要仿照现有 `poi` 分支把
+page_size/page_num 写回响应体，否则 `_pois()` 的分页类型校验会炸）；
+`rail12306.py` 只加一处布尔读出的 warnings 追加——判断依据是 `body` 顶层新
+增的一个布尔标记（`_transcript()` 不做顶层 key 穷举校验，可安全新增；
+`_station_resolution()` 对 `endpoints` 内部才是严格 whitelist，不能动）。
+顺序：任务 1（传输层能力+归一化+夹具，独立可测）→ 任务 2（第四层接入
+`_resolve_rail_stations`，依赖任务 1 的新能力）。
+最大风险：AMap `distance` 字段多半是字符串而非数字，需要健壮转 float 且拒绝
+负数/非有限值；第四层的 12306 反查调用如果和现有三层用同一 `calls` 记录
+方式，`_calls()` 之类按工具名计数的既有测试断言不能被打乱，新增调用只应出
+现在空端点这一支路径上。

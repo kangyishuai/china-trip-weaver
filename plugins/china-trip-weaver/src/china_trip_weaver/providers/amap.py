@@ -15,7 +15,7 @@ from .base import BaseAdapter, ContractMismatch, Normalization, ProviderFailure,
 class AMapAdapter(BaseAdapter):
     provider = "amap"
     provider_version = "web-service-v5-v3-route"
-    capabilities = ("poi", "geocode", "route")
+    capabilities = ("poi", "geocode", "route", "poi_around")
     required_secret_names = ("AMAP_WEBSERVICE_KEY",)
     allow_keyless = False
 
@@ -34,7 +34,7 @@ class AMapAdapter(BaseAdapter):
             if "LIMIT" in info.upper():
                 raise ProviderFailure("rate_limited", "AMap quota response")
             raise ProviderFailure("forbidden", "AMap rejected the request")
-        if api == "poi-v5":
+        if api in ("poi-v5", "around-v5"):
             return self._pois(body, request, clock)
         if api == "geocode-v3":
             return self._geocodes(body, request, clock)
@@ -49,6 +49,10 @@ class AMapAdapter(BaseAdapter):
             or not isinstance(body.get("page_size"), int)
         ):
             raise ContractMismatch("AMap v5 POI pagination or pois shape drifted")
+        source_url = (
+            "https://restapi.amap.com/v5/place/around" if body.get("api") == "around-v5"
+            else "https://restapi.amap.com/v5/place/text"
+        )
         items: List[Mapping[str, Any]] = []
         claims: List[Mapping[str, Any]] = []
         for index, raw in enumerate(body["pois"]):
@@ -77,13 +81,13 @@ class AMapAdapter(BaseAdapter):
             }
             identity_claim = make_claim(
                 subject_ref=subject_ref, field_path="/provider_identity", value=identity,
-                source_url="https://restapi.amap.com/v5/place/text", provider=self.provider,
+                source_url=source_url, provider=self.provider,
                 status="verified", confidence=0.9, mode="live", clock=clock,
                 json_path="/pois/%d" % index,
             )
             business_claim = make_claim(
                 subject_ref=subject_ref, field_path="/business", value=business,
-                source_url="https://restapi.amap.com/v5/place/text", provider=self.provider,
+                source_url=source_url, provider=self.provider,
                 status="partial", confidence=0.65, mode="live", clock=clock,
                 json_path="/pois/%d/business" % index,
                 claim_id=stable_id(
