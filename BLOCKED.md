@@ -21,6 +21,44 @@ dataclass」两个选项，未点名具体类名），选择理由是与文件�
 最直观写法。完整实测过程（含把 112 行发现并修正为 107 行的记录）见
 PROGRESS.md 本书任务 2 小节。
 
+## 书 AB2「拆 providers/base.query」（2026-09-11，worktree `.tmp/wt-ab2` 分支 `split-provider-query`，第十二波两份并行书之一）：无待裁决项
+
+任务 0/1/2 全部按任务书字面执行，全程无需领导裁决的冲突，也未发现任何
+bug 或想改动的逻辑——纯逐字节剪切，四个新方法与原 `query` 方法体内部
+完全一致，只是把控制流的 `continue`/`break`/落空补齐成方法边界处的
+显式 `return` + 调用方 `isinstance` 分流。任务书数字逐条核对全部吻合，
+无出入需要记录。
+
+两点自行判断（非裁决分叉，供核对）：
+
+1. 任务书「建议」四个方法名——`_preflight_failure`/
+`_execute_with_retries`/`_normalize_envelope`/`_build_result`——全部
+照抄采用，但额外多抽了一个任务书未提及的 `_handle_rate_limited`
+（rate-limited 分支的重试/失败判定，原 36 行）。原因：`_execute_with_
+retries` 若把这 36 行内联在自己体内，连同 setup、其余异常分支、loop
+后两次状态检查，会到约 100 行，超过「全文件无函数 >80 行」的硬指标；
+拆出这个额外助手后 `_execute_with_retries` 74 行、`_handle_rate_limited`
+44 行，均达标。这是「建议有更好的路可以走」条款覆盖的偏离，不是违反
+「只允许/不许」的失败项。
+
+2. 反向验证按先例（书 Y1「拆 journey._merge_segment_trips」、书「拆
+journey._validate_connection」发现的同款测试缺口）在
+`tests/test_providers.py` 新增一个精确断言测试
+`test_timeout_exhaustion_pins_the_exact_retry_reason_text`——全仓库
+此前对 timeout 耗尽重试后的 `health["reason"]` 文案零精确断言（`grep
+-rn "provider deadline exceeded" tests/` 零命中），若不补测试，反向
+验证要求的「至少一项测试红」无法满足；不是任务书要求之外的画蛇添足，
+而是任务书「反向验证」条款本身能兑现的必要前提，且「界限」明确允许
+`tests/test_providers.py` 新增 `def test_`。完整实测过程（含反向验证
+的红→绿记录）见 PROGRESS.md 本书任务 2 小节。
+
+另有一处主动放弃的覆盖（同样非待裁决项，已在 PROGRESS.md「覆盖判断」
+段落说明理由）：快照脚本未构造 `Rail12306Adapter.query` 的 `ambiguous`
+包装分支场景，因为真实触发路径依赖 `tests/test_rail_station_fallback.py`
+专用的 subprocess 假 MCP 服务器基础设施，复刻代价远超收益，而该分支
+唯一依赖的一行代码是逐字节剪切未改动的一行，且有现成的精确断言测试
+作为全量回归的防线。
+
 ## 书「拆 journey._validate_connection」（2026-09-11，worktree `.tmp/wt-aa2` 分支 `split-journey-connection`，第十一波三份并行书之一）：无待裁决项
 
 任务 0/1/2 全部按任务书字面执行，全程无需停工的冲突，也未发现任何 bug 或

@@ -192,6 +192,21 @@ class ProviderCorpusTests(unittest.TestCase):
         self.assertEqual(1, len(availability))
         self.assertTrue(any(seat["available"] for seat in availability[0]["value"]))
 
+    def test_timeout_exhaustion_pins_the_exact_retry_reason_text(self):
+        fixture = load(FIXTURES / "amap" / "timeout.json")
+        adapter = ADAPTERS[fixture["provider"]]()
+        request = ProviderRequest(**fixture["request"])
+        transport = ReplayTransport(fixture["transport"])
+        context = ProviderContext(
+            clock=FixedClock.from_iso(fixture["captured_at"]),
+            credentials=resolve_credentials(PROVIDER_ENV[fixture["provider"]], ROOT / ".tmp" / "provider-fixture-no-file"),
+            transport=transport,
+        )
+        result = adapter.query(request, context)
+        self.assertEqual("timeout", result.error_class)
+        self.assertEqual(2, transport.calls)
+        self.assertEqual("timeout: provider deadline exceeded", result.health["reason"])
+
     def test_amap_synthetic_responses_cover_v3_v4_v5_without_credentials(self):
         synthetic_cases = (
             "success", "pagination_page2", "geocode", "walking", "transit",

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
-from typing import Any, List, Mapping, Optional, Protocol, Sequence, Tuple
+from typing import Any, List, Mapping, Optional, Protocol, Sequence, Tuple, Union
 from urllib.parse import urlsplit
 
 from ..clock import Clock, isoformat_seconds
@@ -167,7 +167,7 @@ class BaseAdapter:
     def normalize(self, body: Any, request: ProviderRequest, clock: Clock) -> Normalization:
         raise NotImplementedError
 
-    def query(self, request: ProviderRequest, context: ProviderContext) -> AdapterResult:
+    def _preflight_failure(self, request: ProviderRequest, context: ProviderContext) -> Optional[AdapterResult]:
         if request.capability not in self.capabilities:
             return self._failure("invalid_request", "capability is not supported", request, context.clock)
         if request.deadline_ms <= 0:
@@ -175,7 +175,26 @@ class BaseAdapter:
         if self.required_secret_names and not self.allow_keyless:
             if not any(context.credentials.get(name) for name in self.required_secret_names):
                 return self._failure("credential_missing", "required provider credential is missing", request, context.clock)
+        return None
 
+    def query(self, request: ProviderRequest, context: ProviderContext) -> AdapterResult:
+        preflight_failure = self._preflight_failure(request, context)
+        if preflight_failure is not None:
+            return preflight_failure
+
+        outcome = self._execute_with_retries(request, context)
+        if isinstance(outcome, AdapterResult):
+            return outcome
+        envelope, rate_limit_retries, retry_delays = outcome
+
+        normalized = self._normalize_envelope(envelope, request, context, rate_limit_retries, retry_delays)
+        if isinstance(normalized, AdapterResult):
+            return normalized
+        return self._build_result(envelope, normalized, request, context, rate_limit_retries, retry_delays)
+
+    def _execute_with_retries(
+        self, request: ProviderRequest, context: ProviderContext,
+    ) -> Union[AdapterResult, Tuple[ProviderEnvelope, int, List[float]]]:
         envelope: Optional[ProviderEnvelope] = None
         last_error: Optional[str] = None
         transport_retries = 0
@@ -196,40 +215,12 @@ class BaseAdapter:
                 status_error = self._http_error(envelope.status_code)
                 if status_error == "rate_limited":
                     last_error = status_error
-                    _emit_progress(
-                        context.transport,
-                        event="degrade",
-                        provider=self.provider,
-                        capability=request.capability,
-                        error_class=status_error,
-                        attempt=attempt,
+                    failure, rate_limit_retries = self._handle_rate_limited(
+                        envelope, request, context, status_error, attempt, rate_limit_retries, retry_delays,
                     )
-                    retry_enabled = bool(getattr(context.transport, "retry_rate_limits", False))
-                    if retry_enabled and rate_limit_retries < MAX_RATE_LIMIT_RETRIES:
-                        delay = _retry_delay_seconds(envelope.headers)
-                        rate_limit_retries += 1
-                        retry_delays.append(delay)
-                        _emit_progress(
-                            context.transport,
-                            event="retry",
-                            provider=self.provider,
-                            capability=request.capability,
-                            error_class=status_error,
-                            attempt=attempt + 1,
-                            delay_seconds=delay,
-                        )
-                        if delay:
-                            time.sleep(delay)
-                        continue
-                    return self._failure_with_retry(
-                        status_error,
-                        "provider HTTP %d" % envelope.status_code,
-                        request,
-                        context.clock,
-                        rate_limit_retries,
-                        retry_delays,
-                        context.transport,
-                    )
+                    if failure is not None:
+                        return failure
+                    continue
                 if envelope.status_code >= 500:
                     last_error = "upstream_5xx"
                     transport_retries += 1
@@ -274,10 +265,66 @@ class BaseAdapter:
                 status_error, "provider HTTP %d" % envelope.status_code, request, context.clock,
                 rate_limit_retries, retry_delays, context.transport,
             )
+        return envelope, rate_limit_retries, retry_delays
+
+    def _handle_rate_limited(
+        self,
+        envelope: ProviderEnvelope,
+        request: ProviderRequest,
+        context: ProviderContext,
+        status_error: str,
+        attempt: int,
+        rate_limit_retries: int,
+        retry_delays: List[float],
+    ) -> Tuple[Optional[AdapterResult], int]:
+        _emit_progress(
+            context.transport,
+            event="degrade",
+            provider=self.provider,
+            capability=request.capability,
+            error_class=status_error,
+            attempt=attempt,
+        )
+        retry_enabled = bool(getattr(context.transport, "retry_rate_limits", False))
+        if retry_enabled and rate_limit_retries < MAX_RATE_LIMIT_RETRIES:
+            delay = _retry_delay_seconds(envelope.headers)
+            rate_limit_retries += 1
+            retry_delays.append(delay)
+            _emit_progress(
+                context.transport,
+                event="retry",
+                provider=self.provider,
+                capability=request.capability,
+                error_class=status_error,
+                attempt=attempt + 1,
+                delay_seconds=delay,
+            )
+            if delay:
+                time.sleep(delay)
+            return None, rate_limit_retries
+        return self._failure_with_retry(
+            status_error,
+            "provider HTTP %d" % envelope.status_code,
+            request,
+            context.clock,
+            rate_limit_retries,
+            retry_delays,
+            context.transport,
+        ), rate_limit_retries
+
+    def _normalize_envelope(
+        self,
+        envelope: ProviderEnvelope,
+        request: ProviderRequest,
+        context: ProviderContext,
+        rate_limit_retries: int,
+        retry_delays: List[float],
+    ) -> Union[Normalization, AdapterResult]:
         try:
             normalized = self.normalize(envelope.body, request, context.clock)
             for claim in normalized.claims:
                 validate_claim(claim)
+            return normalized
         except ProviderFailure as exc:
             return self._failure_with_retry(
                 exc.error_class, exc.message, request, context.clock,
@@ -289,6 +336,15 @@ class BaseAdapter:
                 rate_limit_retries, retry_delays, context.transport,
             )
 
+    def _build_result(
+        self,
+        envelope: ProviderEnvelope,
+        normalized: Normalization,
+        request: ProviderRequest,
+        context: ProviderContext,
+        rate_limit_retries: int,
+        retry_delays: List[float],
+    ) -> AdapterResult:
         queried_at = isoformat_seconds(context.clock)
         response_hash = "sha256:" + hashlib.sha256(canonical_json(envelope.body).encode("utf-8")).hexdigest()
         retry_reason = _retry_reason(rate_limit_retries, retry_delays)
