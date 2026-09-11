@@ -124,7 +124,7 @@ fix-names` 会把它们列为人工项。
 - 2026-09-03/04 越界事实的唯一记录：`BLOCKED.md`（面向公众的产品未决问题，
   Open 区已于 2026-09-06 清零，现为存档）。
 
-## 书 W2「suspend 删非末尾腿的 unknowns 重编号」（2026-09-11，worktree `.tmp/wt-w2` 分支 `replan-reindex`，进行中）
+## 书 W2「suspend 删非末尾腿的 unknowns 重编号」（2026-09-11，worktree `.tmp/wt-w2` 分支 `replan-reindex`，已完成）
 
 任务 0 核对（HEAD `d22e3e6`）：全部与任务书数字吻合——602 测试 OK 0 skip、
 secrets 0、pyflakes 0；`replan.py:401/435/474` 行号、`planning.py:1397/1403`
@@ -144,6 +144,84 @@ transport_legs 只剩 1 个元素，`validate_trip` 报 2 条 `V_UNKNOWN_PATH`
 理解的目标：在 `_apply_suspend` 删孤儿 unknowns 之后、重算账本之前加一步——对剩余 unknowns 里 `field_path` 匹配 `/transport_legs/N/...` 且 N 大于被删 leg 原下标的，整体减一并各产出一条 `replace /unknowns/k/field_path` 操作，不新建/删除 unknown 条目。
 顺序：任务 1（新夹具 `suspend-first-leg.json` 删去程腿 + 3 个新测试，先红）→ 任务 2（实现 + CLI 验收 + 反向验证）。
 最大风险：新增 2 条 replace 操作会让 `operation_count` 从 30 变 32，已用脚本跑通未修复代码实测确认 32 是正确的期望值而非猜测，且确认既有 `suspend.json`（删最后一条腿，重编号循环里 `leg_number > removed_leg_index` 永假）的 `operation_count==30` 不受影响。
+
+任务 1（已完成，提交 `97b735d`）：新建 `tests/fixtures/scheduler/replan/
+suspend-first-leg.json`（base demo/trip.json，subject_ref 指向去程腿的
+slot_id `slot-leg-rail-fallback-6d95c810b44d`，replacement_slot 为同一
+08:00-13:00 窗口的 `kind=free` 时段，`expected.operation_count` 按实测填
+32、`affected_day` 为 `day-1`、`unchanged_day_indexes` 为 `[1, 2]`）。
+`tests/test_replan.py` 新增 3 个 `def test_`：
+`test_suspend_first_leg_fixture_runs_through_run_replan_fixture`（跑通用
+`run_replan_fixture`，覆盖 revision/trigger/affected_day/operation_count/
+replay/validate 等既有断言）、
+`test_suspend_first_leg_reindexes_trailing_unknowns_to_leg_zero`（直接断言
+回程腿是 `transport_legs` 里唯一剩下的腿，其两条 unknowns 的 `field_path`
+恰为 `/transport_legs/0/service_number`、`/transport_legs/0/price/amount`，
+对应 claim 的 `subject_ref` 仍是回程腿 leg_id，且 `validate_trip` 通过）、
+`test_suspend_first_leg_patch_replaces_exactly_two_unknown_field_paths`
+（断言 patch 里恰好 2 条 `op=replace` 且 `path` 以 `/field_path` 结尾的
+操作，`value` 恰为上述两个新路径）。CLI 循环夹具元组加入
+`"suspend-first-leg.json"`（共 7 项），`assertEqual(6, ...)` 改 7。
+验收：`python3 -m unittest tests.test_replan -v -k suspend_first_leg` →
+`FAILED (failures=4)`——3 个新测试 + 夹具自动发现机制生成的
+`test_replan_suspend_first_leg`（`test_replan.py` 末尾 `FIXTURES.glob` 循环
+对每个夹具文件自动生成一个 `test_replan_<case_id>`，非字面 `def test_`
+行，不受「不删 def test_」规矩约束）全部因 `operation_count` 30≠32 或
+`field_path` 仍为 `/transport_legs/1/...` 而红；全量跑
+`tests.test_replan` 额外看到既有 CLI 循环测试
+`test_all_four_replan_fixtures_run_through_cli_and_render`
+也因新夹具在子进程里触发 `REPLAN_FAILED ... V_UNKNOWN_PATH` 而红（`Ran 35
+tests ... FAILED (failures=5)`，其余 30 个既有测试不受影响）——这是「界限」
+明确允许的夹具元组改动的直接后果，不是额外回归。
+取舍记录：`test_suspend_first_leg_reindexes_trailing_unknowns_to_leg_zero`
+最初按 `claim_id` 过滤待查 unknowns，实测发现 `_budget_ledger` 重算会给
+同一条 `claim-98f1eeb25f5aeee7` 另建一条 `/budget_ledger/items/.../
+amount_max_cny` unknown（同一事实的两种证据，合法共存，非重编号范围），
+导致按 claim_id 过滤多出一条无关项；改为按 `field_path` 以
+`/transport_legs/` 开头过滤，精确限定到本任务范围，不影响断言强度。
+
+任务 2（已完成，提交见下）：`_apply_suspend` 删完孤儿 unknowns 之后、
+`if has_budget` 重算账本之前，新插入一行
+`_reindex_transport_leg_unknowns(trip["unknowns"], leg_index, operations)`
+调用；新增私有辅助 `_reindex_transport_leg_unknowns`（不用 `re`，按
+`/transport_legs/` 前缀切字符串取腿号，腿号小于等于被删下标跳过，大于则
+整体减一、就地改 `item["field_path"]`、append 一条
+`{"op":"replace","path":"/unknowns/%d/field_path"%index,"value":新路径}`），
+对任意后续腿数量通用，不止步于 2 腿场景。
+硬指标一命令输出：`ctw replan --trip demo/trip.json --event
+tests/fixtures/scheduler/replan/suspend-first-leg.json --base-revision 1
+--output-json .tmp/s0.json --output-html .tmp/s0.html` →
+`REPLAN_COMPLETE ... trigger=disruption ... errors=0`；
+`ctw validate .tmp/s0.json` → `VALID .tmp/s0.json`；输出 JSON 实测
+`transport_legs` 只剩回程腿、两条 unknowns 确为
+`/transport_legs/0/service_number`+`/transport_legs/0/price/amount`。
+全量 `/usr/bin/python3 -m unittest discover -s tests` → `Ran 606 tests`
+`OK` 0 skipped（602 基线 + 3 个新 `def test_` + 1 个夹具自动生成）；
+`scripts/scan_secrets.py` 0 命中；pyflakes
+（`plugins/china-trip-weaver/src tests scripts`）0 行。
+反向验证：把调用行临时改成
+`pass  # TEMP-REVERSE-VERIFY: _reindex_transport_leg_unknowns(...)` →
+`python3 -m unittest tests.test_replan -v -k suspend_first_leg` →
+`FAILED (failures=4)`（与任务 1 记录的红屏一致）→ 还原 → `git diff d22e3e6
+-- plugins/china-trip-weaver/src/china_trip_weaver/replan.py | grep -c
+TEMP-REVERSE-VERIFY` 为 0（标记已清零）→ 全量 `Ran 606 tests` `OK` 重新
+全绿。
+
+最终门复核：`git diff d22e3e6 --stat -- plugins/china-trip-weaver/schema
+'*/journey.py' '*/planning.py' '*/render/*' demo` 空输出；`git diff
+d22e3e6 -- tests | grep -E '^-\s*def test_'` 空输出；`git diff d22e3e6
+--stat` 只有 `PROGRESS.md`/`replan.py`/新夹具/`test_replan.py` 四个文件。
+判断记录（非空白裁决，已写入 BLOCKED.md）：本书「全局」小节声明三书并行，
+验收期间 `main` 已被并行书 W1（main 直改 journey.py 等）推进一个提交
+`1e434bf`，若直接对 `git diff main` 跑上述两条命令会把 W1 的
+`test_journey.py` 新测试误判成本书删除的测试——与 PROGRESS.md 既有先例
+「书 A2b 任务 2」同款情形，改用 `git merge-base main HEAD` 核实的真实分叉
+点 `d22e3e6` 重新比较，如上两条命令均已确认干净；按同一先例不停工、只记录，
+不需要等 main 静止。
+
+任务书止损未触发（任务 0/1/2 均一轮验收通过，无连败）；BLOCKED.md 随本轮
+提交追加上述判断记录。`git commit` 两次（任务 1 `97b735d`、任务 2待提交），
+完成后 `git push -u origin replan-reindex`。
 
 ## 本轮记录（2026-09-10，书 docs-drift：文档漂移清零 + 站点城市匹配接受区县，worktree `.tmp/wt-b` 分支 `docs-drift`）
 

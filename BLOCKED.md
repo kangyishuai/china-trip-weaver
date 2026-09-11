@@ -1,3 +1,33 @@
+## 书 W2「suspend 删非末尾腿的 unknowns 重编号」（2026-09-11，已按先例处理，非空白裁决）
+
+任务书「规矩」要求 `git diff main --stat -- plugins/china-trip-weaver/schema
+'*/journey.py' '*/planning.py' '*/render/*' demo` 与 `git diff main -- tests
+| grep -E '^-\s*def test_'` 均为空，但本书「全局」小节本身声明三本任务书
+并行（W1 在 main 直改 journey.py/render/journey_html.py/
+validate_journey_html.py，W3 在分支 split-validate-html 改
+render/validate_html.py）。验收时 `git log d22e3e6..main --oneline` 显示
+`main` 已被 W1 推进一个提交 `1e434bf`（"Add failing spec tests for
+deadline-kind checklist wording (task 1)"，W1 任务 1 的先红阶段，
+`tests/test_journey.py` 新增 5 个 `def test_`）。若此时直接对移动后的
+`main` 跑上述两条命令，`git diff main --stat` 会把 W1 新增的
+`test_journey.py` 当作本书"改动"列出（因为本分支缺少该提交），`git diff
+main -- tests | grep '^-\s*def test_'` 也会把那 5 个新测试函数签名误判为
+本书删除（同理，本分支没有它们，diff 方向上显示为"减号"）——但本书从未
+打开过 `tests/test_journey.py`，也没有改动 `journey.py`/`render/`/`demo`
+任何字节。
+
+判断：与本文件既有先例「书 A2b 任务 2：`git diff main` 的"删测试"验收因
+并行 A1b 书已合入 main 而失真」同款情形，按同一先例处理——改用
+`git merge-base main HEAD` 核实的本分支真实分叉点 `d22e3e6`（而非已经
+移动的 `main`）重新跑这两条命令，结果均为空/零行，证实本书确实零改动
+`schema`/`journey.py`/`planning.py`/`render/`/`demo`，也零行删除测试函数；
+`git diff d22e3e6 --stat` 只有 `PROGRESS.md`、
+`plugins/china-trip-weaver/src/china_trip_weaver/replan.py`、新增的
+`tests/fixtures/scheduler/replan/suspend-first-leg.json`、
+`tests/test_replan.py` 四个文件，均在白名单内。不停工，供管理者合并时核对
+——merge 时 W1 的新测试会随 main 最新提交自然出现在合并结果里，不需要本书
+额外动作。
+
 ## 书 F1「预订清单按开售日」（2026-09-10，无待裁决项）
 
 任务 0/1/2 全部按任务书字面执行，全程无需停工的冲突。两处需要自行判断的
