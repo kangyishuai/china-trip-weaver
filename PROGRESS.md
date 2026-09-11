@@ -3880,3 +3880,77 @@ plugins/china-trip-weaver/src/china_trip_weaver/journey.py | sort | uniq -c`
 `validate_journey` 末尾账本校验的正常连带反应，不属于
 `_validate_connection` 本体但证明突变确实生效），证明快照对三类检查的
 全部分支都有真实覆盖，不是空跑。
+
+任务 2（已完成）：一次性按三类抽出 `_check_connection_refs`（expected 四
+字段）、`_check_connection_lodging`（ref/date/gap/handoff/status）、
+`_check_connection_transport`（owner/ref/cost/not_required/separate），
+全部逐字节剪切、未重敲一个字符；`_validate_connection` 收窄成
+`path` 计算 + 三次调用 + 已有的 `_validate_connection_timing` 调用，共
+12 行。`git diff d11c2cb -- .../journey.py` 显示纯粹的函数体搬移，三个
+新函数内部逻辑与原函数完全一致，无任何字符改动。抽出后立即跑
+`tests.test_journey`：`Ran 76 tests` `OK`（当时还未加新测试）。
+
+写测试前核对：全仓库 `grep -rn` 这 10 个 J_ 码
+（`J_CONNECTION_REF`/`J_LODGING_REF`/`J_LODGING_DATE`/`J_LODGING_GAP`/
+`J_LODGING_HANDOFF`/`J_LODGING_STATUS`/`J_TRANSPORT_OWNER`/
+`J_TRANSPORT_REF`/`J_TRANSPORT_COST`/`J_TRANSPORT_NOT_REQUIRED`）在
+`tests/` 下零命中——与「拆 validate_trip.semantic_issues」任务书发现的
+同款缺口一样，既有测试从未对 `_validate_connection` 的任何具体
+`(code, path, message)` 做精确断言，只在 `_validate_connection_timing`
+的两个 `*_CONTINUITY_GAP` 码上有精确断言。若不补测试，反向验证要求的
+「至少一项测试红」无法满足。照抄该先例的做法（`tests/test_journey.py`
+白名单允许新增 `def test_`），新增
+`test_connection_checks_pin_exact_error_tuples_across_split_functions`
+（`JourneyContinuityTests` 类，用 `self.result.journey` 即
+`journey_sixteen_day_case()`，与 `demo/journey-16d` 同一份 fixture），
+3 个 subTest 各对应一个新函数的落点、各选一个产生「`report.errors`
+整体恰好一个元素」的干净突变（`from_trip_id`→`J_CONNECTION_REF`；
+`lodging_continuity.from_lodging_id`→`J_LODGING_REF`；
+`cross_segment_transport.amount_min_cny`→`J_TRANSPORT_COST`），逐一
+`assertEqual` 精确单元素集合。加入后 `Ran 77 tests` `OK`。
+
+硬指标一实测：
+```
+$ /usr/bin/python3 -c "import ast;p='plugins/china-trip-weaver/src/china_trip_weaver/journey.py';t=ast.parse(open(p).read());print(sorted(((n.end_lineno-n.lineno+1),n.name) for n in ast.walk(t) if isinstance(n,ast.FunctionDef))[-6:])"
+[(76, 'journey_risk_items'), (85, 'journey_budget_ledger'), (88, '_validate_connection_timing'), (94, 'plan_journey'), (100, '_bridge_segment_lodgings'), (103, 'validate_journey')]
+```
+`_validate_connection` 精确 12 行（`_check_connection_refs` 19 行、
+`_check_connection_lodging` 74 行、`_check_connection_transport` 52
+行，均未成为文件最长函数）；文件最长函数仍是 `validate_journey` 的
+103 行，与拆分前逐字相同。
+
+硬指标二实测：`.tmp/snap-after.json` 与 `.tmp/snap-before.json`
+`diff` 空输出（byte-identical）；J_ 码计数
+`grep -o '"J_[A-Z_]*"' .../journey.py | sort | uniq -c` 前后 `diff`
+空输出（25 行逐行相同）。三条语料命令零漂移：README demo
+（`trip_sha256=7ea7888f5478bb949e2d565e653212dfb67ff8be041ee61f0d45386a2d9c788c`/
+`html_sha256=c2d07708cb0cc088afab02331642f91e40c58ef3c45db3862b45c480a8bca927`，
+与历史基线逐字相同）；`scripts/build_plan_fixtures.py`（`wrote 3 plan
+cases, 3 invalid candidates, one Journey lodging-chain fixture...`，
+零异常）；`scripts/build_renderer_fixtures.py`
+（`journey_sha256=7ada91c09a6ef253a23f930b454a2d13510d9a4326f906f6299337ec0ce7628e`，
+与「书 Y1」「拆 validate_trip.semantic_issues」两处记录的历史基线完全
+一致）；三条命令跑完 `git status --short` 只有
+`journey.py`/`test_journey.py`/`PROGRESS.md` 三个白名单文件。全量
+`/usr/bin/python3 -m unittest discover -s tests`：`Ran 630 tests`
+`OK` 0 skipped（629 基线 + 1 个新 `def test_`）；`scan_secrets.py`
+`0 finding(s) across 378 file(s)`；
+`~/miniconda3/envs/core/bin/python -m pyflakes
+plugins/china-trip-weaver/src tests scripts` 0 行。
+
+反向验证（终端记录）：把 `_check_connection_transport` 里
+`"must preserve the owned Trip ledger range without counting it
+twice"` 改成结尾多一个 `e` 的 `"...twicee"` → 快照重跑
+`diff .tmp/snap-reverse.json .tmp/snap-after.json` 非空（5 处
+`twice`→`twicee`，对应两个语料共 5 次触达 `J_TRANSPORT_COST` 的场景）
+→ 单独跑新测试 `FAILED (failures=1)`，恰是 `code='J_TRANSPORT_COST'`
+这个 subTest 报 `AssertionError`（期望结尾 `twice`，实际
+`twicee`）→ 精确还原（`grep -c twicee` 确认残留为 0）→ 快照重跑
+`diff` 空输出（IDENTICAL AGAIN）→ `tests.test_journey` 重跑
+`Ran 77 tests` `OK`。
+
+`git diff d11c2cb -- tests | grep -E '^-\s*def test_'` 0 行；
+`git diff d11c2cb --stat -- . ':!plugins/china-trip-weaver/src/china_trip_weaver/journey.py' ':!tests/test_journey.py' ':!PROGRESS.md' ':!BLOCKED.md'`
+空输出；`git diff d11c2cb --stat` 只有三个白名单文件（`journey.py`
++35-3、`test_journey.py` +33、`PROGRESS.md` +本节）。止损轮次未触发
+（一次性按三类抽取、每段过测试即绿，未遇连败）。

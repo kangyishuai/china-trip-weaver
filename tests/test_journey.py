@@ -1003,6 +1003,39 @@ class JourneyContinuityTests(unittest.TestCase):
         report = validate_journey(journey)
         self.assertIn("J_BUDGET_MISMATCH", {item.code for item in report.errors})
 
+    def test_connection_checks_pin_exact_error_tuples_across_split_functions(self):
+        cases = {
+            "J_CONNECTION_REF": (
+                lambda connection: connection.update(from_trip_id="mutated-trip-id"),
+                {(
+                    "J_CONNECTION_REF", "/segment_connections/0/from_trip_id",
+                    "does not match its adjacent Trip pair",
+                )},
+            ),
+            "J_LODGING_REF": (
+                lambda connection: connection["lodging_continuity"].update(
+                    from_lodging_id="mutated-lodging-id",
+                ),
+                {(
+                    "J_LODGING_REF", "/segment_connections/0/lodging_continuity/from_lodging_id",
+                    "must reference a lodging in the preceding Trip",
+                )},
+            ),
+            "J_TRANSPORT_COST": (
+                lambda connection: connection["cross_segment_transport"].update(amount_min_cny=999),
+                {(
+                    "J_TRANSPORT_COST", "/segment_connections/0/cross_segment_transport",
+                    "must preserve the owned Trip ledger range without counting it twice",
+                )},
+            ),
+        }
+        for code, (mutate, expected) in cases.items():
+            with self.subTest(code=code):
+                journey = copy.deepcopy(self.result.journey)
+                mutate(journey["segment_connections"][0])
+                actual = {(item.code, item.path, item.message) for item in validate_journey(journey).errors}
+                self.assertEqual(expected, actual)
+
     def test_separate_cross_segment_transport_is_added_to_trip_totals(self):
         journey = copy.deepcopy(self.result.journey)
         transport = journey["segment_connections"][0]["cross_segment_transport"]
