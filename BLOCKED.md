@@ -1318,3 +1318,27 @@ Decision 对四个问题给了「不做/不做/不做/做」，不是四个都"�
 证据链和 ADR-0017 先例的"暂不做"一样扎实，只是这次证据指向"可以做
 且成本极低"而非"不做"。硬指标一、二均已实测通过，见 PROGRESS.md
 本书小节。
+
+## 书 AC2「第二价源 ADR-0019」（2026-09-11，worktree `.tmp/wt-ac2` 分支 `adr-second-price`，第十三波三份并行书之一）：无待裁决项
+
+任务 0/1/2 全部按任务书字面执行，全程无需停工的分叉。任务书列出的全部
+file:line（`/price` claim 10 处、04-providers.md L105/L111、
+trip.schema.json L196-222/L736、evidence.py L1/L14、render/html.py
+`_price`+evidence 区）逐条核对通过；写进 ADR 正文的全部 55 条唯一
+file:line 引用事后又做了一轮独立提取+抽查复核，无漂移（过程见
+PROGRESS.md 本书任务 2 小节）。
+
+Decision 对火车票/机票/住宿/门票四类分别给出「不做/做/做（排后）/不做」
+——不是「只有航班需要，其余不做」这种单一结论，是四类各自独立证据支撑
+的判断，满足任务书「四类价格全覆盖」的让步顺序。唯一算得上分叉的一点：
+任务书建议的验证命令「用...离线跑 `ctw plan --offline-fixture` 看
+claims」本身在 CLI 层不可执行——`cli.py:914`（及 `journey plan` 同款
+校验 `cli.py:1002`）规定 `--offline-fixture` 必须配 `--lodging off`，
+两者不能同时出现。这不是任务书出错（`--offline-fixture` 的这条限制原本
+就与本书要验证的场景无关，只是恰好都涉及「lodging」），是建议达成同一
+验证目的的命令本身不可行——按「建议」条款的让步空间，改用直接调用真实
+的 `planning._merge_lodging_candidates` 函数（纯函数、同一份代码、零
+mock）做等价离线验证，过程与输出已写进 PROGRESS.md，不影响 Context 与
+Decision 的证据强度。
+
+硬指标一、二均已实测通过，见 PROGRESS.md 本书任务 2 小节。
