@@ -2462,3 +2462,65 @@ FAILED (errors=3)
 ```
 后两条天生绿（回归哨兵，其定义决定了改动前后都该成立），不是弱断言，判断
 记在 `BLOCKED.md`；前三条真红，证明确实在测未实现的字段/分支。
+
+任务 2（已完成）：`_journey_transport_leg_deadline` 返回 4 元组
+`(deadline, deadline_kind, depart_at, reason)`，`declared`/`presale_open`/
+`departure` 三态；新增私有 `_journey_trace_deadline_kind`（unknown 项按
+所指 transport_leg/lodging 归类，其余 other，未改 `_journey_trace_deadline`
+本体——`[0]` 索引对新 4 元组仍成立，risk items 两处调用点零改动）；
+`_journey_action_item` 加 `deadline_kind="other"`/`depart_at=None` 两个
+kwarg，只进输出字典不进 identity；`journey_booking_checklist` 三个循环
+各自传对应 kind（transport 用返回值、lodging 硬编码 `check_in`、unknown
+查新私有函数）。渲染侧：`_journey_labels` 中英各加 4 个模板（
+`deadline_presale`/`deadline_declared`/`deadline_departure`/
+`deadline_check_in`）；`_deadline` 改签名收整个 item，按 kind 选模板，
+presale_open 的出发日用 `depart_at[5:10]`（短格式 `MM-DD`，因任务书字面
+断言「10-01 出发」而非「2026-10-01 出发」）、其余日期用 `value[:10]`
+完整年月日；`_trace_attributes`/`_validate_trace_nodes` 各加不带前缀的
+`data-deadline-kind`（比照已有 `data-deadline`）。
+`scripts/build_renderer_fixtures.py` 重跑：
+```
+wrote 9 Trip and 12 HTML renderer fixtures; Journey demo trips=3 days=16
+journey_sha256=7ada91c0... html_sha256=a38fc636...
+```
+只有 `demo/journey-16d/journey.html` 变化（`journey.json`/`request.json`/
+`candidates.json`/`tests/fixtures/renderer/*` 逐字节不变，符合预期——Trip
+数据模型本身未改，只有派生的 checklist 措辞变了）。demo html 内文案实测：
+`开售日 2026-09-17` 8 处、`10-01 出发` 8 处（checklist+priority 两个区块各
+出现一次 × 4 条相关行程项）、`入住前确认` 3 处（对应 3 条住宿）、
+`请在此之前完成 2026-09-17` 0 处、`presale window is` 0 处。
+校验：`ctw journey validate-html demo/journey-16d/journey.html demo/
+journey-16d/journey.json` → `JOURNEY HTML VALID ... errors=0`；
+`qa_renderer_browser.py --viewports 375x812 --sections 15` →
+`"failures": []`、`"handshakeAttempts": 1`、`sectionCount: 15`。英文
+locale（临时把 `journey["trips"][0]["request"]["locale"]` 改 `"en"` 内存
+渲染一次，不落盘）→ `Sale opens 2026-09-17 · buy that day · departs
+10-01` 出现 17 次。全量 `Ran 607 tests` `OK` 0 skipped（602 基线 + 5 新
+`def test_`，≥606 达标）；`scan_secrets.py` 0 命中；pyflakes 0 行。
+反向验证①（终端记录）：临时把 `_journey_transport_leg_deadline` 两个
+return 分支的 kind 字面量都改成 `"departure"`（带 `# TEMP-REVERSE-VERIFY`
+标记）→ 重跑 5 个新测试，`test_..._presale_open_...`/
+`test_leg_with_declared_booking_deadline_claim_...` 两个红
+（`AssertionError: 'presale_open' != 'departure'`／`'declared' !=
+'departure'`），另 3 个仍绿（check_in 走 lodging 循环的硬编码分支、不受
+这处改动影响，属预期）→ 还原两处 → `grep -c TEMP-REVERSE-VERIFY
+journey.py` 为 0 → 重跑同 2 测试转 `ok`。
+反向验证②（终端记录，仅作用于 `.tmp/` 下的临时副本，从未碰触已提交的
+`demo/journey-16d/journey.html`——白名单明文该文件「不许手改」，只能由
+`build_renderer_fixtures.py` 重生成）：`cp` 出
+`.tmp/journey-mutated.html`，把其中**booking-checklist 区块内**（用
+`content.find('id="booking-checklist"')` 定位起点，避免误改到文档顺序更
+靠前、同样含 `data-deadline-kind="presale_open"` 的 priority-actions 区块
+——那个区块误改只会报 `JH201`，不是任务书要的 `JH202`）第一处
+`data-deadline-kind="presale_open"` 手改成 `"declared"` → `ctw journey
+validate-html .tmp/journey-mutated.html demo/journey-16d/journey.json` →
+`JH202 checklist trace or ordering differs at index 0`、`errors=1`（红，
+命中任务书要求的码）→ 删除临时副本 → 原始 `demo/journey-16d/journey.html`
+重新校验 `errors=0`（绿，确认原文件从未被这步改动）。
+边界核对：`git diff d22e3e6 -- tests | grep -E '^-\s*def test_'` 0 行；
+`git diff d22e3e6 --stat -- plugins/china-trip-weaver/schema
+'*/render/html.py' '*/render/validate_html.py' '*/replan.py' README.md`
+空输出；改动文件列表（`git diff d22e3e6 --stat`）仅
+`BLOCKED.md`/`PROGRESS.md`/`demo/journey-16d/journey.html`/`journey.py`/
+`render/journey_html.py`/`render/validate_journey_html.py`/
+`tests/test_journey.py` 七个，全部在白名单内。

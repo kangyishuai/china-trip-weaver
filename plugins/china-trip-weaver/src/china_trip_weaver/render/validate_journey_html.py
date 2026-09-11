@@ -270,6 +270,7 @@ def _validate_trace_nodes(
             "data-source-claim": item.get("claim_id") or "",
             "data-source-path": item.get("field_path") or "",
             "data-deadline": item["deadline"],
+            "data-deadline-kind": item["deadline_kind"],
         }
         if item.get("capability"):
             expected["data-capability"] = item["capability"]

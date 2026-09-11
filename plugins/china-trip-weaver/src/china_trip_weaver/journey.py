@@ -1782,7 +1782,7 @@ def journey_booking_checklist(
                 "transport_legs",
                 leg_index,
             )
-            deadline, reason = _journey_transport_leg_deadline(trip, leg)
+            deadline, deadline_kind, depart_at, reason = _journey_transport_leg_deadline(trip, leg)
             items.append(_journey_action_item(
                 "checklist",
                 "transport",
@@ -1794,6 +1794,8 @@ def journey_booking_checklist(
                 None,
                 leg.get("provider"),
                 reason=reason,
+                deadline_kind=deadline_kind,
+                depart_at=depart_at,
             ))
         for lodging_index, lodging in enumerate(trip["lodgings"]):
             trace = _journey_entity_trace(
@@ -1812,9 +1814,11 @@ def journey_booking_checklist(
                 None,
                 None,
                 None,
+                deadline_kind="check_in",
             ))
         for unknown_index, unknown in enumerate(trip["unknowns"]):
             trace = _journey_unknown_trace(trip, context, unknown)
+            deadline_kind, depart_at = _journey_trace_deadline_kind(trip, trace)
             items.append(_journey_action_item(
                 "checklist",
                 "unknown",
@@ -1827,6 +1831,8 @@ def journey_booking_checklist(
                 unknown.get("provider"),
                 reason=unknown["reason"],
                 source_index=unknown_index,
+                deadline_kind=deadline_kind,
+                depart_at=depart_at,
             ))
     return tuple(sorted(items, key=_journey_checklist_sort_key))
 
@@ -1924,6 +1930,8 @@ def _journey_action_item(
     status: Optional[str] = None,
     capability: Optional[str] = None,
     source_index: int = 0,
+    deadline_kind: str = "other",
+    depart_at: Optional[str] = None,
 ) -> Mapping[str, Any]:
     identity = {
         "kind": kind,
@@ -1950,6 +1958,8 @@ def _journey_action_item(
         "field_path": field_path,
         "provider": provider,
         "deadline": deadline,
+        "deadline_kind": deadline_kind,
+        "depart_at": depart_at,
         "reason": reason,
         "status": status,
         "capability": capability,
@@ -1974,19 +1984,23 @@ def _journey_deadline_sort_key(value: str) -> Tuple[str, int, str]:
 def _journey_transport_leg_deadline(
     trip: Mapping[str, Any],
     leg: Mapping[str, Any],
-) -> Tuple[str, Optional[str]]:
-    """Resolve when a transport leg must be booked by, with an explanation when it is not departure time."""
+) -> Tuple[str, str, str, Optional[str]]:
+    """Resolve a transport leg's booking deadline, its `deadline_kind`, its departure date, and a reason."""
     depart_at = leg.get("depart_at") or trip["request"]["start_date"]
     claim = _journey_leg_booking_deadline_claim(trip, leg)
     if claim is not None:
-        return str(claim["value"]), "declared booking deadline (claim %s)" % claim["claim_id"]
+        return (
+            str(claim["value"]), "declared", depart_at,
+            "declared booking deadline (claim %s)" % claim["claim_id"],
+        )
     if leg.get("travel_mode") == "rail":
         sale_date = _journey_rail_presale_date(depart_at)
-        return sale_date, (
+        return (
+            sale_date, "presale_open", depart_at,
             "12306 presale window is %d days; tickets go on sale %s for departure %s"
-            % (PRESALE_DAYS, sale_date, depart_at[:10])
+            % (PRESALE_DAYS, sale_date, depart_at[:10]),
         )
-    return depart_at, None
+    return depart_at, "departure", depart_at, None
 
 
 def _journey_leg_booking_deadline_claim(
@@ -2133,6 +2147,19 @@ def _journey_trace_deadline(
     if trace["source_kind"] == "day":
         return value["date"]
     return trip["request"]["end_date"]
+
+
+def _journey_trace_deadline_kind(
+    trip: Mapping[str, Any],
+    trace: Mapping[str, Any],
+) -> Tuple[str, Optional[str]]:
+    """Classify an unknown's deadline by the kind of entity it traces to, carrying a departure date when relevant."""
+    if trace["source_kind"] == "transport_leg":
+        _, kind, depart_at, _ = _journey_transport_leg_deadline(trip, trace["source_value"])
+        return kind, depart_at
+    if trace["source_kind"] == "lodging":
+        return "check_in", None
+    return "other", None
 
 
 def _journey_pointer_parts(pointer: str) -> List[str]:

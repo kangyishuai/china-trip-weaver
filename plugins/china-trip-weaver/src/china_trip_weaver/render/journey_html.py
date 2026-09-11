@@ -300,6 +300,10 @@ def _journey_labels(locale: str) -> Mapping[str, str]:
             "known_cost": "Known cost", "total_range": "Total range", "budget_limit": "Budget",
             "remaining": "Known remaining", "incomplete": "Upper bound not yet known",
             "unknown": "Not yet known", "by": "Complete before", "time_unknown": "time not specified",
+            "deadline_presale": "Sale opens %s · buy that day · departs %s",
+            "deadline_declared": "Book by %s",
+            "deadline_departure": "Confirm before departure · departs %s",
+            "deadline_check_in": "Confirm before check-in · check in %s",
             "transport_action": "Confirm transport", "lodging_action": "Confirm check-in",
             "unknown_action": "Resolve unknown", "source": "Trace", "open_source": "Open source",
             "open_booking": "Open official booking page", "open_lodging": "Open lodging page",
@@ -335,6 +339,10 @@ def _journey_labels(locale: str) -> Mapping[str, str]:
         "known_cost": "已知费用", "total_range": "总费用区间", "budget_limit": "预算上限",
         "remaining": "按已知费用剩余", "incomplete": "上限仍未确定", "unknown": "尚未确定",
         "by": "请在此之前完成", "time_unknown": "具体时间未提供",
+        "deadline_presale": "开售日 %s · 当天就买 · %s 出发",
+        "deadline_declared": "预订截止 %s",
+        "deadline_departure": "出发前确认 · %s 出发",
+        "deadline_check_in": "入住前确认 · %s 入住",
         "transport_action": "确认交通", "lodging_action": "确认入住", "unknown_action": "核验未知项",
         "source": "追溯", "open_source": "查看来源", "open_booking": "打开官方购票页",
         "open_lodging": "打开住宿页", "segment": "第 %d 段", "days": "%d 天",
@@ -577,7 +585,7 @@ def _checklist_item_html(
         heading = "%s · %s" % (labels["unknown_action"], _display_source(item, labels))
     detail = _checklist_detail(journey, item, labels)
     return '<li class="checklist-item" %s><span class="deadline">%s</span><h3>%s</h3>%s%s</li>' % (
-        _trace_attributes(prefix, item), _deadline(item["deadline"], labels),
+        _trace_attributes(prefix, item), _deadline(item, labels),
         text(heading), detail, _trace_note(item, labels),
     )
 
@@ -834,6 +842,7 @@ def _trace_attributes(prefix: str, item: Mapping[str, Any]) -> str:
         "data-source-claim": item.get("claim_id") or "",
         "data-source-path": item.get("field_path") or "",
         "data-deadline": item["deadline"],
+        "data-deadline-kind": item["deadline_kind"],
     }
     if item.get("capability"):
         values["data-capability"] = item["capability"]
@@ -931,7 +940,20 @@ def _journey_traveler_count(journey: Mapping[str, Any]) -> int:
     return int(journey["travelers"])
 
 
-def _deadline(value: str, labels: Mapping[str, str]) -> str:
+def _deadline(item: Mapping[str, Any], labels: Mapping[str, str]) -> str:
+    value = item["deadline"]
+    kind = item["deadline_kind"]
+    sentence = None
+    if kind == "presale_open":
+        sentence = labels["deadline_presale"] % (value[:10], item["depart_at"][5:10])
+    elif kind == "declared":
+        sentence = labels["deadline_declared"] % value[:10]
+    elif kind == "departure":
+        sentence = labels["deadline_departure"] % value[:10]
+    elif kind == "check_in":
+        sentence = labels["deadline_check_in"] % value[:10]
+    if sentence is not None:
+        return '<time datetime="%s">%s</time>' % (attr(value), text(sentence))
     if len(value) >= 16:
         return '%s <time datetime="%s">%s</time>' % (
             text(labels["by"]), attr(value), text(value[:16].replace("T", " ")),
