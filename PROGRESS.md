@@ -132,6 +132,55 @@ fix-names` 会把它们列为人工项。
 - 2026-09-03/04 越界事实的唯一记录：`BLOCKED.md`（面向公众的产品未决问题，
   Open 区已于 2026-09-06 清零，现为存档）。
 
+## 书 X3「租车与轮渡合成 Trip 夹具」（2026-09-11，worktree `.tmp/wt-x3` 分支 `rental-ferry-fixture`）
+
+任务 0 核对（HEAD `bf53f72`）：全部与任务书数字吻合——612 测试 OK 0 skip、secrets
+0（375 文件）、pyflakes 0 行；`tests/fixtures/trips/schema/valid/` 恰 2 份
+（multicity-static.json、weekend-live.json）；`test_contracts.py:81-84` 断言
+valid 恰 2、invalid 恰 4；`trip.schema.json:553` `travel_mode` 枚举含
+drive/ferry；`render/html.py:59` 中文标签「驾车」「轮渡」（英文版 26-28 行）；
+`validate_trip.py:318` `V_ORIGIN_REQUIRED` 条件是「目的地>1 或含 rail/flight
+腿」。额外核实（任务书未列但影响夹具设计）：`from_ref`/`to_ref` 只需落在
+`all_refs`（含 trip_id/day/leg/lodging/poi/origin/destinations 的
+ref_id/slot_id），不要求是 POI——照抄 `multicity-static.json` 用 city ref 做
+火车腿端点的写法；`request` 走 `oneOf` 第一分支只需 `origin`+`travelers` 两个
+键存在（值可为 null）；`budget_ledger`/`lodgings` 均非顶层必填，`lodgings`
+可为空数组；`url`/`claim.source_url` 强制 `^https://` 前缀，`example.invalid`
+域名直接可用。
+
+理解的目标：写一份 2 天厦门合成 Trip（第 1 天鼓浪屿轮渡、第 2 天南靖自驾），
+证明 schema/校验器/渲染器三关吃得下 drive/ferry 腿。
+顺序：任务 0（已完成）→ 任务 1 夹具三关 → 任务 2 测试+ADR+反向验证。
+最大风险：`from_ref`/`to_ref` 端点选型——若误用未定义的 POI/城市 ref 会触发
+`V_ENDPOINT_REF`；已用 `multicity-static.json` 的 city-ref 先例排除，两条腿的
+`from_ref` 均用已在 `request.destinations` 里的 `city-xiamen`，`to_ref` 各用
+新建的 `poi-gulangyu`/`poi-nanjing-tulou`，全部在 `all_refs` 内。
+
+任务 1（已完成）：新建 `tests/fixtures/trips/schema/valid/rental-ferry.json`
+（厦门 2 天，`mode=static`；第 1 天 `leg-ferry-gulangyu` 厦门→鼓浪屿、
+`provider`/`booking_url` 均用 `gulangyu-ferry.example.invalid` 域名、
+`price_type=verify-on-click`；第 2 天 `leg-drive-nanjing` 厦门→南靖、
+`provider`/`booking_url` 用 `nanjing-carrental.example.invalid` 域名同款处理；
+`request.assumptions` 两条：「租车最低起租 96 小时，不足 96 小时按 96 小时
+计费」「异地还车需在南靖门店验车并支付跨城服务费」；2 个 POI（日光岩风景区、
+田螺坑土楼群，真实地名/近似公开坐标）、6 条 claim、3 条 provider_health、2
+条 unknowns，`lodgings: []`、不加 `budget_ledger`（猜的两项均按任务书「我替
+领导拍的板」执行），命名与 claim 写法照抄 `weekend-live.json`）。
+验收（一轮全过，未重试）：
+- `ctw validate tests/fixtures/trips/schema/valid/rental-ferry.json` →
+  `VALID tests/fixtures/trips/schema/valid/rental-ferry.json`
+- `ctw render ... --output .tmp/rf.html` →
+  `RENDERED .tmp/rf.html sha256=... errors=0`
+- `ctw validate-html .tmp/rf.html tests/fixtures/trips/schema/valid/
+  rental-ferry.json` → `HTML VALID .tmp/rf.html errors=0`
+- `grep -c '轮渡' .tmp/rf.html` → 3；`grep -c '驾车' .tmp/rf.html` → 1（均
+  ≥1，出现在 `#transport-summary` 的 `<h3>轮渡 · ...</h3>`/`<h3>驾车 ·
+  ...</h3>` 与逐日时间轴的 slot 标题里）
+- `scripts/qa_renderer_browser.py .tmp/rf.html --output .tmp/qa --viewports
+  375x812 --sections 12` → `failures: []`，`horizontalOverflow: 0`，
+  `handshakeAttempts: 1`
+- `scripts/scan_secrets.py` → `0 finding(s) across 376 file(s)`
+
 ## 书 W2「suspend 删非末尾腿的 unknowns 重编号」（2026-09-11，worktree `.tmp/wt-w2` 分支 `replan-reindex`，已完成）
 
 任务 0 核对（HEAD `d22e3e6`）：全部与任务书数字吻合——602 测试 OK 0 skip、
