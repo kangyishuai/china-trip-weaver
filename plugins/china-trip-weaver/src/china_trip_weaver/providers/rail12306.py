@@ -82,7 +82,10 @@ class Rail12306Adapter(BaseAdapter):
                 raise ContractMismatch("12306 queried tickets before station ambiguity was resolved")
             if resolution_status == "no_results":
                 return Normalization((), (), ("station_resolution_no_results",))
-            return Normalization(station_candidates, (), ("station_resolution_ambiguous", "ambiguous"))
+            warnings = ("station_resolution_ambiguous", "ambiguous")
+            if transcript.get("station_resolution_nearby_fallback"):
+                warnings += ("station_nearby_fallback",)
+            return Normalization(station_candidates, (), warnings)
 
         call = _single_call(calls, ("get-tickets", "get-interline-tickets"))
         payload = _call_payload(call, request, clock)

@@ -2844,3 +2844,96 @@ page_size/page_num 写回响应体，否则 `_pois()` 的分页类型校验会�
 负数/非有限值；第四层的 12306 反查调用如果和现有三层用同一 `calls` 记录
 方式，`_calls()` 之类按工具名计数的既有测试断言不能被打乱，新增调用只应出
 现在空端点这一支路径上。
+
+任务 1（已完成，提交 `d826d0e`）：`amap_http.py` 新增 `poi_around`
+capability→`/v5/place/around`（location/keywords/types/radius≤50000/
+page_size/page_num=1/show_fields=business/sortrule=distance，指纹
+`around-v5`），并把响应体 page_size/page_num 回写从只对 `poi` 生效改成对
+`poi`/`poi_around` 都生效——这是任务书没写但「归一化复用 `_pois`」这句本身
+要求的：`_pois()` 靠 `isinstance(body.get("page_num"), int)` 校验分页，AMap
+真实响应这两个字段是字符串，不回写会在 `_pois()` 直接炸
+`ContractMismatch`。`amap.py`：`capabilities` 加 `poi_around`，`normalize`
+的 `api in ("poi-v5","around-v5")` 都转 `_pois`；顺手把 `_pois()` 里硬编码
+的 `source_url="...place/text"` 改成按 `body["api"]` 选，`around-v5` 的
+POI 如实署名 `place/around`（之前两个 endpoint 共用一个 source_url 字面量，
+不算错但不诚实）。`build_provider_fixtures.py` 加一份 `amap/around_stations`
+合成用例，manifest 78→79，其余 78 份哈希不变（`git status --short` 只多
+一个新文件）。`test_amap_live.py` 新增 2 个 `def test_`（查询串含
+location/keywords/types/radius/page_size/page_num/sortrule/show_fields；
+radius=50001 报 `ContractMismatch`）。验收：`Ran 615 tests OK` 0
+skipped（612+3）；pyflakes 0；secrets 0。
+
+任务 2（已完成，提交见下）：`station_distance.py` 给
+`AMapStationDistanceEnricher` 加 `find_nearby_stations(city, parent)`——
+无 Key 直接空 tuple；否则找中心点、查 `poi_around`（关键词「火车站」、
+types 150200、radius 50000、page_size 10），按 `_rail_station_category`
+过滤后取每条 POI 的 `name`+原始响应里的 `distance`（字符串转 float 的新
+辅助 `_nonnegative_float`，因为 AMap 这个字段是字符串）。`mcp_stdio.py`：
+`RailMCPStdioTransport` 把「没注入 enricher 就 lazy 建一个」的逻辑从
+`_best_effort_station_distances` 抽成 `_station_distance_enricher_instance`
+（行为不变，纯搬家），第四层用同一个实例；`_resolve_rail_stations` 加
+`nearby_resolver` 关键字参数（默认 `None`，三个旧调用点不传，行为完全不
+变）——三层+剥后缀重试后仍空的端点才调 `nearby_resolver(name)`，拿到的
+`(station_name, distance_meters)` 站名剥尾「站」后交新函数
+`_resolve_nearby_station_candidates` 用 `get-station-code-by-names` 反查，
+查不到的丢弃、查到的连同 AMap 真实距离一起走 `_deduplicated_candidates`
+排序去重；用上了才在 `body` 顶层打 `station_resolution_nearby_fallback`
+（`_transcript()` 不穷举顶层 key，加这个字段安全）。`rail12306.py` 在
+`ambiguous` 分支多一行：这个标记真时 warnings 追加
+`station_nearby_fallback`。
+
+实测中发现并修的两处偏差（任务书没预判到，均判断为「必须修，否则不算
+完成」，未停工）：
+①【测试会打真实网】`_nearby_station_lookup` 的关闭态与现有
+`_best_effort_station_distances` 共用同一条「没注入就
+`resolve_credentials()`（无参、真读本机文件）」路径，这条路径本身没问题
+（`cli.py:1213`/`planning.py:118` 两处生产构造点都特意把
+`RailMCPStdioTransport.credentials` 隔离成空，靠这条 fallback 在生产环境
+里真正拿到本机 AMap Key，是既有设计，不能改）；但第四层的触发面比既有
+「status==ambiguous 才做」宽——只要有端点三层后仍空就会试——而
+`tests/test_rail_station_fallback.py` 里
+`test_three_empty_station_layers_are_no_results_with_ready_provider_health`
+（`未知起点`/`未知终点`）恰好没注入 enricher，用实际打了真实 AMap key 的
+方式复现：临时给 `urllib.request.OpenerDirector.open` 打補丁拦截真实请求，
+全量跑一遍——补丁前这条测试真的发出 2 条 geocode 请求（用本机
+credentials.env 里的真实 Key），补丁后（阻断请求，`except Exception` 兜底）
+0 条且 620 项全绿；确认全仓库仅此一处后，给这条测试注入
+`self._amap_enricher(StationAMapFixtureTransport(), configured=False)`
+并断言 `amap.requests == []`，问题清零（同一探针复跑仓库全量 620 项，
+真实请求数回到 0）。②【`_city_centre` 对这个新用途是错的】直接实网跑
+`--to 鼓浪屿` 仍是 `no_results`，查到 `find_nearby_stations` 复用的
+`_city_centre` 靠 geocode（`/v3/geocode/geo`）+
+行政区逐字匹配——对「鼓浪屿」这种非行政区地名，AMap geocode 把它当成
+街道地址片段做全国模糊匹配，实测返回青海西宁、四川眉山等 10 个不相关
+「鼓浪屿」路名，行政区校验全部不匹配、中心点为空；换成 POI 文本搜索
+（复用现有 `poi` capability、city_limit=false）实测第二条结果就是
+「鼓浪屿」本体（118.066102,24.446214，思明区，与站内已有实测记录
+118.0625,24.4467 吻合）。新增 `_place_centre`（POI 搜索、取名字包含查询词
+的最靠前一条，不要求跟 `_unique_point` 那样坐标逐点相同——因为这里只是
+给 50km 半径搜索定一个粗锚点，不是站点身份，多个同名 POI 相差几百米对
+「附近有没有火车站」这个问题没有实际影响），`_city_centre` 本体一行未动
+（现有 30+ 项距离填充测试全须原样通过）。修完实测：`--to 鼓浪屿`→
+`ambiguous`，候选厦门站 5563m/厦门北站 21416m，warnings 含
+`station_nearby_fallback`；`--to 平潭`→与 0.13.0 一致（10 legs、
+`error_class=None`、`warnings=[]`，未落入第四层）。
+反向验证：`_resolve_rail_stations` 里 `if nearby_resolver is not None:`
+临时改成 `if False and nearby_resolver is not None:`——5 个新测试里 2 个
+（两站/一站的正向断言）红、3 个（丢弃/跳过/无 Key 的反向断言）本就该在
+禁用时也成立、依旧绿；改回后 5 个全绿，`git diff` 确认无残留。
+硬指标一实测：见上（`--to 鼓浪屿` no_results→ambiguous 带距离；
+`test_resolved_first_pass_never_calls_the_nearby_resolver`/
+`test_missing_amap_key_finds_no_nearby_stations_and_makes_no_amap_calls`
+锁住两条零请求路径，外加全仓库网络探针复核）。
+硬指标二实测：`Ran 620 tests OK` 0 skipped（612+3+5）；
+`scripts/scan_secrets.py` 0 命中；
+`~/miniconda3/envs/core/bin/python -m pyflakes ...` 0 行；`amap` 夹具目录
+只多 `around_stations.json` 一份；
+`git diff $(git merge-base HEAD main) -- plugins/china-trip-weaver/schema
+'*/planning.py' '*/mobility.py' demo` 空输出（注意：核对当刻 `main` 已因
+另两本并行书前移到 `f3bce51`，必须用 `git merge-base HEAD main` 求出的
+`bf53f72` 这个 fork 点而非直接 `git diff main`，否则会把另外两本书的改动
+误判成本书越界——同 X1 book 记录过的同一坑）；
+`git diff bf53f72 -- tests | grep -E '^-\s*def test_'` 0 行。
+BLOCKED.md 无待裁决项；上面两处偏差判断为「必须修的隐藏 bug」而非
+「任务书假设不成立」，未写入 BLOCKED.md。止损轮次未触发（核心实现一次
+到位，两处 bug 各一轮定位+一轮修复即绿，未连败）。

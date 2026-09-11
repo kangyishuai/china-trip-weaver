@@ -1,3 +1,13 @@
+## 书 X2「12306 站点最近火车站回查」（2026-09-11，worktree `.tmp/wt-x2` 分支 `station-nearby`）：无待裁决项
+
+本书全程未遇到需要领导裁决、又拿不准该怎么办的分叉。任务 0 核对到的一处
+文字表述疑问（`test_amap_live.py`/`test_rail_station_fallback.py` 任务书
+括注写「新增」但两份文件早已存在）与实现中发现的两处隐藏 bug（第四层会
+在没注入 enricher 的既有测试里打真实 AMap 网络请求；`find_nearby_stations`
+复用 `_city_centre` 对非行政区地名如「鼓浪屿」会走 AMap geocode 的全国
+模糊匹配、永远拿不到中心点）均已就地判断、修复并验证，记录在 PROGRESS.md
+本书小节，不构成待裁决项。
+
 ## 书 W2 遗留：`user_delete` 删时段后 `/days/d/slots/s` 路径的同款缺口（2026-09-11，任务书明确排除在外，只记录不处理）
 
 任务书「我替领导拍的板」第三条明确裁定这不在本书范围：`user_delete` 事件
