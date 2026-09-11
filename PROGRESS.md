@@ -5962,3 +5962,108 @@ FAILED (failures=1, errors=1)
 `ok`。这条测试仍有效——它锁定"重构后这个已经正确的场景不能被我的改动
 弄坏"——只是它不满足"硬指标一"字面的"三条新测试先红后绿"，如实记录，
 不伪造一个不相关的失败来凑红。
+
+## 书「汇合腿铁路赶不上时取合规航班」任务 2：实现（2026-09-12，完成）
+
+实现落在 planning.py（未碰 L204-206 原文，只挪走/新增其前后的调用行）：
+
+- 把 `_validate_meeting_anchor(normalized_request, transport_legs)` 的
+  调用从 `_resolve_rail` 之后（早于 FlyAI/VariFlight 解析）删掉，改在
+  `enrichment.claims` 并入 `claims` 之后调用
+  `transport_legs, claims = _validate_meeting_anchor(normalized_request,
+  transport_legs, claims, enrichment.flights)`——这是唯一触及
+  `_plan_resolve_candidates`（不在"只允许改"清单里）的改动，纯粹是给三个
+  白名单函数接线：`enrichment.flights` 在旧调用点根本不存在，不挪调用点
+  这本书无法实现；L204-206 三行原文逐字未动（`git diff` 里看不到这三行）。
+- `_is_meeting_arrival_leg`：不再无条件排除 `travel_mode=="flight"`，只
+  排除"没打 `leg-meeting-flight-` 前缀"的航班——其余比价航班（结构上
+  同样匹配 from_ref/to_ref/单组 group_refs）仍被排除，不会被误判成汇合腿
+  引发 `MEETING_LEG_AMBIGUOUS`。
+- 新增 `_meeting_leg_is_compliant`（到达+缓冲≤meet_by）、
+  `_meeting_route_flights`（按 from_ref/to_ref 从 `enrichment.flights`
+  筛同路线候选）、`_promote_meeting_flight_leg`（筛合规航班里最早到达的
+  一班，复制一份并把 `leg_id` 换成 `stable_id("leg-meeting-flight",
+  group_id, 原 leg_id)`、`group_refs` 设成该组）、`_swap_meeting_leg`
+  （从 `transport_legs`/`claims` 里删掉被替换的铁路腿与航班原条目，把
+  航班原条目的 claims `subject_ref` 重指到新 leg_id 后保留，不删——
+  `validate_trip._check_claim_subjects` 要求每条 claim 的 subject 必须在
+  `all_refs`（含 `transport_legs` 的 leg_id 集合）里，删腿不同步删/转
+  claim 会被判悬空引用，任务 0 的最大风险①②在实现里如期处理）。
+- `_validate_meeting_anchor` 改造：签名新增 `claims`/`flights`，返回值从
+  `None` 改成 `(legs, claims)`；铁路合规则不变（`continue`）；不合规先
+  找合规航班替换（`_swap_meeting_leg`），仍不行则从「当前铁路腿 + 该路线
+  全部航班候选」里取到达最早的一个上报 `arrival_at`/`actual_buffer_
+  minutes`（原来只看铁路自己），错误码/字段结构不变。
+- `_resolve_rail` **未改动**：任务 0 已证明"先按缓冲过滤再取最早到达"
+  与现状"直接取最早到达"逐场景等价（见上），改了也不会改变任何可观察
+  行为，属不必要变更，不动。
+
+验证（实测命令与输出）：
+
+```
+$ /usr/bin/python3 -m unittest tests.test_keyless_e2e.KeylessE2ETests.test_g6_meeting_falls_back_to_a_compliant_flight_when_rail_misses_the_buffer tests.test_keyless_e2e.KeylessE2ETests.test_g6_meeting_buffer_insufficient_reports_earliest_known_arrival_across_rail_and_flight tests.test_keyless_e2e.KeylessE2ETests.test_g6_meeting_rail_candidates_are_filtered_by_buffer_before_taking_the_earliest_arrival tests.test_keyless_e2e.KeylessE2ETests.test_g6_grouped_origins_meet_with_owned_legs_and_group_party_prices tests.test_keyless_e2e.KeylessE2ETests.test_g6_insufficient_meeting_buffer_is_a_structured_conflict -v
+... (5 项) ... ok ok ok ok ok
+Ran 5 tests in 0.066s
+OK
+```
+
+三条新测试转绿，两条既有 G6 测试仍绿。
+
+```
+$ /usr/bin/python3 -m unittest tests.test_keyless_e2e tests.test_journey
+Ran 123 tests in 15.245s
+OK
+```
+
+四个语料命令零差异：
+
+```
+$ plugins/china-trip-weaver/scripts/ctw plan --request demo/request.json --candidates demo/candidates.json --rail fixture:tests/fixtures/providers/rail12306/empty.json --mobility off --lodging off --aviation off --offline-fixture --fixed-clock 2026-09-04T00:00:00+08:00 --output-json demo/trip.json --output-html demo/trip.html
+trip_sha256=7ea7888f5478bb949e2d565e653212dfb67ff8be041ee61f0d45386a2d9c788c
+$ git status --short -- demo/trip.json demo/trip.html demo/request.json demo/candidates.json   # 空
+
+$ plugins/china-trip-weaver/scripts/ctw plan --request demo/grouped-departures/request.json --candidates demo/grouped-departures/candidates.json --rail fixture:tests/fixtures/providers/rail12306/success.json --mobility off --lodging off --aviation off --offline-fixture --fixed-clock 2026-09-04T00:00:00+08:00 --output-json demo/grouped-departures/trip.json --output-html demo/grouped-departures/trip.html
+trip_sha256=4be53526d0c77112344b3a0aa99f0168f03a2cf75ba54f0b2b5afb9c18206c96   # 与书 AD1 记录的哈希一致
+$ git status --short -- demo/grouped-departures/   # 空（该示例铁路 12:00 到本就合规，回落分支不触发）
+
+$ /usr/bin/python3 scripts/build_plan_fixtures.py   # wrote 3 plan cases...; git status 只剩 planning.py
+$ /usr/bin/python3 scripts/build_renderer_fixtures.py   # wrote 9 Trip and 12 HTML...; git status 只剩 planning.py
+```
+
+反向验证：把 `promotion = _promote_meeting_flight_leg(...)` 临时改成
+`promotion = None` → 测试①立刻 `ERROR`（仍抛
+`MEETING_BUFFER_INSUFFICIENT`，但 `arrival_at` 仍正确报告航班的
+11:00——证明"最早到达"上报逻辑不依赖回落分支本身，回落分支只管"要不要
+换成航班"）→ 换回原实现（`git diff` 确认无 TEMP 残留）→ 测试①复跑
+`ok`。
+
+硬指标一：三条新测试先红后绿（①②确认；③如任务 1 所记，改动前后均绿，
+已在 BLOCKED.md 记录非阻塞判断）；两条既有 G6 测试仍绿；语料零差异。
+
+全量：
+
+```
+$ /usr/bin/python3 -m unittest discover -s tests
+Ran 649 tests in 42.877s
+OK
+$ /usr/bin/python3 scripts/scan_secrets.py
+secret scan: 0 finding(s) across 382 file(s)
+$ ~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src tests scripts | wc -l
+0
+$ git diff 560eeeb --stat
+ PROGRESS.md | 57 +++++
+ README.md | 2 +-
+ README.zh-CN.md | 2 +-
+ .../src/china_trip_weaver/planning.py | 127 ++++++++--
+ tests/test_keyless_e2e.py | 261 +++++++++++++++++++++
+ 5 files changed, 431 insertions(+), 18 deletions(-)   # 全部落在"界限"允许的文件清单内
+$ git diff 560eeeb -- tests | grep -E '^-\s*def test_'   # 无输出，0 行
+```
+
+界限自检：未碰 flyai_inventory.py/variflight_enrichment.py/schema/
+render/demo 源码/夹具；`_resolve_rail` 未改一行；L204-206 原文逐字未动
+（只是调用点从其前挪到其后）；`variflight-cross-price` 分支与
+`.tmp/wt-af1` worktree 全程只读未碰；未升版本号、未装机、未改 CI。
+
+硬指标一、二均已满足，两轮内完成，未触发止损。BLOCKED.md 记了一条
+非阻塞判断（测试③预判不符，见上）。

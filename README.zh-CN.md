@@ -18,7 +18,7 @@ Journey 的高德调用额度按最终子 Trip 分配。缺省总额度是每个
 
 POI 搜索与 geocode 采用同一套行政区匹配口径：调研候选写的是城市或区县，都可以与服务商返回的城市或区县相匹配。因此一边写区县、另一边写其所属地级市（或反过来）不会被误判成两个地点；真正无关的行政区仍会严格判为不匹配。
 
-旅客输入有两种互斥写法：既有 `origin + travelers`，或 `traveler_groups[] + meeting_anchor`。每组提供稳定的 `group_id`、本组人数与 origin，可另带 mobility profile；会合锚点提供地点和 `meet_by`，`buffer_minutes` 缺省为 60。任何一组无法留出足够缓冲都会得到结构化冲突；混合输入会被拒绝，输出 Trip 也只保留被选中的那一种写法。验证、渲染与 inventory 查询都会原生消费分组写法。分组交通腿必须有明确 `group_refs`；`transport_pricing` 分别给出每组交通总价与全团交通总价。
+旅客输入有两种互斥写法：既有 `origin + travelers`，或 `traveler_groups[] + meeting_anchor`。每组提供稳定的 `group_id`、本组人数与 origin，可另带 mobility profile；会合锚点提供地点和 `meet_by`，`buffer_minutes` 缺省为 60。任何一组无法留出足够缓冲都会得到结构化冲突。当到达最早的铁路候选无法满足这一缓冲时，汇合腿会改用同一次实时航班查询里到达最早的合规航班；只有当铁路和所有航班候选都无法满足缓冲时，才会得到结构化冲突。混合输入会被拒绝，输出 Trip 也只保留被选中的那一种写法。验证、渲染与 inventory 查询都会原生消费分组写法。分组交通腿必须有明确 `group_refs`；`transport_pricing` 分别给出每组交通总价与全团交通总价。
 
 `pace=slow` 先按严格慢节奏排程。只要无解，就累计尝试：降低每日 POI 上限、把 POI／餐点时长压到推荐值的 70%、最后把当日结束时间放宽到 balanced 的 21:30。排得出的第一步就停止，实际采用的每一步都会追加到 `request.assumptions`；三步无法改变的硬冲突保留原结构化冲突，并列出全部已尝试降配。
 

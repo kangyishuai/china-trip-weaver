@@ -181,7 +181,6 @@ def _plan_resolve_candidates(
     ) = _resolve_rail(
         routes, clock, rail_backend
     )
-    _validate_meeting_anchor(normalized_request, transport_legs)
     claims.extend(rail_claims)
     active_flyai = flyai_backend or FlyAIBackend.from_spec("off", rail_backend.repo_root)
     inventory = active_flyai.resolve(normalized_request, routes, clock)
@@ -207,6 +206,9 @@ def _plan_resolve_candidates(
     if amap_lodging is not None:
         claims.extend(copy.deepcopy(list(amap_lodging.claims)))
     claims.extend(copy.deepcopy(list(enrichment.claims)))
+    transport_legs, claims = _validate_meeting_anchor(
+        normalized_request, transport_legs, claims, enrichment.flights,
+    )
     run.advance(
         "CANDIDATES_READY",
         {
@@ -1496,12 +1498,19 @@ def _traveler_groups_by_id(
     }
 
 
+_MEETING_FLIGHT_LEG_PREFIX = "leg-meeting-flight"
+
+
 def _is_meeting_arrival_leg(
     request: Mapping[str, Any],
     leg: Mapping[str, Any],
 ) -> bool:
     anchor = request.get("meeting_anchor")
-    if not isinstance(anchor, Mapping) or leg.get("travel_mode") == "flight":
+    if not isinstance(anchor, Mapping):
+        return False
+    if leg.get("travel_mode") == "flight" and not str(leg.get("leg_id", "")).startswith(
+        _MEETING_FLIGHT_LEG_PREFIX + "-"
+    ):
         return False
     group_refs = leg.get("group_refs")
     if not isinstance(group_refs, list) or len(group_refs) != 1:
@@ -1514,13 +1523,83 @@ def _is_meeting_arrival_leg(
     )
 
 
+def _meeting_leg_is_compliant(
+    leg: Mapping[str, Any],
+    meet_by: datetime,
+    required_buffer: int,
+) -> bool:
+    arrival_value = leg.get("arrive_at")
+    if not isinstance(arrival_value, str):
+        return False
+    arrival = datetime.fromisoformat(arrival_value.replace("Z", "+00:00"))
+    return int((meet_by - arrival).total_seconds() // 60) >= required_buffer
+
+
+def _meeting_route_flights(
+    current: Mapping[str, Any],
+    flights: Sequence[Mapping[str, Any]],
+) -> List[Mapping[str, Any]]:
+    return [
+        flight for flight in flights
+        if flight.get("from_ref") == current.get("from_ref")
+        and flight.get("to_ref") == current.get("to_ref")
+        and isinstance(flight.get("arrive_at"), str)
+    ]
+
+
+def _promote_meeting_flight_leg(
+    group_id: str,
+    current: Mapping[str, Any],
+    flights: Sequence[Mapping[str, Any]],
+    meet_by: datetime,
+    required_buffer: int,
+) -> Optional[Tuple[str, Mapping[str, Any]]]:
+    candidates = [
+        flight for flight in _meeting_route_flights(current, flights)
+        if _meeting_leg_is_compliant(flight, meet_by, required_buffer)
+    ]
+    if not candidates:
+        return None
+    chosen = min(candidates, key=lambda item: (item["arrive_at"], item.get("depart_at") or ""))
+    promoted = copy.deepcopy(dict(chosen))
+    promoted["leg_id"] = stable_id(_MEETING_FLIGHT_LEG_PREFIX, group_id, chosen["leg_id"])
+    promoted["group_refs"] = [group_id]
+    return chosen["leg_id"], promoted
+
+
+def _swap_meeting_leg(
+    legs: List[Mapping[str, Any]],
+    claims: List[Mapping[str, Any]],
+    superseded: Mapping[str, Any],
+    original_flight_leg_id: str,
+    promoted: Mapping[str, Any],
+) -> Tuple[List[Mapping[str, Any]], List[Mapping[str, Any]]]:
+    removed_ids = {superseded["leg_id"], original_flight_leg_id}
+    updated_legs = [leg for leg in legs if leg["leg_id"] not in removed_ids]
+    updated_legs.append(promoted)
+    updated_claims = [
+        claim for claim in claims
+        if claim.get("subject_ref") != superseded["leg_id"]
+    ]
+    updated_claims = [
+        dict(claim, subject_ref=promoted["leg_id"])
+        if claim.get("subject_ref") == original_flight_leg_id else claim
+        for claim in updated_claims
+    ]
+    return updated_legs, updated_claims
+
+
 def _validate_meeting_anchor(
     request: Mapping[str, Any],
     legs: Sequence[Mapping[str, Any]],
-) -> None:
+    claims: Sequence[Mapping[str, Any]],
+    flights: Sequence[Mapping[str, Any]],
+) -> Tuple[List[Mapping[str, Any]], List[Mapping[str, Any]]]:
+    legs = list(legs)
+    claims = list(claims)
     anchor = request.get("meeting_anchor")
     if not isinstance(anchor, Mapping):
-        return
+        return legs, claims
     meet_by = datetime.fromisoformat(str(anchor["meet_by"]).replace("Z", "+00:00"))
     required_buffer = int(anchor["buffer_minutes"])
     anchor_ref = anchor["location"]["ref_id"]
@@ -1538,24 +1617,40 @@ def _validate_meeting_anchor(
                 "group_ref": group["group_id"],
                 "meeting_anchor_ref": anchor_ref,
             }))
-        arrival_value = matches[0].get("arrive_at")
+        current = matches[0]
+        arrival_value = current.get("arrive_at")
         if not isinstance(arrival_value, str):
             raise ValueError("meeting anchor conflict: " + canonical_json({
                 "code": "MEETING_ARRIVAL_UNKNOWN",
                 "group_ref": group["group_id"],
                 "meeting_anchor_ref": anchor_ref,
             }))
-        arrival = datetime.fromisoformat(arrival_value.replace("Z", "+00:00"))
-        actual_buffer = int((meet_by - arrival).total_seconds() // 60)
-        if actual_buffer < required_buffer:
-            raise ValueError("meeting anchor conflict: " + canonical_json({
-                "code": "MEETING_BUFFER_INSUFFICIENT",
-                "group_ref": group["group_id"],
-                "arrival_at": arrival_value,
-                "meet_by": anchor["meet_by"],
-                "required_buffer_minutes": required_buffer,
-                "actual_buffer_minutes": actual_buffer,
-            }))
+        if _meeting_leg_is_compliant(current, meet_by, required_buffer):
+            continue
+        promotion = _promote_meeting_flight_leg(
+            group["group_id"], current, flights, meet_by, required_buffer,
+        )
+        if promotion is not None:
+            original_flight_leg_id, promoted = promotion
+            legs, claims = _swap_meeting_leg(legs, claims, current, original_flight_leg_id, promoted)
+            continue
+        best = min(
+            [current] + _meeting_route_flights(current, flights),
+            key=lambda leg: leg["arrive_at"],
+        )
+        best_arrival = best["arrive_at"]
+        actual_buffer = int(
+            (meet_by - datetime.fromisoformat(best_arrival.replace("Z", "+00:00"))).total_seconds() // 60
+        )
+        raise ValueError("meeting anchor conflict: " + canonical_json({
+            "code": "MEETING_BUFFER_INSUFFICIENT",
+            "group_ref": group["group_id"],
+            "arrival_at": best_arrival,
+            "meet_by": anchor["meet_by"],
+            "required_buffer_minutes": required_buffer,
+            "actual_buffer_minutes": actual_buffer,
+        }))
+    return legs, claims
 
 
 def _shared_schedule_legs(
