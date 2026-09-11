@@ -2,17 +2,27 @@
 
 唯一的当前进度记录。2026-09-03 到 09-06 的逐轮任务书、实测证据、验收记录已归档，见「历史索引」。
 
-## 现状速览（2026-09-11 实测，0.14.0）
+## 现状速览（2026-09-11 实测，0.15.0）
 
-- 版本：`0.14.0`，唯一来源是
+- 版本：`0.15.0`，唯一来源是
   `plugins/china-trip-weaver/.codex-plugin/plugin.json` 与
   `src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
   位置一律引用这两处之一，历史版本只以日期提及、不写字面值。
-- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 623 tests`，`OK`，0 skipped；
+- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 628 tests`，`OK`，0 skipped；
   `scripts/scan_secrets.py` 0 命中；
   `~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src
   tests scripts` 0 行。带假 Key（`ANYSEARCH_API_KEY=... unittest`）跑全量同样
-  623 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+  628 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+- 0.15.0（第九波三份并行书）：站点距离富化的两遍 POI 查询限定火车站类目
+  （`types=150200`）、一页取 25 条，AMap poi 合同加可选 `types`（实测子设施
+  「出站口」「售票处」仍与父类目同返，但酒店、高速出口等噪音已滤掉，逐字同名
+  站点更容易落在同一页）；`journey._merge_segment_trips` 213 行拆成 8 个
+  `_merge_segment_*`（本体 53 行，管理者用 cab411f 旧 worktree 对 demo 16
+  天、six-city 夹具与真实 16 天行程离线规划回放，journey sha256 全部相同）；
+  ADR-0017（Proposed）裁定租车与轮渡的生产者暂不做——现状（手写 Trip +
+  assumptions + suspend）已够用，若日后要做选 candidates.json 加 `transport`
+  候选（方案 B），不动 trip.schema。合并时冲突标记曾漏进 PROGRESS/BLOCKED
+  两个提交（本地），发版前已用两侧并存的方式修正。
 - 0.14.0（第八波三份并行书）：12306 站点第四层——三层加剥后缀重试仍空且有
   AMap Key 时，用地名中心 50 公里内的火车站（AMap `/v5/place/around`，
   types 150200，新 capability `poi_around`）回查 12306 站码，候选带真实距离，
