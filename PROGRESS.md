@@ -4467,3 +4467,112 @@ Context 要用的全部证据实测列清单（含用 `render_trip()` 实际渲�
 数据故意不带真实坐标），无法直接从 demo 产物测出 `_location_svg`
 的真实字节体量，需要另找带坐标的测试夹具实测，避免把「未验证的
 假设」当成「已实测的数字」写进 Context。
+
+## 书「地图与图片 ADR-0018」任务 1：取证清单，24 条（2026-09-11，完成）
+
+以下每条都已在本轮 `git grep`/`sed -n`/实测命令核对命中（文件路径省略
+`plugins/china-trip-weaver/src/china_trip_weaver/` 前缀时按仓库任务书
+惯例书写）：
+
+1. `render/html.py:627` `_location_svg(plotted, crs, city, group_index,
+   labels)`：把每个已定位点按 `10 + (lng-min)/(max-min)*80` /
+   `90 - (lat-min)/(max-min)*80` 归一化进 `viewBox="0 0 100 100"`
+   画布，画 `<circle>`+序号 `<text>`，多于 1 点再画 `<polyline
+   class="route-line">`，末尾附 `schematic-note`（"日程顺序示意"
+   字样）。
+2. `render/html.py:601` 调用处（`_location_section` 内）：
+   `plotted` 非空才调用 `_location_svg`，否则渲染
+   `<p class="empty-state">位置未核验</p>`。
+3. `render/journey_html.py` 对 `_location_svg`/`<svg` 的
+   `git grep -c` 均 exit 1（零命中）——Journey 页目前没有任何位置
+   可视化。
+4. `render/journey_html.py:267-277` `_render_journey` 现有 11 个
+   分区（route/day-timeline/budget/priority-actions/checklist/
+   risk/segments/connections/transport-overview/provider-health/
+   notes），没有位置/地图分区。
+5. `render/journey_html.py:482` `_route_section`：只拼
+   `origin_text`/`destination_text` 文字与 `<ol class="journey-route">`
+   城市名列表，不含任何坐标或可视化。
+6. `render/journey_html.py:13-22`：已经
+   `from .html import (PROVIDER_ATTRIBUTION, RendererError,
+   _enum_label, _field_label, _health_reason, _number, _price,
+   _provider_label, _render_day_slots)`——跨模块 import `html.py`
+   的 7 个下划线私有函数，在这个代码库里已经是既有惯例，不是需要
+   新引入的模式。
+7. `schema/journey.schema.json:60` `"trips": {"items":
+   {"$ref": "trip.schema.json"}}`——`journey["trips"][i]` 就是完整
+   Trip（含 `pois`/`lodgings`/`coordinates`），复用 `_location_svg`
+   不缺数据。
+8. `docs/design/07-renderer.md:63`："v1 不加载 AMap JS、Leaflet、
+   OSM tiles 或任何 remote map script；因此不需要/不接受 JS
+   Key/security code。"
+9. `docs/design/07-renderer.md:70`："Trip v1 Schema 没有 image
+   字段，renderer 不请求远程图片……未来若加图必须先升 Schema 并
+   定义 license/source/alt/offline placeholder，不得在模板私自
+   抓图。"
+10. `docs/design/07-renderer.md:76-95`（§5.1）CSP 全文：`img-src
+    data:`（只许内联图片）、`connect-src 'none'`、`script-src
+    'none'` 等 10 条，及"唯一远程行为是用户主动点击的 `https`
+    链接"。
+11. `docs/design/07-renderer.md:61-67`（§4.2 地图）：WGS84/GCJ02
+    归一化画布、同一 SVG 不混 CRS、只画 markers/访问序号、连接线
+    必须标"日程顺序示意，非道路路线"、坐标 unknown 显示"位置未
+    核验"，不放 `(0,0)` 或默认城市中心——与 `_location_svg` 的
+    实现逐条对应。
+12. `docs/design/07-renderer.md:30`（§2 页面架构第 8 条）：
+    `location-overview`："只用 Trip 中已存在的 WGS84/GCJ02 点画
+    内联 SVG **位置示意**；醒目标注'非真实路线'，另给 AMap/官方
+    `https` deep links。"——这是单 Trip renderer 的既定合同项。
+13. `docs/design/07-renderer.md:172-176`（§10 Journey renderer）：
+    只声明 Journey renderer "与上述单 Trip renderer 共享同一套
+    安全/CSP/离线/mobile 合同"，字面没有提及是否共享 §2 的 12
+    分区列表本身（§2 明确写的是"Trip"单行程页面架构）。
+14. `THIRD_PARTY_NOTICES.md:16`：高德条款 3.5（禁止直接存储/
+    缓存/爬取其服务数据）、7.7（要求标注"高德地图"为数据来源）、
+    3.2.2（商用需购买技术服务许可证）、3.4（禁止用于模型/算法
+    训练或数据集构建）。
+15. `references/provider-contracts.md:26`："R1 is disabled and no
+    provider response is cached today. AMap's terms section 3.5
+    forbid storing or caching its service data..."
+16. `references/provider-contracts.md` AMap 一行：能力列为
+    "POI (`poi`, optional `types`/`city_limit`), nearby search
+    (`poi_around`), geocode, route matrix"——没有 static map/静态图
+    能力。
+17. `providers/amap.py`：`git grep -in "static"` 零命中；已实现的
+    能力只有 `_pois`（L45）、`_geocodes`（L113）、`_route`
+    （L135）三个，没有静态图相关代码——若做静态图选项需要全新
+    capability，不是复用现有代码。
+18. `providers/anysearch.py`、`providers/host_web.py`：
+    `git grep -in "image\|photo\|picture"` 均零命中——当前六个
+    provider adapter 里没有一个能提供图片来源。
+19. `render/validate_html.py:315`：`if tag == "img" and
+    attrs.get("src") and not attrs["src"].startswith("data:"):
+    add("E101", "remote image is forbidden")`。
+20. `render/validate_journey_html.py:14-15`：`from .validate_html
+    import (AuditParser, ...)`——Journey 页复用同一套 `E101`/CSP
+    （`_check_csp`，`validate_journey_html.py:483`）校验基础设施，
+    不是独立实现。
+21. `ls -l demo/trip.html` = 88906 字节，`ls -l
+    demo/journey-16d/journey.html` = 287673 字节（均为合成数据，
+    0 个地点带坐标，故两份 demo 产物里实际一次 `_location_svg`
+    也没触发过）。
+22. 实测体量（调用现有 `render_trip()`，未改代码，对
+    `tests/fixtures/trips/schema/valid/` 下
+    `multicity-static.json`/`weekend-live.json`/`rental-ferry.json`
+    三份带坐标的夹具渲染）：共产出 4 个 `_location_svg` 实例，
+    字节数 `[464]`/`[666]`/`[458, 463]`，即 458–666 字节、均值约
+    500 字节；对 287673 字节的 journey.html 而言每个 trip 约
+    +0.16%–+0.23%。对比：一张 640×400 PNG 约 50–150 KB（**假设，
+    未验证**，未在本仓库或本机实测，只是常识估算），base64 后
+    体积再膨胀约 33%（约 67–200 KB）——比 SVG 示意贵两个数量级。
+23. `docs/research/05-open-questions.md:82`："## Q12. 手机单文件
+    HTML 能否同时做到 secret-free、核心离线与地图可用？"，其下
+    "未决"："AMap JS 需 key/security，Leaflet/tiles 非离线；
+    KML/SVG 可离线但交互弱。"
+24. `/Users/kangyishuai/Workspace/core/ChinaTripWeaver/CLAUDE.md:72`
+    （工作区根，非仓库内文件）："78 个地点定位成功 60，坐标
+    unknown 12……名字 unknown 6"，定位判据是逐字/阈值硬判断，
+    "不要在后续迭代里放宽"。
+
+硬指标一里"≥10 条"达标（实得 24 条），全部可用 `git grep -n`/
+`sed -n`/实测命令复现，无一条凭印象或猜测。
