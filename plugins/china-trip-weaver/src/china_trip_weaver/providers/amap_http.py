@@ -313,7 +313,7 @@ class AMapHTTPTransport:
         if isinstance(body, dict):
             body = dict(body)
             body["api"] = api
-            if request.capability == "poi":
+            if request.capability in ("poi", "poi_around"):
                 body["page_size"] = parameters["page_size"]
                 body["page_num"] = parameters["page_num"]
         response = ProviderEnvelope(
@@ -381,6 +381,23 @@ def _request_contract(request: ProviderRequest) -> Tuple[str, Dict[str, Any], st
                 "show_fields": "business",
             },
             "poi-v5",
+        )
+    if request.capability == "poi_around":
+        page_size = _bounded_integer(values.get("page_size", 10), "page_size", 1, 25)
+        radius = _bounded_integer(values.get("radius", 3000), "radius", 1, 50000)
+        return (
+            AMAP_ORIGIN + "/v5/place/around",
+            {
+                "location": _coordinate_text(values, "location"),
+                "keywords": _required_text(values, "keywords"),
+                "types": _required_text(values, "types"),
+                "radius": radius,
+                "page_size": page_size,
+                "page_num": 1,
+                "show_fields": "business",
+                "sortrule": "distance",
+            },
+            "around-v5",
         )
     if request.capability != "route":
         raise ContractMismatch("unsupported AMap capability")

@@ -303,7 +303,15 @@ class RailStationFallbackTests(unittest.TestCase):
         )
 
     def test_three_empty_station_layers_are_no_results_with_ready_provider_health(self):
-        result, diagnostics = self._query("station-no-results", "未知起点", "未知终点")
+        # Every layer is empty for both endpoints, so the fourth (nearby-station)
+        # layer would otherwise try too; keep this test offline and
+        # deterministic like every other one here by injecting a no-key
+        # enricher instead of letting it fall back to real local credentials.
+        amap = StationAMapFixtureTransport()
+        result, diagnostics = self._query(
+            "station-no-results", "未知起点", "未知终点",
+            self._amap_enricher(amap, configured=False),
+        )
         self.assertEqual("no_results", result.error_class)
         self.assertEqual("ready", result.health["status"])
         self.assertIn("no_results", result.health["reason"])
@@ -318,6 +326,7 @@ class RailStationFallbackTests(unittest.TestCase):
             ],
             self._calls(diagnostics),
         )
+        self.assertEqual([], amap.requests)
 
     def test_multiple_city_stations_are_returned_sorted_and_classified_ambiguous(self):
         amap = StationAMapFixtureTransport()
@@ -828,6 +837,169 @@ class RailStationSuffixRetryTests(unittest.TestCase):
             ],
             [call["name"] for call in client.calls],
         )
+
+
+class RailStationNearbyFallbackTests(unittest.TestCase):
+    """`_resolve_rail_stations`'s fourth layer: once the three 12306 layers and
+    the administrative-suffix retry all found nothing for an endpoint (a
+    place with no station of its own, e.g. 鼓浪屿), a caller-supplied
+    `nearby_resolver` gets one chance to suggest real nearby stations, which
+    are then cross-checked against 12306's own station table before becoming
+    candidates. Uses `_StubStationClient` directly for the same reason
+    `RailStationSuffixRetryTests` does: `tests/fixtures/` is off limits for
+    this book, so there is no subprocess fixture-server mode for this.
+    """
+
+    @staticmethod
+    def _no_station_handler(from_name, from_code, empty_city, station_lookup):
+        def handler(name, arguments):
+            if name == "get-station-code-by-names":
+                if arguments["stationNames"] == from_name + "|" + empty_city:
+                    return _stub_tool_result({from_name: _stub_station(from_code, from_name)})
+                result = station_lookup(arguments["stationNames"])
+                if result is not None:
+                    return _stub_tool_result(result)
+            elif name == "get-station-code-of-citys" and arguments["citys"] == empty_city:
+                return _stub_tool_result({})
+            elif name == "get-stations-code-in-city" and arguments["city"] == empty_city:
+                return _stub_tool_result([])
+            raise AssertionError("unexpected tool call %s %r" % (name, arguments))
+
+        return handler
+
+    def test_two_nearby_stations_become_distance_ordered_ambiguous_candidates_with_a_fallback_warning(self):
+        def station_lookup(names):
+            if set(names.split("|")) == {"厦门", "厦门北"}:
+                return {"厦门": _stub_station("XMS", "厦门"), "厦门北": _stub_station("XKS", "厦门北")}
+            return None
+
+        def nearby_resolver(city):
+            self.assertEqual("鼓浪屿", city)
+            return (
+                {"station_name": "厦门北站", "distance_meters": 21213.0},
+                {"station_name": "厦门站", "distance_meters": 5883.0},
+            )
+
+        client = _StubStationClient(self._no_station_handler("福州", "FZS", "鼓浪屿", station_lookup))
+        body: Dict[str, Any] = {"calls": []}
+        resolution = _resolve_rail_stations(
+            client, body, "福州", "鼓浪屿", nearby_resolver=nearby_resolver,
+        )
+
+        self.assertEqual("ambiguous", resolution["status"])
+        self.assertEqual("鼓浪屿", resolution["endpoints"]["to"]["query"])
+        self.assertEqual(
+            [
+                {"station_code": "XMS", "station_name": "厦门", "distance_meters": 5883.0},
+                {"station_code": "XKS", "station_name": "厦门北", "distance_meters": 21213.0},
+            ],
+            resolution["endpoints"]["to"]["candidates"],
+        )
+        self.assertTrue(body["station_resolution_nearby_fallback"])
+
+        transcript_body = dict(body, **{
+            "protocol_version": "2025-06-18",
+            "server_info": {"name": "12306-mcp", "version": "0.3.10"},
+            "tools": list(EXPECTED_TOOL_FINGERPRINT),
+            "station_resolution": resolution,
+        })
+        request = ProviderRequest(
+            request_id="nearby-fallback-warning",
+            capability="rail",
+            parameters={
+                "date": "2026-09-21", "from_name": "福州", "to_name": "鼓浪屿",
+                "from_ref": "place-from", "to_ref": "place-to",
+            },
+            deadline_ms=2000, as_of="2026-09-10", cache_policy="bypass",
+            trace={"stage": "nearby-fallback-test"},
+        )
+        normalization = Rail12306Adapter().normalize(
+            transcript_body, request, FixedClock.from_iso("2026-09-10T00:00:00+08:00"),
+        )
+        self.assertEqual(
+            ("station_resolution_ambiguous", "ambiguous", "station_nearby_fallback"),
+            normalization.warnings,
+        )
+
+    def test_single_nearby_station_resolves_the_endpoint(self):
+        def station_lookup(names):
+            if names == "厦门":
+                return {"厦门": _stub_station("XMS", "厦门")}
+            return None
+
+        def nearby_resolver(city):
+            return ({"station_name": "厦门站", "distance_meters": 5883.0},)
+
+        client = _StubStationClient(self._no_station_handler("福州", "FZS", "鼓浪屿", station_lookup))
+        body: Dict[str, Any] = {"calls": []}
+        resolution = _resolve_rail_stations(
+            client, body, "福州", "鼓浪屿", nearby_resolver=nearby_resolver,
+        )
+
+        self.assertEqual("resolved", resolution["status"])
+        self.assertEqual(
+            [{"station_code": "XMS", "station_name": "厦门", "distance_meters": 5883.0}],
+            resolution["endpoints"]["to"]["candidates"],
+        )
+        self.assertTrue(body["station_resolution_nearby_fallback"])
+
+    def test_amap_station_unrecognized_by_12306_is_dropped_not_guessed(self):
+        def station_lookup(names):
+            if names == "厦门":
+                return {}
+            return None
+
+        def nearby_resolver(city):
+            return ({"station_name": "厦门站", "distance_meters": 5883.0},)
+
+        client = _StubStationClient(self._no_station_handler("福州", "FZS", "鼓浪屿", station_lookup))
+        body: Dict[str, Any] = {"calls": []}
+        resolution = _resolve_rail_stations(
+            client, body, "福州", "鼓浪屿", nearby_resolver=nearby_resolver,
+        )
+
+        self.assertEqual("no_results", resolution["status"])
+        self.assertEqual((), tuple(resolution["endpoints"]["to"]["candidates"]))
+        self.assertNotIn("station_resolution_nearby_fallback", body)
+
+    def test_resolved_first_pass_never_calls_the_nearby_resolver(self):
+        def handler(name, arguments):
+            if name == "get-station-code-by-names" and arguments["stationNames"] == "北京南|上海虹桥":
+                return _stub_tool_result({
+                    "北京南": _stub_station("BNX", "北京南"),
+                    "上海虹桥": _stub_station("HXX", "上海虹桥"),
+                })
+            raise AssertionError("unexpected tool call %s %r" % (name, arguments))
+
+        def poison_pill(city):
+            raise AssertionError("nearby_resolver must not run once every layer already resolved")
+
+        client = _StubStationClient(handler)
+        body: Dict[str, Any] = {"calls": []}
+        resolution = _resolve_rail_stations(
+            client, body, "北京南", "上海虹桥", nearby_resolver=poison_pill,
+        )
+
+        self.assertEqual("resolved", resolution["status"])
+        self.assertNotIn("station_resolution_nearby_fallback", body)
+
+    def test_missing_amap_key_finds_no_nearby_stations_and_makes_no_amap_calls(self):
+        amap = StationAMapFixtureTransport()
+        enricher = RailStationFallbackTests._amap_enricher(amap, configured=False)
+        nearby = enricher.find_nearby_stations(
+            "鼓浪屿",
+            ProviderRequest(
+                request_id="nearby-no-key",
+                capability="rail",
+                parameters={},
+                deadline_ms=2000,
+                as_of="2026-09-10",
+                cache_policy="bypass",
+                trace={"stage": "nearby-no-key-test"},
+            ),
+        )
+        self.assertEqual((), nearby)
+        self.assertEqual([], amap.requests)
 
 
 class ConfigurableStationPoiTransport:

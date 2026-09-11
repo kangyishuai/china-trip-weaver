@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 import math
 import unicodedata
-from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .clock import Clock, SystemClock
 from .contracts import ProviderRequest
@@ -22,6 +22,12 @@ DEFAULT_CALL_DEADLINE_MS = 2_000
 # this distance of the researched city's centre; farther or ambiguous
 # matches are left with an unknown distance rather than guessed.
 STATION_MAX_DISTANCE_METERS = 80_000
+
+# How far around a station-less place's centre (鼓浪屿, a scenic-area name, ...)
+# to search for a real nearby train station once all of 12306's own
+# station-resolution layers found nothing. Matches AMap's own /v5/place/around
+# radius ceiling, so this is the widest search the endpoint allows.
+NEARBY_STATION_SEARCH_RADIUS_METERS = 50_000
 
 
 class StationDistanceEnrichmentError(RuntimeError):
@@ -148,6 +154,131 @@ class AMapStationDistanceEnricher:
                         station.lat,
                     )
         return enriched
+
+    def find_nearby_stations(
+        self,
+        city: str,
+        parent: ProviderRequest,
+    ) -> Sequence[Mapping[str, Any]]:
+        """Find real train stations within `NEARBY_STATION_SEARCH_RADIUS_METERS` of `city`'s centre.
+
+        Only meant to be tried once 12306's three station-resolution layers,
+        plus the administrative-suffix retry, found nothing for `city` --
+        e.g. `city` names a place with no station of its own (鼓浪屿, 湄洲岛,
+        a scenic-area name). Returns AMap POI candidates carrying the
+        straight-line `distance_meters` AMap itself reports for the search;
+        the caller still has to cross-check each name against 12306's own
+        station table before treating it as a real candidate -- this method
+        never guesses one on its own.
+        """
+
+        if not self.credentials.get("AMAP_WEBSERVICE_KEY"):
+            return ()
+        centre = self._place_centre(city, parent)
+        if centre is None:
+            return ()
+        request = self._request(
+            parent,
+            capability="poi_around",
+            identity=(city, "nearby-stations"),
+            parameters={
+                "location": "%.6f,%.6f" % (centre.lng, centre.lat),
+                "keywords": "火车站",
+                "types": "150200",
+                "radius": NEARBY_STATION_SEARCH_RADIUS_METERS,
+                "page_size": 10,
+            },
+        )
+        result, body = self._query(request)
+        if not result.normalized_items:
+            return ()
+        if not isinstance(body, dict) or not isinstance(body.get("pois"), list):
+            raise StationDistanceEnrichmentError("AMap POI-around response body is unavailable")
+        raw_by_id = {
+            raw.get("id"): raw
+            for raw in body["pois"]
+            if isinstance(raw, dict) and isinstance(raw.get("id"), str)
+        }
+        candidates: List[Mapping[str, Any]] = []
+        for item in result.normalized_items:
+            if not isinstance(item, dict) or not _rail_station_category(item.get("category")):
+                continue
+            name = item.get("name")
+            if not isinstance(name, str) or not name.strip():
+                raise StationDistanceEnrichmentError("AMap POI-around station name has the wrong shape")
+            claim_ids = item.get("claim_ids")
+            if not isinstance(claim_ids, list):
+                raise StationDistanceEnrichmentError("AMap POI-around identity claims are missing")
+            identity = _single_identity_claim(claim_ids, result.claims)
+            if not isinstance(identity, dict):
+                raise StationDistanceEnrichmentError("AMap POI-around identity is ambiguous")
+            raw = raw_by_id.get(identity.get("provider_poi_id"))
+            if not isinstance(raw, dict):
+                raise StationDistanceEnrichmentError("AMap POI-around raw identity does not match normalization")
+            distance = _nonnegative_float(raw.get("distance"))
+            if distance is None:
+                raise StationDistanceEnrichmentError("AMap POI-around distance is invalid")
+            candidates.append({"station_name": name.strip(), "distance_meters": distance})
+        return tuple(candidates)
+
+    def _place_centre(self, city: str, parent: ProviderRequest) -> Optional[Point]:
+        """Find a place's own coordinates through AMap POI search, not geocoding.
+
+        `_city_centre` below requires the geocoded result's own city/district
+        to admin-match `city`, which is correct for a real administrative
+        city (used by `enrich()`) but wrong for `find_nearby_stations`'s
+        callers: a scenic spot or island name such as 鼓浪屿/湄洲岛 is never
+        itself a city or district, so AMap's structured-address geocoder
+        treats it as a bare street-name fragment and matches unrelated
+        same-named streets nationwide, never the actual place -- confirmed
+        against the real API before writing this. A landmark-style POI
+        keyword search finds it correctly instead. Since the only use of the
+        result is a rough anchor for a wide-radius (up to
+        `NEARBY_STATION_SEARCH_RADIUS_METERS`) nearby-station search -- never
+        the identity of a specific station, which stays cross-checked against
+        12306 regardless -- the top AMap result whose name contains the query
+        is precise enough; this does not need `_unique_point`'s
+        exact-coordinate agreement across every match.
+        """
+
+        request = self._request(
+            parent,
+            capability="poi",
+            identity=(city, "place-centre"),
+            parameters={
+                "keywords": city,
+                "city": city,
+                "city_limit": "false",
+                "page_size": 5,
+                "page_num": 1,
+            },
+        )
+        result, body = self._query(request)
+        if not result.normalized_items:
+            return None
+        if not isinstance(body, dict) or not isinstance(body.get("pois"), list):
+            raise StationDistanceEnrichmentError("AMap POI response body is unavailable")
+        raw_by_id = {
+            raw.get("id"): raw
+            for raw in body["pois"]
+            if isinstance(raw, dict) and isinstance(raw.get("id"), str)
+        }
+        for item in result.normalized_items:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("name")
+            if not isinstance(name, str) or city not in name:
+                continue
+            claim_ids = item.get("claim_ids")
+            identity = _single_identity_claim(claim_ids, result.claims) if isinstance(claim_ids, list) else None
+            provider_poi_id = identity.get("provider_poi_id") if isinstance(identity, dict) else None
+            raw = raw_by_id.get(provider_poi_id)
+            if not isinstance(raw, dict):
+                continue
+            point = _location_point(raw.get("location"))
+            if point is not None:
+                return point
+        return None
 
     def _city_centre(self, city: str, parent: ProviderRequest) -> Optional[Point]:
         request = self._request(
@@ -357,6 +488,25 @@ def _coordinate_record_point(value: Any) -> Optional[Point]:
     if not isinstance(coordinates, dict):
         return None
     return _point(coordinates.get("lng"), coordinates.get("lat"))
+
+
+def _nonnegative_float(value: Any) -> Optional[float]:
+    """Parse an AMap numeric-shaped field that may arrive as a JSON string."""
+
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        number = float(value)
+    elif isinstance(value, str) and value.strip():
+        try:
+            number = float(value.strip())
+        except ValueError:
+            return None
+    else:
+        return None
+    if not math.isfinite(number) or number < 0:
+        return None
+    return number
 
 
 def _location_point(value: Any) -> Optional[Point]:

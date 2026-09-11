@@ -732,6 +732,27 @@ def build() -> List[Dict[str, Any]]:
         fixture("amap", "schema_v3_drift", amap_req, response({"status": "1", "info": "OK", "api": "poi-v5", "page": 1, "offset": 20, "pois": [amap_poi()]}), health="contract_mismatch", error_class="contract_mismatch"),
         fixture("amap", "boundary_hk", amap_req, response(amap_poi_body([amap_poi("香港边界测试点", "SYNTHETIC-HK-1001", "114.000000,22.000000", "香港")])), item_count=1, schema_refs=[SCHEMA_REFS["poi"]]),
         fixture("amap", "pagination_page2", request("poi", {"city": "上海", "keywords": "博物馆", "page_size": 1, "page_num": 2}), response(amap_poi_body([amap_poi("上海自然博物馆", "SYNTHETIC-POI-1002", "121.200000,31.200000", "上海市")], page_num=2)), item_count=1, schema_refs=[SCHEMA_REFS["poi"]], source=AMAP_SOURCE, captured_at=AMAP_CAPTURED_AT),
+        fixture(
+            "amap", "around_stations",
+            request("poi_around", {"location": "118.062500,24.446700", "keywords": "火车站", "types": "150200", "radius": 30000, "page_size": 10, "page_num": 1}),
+            response({
+                "status": "1", "info": "OK", "infocode": "10000", "count": "1",
+                "api": "around-v5", "page_size": 10, "page_num": 1,
+                "pois": [{
+                    "id": "SYNTHETIC-AROUND-STATION-1001",
+                    "name": "示例火车站",
+                    "location": "118.070000,24.450000",
+                    "pname": "福建省",
+                    "cityname": "厦门市",
+                    "adname": "示例区",
+                    "address": "示例站前路1号",
+                    "adcode": "350200",
+                    "type": "交通设施服务;火车站;火车站",
+                    "distance": "5883",
+                }],
+            }),
+            item_count=1, schema_refs=[SCHEMA_REFS["poi"]], source=AMAP_SOURCE, captured_at=AMAP_CAPTURED_AT,
+        ),
     ])
 
     vari_req = request("flight", {

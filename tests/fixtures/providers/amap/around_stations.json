@@ -1,0 +1,67 @@
+{
+  "captured_at": "2026-09-04T00:00:00+08:00",
+  "case": "around_stations",
+  "contains_personal_data": false,
+  "credential_state": "configured",
+  "expected": {
+    "error_class": null,
+    "health_status": "ready",
+    "item_count": 1,
+    "sanitized": false,
+    "schema_refs": [
+      "#/$defs/poi"
+    ],
+    "transport_calls": 1
+  },
+  "fixture_version": 1,
+  "provider": "amap",
+  "provider_version": "web-service-v5-v3-route",
+  "redacted": false,
+  "request": {
+    "as_of": "2026-10-16",
+    "cache_policy": "bypass",
+    "capability": "poi_around",
+    "deadline_ms": 1000,
+    "parameters": {
+      "keywords": "火车站",
+      "location": "118.062500,24.446700",
+      "page_num": 1,
+      "page_size": 10,
+      "radius": 30000,
+      "types": "150200"
+    },
+    "request_id": "fixture-request",
+    "trace": {
+      "stage": "provider-fixture"
+    }
+  },
+  "source": "locally generated synthetic AMap-shaped response; contains no captured provider data",
+  "transport": {
+    "body": {
+      "api": "around-v5",
+      "count": "1",
+      "info": "OK",
+      "infocode": "10000",
+      "page_num": 1,
+      "page_size": 10,
+      "pois": [
+        {
+          "adcode": "350200",
+          "address": "示例站前路1号",
+          "adname": "示例区",
+          "cityname": "厦门市",
+          "distance": "5883",
+          "id": "SYNTHETIC-AROUND-STATION-1001",
+          "location": "118.070000,24.450000",
+          "name": "示例火车站",
+          "pname": "福建省",
+          "type": "交通设施服务;火车站;火车站"
+        }
+      ],
+      "status": "1"
+    },
+    "headers": {},
+    "kind": "response",
+    "status_code": 200
+  }
+}

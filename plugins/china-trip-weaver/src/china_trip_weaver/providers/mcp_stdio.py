@@ -305,6 +305,7 @@ class RailMCPStdioTransport:
         self.command = tuple(command)
         self.cwd = Path(cwd) if cwd is not None else None
         self.station_distance_enricher = station_distance_enricher
+        self._lazy_station_distance_enricher: Optional[Any] = None
         self.calls = 0
         self.last_stderr: Tuple[str, ...] = ()
 
@@ -359,7 +360,10 @@ class RailMCPStdioTransport:
                 elif request.capability == "rail":
                     from_name = _required_text(request.parameters, "from_name")
                     to_name = _required_text(request.parameters, "to_name")
-                    resolution = _resolve_rail_stations(client, body, from_name, to_name)
+                    resolution = _resolve_rail_stations(
+                        client, body, from_name, to_name,
+                        nearby_resolver=self._nearby_station_lookup(request),
+                    )
                     body["station_resolution"] = resolution
                     if resolution["status"] == "resolved":
                         from_code = resolution["endpoints"]["from"]["candidates"][0]["station_code"]
@@ -406,6 +410,45 @@ class RailMCPStdioTransport:
             self.last_stderr = client.stderr_lines
             client.close()
 
+    def _station_distance_enricher_instance(self) -> Any:
+        """Lazily build (and memoize for this transport) the AMap station-distance
+        enricher used for both the ambiguous-candidate distance fill-in below and
+        the no-results nearby-station fallback in `_nearby_station_lookup`.
+        """
+
+        if self.station_distance_enricher is not None:
+            return self.station_distance_enricher
+        if self._lazy_station_distance_enricher is None:
+            from ..credentials import resolve_credentials
+            from ..station_distance import AMapStationDistanceEnricher
+
+            # AMap is resolved separately and never enters the rail process
+            # environment, even when the caller supplied a shared resolution.
+            amap_credentials = self.credentials
+            if not amap_credentials.get("AMAP_WEBSERVICE_KEY"):
+                amap_credentials = resolve_credentials()
+            self._lazy_station_distance_enricher = AMapStationDistanceEnricher(amap_credentials)
+        return self._lazy_station_distance_enricher
+
+    def _nearby_station_lookup(
+        self, request: ProviderRequest,
+    ) -> Callable[[str], Sequence[Mapping[str, Any]]]:
+        """Bind a best-effort "find real stations near this place" callable.
+
+        AMap is an optional signal here just like the distance fill-in below:
+        any failure (missing key, network, rate limit, a contract drift in the
+        AMap response) falls back to "found nothing nearby" rather than
+        turning a working 12306 no_results outcome into a hard failure.
+        """
+
+        def lookup(city: str) -> Sequence[Mapping[str, Any]]:
+            try:
+                return self._station_distance_enricher_instance().find_nearby_stations(city, request)
+            except Exception:
+                return ()
+
+        return lookup
+
     def _best_effort_station_distances(
         self,
         resolution: Mapping[str, Any],
@@ -415,18 +458,7 @@ class RailMCPStdioTransport:
         if not _station_resolution_needs_distance(original):
             return original
         try:
-            enricher = self.station_distance_enricher
-            if enricher is None:
-                from ..credentials import resolve_credentials
-                from ..station_distance import AMapStationDistanceEnricher
-
-                # AMap is resolved separately and never enters the rail process
-                # environment, even when the caller supplied a shared resolution.
-                amap_credentials = self.credentials
-                if not amap_credentials.get("AMAP_WEBSERVICE_KEY"):
-                    amap_credentials = resolve_credentials()
-                enricher = AMapStationDistanceEnricher(amap_credentials)
-            return enricher.enrich(copy.deepcopy(original), request)
+            return self._station_distance_enricher_instance().enrich(copy.deepcopy(original), request)
         except Exception:
             # Station distance is an optional signal. Its provider must never turn a
             # successful 12306 resolution into a rail transport or health failure.
@@ -579,6 +611,8 @@ def _resolve_rail_stations(
     body: Dict[str, Any],
     from_name: str,
     to_name: str,
+    *,
+    nearby_resolver: Optional[Callable[[str], Sequence[Mapping[str, Any]]]] = None,
 ) -> Mapping[str, Any]:
     endpoint_names = {"from": from_name, "to": to_name}
     endpoint_candidates = _resolve_station_candidates(client, body, endpoint_names)
@@ -601,6 +635,24 @@ def _resolve_rail_stations(
             if candidates:
                 endpoint_candidates[endpoint] = candidates
 
+    # Fourth layer: a place with no station of its own (鼓浪屿, a scenic-area
+    # name, ...) is still empty here. Only tried for endpoints still at zero
+    # candidates, and only when the caller wired up a resolver at all (real
+    # use always does; direct-call tests of the first three layers above
+    # leave this None and keep their exact existing behavior unchanged).
+    used_nearby_fallback = False
+    if nearby_resolver is not None:
+        for endpoint in ("from", "to"):
+            if endpoint_candidates[endpoint]:
+                continue
+            nearby = nearby_resolver(endpoint_names[endpoint])
+            if not nearby:
+                continue
+            resolved = _resolve_nearby_station_candidates(client, body, nearby)
+            if resolved:
+                endpoint_candidates[endpoint] = resolved
+                used_nearby_fallback = True
+
     counts = [len(endpoint_candidates[endpoint]) for endpoint in ("from", "to")]
     if any(count == 0 for count in counts):
         status = "no_results"
@@ -608,6 +660,8 @@ def _resolve_rail_stations(
         status = "ambiguous"
     else:
         status = "resolved"
+    if used_nearby_fallback:
+        body["station_resolution_nearby_fallback"] = True
     return {
         "status": status,
         "endpoints": {
@@ -618,6 +672,49 @@ def _resolve_rail_stations(
             for endpoint in ("from", "to")
         },
     }
+
+
+def _resolve_nearby_station_candidates(
+    client: MCPStdioClient,
+    body: Dict[str, Any],
+    nearby: Sequence[Mapping[str, Any]],
+) -> Sequence[Mapping[str, Any]]:
+    """Cross-check AMap-found nearby stations against 12306's own station table.
+
+    `nearby` is `[{"station_name": <AMap POI name>, "distance_meters": ...}, ...]`.
+    12306 station names never carry the trailing "站" AMap's POI names do
+    (e.g. 12306 has "厦门", not "厦门站"), so that is stripped before the
+    lookup, same convention `_mapped_station_candidates` already uses for the
+    caller-supplied names in the first three layers. A name 12306 does not
+    recognize is dropped -- never guessed -- while one it does recognize
+    keeps the real distance AMap reported for it.
+    """
+
+    distance_by_query: Dict[str, float] = {}
+    for entry in nearby:
+        name = entry.get("station_name")
+        distance = entry.get("distance_meters")
+        if not isinstance(name, str) or not name.strip():
+            continue
+        query_name = name[:-1] if name.endswith("站") else name
+        if not query_name:
+            continue
+        distance_by_query[query_name] = distance
+
+    if not distance_by_query:
+        return ()
+
+    query_names = _unique_names(tuple(distance_by_query))
+    payload = _call_station_tool(
+        client, body, "get-station-code-by-names", {"stationNames": "|".join(query_names)},
+    )
+    mapped = _mapped_station_candidates(payload, query_names, strip_station_suffix=False)
+
+    matched: List[Mapping[str, Any]] = []
+    for query_name in query_names:
+        for candidate in mapped[query_name]:
+            matched.append(dict(candidate, distance_meters=distance_by_query[query_name]))
+    return tuple(_deduplicated_candidates(matched))
 
 
 def _resolve_station_candidates(
