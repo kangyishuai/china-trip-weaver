@@ -18,7 +18,7 @@ from china_trip_weaver.contracts import ProviderRequest
 from china_trip_weaver.credentials import resolve_credentials
 from china_trip_weaver.flyai_inventory import FlyAIBackend
 from china_trip_weaver.planning import RailBackend, plan_trip
-from china_trip_weaver.providers.base import ContractMismatch, ProviderContext, ProviderEnvelope
+from china_trip_weaver.providers.base import ContractMismatch, ProviderContext, ProviderEnvelope, ReplayTransport
 from china_trip_weaver.providers.flyai_cli import FlyAISubprocessTransport
 from china_trip_weaver.providers.variflight import EXPECTED_TOOLS, VariFlightAdapter
 from china_trip_weaver.providers.variflight_mcp import VariFlightMCPTransport
@@ -221,6 +221,30 @@ class VariFlightLiveTests(unittest.TestCase):
             result.business_calls,
         )
         self.assertEqual(1, transport.business_calls)
+
+    def test_search_error_object_degrades_with_invalid_request_and_keeps_message(self):
+        payload = {
+            "code": 200,
+            "message": "Success",
+            "data": {"error_code": 12, "error": "示例无机场"},
+            "request_id": "synthetic-error-object",
+            "timestamp": 0,
+        }
+        body = {
+            "tools": list(EXPECTED_TOOLS),
+            "tool": "searchFlightsByDepArr",
+            "content": [{"type": "text", "text": json.dumps(payload, ensure_ascii=False)}],
+            "isError": False,
+        }
+        transport = ReplayTransport({"kind": "response", "status_code": 200, "body": body, "headers": {}})
+        resolved = credentials(True)
+        context = ProviderContext(CLOCK, resolved, transport)
+
+        result = VariFlightAdapter().query(request("search"), context)
+
+        self.assertEqual("invalid_request", result.error_class)
+        self.assertEqual("degraded", result.health["status"])
+        self.assertIn("示例无机场", result.health["reason"])
 
     def test_search_rate_limit_keeps_empty_candidates_with_exact_warning_and_health(self):
         class RateLimitedSearchTransport(VariFlightMCPTransport):

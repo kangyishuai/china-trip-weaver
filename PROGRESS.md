@@ -5630,3 +5630,80 @@ journey_html.py/test_journey.py），全部落在「界限」允许范围；
 证据代替实跑）。分支已 `git push -u origin journey-location-svg`
 （远程新分支，未开 PR，按任务书交给管理者合并）。硬指标一、二均达成，
 一轮内完成，未触发止损。
+
+## 书 AE1「VariFlight 错误对象降级」（2026-09-11，worktree `.tmp/wt-ae1` 分支 `variflight-error-object`，第十五波两份并行书之一）
+
+任务 0 核对（HEAD `625e818`）：全量 `/usr/bin/python3 -m unittest discover -s
+tests` → `Ran 641 tests` `OK` 0 skipped（74.8s）；`scan_secrets.py` → `0
+finding(s) across 381 file(s)`；pyflakes（`~/miniconda3/envs/core/bin/python
+-m pyflakes plugins/china-trip-weaver/src tests scripts`）0 行。任务书列的
+文件位置逐一核对：`_live_payload` 在 providers/variflight.py L100-111 与
+任务书一致；`CITY_IATA` 在 variflight_enrichment.py L18-24 一致；
+`_probe_variflight` 实际在 cli.py L1642（任务书写 L1680，`dep_city="PEK"`/
+`arr_city="SHA"` 参数恰在函数体 L1680-1682，行号误差不影响改法）；
+`ERROR_POLICIES` 核对 errors.py：错误码 10→no_results（health=ready）、
+12→invalid_request（health=degraded）、其余→upstream_5xx（health=degraded）
+三档拍板与现有 `flyai.py` L38-42 的 `ProviderFailure` 用法同构；
+`vari_live_body` 在 build_provider_fixtures.py L524、variflight 夹具生成在
+L769-786；`test_providers.py` L117 `self.assertEqual(80,
+manifest["fixture_count"])`；`test_variflight_live.py` 11 项、
+`mock.patch.dict(CITY_IATA, ...)` 在 L197-201/254-258，与任务书一致。
+
+真实 Key 抓取：本沙箱直连（不经代理）时 `VariFlightMCPTransport` 拿到
+`Error: fetch failed`（`SAFE_PROCESS_ENV` 不传 `HTTP_PROXY`/`HTTPS_PROXY`
+给子进程是刻意的进程隔离设计，不能改——用户真机预期无需代理；这只是本次
+执行沙箱自身的出口网络限制）。诊断用脚本放在会话 scratchpad（未落进仓库、
+未改任何源文件），临时子类化 `VariFlightMCPTransport._environment()` 透传
+`os.environ` 做一次性抓取，date 取 14 天后 2026-09-25：PEK→SHA
+`code=200 message=Success data=dict{error_code:10, error:"暂无数据"}`；
+BJS→SHA `code=200 message=Success data=list count=76`。用捕获的 PEK→SHA
+原始 body 经 `ReplayTransport` 跑现有未改的 `VariFlightAdapter().query()`：
+`error_class=contract_mismatch`
+`health.reason="contract_mismatch: VariFlight live data is not a list"`——
+复现了管理者描述的病征。**与任务书原文的差异**：管理者原文 PEK→SHA 拿到
+`error_code=12`（出发城市或目的城市无机场），我此刻拿到的是
+`error_code=10`（暂无数据）；两者都落在同一个「`data` 是带 `error_code` 的
+dict」分支，且拍板表本就同时覆盖 10 和 12 两档，不是没预料到的合同形状，
+判断为服务商对同一畸形城市码在不同查询时刻/日期给出的不同错误码，不影响
+任务设计，不停工，如实记录差异。原始响应存于 `.tmp/vf-capture/*-raw.json`
+（未提交，不贴航班原文）。
+
+理解的目标：把 `_live_payload` 见到 `data` 是带 `error_code` 的 dict 时按
+拍板三档抛 `ProviderFailure` 而非 `ContractMismatch`，同时把探针与
+`CITY_IATA` 从机场码/五城扩到城市码/≥5 城真实验证过的表。顺序：先写红
+（夹具+两个模块各一条新测试）→ 再改三处实现 → 城市表逐条真测 → 全量与两份
+README 收尾。最大风险：`CITY_IATA` 新增城市若真测失败（服务商没有该城市数据）
+不能硬塞进表，只能选查得到的城市，可能凑不满「必含五城」——五城里武夷山非
+枢纽机场，需先探一次确认服务商认得。
+
+任务 1（先写红，三处新增，提交前）：`build_provider_fixtures.py` 新增
+`vari_live_error_body(tool, error_code, error)`（结构照抄 `vari_live_body`，
+`data` 换成 `{error_code, error}` 而不是 `list(rows)`，不改动
+`vari_live_body` 本体，避免影响既有 13 份夹具）；在 `vari_req` 的 fixtures
+列表里紧跟 "empty" 之后新增
+`fixture("variflight", "error_object", vari_req,
+response(vari_live_error_body("searchFlightsByDepArr", 12, "示例无机场")),
+health="degraded", error_class="invalid_request", ...)`。跑
+`build_provider_fixtures.py` → `wrote 81 provider fixtures and 5 AMap
+scenarios`。`tests/test_variflight_live.py` 新增
+`test_search_error_object_degrades_with_invalid_request_and_keeps_message`
+（直接用 `ReplayTransport` 喂同构 body，断言 `VariFlightAdapter().query()`
+的 `result.error_class`/`health.status`/`health.reason` 含「示例无机场」，
+选在适配器层而非 `VariFlightBackend.enrich()` 层断言，因为 `enrich()` 的
+`health.reason` 只拼 `errors=<class>` token、不带原始消息文本，适配器层的
+`_health()` 才会把 `reason` 原样纳入）。`tests/test_credentials.py` 新增
+`test_probe_variflight_searches_by_city_code_not_airport_code`（仿
+`test_probe_flyai_adds_a_flight_capability_probe_and_reports_the_worse_layer`
+的 `mock.patch.object(VariFlightAdapter, "query", return_value=...)` 手法，
+断言 `query.call_args.args[0].parameters["dep_city"] == "BJS"`）。
+
+三处此刻红，`/usr/bin/python3 -m unittest tests.test_providers
+tests.test_variflight_live tests.test_credentials` → `Ran 128 tests`
+`FAILED (failures=4)`：`test_fixture_variflight_error_object`
+（`'degraded' != 'contract_mismatch'`）、
+`test_manifest_hashes_and_file_set_are_exact`（`80 != 81`，任务书没提但
+是新增夹具的必然连带，任务 2 一并改两份 README 与这个断言）、
+`test_search_error_object_degrades_with_invalid_request_and_keeps_message`
+（`'invalid_request' != 'contract_mismatch'`）、
+`test_probe_variflight_searches_by_city_code_not_airport_code`
+（`'BJS' != 'PEK'`）。pyflakes 对四个改动文件 0 行。
