@@ -5707,3 +5707,81 @@ tests.test_variflight_live tests.test_credentials` → `Ran 128 tests`
 （`'invalid_request' != 'contract_mismatch'`）、
 `test_probe_variflight_searches_by_city_code_not_airport_code`
 （`'BJS' != 'PEK'`）。pyflakes 对四个改动文件 0 行。
+
+任务 2（改判定、探针、城市表）：`providers/variflight.py` 新增模块级
+`_live_error_class(error_code)`（10→`no_results`、12→`invalid_request`、
+其余→`upstream_5xx`，非 int/未知值落进"其余"分支，不额外校验类型）；
+`_live_payload` 在 `rows` 不是 list 时先判 `isinstance(rows, dict) and
+"error_code" in rows`，是则 `raise ProviderFailure(_live_error_class(...),
+sanitize_text(rows.get("error"), 40))`，否则维持原 `ContractMismatch`
+兜底（`.base` 新增 import `ProviderFailure`）；`cli.py` 的
+`_probe_variflight` 把 `dep_city` 从 `"PEK"` 改成 `"BJS"`（`arr_city`
+本来就是 `"SHA"`，未动；`from_ref="doctor-pek"` 只是内部 ref 标签、不影响
+合同，未改，保持最小 diff）；`test_providers.py` L117 断言
+`80`→`81`；两份 README 的夹具计数 `80`→`81`。
+
+`CITY_IATA` 扩容：原 5 城不动，新增 19 城（24 城，未超"≤30"）。真实 Key
+逐条查 `<code>→SHA`，14 天后 2026-09-25，`VariFlightMCPTransport.execute`
+拿到的 `data` 是列表即判定 code 有效并记录条数：福州 FOC 12、厦门 XMN 30、
+泉州 JJN 10、昆明 KMG 42、南京 NKG 2、武汉 WUH 19、青岛 TAO 28、
+桂林 KWL 13、三亚 SYX 17、哈尔滨 HRB 26、天津 TSN 16、长沙 CSX 21、
+郑州 CGO 16、贵阳 KWE 22、南宁 NNG 14、大连 DLC 27、沈阳 SHE 25、
+济南 TNA 6，共 18 城直接过。**武夷山 WUS**（必含城市之一）对 SHA 在
+三个不同日期（2026-09-18/09-25/10-02）与反向方向（SHA→WUS）全部拿到
+`error_code=10 暂无数据`，与"码错"和"当天无航班"在这份 API 上无法从
+`error_code` 单独区分（任务 0 已证实：连明显错误的机场码 PEK 当天也返回
+同一个 10）；换 `WUS→CAN`（广州）同一天真实拿到 1 条航班，证明 `WUS`
+本身是服务商认得的有效城市码，只是与 SHA 之间当前没有直飞航班——按开头
+"「建议」有更好的路可以走，在 PROGRESS.md 记一句为什么"的允许，改用
+`WUS→CAN` 作为验证证据，纳入表。**西安 XIY**（非必含，候选城市）同样对
+SHA 拿到 `error_code=10`，未额外找替代路线验证，按"查不到的不进表"
+直接不纳入。
+
+硬指标一实测：真实 Key 重跑 PEK→SHA（2026-09-25，经
+`VariFlightAdapter().query()`，本沙箱直连子进程拿不到出口网络，用会话
+scratchpad 里的一次性诊断脚本子类化 `_environment()` 透传 `os.environ`，
+不改仓库任何文件——原因见任务 0 记录）：此刻服务商返回的仍是
+`error_code=10`（与任务 0 一致，未再复现管理者原文的 12），
+`AFTER FIX error_class= no_results  health.status= ready  health.reason=
+no_results: 暂无数据`——不再是 `contract_mismatch`。任务 0 保存的原始
+`error_code=10` 响应体也重放过一次：`AFTER FIX (replay) error_class=
+no_results health.status= ready`，与前面 BEFORE FIX 记录的
+`error_class=contract_mismatch` 对照，前后差异确认。`error_code=12` 分支
+（管理者原文报告的那个具体错误码）由任务 1 的 `error_object` 夹具覆盖
+（`expected.error_class="invalid_request"`，`test_fixture_variflight_
+error_object` 通过），未再单独真实抓取到 12（服务商今天没有再给过这个
+码），两个分支合起来证明拍板的三档判定都按预期工作。
+
+`doctor --probe`：四个 provider 并发探测在本沙箱下 variflight 单独
+`network=failed`（`_probe_variflight` 的 `deadline_ms=8000` 在本沙箱
+"子进程需要透传代理才能出网、且与另外三个并发探针抢占资源"的条件下不够
+用，是环境延迟问题不是本书改动引入的——单独调用同一个
+`_probe_variflight()` 生产函数（同样的运行时透传，不改代码）不带另外三个
+探针的并发抢占，拿到
+`{"credential": "configured", "contract": "passed", "network": "passed",
+"business": "passed"}`，硬指标一要的 `contract=passed` 由此证实；四探针
+并发下 8 秒不够，是本沙箱特有的资源竞争，不在本书"只改 `_probe_variflight`"
+的授权范围内去调大 `deadline_ms`，留给管理者在真机复验时确认（真机应无需
+代理，大概率不复现）。
+
+反向验证：`_live_payload` 的新分支临时删回旧的单行 `raise
+ContractMismatch` → `test_fixture_variflight_error_object`/
+`test_search_error_object_degrades_with_invalid_request_and_keeps_message`
+`FAILED (failures=2)`（`'degraded' != 'contract_mismatch'`/
+`'invalid_request' != 'contract_mismatch'`）→ 换回；`_probe_variflight`
+的 `dep_city` 临时改回 `"PEK"` → `test_probe_variflight_searches_by_
+city_code_not_airport_code` `FAILED`（`'BJS' != 'PEK'`）→ 换回；换回后
+三条测试与 `git diff` 均确认与改动前逐字节相同。
+
+全量 `/usr/bin/python3 -m unittest discover -s tests` → `Ran 644 tests`
+`OK` 0 skipped（182.1s，644 = 641 基线 + 3 个新 `def test_`）；
+`scan_secrets.py` → `0 finding(s) across 382 file(s)`；pyflakes（
+`plugins/china-trip-weaver/src tests scripts`）0 行。`git diff 625e818
+--stat` 只列 `README.md`/`README.zh-CN.md`/`BLOCKED.md`/`PROGRESS.md`/
+`cli.py`/`providers/variflight.py`/`variflight_enrichment.py`/
+`tests/fixtures/providers/manifest.json`/
+`tests/fixtures/providers/variflight/error_object.json`/
+`tests/test_credentials.py`/`tests/test_providers.py`/
+`tests/test_variflight_live.py`、`scripts/build_provider_fixtures.py`
+共 13 个文件，全部落在"界限"允许范围；`git diff 625e818 -- tests | grep
+-E '^-\s*def test_'` 0 行。硬指标一、二均达成，一轮内完成，未触发止损。

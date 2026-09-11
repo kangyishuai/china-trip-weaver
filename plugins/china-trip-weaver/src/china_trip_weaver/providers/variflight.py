@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Mapping
 from ..clock import Clock
 from ..contracts import ProviderRequest
 from ..evidence import make_claim
-from .base import BaseAdapter, ContractMismatch, Normalization, sanitize_text, stable_id
+from .base import BaseAdapter, ContractMismatch, Normalization, ProviderFailure, sanitize_text, stable_id
 
 
 EXPECTED_TOOLS = (
@@ -108,6 +108,8 @@ class VariFlightAdapter(BaseAdapter):
             raise ContractMismatch("VariFlight live envelope changed")
         rows = payload.get("data")
         if not isinstance(rows, list):
+            if isinstance(rows, dict) and "error_code" in rows:
+                raise ProviderFailure(_live_error_class(rows.get("error_code")), sanitize_text(rows.get("error"), 40))
             raise ContractMismatch("VariFlight live data is not a list")
         if tool == "flightHappinessIndex":
             return self._live_comfort(rows, request, clock)
@@ -279,6 +281,14 @@ class VariFlightAdapter(BaseAdapter):
             clock=clock,
         )
         return Normalization((), (claim,))
+
+
+def _live_error_class(error_code: Any) -> str:
+    if error_code == 10:
+        return "no_results"
+    if error_code == 12:
+        return "invalid_request"
+    return "upstream_5xx"
 
 
 def _live_datetime(value: Any) -> str:

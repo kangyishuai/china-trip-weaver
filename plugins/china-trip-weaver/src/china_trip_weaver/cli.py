@@ -1678,7 +1678,7 @@ def _probe_variflight(
         request_id=stable_id("doctor-variflight", travel_date),
         capability="flight",
         parameters={
-            "action": "search", "dep_city": "PEK", "arr_city": "SHA",
+            "action": "search", "dep_city": "BJS", "arr_city": "SHA",
             "date": travel_date, "from_ref": "doctor-pek", "to_ref": "doctor-sha",
             "candidate_mode": True,
         },
