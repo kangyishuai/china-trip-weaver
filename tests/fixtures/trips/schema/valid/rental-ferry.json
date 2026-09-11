@@ -1,0 +1,359 @@
+{
+  "schema_version": "1.0.0",
+  "trip_id": "xiamen-rental-ferry-20261205",
+  "revision": {
+    "number": 1,
+    "parent_revision": null,
+    "created_at": "2026-11-20T09:00:00+08:00",
+    "reason": "initial plan",
+    "created_by": "system"
+  },
+  "mode": "static",
+  "request": {
+    "origin": null,
+    "destinations": [{"ref_id": "city-xiamen", "name": "厦门", "city": "厦门"}],
+    "start_date": "2026-12-05",
+    "end_date": "2026-12-06",
+    "travelers": 2,
+    "budget_cny": 3500,
+    "interests": ["海岛", "土楼建筑", "自驾"],
+    "pace": "balanced",
+    "constraints": [],
+    "assumptions": ["租车最低起租 96 小时，不足 96 小时按 96 小时计费", "异地还车需在南靖门店验车并支付跨城服务费"],
+    "locale": "zh-CN",
+    "pasted_notes": null
+  },
+  "days": [
+    {
+      "day_id": "day-1",
+      "date": "2026-12-05",
+      "city": "厦门",
+      "timezone": "Asia/Shanghai",
+      "slots": [
+        {
+          "slot_id": "slot-ferry-gulangyu",
+          "start_at": "2026-12-05T09:30:00+08:00",
+          "end_at": "2026-12-05T09:50:00+08:00",
+          "kind": "transport",
+          "ref_id": "leg-ferry-gulangyu",
+          "title": "轮渡前往鼓浪屿",
+          "locked": false,
+          "status": "scheduled",
+          "claim_ids": ["claim-ferry-schedule"]
+        },
+        {
+          "slot_id": "slot-gulangyu-tour",
+          "start_at": "2026-12-05T10:00:00+08:00",
+          "end_at": "2026-12-05T12:30:00+08:00",
+          "kind": "poi",
+          "ref_id": "poi-gulangyu",
+          "title": "游览日光岩风景区",
+          "locked": false,
+          "status": "scheduled",
+          "claim_ids": ["claim-gulangyu-hours"]
+        },
+        {
+          "slot_id": "slot-free-afternoon",
+          "start_at": "2026-12-05T14:00:00+08:00",
+          "end_at": "2026-12-05T17:00:00+08:00",
+          "kind": "free",
+          "ref_id": null,
+          "title": "自由安排：老城区 citywalk 或返回酒店休息",
+          "locked": false,
+          "status": "tentative",
+          "claim_ids": []
+        }
+      ]
+    },
+    {
+      "day_id": "day-2",
+      "date": "2026-12-06",
+      "city": "厦门",
+      "timezone": "Asia/Shanghai",
+      "slots": [
+        {
+          "slot_id": "slot-drive-nanjing",
+          "start_at": "2026-12-06T08:30:00+08:00",
+          "end_at": "2026-12-06T11:00:00+08:00",
+          "kind": "transport",
+          "ref_id": "leg-drive-nanjing",
+          "title": "自驾前往南靖土楼",
+          "locked": false,
+          "status": "scheduled",
+          "claim_ids": ["claim-drive-schedule"]
+        },
+        {
+          "slot_id": "slot-tulou-tour",
+          "start_at": "2026-12-06T11:30:00+08:00",
+          "end_at": "2026-12-06T15:00:00+08:00",
+          "kind": "poi",
+          "ref_id": "poi-nanjing-tulou",
+          "title": "游览田螺坑土楼群",
+          "locked": false,
+          "status": "scheduled",
+          "claim_ids": ["claim-tulou-hours"]
+        }
+      ]
+    }
+  ],
+  "transport_legs": [
+    {
+      "leg_id": "leg-ferry-gulangyu",
+      "travel_mode": "ferry",
+      "data_mode": "static",
+      "from_ref": "city-xiamen",
+      "to_ref": "poi-gulangyu",
+      "depart_at": "2026-12-05T09:30:00+08:00",
+      "arrive_at": "2026-12-05T09:50:00+08:00",
+      "duration_minutes": 20,
+      "provider": "gulangyu-ferry.example.invalid",
+      "service_number": null,
+      "price": {
+        "amount": null,
+        "currency": "CNY",
+        "price_type": "verify-on-click",
+        "unit": "per_person",
+        "includes_taxes": null,
+        "queried_at": "2026-11-20T08:40:00+08:00",
+        "claim_id": "claim-ferry-price"
+      },
+      "booking_url": "https://gulangyu-ferry.example.invalid/booking",
+      "claim_ids": ["claim-ferry-schedule", "claim-ferry-price"],
+      "locked": false
+    },
+    {
+      "leg_id": "leg-drive-nanjing",
+      "travel_mode": "drive",
+      "data_mode": "static",
+      "from_ref": "city-xiamen",
+      "to_ref": "poi-nanjing-tulou",
+      "depart_at": "2026-12-06T08:30:00+08:00",
+      "arrive_at": "2026-12-06T11:00:00+08:00",
+      "duration_minutes": 150,
+      "provider": "nanjing-carrental.example.invalid",
+      "service_number": null,
+      "price": {
+        "amount": null,
+        "currency": "CNY",
+        "price_type": "verify-on-click",
+        "unit": "total",
+        "includes_taxes": null,
+        "queried_at": "2026-11-20T08:50:00+08:00",
+        "claim_id": "claim-drive-price"
+      },
+      "booking_url": "https://nanjing-carrental.example.invalid/booking",
+      "claim_ids": ["claim-drive-schedule", "claim-drive-price"],
+      "locked": false
+    }
+  ],
+  "lodgings": [],
+  "pois": [
+    {
+      "poi_id": "poi-gulangyu",
+      "name": "日光岩风景区",
+      "city": "厦门",
+      "category": "scenic",
+      "coordinates": {
+        "source_crs": "GCJ02",
+        "native": {"lng": 118.0678, "lat": 24.4453},
+        "wgs84": {"lng": 118.0633, "lat": 24.4472},
+        "gcj02": {"lng": 118.0678, "lat": 24.4453},
+        "conversion": {
+          "status": "converted",
+          "method": "gcj02-to-wgs84",
+          "version": "ctw-1",
+          "derived_fields": ["wgs84"],
+          "converted_at": "2026-11-20T08:30:00+08:00",
+          "accuracy_m": 10
+        }
+      },
+      "recommended_duration_minutes": 150,
+      "opening_windows": [
+        {
+          "start_at": "2026-12-05T08:00:00+08:00",
+          "end_at": "2026-12-05T18:00:00+08:00",
+          "status": "tentative",
+          "claim_id": "claim-gulangyu-hours"
+        }
+      ],
+      "price": null,
+      "deep_links": ["https://poi-guide.example.invalid/gulangyu"],
+      "claim_ids": ["claim-gulangyu-hours"]
+    },
+    {
+      "poi_id": "poi-nanjing-tulou",
+      "name": "田螺坑土楼群",
+      "city": "南靖",
+      "category": "heritage-architecture",
+      "coordinates": {
+        "source_crs": "GCJ02",
+        "native": {"lng": 117.3568, "lat": 24.7719},
+        "wgs84": {"lng": 117.3523, "lat": 24.7738},
+        "gcj02": {"lng": 117.3568, "lat": 24.7719},
+        "conversion": {
+          "status": "converted",
+          "method": "gcj02-to-wgs84",
+          "version": "ctw-1",
+          "derived_fields": ["wgs84"],
+          "converted_at": "2026-11-20T08:45:00+08:00",
+          "accuracy_m": 10
+        }
+      },
+      "recommended_duration_minutes": 180,
+      "opening_windows": [
+        {
+          "start_at": "2026-12-06T08:00:00+08:00",
+          "end_at": "2026-12-06T18:00:00+08:00",
+          "status": "tentative",
+          "claim_id": "claim-tulou-hours"
+        }
+      ],
+      "price": null,
+      "deep_links": ["https://poi-guide.example.invalid/nanjing-tulou"],
+      "claim_ids": ["claim-tulou-hours"]
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "claim-gulangyu-hours",
+      "subject_ref": "poi-gulangyu",
+      "field_path": "/opening_windows/0",
+      "value": "日光岩风景区全天开放，建议出发前在官方页面核实",
+      "source_url": "https://poi-guide.example.invalid/gulangyu",
+      "provider": "poi-guide.example.invalid",
+      "queried_at": "2026-11-20T08:30:00+08:00",
+      "status": "stale",
+      "confidence": 0.5,
+      "mode": "static",
+      "as_of": null,
+      "raw_ref": null,
+      "response_hash": null,
+      "json_path": null
+    },
+    {
+      "claim_id": "claim-ferry-schedule",
+      "subject_ref": "leg-ferry-gulangyu",
+      "field_path": "/depart_at",
+      "value": "厦门→鼓浪屿轮渡约每 15-20 分钟一班，班次与票价以现场为准",
+      "source_url": "https://gulangyu-ferry.example.invalid/schedule",
+      "provider": "gulangyu-ferry.example.invalid",
+      "queried_at": "2026-11-20T08:40:00+08:00",
+      "status": "hypothesis",
+      "confidence": 0.3,
+      "mode": "static",
+      "as_of": null,
+      "raw_ref": null,
+      "response_hash": null,
+      "json_path": null
+    },
+    {
+      "claim_id": "claim-ferry-price",
+      "subject_ref": "leg-ferry-gulangyu",
+      "field_path": "/price",
+      "value": null,
+      "source_url": "https://gulangyu-ferry.example.invalid/price",
+      "provider": "gulangyu-ferry.example.invalid",
+      "queried_at": "2026-11-20T08:40:00+08:00",
+      "status": "unknown",
+      "confidence": 0,
+      "mode": "static",
+      "as_of": null,
+      "raw_ref": null,
+      "response_hash": null,
+      "json_path": null
+    },
+    {
+      "claim_id": "claim-tulou-hours",
+      "subject_ref": "poi-nanjing-tulou",
+      "field_path": "/opening_windows/0",
+      "value": "田螺坑土楼群建议核实实时开放时间与门票政策",
+      "source_url": "https://poi-guide.example.invalid/nanjing-tulou",
+      "provider": "poi-guide.example.invalid",
+      "queried_at": "2026-11-20T08:45:00+08:00",
+      "status": "stale",
+      "confidence": 0.5,
+      "mode": "static",
+      "as_of": null,
+      "raw_ref": null,
+      "response_hash": null,
+      "json_path": null
+    },
+    {
+      "claim_id": "claim-drive-schedule",
+      "subject_ref": "leg-drive-nanjing",
+      "field_path": "/depart_at",
+      "value": "厦门至南靖土楼自驾约 2.5 小时，具体路况以导航为准",
+      "source_url": "https://nanjing-carrental.example.invalid/route-estimate",
+      "provider": "nanjing-carrental.example.invalid",
+      "queried_at": "2026-11-20T08:50:00+08:00",
+      "status": "hypothesis",
+      "confidence": 0.3,
+      "mode": "static",
+      "as_of": null,
+      "raw_ref": null,
+      "response_hash": null,
+      "json_path": null
+    },
+    {
+      "claim_id": "claim-drive-price",
+      "subject_ref": "leg-drive-nanjing",
+      "field_path": "/price",
+      "value": null,
+      "source_url": "https://nanjing-carrental.example.invalid/rates",
+      "provider": "nanjing-carrental.example.invalid",
+      "queried_at": "2026-11-20T08:50:00+08:00",
+      "status": "unknown",
+      "confidence": 0,
+      "mode": "static",
+      "as_of": null,
+      "raw_ref": null,
+      "response_hash": null,
+      "json_path": null
+    }
+  ],
+  "provider_health": [
+    {
+      "provider": "gulangyu-ferry.example.invalid",
+      "version": "1.0.0",
+      "mode": "static",
+      "status": "ready",
+      "checked_at": "2026-11-20T08:20:00+08:00",
+      "capabilities": ["schedule", "price"],
+      "reason": "static reference schedule available"
+    },
+    {
+      "provider": "nanjing-carrental.example.invalid",
+      "version": "1.0.0",
+      "mode": "static",
+      "status": "ready",
+      "checked_at": "2026-11-20T08:20:00+08:00",
+      "capabilities": ["schedule", "price"],
+      "reason": "static rental terms reference available"
+    },
+    {
+      "provider": "poi-guide.example.invalid",
+      "version": "1.0.0",
+      "mode": "static",
+      "status": "ready",
+      "checked_at": "2026-11-20T08:20:00+08:00",
+      "capabilities": ["opening-hours"],
+      "reason": "static attraction reference available"
+    }
+  ],
+  "unknowns": [
+    {
+      "field_path": "/transport_legs/0/price/amount",
+      "reason": "ferry fare requires on-site verification via official ticket counter",
+      "provider": "gulangyu-ferry.example.invalid",
+      "claim_id": "claim-ferry-price"
+    },
+    {
+      "field_path": "/transport_legs/1/price/amount",
+      "reason": "rental daily rate depends on vehicle class selected at pickup",
+      "provider": "nanjing-carrental.example.invalid",
+      "claim_id": "claim-drive-price"
+    }
+  ],
+  "patches": [],
+  "generated_at": "2026-11-20T09:00:00+08:00"
+}

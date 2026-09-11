@@ -8,6 +8,31 @@
 模糊匹配、永远拿不到中心点）均已就地判断、修复并验证，记录在 PROGRESS.md
 本书小节，不构成待裁决项。
 
+## 书 X3「租车与轮渡合成 Trip 夹具」（2026-09-11，无待裁决项）
+
+任务 0/1/2 全部按任务书字面执行，全程无需停工的冲突；硬指标一（夹具三关
+全过、页面含「轮渡」「驾车」、反向验证红→绿）与硬指标二（全量 614 测试 OK
+0 skipped、secrets 0、pyflakes 0、`plugins`/`demo` 零改动、分支已推送）均
+一轮验收即通过，未触发止损。两处需要自行判断的细节记在这里供核对：
+
+① `from_ref`/`to_ref` 端点选型——任务书未指定用 POI 还是城市 ref，照抄
+`multicity-static.json` 的火车腿先例（`leg-beijing-nanjing` 的 `from_ref`/
+`to_ref` 直接用 `city-beijing`/`city-nanjing`），两条新腿的 `from_ref` 都用
+`request.destinations` 里已有的 `city-xiamen`，`to_ref` 各用新建的
+`poi-gulangyu`/`poi-nanjing-tulou`；`day-2.city` 沿用 `day-1` 的「厦门」而
+非改成「南靖」——任务书没有要求两天必须落在不同 `request.destinations`
+城市，用单一目的地可以避免触发 `V_ORIGIN_REQUIRED`（其条件是「目的地>1 或
+含 rail/flight 腿」之一为真且无 origin），少一个不必要的 `request.origin`
+字段，判断更贴近「合成数据 > 三关全过」的让步顺序。
+
+② `docs/design/adr/0016-rental-car-and-ferry.md`——任务书原文「命令 2、3
+后各加一行 done 说明」，已照做；但该文件「Consequences」段落末尾还有一句
+2026-09-10 写的「commands 2–3 ... remain open for a future book」，与刚加
+的两行 Done 字面矛盾。任务书界限允许编辑整份 ADR 文件，未特别禁止改这一句；
+判断保留这句不改会让同一份文档自相矛盾，不符合「覆盖 ADR 四件事」这一让步
+优先级，已顺手把这半句改成「shipped in worktree branch rental-ferry-fixture
+...」，只改了事实性陈述，未改动任何验收命令本身的文字。
+
 ## 书 W2 遗留：`user_delete` 删时段后 `/days/d/slots/s` 路径的同款缺口（2026-09-11，任务书明确排除在外，只记录不处理）
 
 任务书「我替领导拍的板」第三条明确裁定这不在本书范围：`user_delete` 事件
