@@ -2,17 +2,28 @@
 
 唯一的当前进度记录。2026-09-03 到 09-06 的逐轮任务书、实测证据、验收记录已归档，见「历史索引」。
 
-## 现状速览（2026-09-11 实测，0.15.2）
+## 现状速览（2026-09-11 实测，0.15.3）
 
-- 版本：`0.15.2`，唯一来源是
+- 版本：`0.15.3`，唯一来源是
   `plugins/china-trip-weaver/.codex-plugin/plugin.json` 与
   `src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
   位置一律引用这两处之一，历史版本只以日期提及、不写字面值。
-- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 630 tests`，`OK`，0 skipped；
+- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 632 tests`，`OK`，0 skipped；
   `scripts/scan_secrets.py` 0 命中；
   `~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src
   tests scripts` 0 行。带假 Key（`ANYSEARCH_API_KEY=... unittest`）跑全量同样
-  630 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+  632 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+- 0.15.3（第十二波，两本纯重构，行为零变化）：`scheduler/light.schedule_day`
+  133 行拆成 `_day_schedule_params`（frozen dataclass `_DayScheduleParams` 收口
+  13 个参数）/`_classify_candidates`/`_beam_search`/`_finalize_day_schedule`
+  （本体 13 行；`_evaluate` 签名收窄为 4 参数、计算体 94 行逐字节未动；管理者用
+  0cc7d55 旧 worktree 对 28 份夹具 47 个 day problem 各叠加 13 种突变共 658 条
+  记录回放，结果逐字节相同）；`providers/base.query` 157 行拆成
+  `_preflight_failure`/`_execute_with_retries`/`_handle_rate_limited`/
+  `_normalize_envelope`/`_build_result`（本体 14 行，最长 74 行；管理者对 79 份
+  夹具加每个适配器 15 种合成传输层共 169 条记录回放，AdapterResult、progress
+  事件序列与 sleep 时长逐字节相同）；两本各补一条精确断言测试。全仓最长函数
+  降到 120 行（`mobility._resolve_poi_identity`），不再有函数超过 120 行。
 - 0.15.2（第十一波，两本纯重构，行为零变化）：`VariFlightBackend.enrich` 167 行
   拆成 `_early_exit_result`/`_enrich_route`/`_build_search_request`/`_select_flight`/
   `_build_comfort_request`/`_backfill_claim_ids`/`_summarize_health`（本体 24 行，
