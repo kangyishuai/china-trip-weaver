@@ -1259,6 +1259,65 @@ class JourneyContinuityTests(unittest.TestCase):
         checklist = journey_booking_checklist(journey)
         self.assertEqual("2026-09-17", checklist[0]["deadline"])
 
+    def test_checked_in_sixteen_day_demo_rail_leg_is_presale_open_and_shows_sale_and_departure_dates(self):
+        journey = load(JOURNEY_DEMO / "journey.json")
+        checklist = journey_booking_checklist(journey)
+        self.assertEqual("presale_open", checklist[0]["deadline_kind"])
+        rendered = render_journey(journey)
+        self.assertIn("开售日 2026-09-17", rendered)
+        self.assertIn("10-01 出发", rendered)
+
+    def test_checked_in_sixteen_day_demo_lodging_item_is_check_in_and_page_shows_check_in_wording(self):
+        journey = load(JOURNEY_DEMO / "journey.json")
+        checklist = journey_booking_checklist(journey)
+        lodging_items = [item for item in checklist if item["kind"] == "lodging"]
+        self.assertTrue(lodging_items)
+        self.assertTrue(all(item["deadline_kind"] == "check_in" for item in lodging_items))
+        rendered = render_journey(journey)
+        self.assertIn("入住前确认", rendered)
+
+    def test_leg_with_declared_booking_deadline_claim_is_declared_and_page_shows_booking_deadline_wording(self):
+        journey = copy.deepcopy(self.result.journey)
+        trip = journey["trips"][0]
+        leg = trip["transport_legs"][0]
+        self.assertEqual("rail", leg["travel_mode"])
+        claim = make_claim(
+            subject_ref=leg["leg_id"],
+            field_path="/booking_deadline",
+            value="2026-09-25",
+            source_url="https://example.com/synthetic-journey/booking-deadline",
+            provider="synthetic-test",
+            status="verified",
+            confidence=1.0,
+            mode="static",
+            clock=FixedClock.from_iso(FIXED_NOW),
+        )
+        trip["claims"].append(claim)
+        leg["claim_ids"].append(claim["claim_id"])
+        checklist = journey_booking_checklist(journey)
+        item = next(
+            entry for entry in checklist
+            if entry["kind"] == "transport"
+            and entry["trip_index"] == 0
+            and entry["source_ref"] == leg["leg_id"]
+        )
+        self.assertEqual("declared", item["deadline_kind"])
+        rendered = render_journey(journey)
+        self.assertIn("预订截止", rendered)
+
+    def test_checked_in_sixteen_day_demo_page_never_leaks_the_raw_presale_window_reason_text(self):
+        journey = load(JOURNEY_DEMO / "journey.json")
+        rendered = render_journey(journey)
+        self.assertNotIn("presale window is", rendered)
+
+    def test_deadline_kind_addition_does_not_change_checklist_item_ids(self):
+        journey = load(JOURNEY_DEMO / "journey.json")
+        checklist = journey_booking_checklist(journey)
+        snapshot_path = ROOT / ".tmp" / "ids-before.json"
+        with open(snapshot_path, encoding="utf-8") as handle:
+            before = json.load(handle)
+        self.assertEqual(before["checklist"], [item["item_id"] for item in checklist])
+
     def test_risks_cover_every_missing_or_degraded_capability_conflict_and_unknown(self):
         journey = copy.deepcopy(self.result.journey)
         journey["trips"][0]["provider_health"][0]["status"] = "degraded"

@@ -931,3 +931,21 @@ if query != request.parameters.get(parameter_name):
 断言同步改为 `query == "武夷山市"`（不是 "武夷山"）。改后实网
 `--to 武夷山市` 返回 `legs=10`（见 PROGRESS.md 本书任务 1 小节实测输出），
 硬指标一达成。
+
+## 书「优先事项卡片按 deadline 种类措辞」任务 1：5 个新测试里 2 个天生绿，非「全红」（2026-09-11，判断，非阻塞）
+
+任务书任务 1 列了 5 条断言（presale_open 双日期、check_in 措辞、declared
+措辞、页面不泄漏 "presale window is"、item_id 前后不变），验收写「新测试此时
+全红」。实测 5 个新 `def test_` 里 3 个真红（`KeyError: 'deadline_kind'`，
+证明确实在测未实现的新字段/新分支）、2 个天生绿——「页面不泄漏 reason 原文」
+与「item_id 不变」这两条按其定义本来就该在改动前后都成立（前者是防止我在
+实现新措辞时手滑把 `item["reason"]` 渲染出来的回归哨兵，`reason` 字段现在
+就没被 `_checklist_item_html`/`_trace_attributes` 引用过，grep demo html 确认
+0 命中；后者是防止我改坏 `_journey_action_item` 的 identity 计算的回归哨兵，
+改动前 identity 计算完全没碰过，自然相等）。
+判断：不删这两条、不放宽断言凑「全红」的字面——任务书任务 1 原文明确要求
+这 5 条断言都要有对应测试，删掉两条等于减少任务书自己要求的覆盖面，属于更
+糟的选择；且"全红"的精神是防止我写出对新旧代码都通过的空测试，这两条是
+`KeyError`/字段缺失以外的另一类必要保障（防止实现阶段引入新泄漏或改坏
+identity），不是偷懒判定。5 个测试的完整红/绿输出见 `PROGRESS.md` 本书任务 1
+小节。

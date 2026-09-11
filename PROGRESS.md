@@ -2410,3 +2410,55 @@ tests/fixtures plugins/china-trip-weaver/schema '*/rail12306.py'
 才暴露的问题——任务 1 的 `query` 字段与 `rail12306.py` 硬校验冲突、任务 2
 的额外 API 调用冲撞既有测试——均一次定位、一次修复、复测即绿，不构成
 「连败」）。分支推送记录见本节末尾。
+
+## 本轮记录（2026-09-11，优先事项卡片按 deadline 种类措辞；main 直改，第七波三份并行之一）
+
+任务 0 核对（HEAD `d22e3e6`）：全量 602 测试 OK 0 skip、secrets 0、pyflakes 0
+行；journey.py/journey_html.py/validate_journey_html.py 六处行号（1770/1912/
+1974/2117、566/827/934、253）与任务书完全一致；demo `journey_booking_
+checklist(...)[0]` 为 rail 交通项，deadline `2026-09-17`，reason 含
+"presale window is"；`_deadline` 仅 by/time_unknown 两态；demo 无
+`/booking_deadline` claim（grep 0），需在任务 1 里合成一条（照抄既有测试
+`test_transport_leg_booking_deadline_claim_overrides_the_presale_calculation`
+的 claim 构造，但 `mode` 须用 `"static"` 而非该测试的 `"mock"`——实测
+`mode="mock"` 会让 `render_journey` 因 `V_TOP_MODE` 报错，因为 sixteen-day
+fixture 的 `trip["mode"]`/既有 claims 均为 `"static"`，`mock` 排在
+`MODE_RANK` 更不保守的一端）。均与任务书吻合，不停工。
+理解的目标：`_journey_transport_leg_deadline` 改回 4 元组
+`(deadline, kind, depart_at, reason)`，kind∈{declared,presale_open,
+departure}；新增私有 `_journey_trace_deadline_kind`（供 unknown 项判所指腿
+/住宿的种类，其余 other）；`_journey_action_item` 加两个默认值 kwarg
+`deadline_kind="other"`/`depart_at=None`，均不进 identity（item_id 不变）；
+`_journey_trace_deadline` 本体不用改——`[0]` 索引对 4 元组仍成立。渲染侧
+`_deadline` 按 kind 选模板，presale_open 的出发日用短格式 `MM-DD`（因任务书
+硬性字面断言「10-01 出发」而非「2026-10-01 出发」），其余日期用完整
+`YYYY-MM-DD`；`_trace_attributes`/`_validate_trace_nodes` 各加一个不带前缀
+的 `data-deadline-kind`（比照已有 `data-deadline` 同样不带 prefix）。
+顺序：任务 1 先写 5 个新测试（覆盖 presale_open/check_in/declared/
+不泄漏 reason/item_id 不变）留红→任务 2 实现+重生成+两道校验+反向验证。
+最大风险：`_journey_action_item` 被 `journey_risk_items`（不在白名单内、
+不许改）共用，新 kwarg 必须给默认值且不能要求 risk 调用点跟着改；已用
+`git grep` 确认 risk items 的渲染路径（`_risk_section`）从不调用
+`_deadline`，只有 `_trace_attributes`/`_validate_trace_nodes` 共用，两处
+新增字段对 risk items 而言恒为 `"other"`，字面合规且不改变 risk 侧行为。
+
+任务 1（已完成）：`.tmp/ids-before.json` 存 demo checklist 85 项 + risk 103
+项 item_id（不提交）。`tests/test_journey.py` 的 `JourneyContinuityTests`
+新增 5 个 `def test_`：demo rail 腿 `deadline_kind=="presale_open"` 且渲染页
+含「开售日 2026-09-17」与「10-01 出发」；demo 住宿项 `deadline_kind==
+"check_in"` 且页面含「入住前确认」；照抄既有测试手法给腿追加 `/booking_
+deadline` claim（`mode="static"`，非既有测试用的 `"mock"`——原因见任务 0
+笔记）后 `deadline_kind=="declared"` 且页面含「预订截止」；demo 页面不含
+"presale window is"；改动后 checklist item_id 列表与 `.tmp/ids-before.json`
+逐项相同。红测试实测：
+```
+test_checked_in_sixteen_day_demo_rail_leg_is_presale_open_and_shows_sale_and_departure_dates ... ERROR (KeyError: 'deadline_kind')
+test_checked_in_sixteen_day_demo_lodging_item_is_check_in_and_page_shows_check_in_wording ... ERROR (KeyError: 'deadline_kind')
+test_leg_with_declared_booking_deadline_claim_is_declared_and_page_shows_booking_deadline_wording ... ERROR (KeyError: 'deadline_kind')
+test_checked_in_sixteen_day_demo_page_never_leaks_the_raw_presale_window_reason_text ... ok
+test_deadline_kind_addition_does_not_change_checklist_item_ids ... ok
+Ran 5 tests in 0.333s
+FAILED (errors=3)
+```
+后两条天生绿（回归哨兵，其定义决定了改动前后都该成立），不是弱断言，判断
+记在 `BLOCKED.md`；前三条真红，证明确实在测未实现的字段/分支。
