@@ -4125,3 +4125,191 @@ bfa1e012be32ae1e9bd0613f27128c56e7847b17  fujian-2026-09-25-to-10-10/journey.jso
 不要提前交付"（指 9/11 的上一次派发）；本次是同一自然日内的第二次派发，
 再次空跑同一结论。建议 2026-09-12（含）之后再派发本书本身，而非在门槛前
 重试。
+
+## 书 AB2「拆 providers/base.query」（2026-09-11，worktree `.tmp/wt-ab2` 分支
+`split-provider-query`，第十二波两份并行书之一）
+
+任务 0 核对（从 main `0cc7d55` 分出）：全量 `/usr/bin/python3 -m unittest
+discover -s tests` → `Ran 630 tests` `OK` 0 skipped（56.050s）；
+`scripts/scan_secrets.py` → `secret scan: 0 finding(s) across 378 file(s)`；
+`~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src
+tests scripts` 0 行；base.py 437 行；AST 长度命令输出
+`[(17, '_retry_delay_seconds'), (35, '_failure_with_retry'), (157, 'query')]`
+与任务书逐字吻合；`MAX_RATE_LIMIT_RETRIES = 1` 确在 L31，`ReplayTransport`
+确在 L118；`tests/fixtures/providers/manifest.json` 的 `fixture_count` 为
+79（与 `files` 长度一致）；`tests/test_providers.py` 单独跑
+`Ran 95 tests OK`（16 个显式 `def test_` + 79 个动态测试，与任务书
+「16 + 79」逐字吻合）。全部核对通过，无出入。
+
+任务 0 额外发现（非出入，是设计输入）：`providers/rail12306.py:47` 的
+`Rail12306Adapter.query` 覆写了 `query`，内部调用 `super().query(request,
+context)` 后检查 `"station_resolution_ambiguous" in result.warnings`
+决定是否包一层 `ambiguous` 结果；`_failure` 也被 `Rail12306Adapter`
+覆写（L115）。这意味着我拆出的所有新方法内部凡是调用 `self._failure(...)`
+`self._health(...)` `self.normalize(...)` 都必须保持用 `self.` 而非直接
+引用 `BaseAdapter`，以维持子类多态——设计时确认了这一点，实现时也确实
+全程只用 `self.`，未破坏这个继承关系。
+
+理解的目标：按任务书建议的四阶段拆（前置三检→传输循环→归一化+claim
+校验→结果封装），但传输循环若整体保留成一个方法，setup+while循环+
+loop后两次状态检查共约 98 行（不含 def 行与最终 return），会超过 80 行
+硬上限。因此在「传输循环」阶段内部再抽一层：把 rate-limited 分支
+（原 36 行，判断是否启用重试、算 delay、发 retry 进度事件、sleep、
+或直接失败）单独抽成 `_handle_rate_limited`，返回
+`(Optional[AdapterResult], 更新后的 rate_limit_retries)`；调用方
+`_execute_with_retries` 收到非 None 失败结果就直接 `return`，否则
+`continue`，`retry_delays` 列表本身是可变对象、原地 `.append()` 后天然
+对调用方可见，不需要额外传回。这是对任务书「建议」的偏离（任务书只建议
+四个方法），偏离原因：不这样拆无法同时满足「`query` ≤60 行」与「全文件
+无函数 >80 行」两条硬指标；`try`/`except` 结构必须留在同一函数内
+（Python 语法要求），但 `try` 块内、`except` 之外的状态机判断代码本身
+不会抛出被捕获的四种异常，把它调用一层帮助方法、仍在 `try` 块内调用，
+异常传播语义不变，验证方式见下方「硬指标二」与反向验证。
+
+顺序：任务 1 快照（先做）→ 任务 2 一次性替换 `query` 剩余方法体（四阶段
++ 一个额外助手, 因四段互相衔接紧密、拆成更小步骤会产生中间不可跑的
+状态，故未逐阶段分次提交，而是分次用 Edit 写入后立即跑
+`test_providers` 验证，验证通过后才继续）→ 终验四项 → 反向验证 → 单次
+commit → push。
+
+最大风险：`AdapterResult` 与 `Normalization` 都是
+`@dataclass(frozen=True)`（非 tuple 子类，已用 `inspect`/`Read`
+核实契约文件），`_execute_with_retries` 返回 `Union[AdapterResult,
+Tuple[...]]`、`_normalize_envelope` 返回 `Union[Normalization,
+AdapterResult]`，调用方靠 `isinstance(x, AdapterResult)` 分流——已确认
+两者不会被误判。次大风险：`rate_limit_retries`（int，不可变）必须靠
+`_handle_rate_limited` 显式返回新值再赋回，而 `retry_delays`（list，
+可变）靠原地 `.append()` 天然对调用方可见，两者处理方式不同、容易记错，
+写代码时逐行核对了这一点。
+
+任务 1（已完成，不提交）：`.tmp/snapshot_provider_query.py` 回放
+`tests/fixtures/providers/*/*.json`（与 `run_fixture` 相同的
+`FIXTURES.glob("*/*.json")` 口径，79 份）+ 每个 adapter（6 个）各 5 种
+合成场景——`rate_limited_retry_after_0`（429 + `Retry-After: 0`，
+`retry_rate_limits=True`）、`network_exhausts_retries`
+（`ReplayTransport({"kind": "network"})`，每次调用都抛
+`ProviderNetworkError`）、`503_then_200`（自写 `RecordingFlakyTransport`，
+第 1 次调用返回裸 503、第 2 次起复用该 adapter 自己 `success.json`
+夹具的响应体）、`preflight_bad_capability`（`capability` 换成不存在的
+字符串）、`preflight_nonpositive_deadline`（`deadline_ms=0`）——
+79+30=109 条记录（≥90 达标）。`RecordingReplayTransport`
+（`ReplayTransport` 子类加 `progress()` 方法把事件按序记进列表）用于
+79 份夹具与前两种合成场景；`time.sleep` 用
+`unittest.mock.patch("time.sleep", side_effect=...)` 全局拦截、只记录
+时长不真睡。每条记 `AdapterResult` 全字段 canonical JSON、`events`
+事件序列、`transport_calls`、`sleep_calls` 到 `.tmp/snap-before.json`。
+
+验收实测：`wrote 109 records`（≥90）；连跑两次
+`diff .tmp/snap-before.json .tmp/snap-before-rerun.json` 空输出
+（IDENTICAL）。内容抽查：`error_class` 分布覆盖 9 种（forbidden/成功
+None/credential_missing/no_results/rate_limited/contract_mismatch/
+timeout/network/invalid_request）；`health.status` 覆盖 6 种
+（forbidden/ready/missing/rate_limited/contract_mismatch/degraded）；
+三种合成场景逐条人工核对（以 amap 为例）——`rate_limited_retry_after_0`：
+2 次 transport 调用、`sleep_calls=[]`（因 `Retry-After: 0` 解析出
+`delay=0.0`，`if delay:` 为假故不真的调用 `time.sleep`，这一细节被
+快照如实记录而非被我的假设覆盖）、6 个事件（query→degrade→retry→
+query→degrade→degrade，最后一个 degrade 来自 `_failure_with_retry`
+自身、不带 `attempt` 字段）；`network_exhausts_retries`：2 次调用、
+`error_class=network`、只有 2 个 query 事件 + 1 个无 attempt 的
+degrade（证实 `except ProviderNetworkError` 分支本身不发 per-attempt
+的 degrade 事件，与源码一致）；`503_then_200`：2 次调用、
+`error_class=None`（成功）、只有 2 个 query 事件（无 degrade，证实
+5xx 重试成功后不留失败痕迹）。
+
+覆盖判断（非待裁决项）：`Rail12306Adapter.query` 的 `ambiguous` 包装
+分支（检查 `"station_resolution_ambiguous" in result.warnings`）未被
+我的 109 条记录覆盖到——语料库 79 份夹具里没有一份触发它，真实触发
+路径需要 `station_resolution` 转录格式，唯一已知的构造方式在
+`tests/test_rail_station_fallback.py` 里，依赖 `mcp_stdio.py` 的
+subprocess 假服务器基础设施（`RailMCPStdioTransport`/
+`_resolve_rail_stations`），与我这份轻量快照脚本的 `ReplayTransport`
+静态回放机制不是一回事，若要复刻代价远超收益。判断依据：该分支唯一
+依赖的一行 `warnings=normalized.warnings + retry_warnings`（`
+_build_result` 内）是我逐字节剪切、未改一个字符的一行，且
+`tests/test_rail_station_fallback.py` 内多个精确断言（如
+`test_multiple_city_stations_are_returned_sorted_and_classified_
+ambiguous` 断言 `result.error_class == "ambiguous"`）已经是这条链路
+的现成防线，会在全量测试里体现。记录判断，不阻塞。
+
+任务 2（已完成）：先给 `typing` 导入加 `Union`；第一步抽
+`_preflight_failure`（前置三检，逐字节剪切，`query` 顶部改调用），跑
+`test_providers` → `Ran 95 tests OK`；第二步一次性替换 `query` 剩余
+方法体为 `_execute_with_retries`（传输循环整体，含 `_handle_rate_limited`
+调用与 `envelope is None`/`status_error` 两个 loop 后检查，返回
+`Union[AdapterResult, Tuple[envelope, rate_limit_retries,
+retry_delays]]`）、`_handle_rate_limited`（rate-limited 分支，返回
+`Tuple[Optional[AdapterResult], int]`，原样保留 `status_error` 作为
+参数传入而非在新方法里硬编码字符串字面量，与原代码用局部变量的方式
+一致）、`_normalize_envelope`（归一化 + claim 校验，返回
+`Union[Normalization, AdapterResult]`）、`_build_result`
+（no_results 与成功两种封装），`query` 收窄成「调用四段 + 两次
+`isinstance` 分流」的编排器。跑 `test_providers` → `Ran 95 tests OK`。
+所有对 `self._failure`/`self._failure_with_retry`/`self._health`/
+`self.normalize` 的调用全部保持 `self.` 前缀（未改成
+`BaseAdapter.xxx`），`Rail12306Adapter` 的多态覆写不受影响。
+
+硬指标一实测：
+```
+$ /usr/bin/python3 -c "import ast;...(sorted函数长度)..."
+[(23, '_normalize_envelope'), (35, '_failure_with_retry'),
+ (44, '_build_result'), (44, '_handle_rate_limited'),
+ (74, '_execute_with_retries')]
+$ ...query 行数...
+[14]
+```
+`query` 14 行（≤60 达标，原 157 行）；全文件最长函数
+`_execute_with_retries` 74 行（≤80 达标）。
+
+硬指标二实测：`.tmp/snap-after.json` 与 `.tmp/snap-before.json`
+`diff` 空输出（109 条记录逐字节相同）。三条语料命令零漂移——README
+demo（`plugins/china-trip-weaver/scripts/ctw plan --request demo/
+request.json --candidates demo/candidates.json --rail fixture:tests/
+fixtures/providers/rail12306/empty.json --mobility off --lodging off
+--aviation off --offline-fixture --fixed-clock 2026-09-04T00:00:00+08:00
+--output-json demo/trip.json --output-html demo/trip.html`）打印
+`trip_sha256=7ea7888f5478bb949e2d565e653212dfb67ff8be041ee61f0d45386a2d9c788c`/
+`html_sha256=c2d07708cb0cc088afab02331642f91e40c58ef3c45db3862b45c480a8bca927`，
+与书 Z1/Y1/AA1/AA2 历次记录的历史基线逐字相同；
+`scripts/build_plan_fixtures.py`（"wrote 3 plan cases, 3 invalid
+candidates, one Journey lodging-chain fixture, and single/multi-city/
+grouped demo inputs; packaged reference verified"，零异常）；
+`scripts/build_provider_fixtures.py`（"wrote 79 provider fixtures and
+5 AMap scenarios"，零异常）；三命令跑完 `git status --short` 只有
+`base.py` 一处差异（当时尚未新增测试）。全量
+`/usr/bin/python3 -m unittest discover -s tests` → `Ran 630 tests`
+`OK`（62.807s，0 skipped）；`scan_secrets.py`
+`0 finding(s) across 378 file(s)`；pyflakes 0 行。
+
+反向验证：把 `_execute_with_retries` 里
+`"provider deadline exceeded"` 改成 `"provider deadline exceededX"`
+（timeout 耗尽重试后的失败原因文案）→ 快照重跑
+`diff .tmp/snap-before.json .tmp/snap-reverse.json` 非空（6 处，
+对应 6 条命中 timeout 耗尽分支的记录的 `health.reason` 字段）→ 但
+全量 630 测试仍然全绿——`grep -rn "provider deadline exceeded" tests/`
+零命中，既有测试套件对这条 reason 文案本来就没有精确断言（与先例
+书 Y1「拆 journey._merge_segment_trips」、书「拆 journey.
+_validate_connection」发现的同款缺口一样）。按「界限」明确允许
+`tests/test_providers.py` 新增 `def test_` 的先例，新增
+`test_timeout_exhaustion_pins_the_exact_retry_reason_text`（复用
+`tests/fixtures/providers/amap/timeout.json`，`expected.
+transport_calls=2` 确认会耗尽默认 `max_attempts=2`，精确断言
+`result.health["reason"] == "timeout: provider deadline exceeded"`
+与 `result.error_class == "timeout"`、`transport.calls == 2`）。先在
+干净代码上单独跑通过（`Ran 1 test OK`）确认新测试本身可靠，再重新
+加入 `exceededX` 突变 → 快照 diff 非空（同样 6 处）且全量
+`Ran 631 tests` `FAILED (failures=1)`，恰是新测试报
+`AssertionError: 'timeout: provider deadline exceeded' !=
+'timeout: provider deadline exceededX'` → 精确还原（`grep -c
+exceededX plugins/.../base.py` 为 0，残留清零）→ 快照重跑
+`diff .tmp/snap-before.json .tmp/snap-after-revert.json` 空输出
+（IDENTICAL AGAIN）→ 全量 `Ran 631 tests` `OK`（630 基线 + 1 个新
+`def test_`，0 skipped）。
+
+界限检查：`git diff 0cc7d55 -- tests | grep -E '^-\s*def test_'`
+空输出（0 行，未删任何测试）；`git diff 0cc7d55 --stat -- .
+':!plugins/china-trip-weaver/src/china_trip_weaver/providers/base.py'
+':!tests/test_providers.py' ':!PROGRESS.md' ':!BLOCKED.md'` 空输出；
+`git diff 0cc7d55 --stat` 只有两个白名单文件（`base.py` 126 行变化、
+`test_providers.py` +15 行）。止损轮次未触发（一次性按四阶段+一个
+额外助手方法拆分，每步验证均一次通过，未遇连败）。
