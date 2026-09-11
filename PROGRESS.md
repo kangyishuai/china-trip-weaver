@@ -2532,4 +2532,14 @@ absentt` 为 0（残留标记清零）→ 全量 `Ran 603 tests` `OK` 0 skipped�
 `BLOCKED.md`/`PROGRESS.md`/`validate_html.py`/`test_renderer.py` 四个
 文件；`git diff d22e3e6 -- tests | grep -E '^-\s*def test_'` 与禁区 diff
 （`tests/fixtures`/`demo`/`schema`/`validate_journey_html.py`/
-`render/html.py`/`journey_html.py`）均空输出。任务 2 单独一次 `git commit`。
+`render/html.py`/`journey_html.py`）均空输出。任务 2 单独一次 `git commit`
+（`5fafe99`，任务 0+1 的文档checkpoint 是 `bc98a0a`）。
+
+最终门（2026-09-11 实测，提交后复核）：`git log --oneline d22e3e6..HEAD` 两
+个提交；全量 `/usr/bin/python3 -m unittest discover -s tests` → `Ran 603
+tests` `OK` 0 skipped；`scan_secrets.py` 0 命中；pyflakes 0 行；长度命令
+`max: (74, '_check_rendered_facts') | validate_html: (32, 'validate_html')`；
+`git status --short` 空（工作区干净）。硬指标一、硬指标二全部达成，反向验证
+一次红→绿（终端记录见任务 2 小节），止损轮次未触发（全程一次到位，未遇
+连败）。BLOCKED.md 有一条任务 0 的判断记录（call-site 计数方法与 `:156`
+标注核对，非阻塞），无待裁决项。分支推送记录见下。
