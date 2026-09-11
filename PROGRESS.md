@@ -3568,3 +3568,80 @@ Skill 或 ADR 本身；其次是漂移清单里如果出现「文档说的与代
 `_apply_refresh`、`_apply_suspend`、`AMapHTTPTransport`、
 `RailMCPStdioTransport`、`_reindex_transport_leg_unknowns` 均在动工前的
 搜索里逐一确认过，见本节前面的代码出处记录）。
+
+任务 2 逐条改完，15 条状态：1 已补（两份 README 站点解析段）、2 已补（同段
+落，80 公里/`station_nearby_fallback`）、3 已补（两份 README 预订清单一句
+`deadline_kind`）、4 已补（README.md ADR-0015/16/17）、5 已改（04-providers
+§1.1 capability 枚举补 `poi_around`/`station`）、6 已补（04-providers §2
+AMap 行加 `poi_around`）、7 已补（04-providers §4.2 四层解析新段落）、8
+已补（06-pipeline §7.2 加 `refresh`/`suspend` 两行）、9 已补（07-renderer
+新增「10. Journey renderer」一节）、10 已补（09-impl-map §3 加 `journey.py`
+行）、11 已补（同上，加 `station_distance.py` 行）、12 已补（09-impl-map §5
+加两个 Journey 渲染模块行）、13 已补（09-impl-map §4 加 `amap_http.py`/
+`mcp_stdio.py` 行）、14 已改（09-impl-map §5 `replan.py` 一行职责补
+`suspend`/重编号）、15 已改（provider-contracts.md AMap 行补第四能力与
+`types`/`city_limit`）。
+
+硬指标一实测（七个术语在 README.md／README.zh-CN.md／docs/design 各 ≥1，
+`git grep -c -i`，docs/design 列命中文件数）：
+```
+poi_around              README.md:1  README.zh-CN.md:1  docs/design: 2 files
+deadline_kind           README.md:1  README.zh-CN.md:1  docs/design: 2 files
+station_nearby_fallback README.md:1  README.zh-CN.md:1  docs/design: 1 files
+city_limit              README.md:1  README.zh-CN.md:1  docs/design: 2 files
+suspend                 README.md:1  README.zh-CN.md:1  docs/design: 4 files
+presale                 README.md:2  README.zh-CN.md:1  docs/design: 5 files
+80 公里|80 km(regex)    README.md:1  README.zh-CN.md:1  docs/design: 2 files
+```
+第一版漏了 `poi_around` 的字面标识符（两段新文案只描述行为、没点名
+capability），两份 README 补了「AMap 的 `poi_around` 能力」这半句后复测
+变成上表这样，记录这次真实的红→绿，不是一次到位。
+
+硬指标二实测：
+```
+$ git diff main --stat -- plugins/china-trip-weaver/src plugins/china-trip-weaver/skills plugins/china-trip-weaver/schema tests
+（空输出，真正的只读区域一字未动）
+$ git diff main --stat -- docs/design/adr
+（空输出）
+$ git grep -n '0\.1[0-9]\.[0-9]' -- README.md README.zh-CN.md docs/design plugins/china-trip-weaver/references
+docs/design/adr/0016-rental-car-and-ferry.md:131:  from `0.2.0` through `0.11.0`, so a schema edit does not strictly force this
+$ git grep -n '0\.1[0-9]\.[0-9]' main -- README.md README.zh-CN.md docs/design plugins/china-trip-weaver/references
+main:docs/design/adr/0016-rental-car-and-ferry.md:131:  from `0.2.0` through `0.11.0`, so a schema edit does not strictly force this
+（同一处，零新增）
+$ /usr/bin/python3 -m unittest discover -s tests
+Ran 628 tests in 47.811s
+OK
+```
+`git diff main --stat -- plugins tests`（任务书字面给的 pathspec）本身非空，
+只有一个文件：`plugins/china-trip-weaver/references/provider-contracts.md`
+——这正是「界限」明确允许改的那个文件，原因见 BLOCKED.md 本书小节；真正
+的只读区域（`src`/`skills`/`schema`/`tests`/`docs/design/adr`）用更精确的
+pathspec 核对后确认一字未动。
+
+反向验证（随机抽 3 句新文案里的函数名 `git grep -n`）：
+```
+$ git grep -n "def administrative_area_key" -- plugins/china-trip-weaver/src/china_trip_weaver/geo.py
+plugins/china-trip-weaver/src/china_trip_weaver/geo.py:31:def administrative_area_key(value: Any) -> str:
+$ git grep -n "def journey_booking_checklist" -- plugins/china-trip-weaver/src/china_trip_weaver/journey.py
+plugins/china-trip-weaver/src/china_trip_weaver/journey.py:1869:def journey_booking_checklist(
+$ git grep -n "def _reindex_transport_leg_unknowns" -- plugins/china-trip-weaver/src/china_trip_weaver/replan.py
+plugins/china-trip-weaver/src/china_trip_weaver/replan.py:476:def _reindex_transport_leg_unknowns(
+```
+三条全部命中。另外把新文案里出现的全部 17 个函数/类/常量名批量
+`git grep -l` 过一遍（`_resolve_station_candidates`、`_resolve_rail_stations`、
+`administrative_area_key`、`STATION_MAX_DISTANCE_METERS`、
+`find_nearby_stations`、`NEARBY_STATION_SEARCH_RADIUS_METERS`、
+`_resolve_nearby_station_candidates`、`_apply_refresh`、`_apply_suspend`、
+`_reindex_transport_leg_unknowns`、`journey_booking_checklist`、`_deadline`、
+`_journey_transport_leg_deadline`、`RailMCPStdioTransport`、
+`AMapHTTPTransport`、`_request_contract`、`AMapCallBudget`），全部命中，
+`_deadline` 的首个匹配落在 `cli.py`（`rail_deadline` 等参数名的子串巧合），
+用 `^def _deadline` 精确匹配确认真正定义仍在 `render/journey_html.py:943`，
+不是误引用。
+
+BLOCKED.md 本书小节：无待裁决项（15 条漂移全部是「代码有、文档没有」，没
+有一条怀疑代码本身错了）；记了一条任务书自身「界限」与「硬指标二」验收
+命令的字面矛盾（provider-contracts.md 既被列为允许改的文件、又落在硬指标
+二 pathspec `plugins` 前缀之内），已按更具体的「界限」白名单执行并双证据
+留痕，供领导确认。止损轮次未触发（核对→列漂移清单→补写→复测一次到位，
+过程中唯一的返工是上面记录的 `poi_around` 漏项，发现即改，不算独立轮次）。

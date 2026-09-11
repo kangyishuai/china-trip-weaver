@@ -168,3 +168,9 @@ renderer 进程不接收 provider env，Trip Schema 没有 credential 字段；�
 ## 9. Renderer acceptance
 
 用 valid schema fixtures、keyless E2E Trip、含危险文本/URL/secret canary 的 adversarial fixtures 验证：确定性 bytes、embedded Trip equal、所有 section/count、zero remote scripts/resources、zero secret、offline core、mobile/print/a11y、claim/price/unknown truthfulness。renderer 只在全部 errors 为 0 时返回 success。[依据：研究决策 21](../research/04-design-insights.md#21-采用四层测试不把能启动能打印当测试)
+
+## 10. Journey renderer
+
+`ctw journey render` 是另一个确定性 renderer（`render/journey_html.py`），与上述单 Trip renderer 共享同一套安全/CSP/离线/mobile 合同，只是数据输入换成 Journey（内含完整子 Trip）；`render/validate_journey_html.py` 是对应的结构/安全/事实校验器，报告规则与 §7 的 E001–E204 同族。
+
+Journey 页的预订/核验清单（`journey.py` 的 `journey_booking_checklist()`）按每一项实际的行动截止时间排序；`_deadline()` 按该项的 `deadline_kind` 选择四种措辞之一：rail 腿默认 `presale_open`（「开售日 %s · 当天就买 · %s 出发」，即出发前 14 天、对齐 12306 预售窗口，来自 `journey.py` 的 `_journey_transport_leg_deadline`），Trip 已带明确 `/booking_deadline` claim 时改用 `declared`（「预订截止 %s」），其余交通用 `departure`（「出发前确认 · %s 出发」），住宿用 `check_in`（「入住前确认 · %s 入住」）。不属于这四种的项（`deadline_kind=other`，例如指向 POI 的 unknown）落回本文档 §6 描述的通用「截止 <date>」措辞，短于一天精度时额外标注「时间未知」。

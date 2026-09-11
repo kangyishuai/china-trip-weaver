@@ -152,6 +152,8 @@ user_locked_refs[], optional allowed_changes[], now
 | local delay | 延迟 leg/slot | 从该点到下一个 locked anchor 之间 |
 | cross-city train/flight delay/cancel | 该 transport leg | 到达 day、接驳/check-in；只有跨午夜/失去住宿时才扩下一 day |
 | provider claim stale/conflict | 引用该 claim 的字段 | 依赖该字段的 slot/hop/price summary |
+| rail leg refresh（`replan.py` 的 `_apply_refresh`，[ADR-0015](adr/0015-refresh-event.md)） | 该 rail leg 与其 slot | 若新到达时间推迟，顺延同日之后的 slots；从调用方提供的 `rail_result` 里为新 leg 复制匹配的 claims |
+| transport leg suspend（`_apply_suspend`） | 该 leg 的 slot | 该 leg 本身、其 budget_ledger 行、引用该 leg 的 claims 与 unknowns 全部移除；非末尾腿被删时，后面腿的 `/transport_legs/N/...` unknowns 由 `_reindex_transport_leg_unknowns` 重新编号 |
 
 范围外 days/refs 不进入 provider requery 或 scheduler state。
 
