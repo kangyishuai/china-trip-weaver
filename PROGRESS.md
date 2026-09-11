@@ -2,17 +2,49 @@
 
 唯一的当前进度记录。2026-09-03 到 09-06 的逐轮任务书、实测证据、验收记录已归档，见「历史索引」。
 
-## 现状速览（2026-09-11 实测，0.16.1）
+## 现状速览（2026-09-12 实测，0.17.0）
 
-- 版本：`0.16.1`，唯一来源是
+- 版本：`0.17.0`，唯一来源是
   `plugins/china-trip-weaver/.codex-plugin/plugin.json` 与
   `src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
   位置一律引用这两处之一，历史版本只以日期提及、不写字面值。
-- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 646 tests`，`OK`，0 skipped；
+- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 653 tests`，`OK`，0 skipped；
   `scripts/scan_secrets.py` 0 命中；
   `~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src
   tests scripts` 0 行。带假 Key（`ANYSEARCH_API_KEY=... unittest`）跑全量同样
-  646 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+  653 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+- 0.17.0（第十六波，两本都改行为）：汇合腿（分组出发各组到会合点那条腿）——
+  `_validate_meeting_anchor` 的调用点从 `_resolve_rail` 之后挪到 FlyAI/VariFlight
+  解析之后，签名加 `claims`/`flights`、返回 `(legs, claims)`；铁路腿留不出
+  `buffer_minutes` 时从 `enrichment.flights` 里取同路线、合规、到达最早的航班提升为
+  汇合腿（`leg_id` 前缀 `leg-meeting-flight-`，`_is_meeting_arrival_leg` 只认带这个
+  前缀的航班，其余比价航班照旧排除），被替换的铁路腿连同其 claims 删除、原航班
+  条目的 claims 改指新 leg_id（`_swap_meeting_leg`）；铁路与航班都不合规仍抛
+  `MEETING_BUFFER_INSUFFICIENT`，`arrival_at`/`actual_buffer_minutes` 改报两者里
+  最早到达的那个；`_resolve_rail` 未动（执行者证明「先按缓冲过滤再取最早到达」
+  与现状「直接取最早到达」逐场景等价，任务书猜的第三条红测试改动前就是绿的）；
+  两份 README 各加一句；六套语料零差异。VariFlight 第二价源（ADR-0019 Option B）
+  ——`_tool_call` 加 `action="price"` → `getFlightPriceByCities`（入参
+  `dep_city/arr_city/dep_date`，返回每班航班的 `cabins[]`），`normalize` 新分支
+  `_live_price` 按 `flightno` 取经济舱（`cabinclass=="Y"`）最低 `price` 产出
+  `/price` claim（`subject_ref` = FlyAI 的 leg_id，status partial）；`_enrich_route`
+  在 comfort 之后、只在非候选模式（真有 FlyAI 航班可比）发第三次调用；阈值
+  `max(20, FlyAI 价×5%)`（`PRICE_CONFLICT_MIN_DELTA`/`PRICE_CONFLICT_RATIO`），
+  超阈值时 VariFlight 那条直接标 conflict、FlyAI 那条经
+  `VariFlightEnrichmentResult.conflict_claim_ids` 由 planning.py 两行补标；夹具 82
+  （新增 variflight/price）；执行者与管理者各用真实 Key 验证（BJS→SHA 返回 69 条、
+  KMG→FOC 真实航班三次调用、`/price` 判 conflict）。管理者用 0.17.0 实网重规划
+  真实 16 天行程：原 request（会合 16:30）现在报 `adult-beijing` 组
+  `MEETING_BUFFER_INSUFFICIENT`、`arrival_at` 16:10（铁路与航班里最早到达，缓冲 20
+  分钟）——是数据事实不是缺陷；会合时间改 17:30 后整趟规划成功，两组汇合腿都成了
+  航班（昆明组 06:50→09:40、北京组 13:25→16:10），north 段 19 条腿 = 15 条比价航班
+  + 2 条汇合航班 + 9/26、9/29 两条铁路（9/26 已开售，12306 返回真实车次 07:06→08:08
+  取代深链占位）；80 地点／62 有坐标／18 坐标 unknown／7 名字 unknown 与 0.15.3
+  相同；`journey validate` 通过，页面 QA failures=[]、内部溢出 0。已知：VariFlight
+  的 comfort/price 对象是 `_select_flight` 取的 FlyAI 列表第一班，不是实际被排进
+  行程的汇合航班（后者只有 `/status`），两条路线的第二价都判 conflict（真实两价差
+  超阈值）；FlyAI 住宿城市搜索返回的 10／9 家酒店与调研候选 8 家零重名，ADR-0019
+  Option C 按名匹配今天没有真实用例。
 - 0.16.1（第十五波，两处缺陷修复）：VariFlight 返回 `data={"error_code":…}`
   错误对象时按错误码降级（10→`no_results`、12→`invalid_request`、其余
   `upstream_5xx`，`_live_error_class`），不再判 `contract_mismatch`；`ctw doctor
