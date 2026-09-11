@@ -1,3 +1,15 @@
+## 书「拆 validate_trip.semantic_issues」（2026-09-11，main 直改）：无待裁决项
+
+任务 0 核对发现任务书「demo 下 5 个 trip.json」与实际不符：`find demo -name
+"trip.json"` 只有 4 份（`demo/trip.json`+`multicity-5d`+`grouped-departures`+
+`guangzhou-shenzhen`），第五个 demo 例子 `journey-16d` 用的是 `journey.json`
+（README 第 134 行称其为「the fifth example」，产物是 journey 不是 trip），
+任务书紧接着单独列出的「demo/journey-16d/journey.json 的三条 trip」已经把
+这一份算在别处——「5」应是把「5 个 demo 例子」误记成「5 个 trip.json」。
+与先例书「书 W3」（`4 份 demo trip`）、「书『拆 validate_journey_html』」的
+现状描述完全一致，判断为任务书笔误、不阻塞，快照语料按实际的 4 份 demo
+trip.json + 3 条 journey-16d 内嵌 trip 取，记录见 PROGRESS.md 任务 0 小节。
+
 ## 书 Y1「拆 journey._merge_segment_trips」（2026-09-11，main 直改，已按先例处理，非空白裁决）
 
 任务 0 的 1 行行数出入（2574→2573）已单独记在本文件靠后位置，不再重复。

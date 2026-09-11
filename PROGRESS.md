@@ -3452,3 +3452,49 @@ BLOCKED.md 本书小节：无待裁决项（任务书允许「暂不做」作为
 回避裁决,ADR 正文给了 5 条独立证据支持这个选择）。止损轮次未触发（研究→
 写作→自查一次到位,过程中发现的 `_editable_candidates` 精确键集这一点是
 补充证据、不是推翻既有结论的返工）。
+
+## 书「拆 validate_trip.semantic_issues」（2026-09-11，main 直接干，第十波三份并行书之一）
+
+任务 0 核对：HEAD `404248e` 与任务书一致；全量 `Ran 628 tests` OK 0
+skipped、`scan_secrets.py` 0 命中（378 文件）、pyflakes（`~/miniconda3/envs/core/bin/python
+-m pyflakes plugins/china-trip-weaver/src tests scripts`）0 行；
+`validate_trip.py` 里 `_add` L226、`semantic_issues` L277-473（197 行）、
+`"V_..."` 字面量去重 33 种，均与任务书吻合；`validate_trip(` 调用点
+test_contracts/test_journey/test_keyless_e2e/test_renderer/test_replan/
+test_flyai_live 逐一 8/11/10/3/3/1＝36，与任务书吻合。语料唯一出入：demo
+下实际只有 4 个 `trip.json`（非任务书写的 5 个），`journey-16d` 是第五个
+demo 例子但产物是 `journey.json`（README:134「the fifth example」），任务书
+下一句单列的「journey-16d 的三条 trip」已把它算在别处——判断是「5 个 demo
+例子」误记成「5 个 trip.json」，与先例书 W3/拆 validate_journey_html 的
+「4 份 demo trip」现状描述一致，记入 BLOCKED.md、不停工，语料按实际 4+4+3+9
+＝20（不含 schema 的 valid 3+invalid 4）取，即 valid 3+invalid 4+demo trip
+4+journey-16d 内嵌 3+renderer 突变 9＝23 条（任务书假设的 24 由错误的「5」
+推出，非核心事实分歧）。
+
+理解的目标：`semantic_issues`（L277-473）按既有空行分段，天然分 12 段——
+引用映射与 all_refs 构建、日期与天数、时段循环、claim 引用、claim 主体、
+交通腿、价格、坐标、mode、revision/patch、unknowns、secret 扫描；拆成
+12 个同名 `_check_*`/`_build_reference_context` 模块私有函数，`semantic_issues`
+本体收窄成一串按原序调用的分发，条件/V 码/消息/`_add` 调用顺序一字不改。
+顺序：任务 1 快照固定行为基线 → 任务 2 按段抽取（每段跑一次
+test_contracts+test_keyless_e2e）→ 长度/快照/V 码/语料/全量五项终验 →
+反向验证 → 单次 commit → push。
+最大风险：`leg_map`/`lodging_map`/`poi_map`/`claim_map`/`all_refs`/`origins`
+六个变量在「引用映射构建」段算出、被后续多段复用，必须显式返回穿针引线，
+不能重算或漏传；`request = trip["request"]`（挪到 semantic_issues 顶部,
+两个函数共用）与 `slot_ids = set()`（挪进消费它的时段循环函数内部）两处
+纯移动无副作用,不改变结果。
+
+任务 1（已完成）：`.tmp/snapshot_validate_trip.py`（不提交）对 schema
+valid 3+invalid 4、demo 下实际 4 份 trip.json、journey-16d 内嵌 3 条 trip、
+renderer/trip 9 份突变（复用 `tests.test_renderer` 的 `mutate_trip`/`load`，
+突变逻辑零重写）逐条跑 `validate_trip`，记 `{case_id, ok, issues:[[code,path,
+message],...]}` 到 `.tmp/snap-before.json`。验收实测：`wrote 23 records`；
+连跑两次 `diff` 空输出（IDENTICAL）；抽查内容合理——3 份 valid 与 4 份 demo
+trip.json 全 `ok=True` 0 issues，4 份 schema-invalid 各 1 条 `S_*`（脚本层
+先短路，从不到达 `semantic_issues`），9 份 renderer 突变里 4 份 `ok=False`
+（`dangerous-scheme`→`S_FORMAT`+`S_PATTERN`、`duplicate-day-id`→
+`V_DUPLICATE_ID`、`fake-secret`→`V_SECRET`、`url-credentials`→`S_FORMAT`），
+与书 W3 记录的「9 份里 4 份 reject-trip」完全对应。另存
+`grep -o '"V_[A-Z_]*"' ... | sort | uniq -c` 到 `.tmp/v-before.txt`（33 个
+V 码，与任务 0 一致）。
