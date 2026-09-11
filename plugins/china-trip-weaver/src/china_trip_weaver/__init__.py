@@ -1,4 +1,4 @@
 """China Trip Weaver core package."""
 
-__version__ = "0.11.1"
+__version__ = "0.12.0"
 SCHEMA_VERSION = "1.0.0"

@@ -2,17 +2,30 @@
 
 唯一的当前进度记录。2026-09-03 到 09-06 的逐轮任务书、实测证据、验收记录已归档，见「历史索引」。
 
-## 现状速览（2026-09-10 实测，0.11.1）
+## 现状速览（2026-09-11 实测，0.12.0）
 
-- 版本：`0.11.1`，唯一来源是
+- 版本：`0.12.0`，唯一来源是
   `plugins/china-trip-weaver/.codex-plugin/plugin.json` 与
   `src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
   位置一律引用这两处之一，历史版本只以日期提及、不写字面值。
-- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 584 tests`，`OK`，0 skipped；
+- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 602 tests`，`OK`，0 skipped；
   `scripts/scan_secrets.py` 0 命中；
   `~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src
   tests scripts` 0 行。带假 Key（`ANYSEARCH_API_KEY=... unittest`）跑全量同样
-  584 OK，README 的 demo 重生成在有无 Key 两种环境下都零差异。
+  602 OK，README 的 demo 重生成在有无 Key 两种环境下都零差异。
+- 0.12.0（第六波三份并行书）：Journey 预订清单与优先事项按开售日排期——rail
+  腿 deadline = 出发日减 14 天（复用 `providers/rail12306.py` 的 `PRESALE_DAYS`），
+  `/booking_deadline` claim 优先，其余交通照旧，unknown 项共用同一规则（真实
+  16 天行程的前三条优先事项变成 9/12、9/15、9/22 三个开售日）；`ctw replan`
+  新增 `suspend` 事件（patch trigger `disruption`），一次删腿、换时段、删孤儿
+  claim 与 unknowns、重算账本，ADR-0016 转 Accepted；12306 站点查询对带
+  「市/县/区」后缀的城市名剥后缀重试一次（`--to 武夷山市` 从 0 趟到 10 趟，
+  `query` 字段仍是用户原话），歧义候选的距离富化多一遍 `city_limit=false` 的
+  全国搜索，只认站名逐字相同、类目火车站、离城市中心 ≤80 公里
+  （`STATION_MAX_DISTANCE_METERS`）的唯一坐标，从不删候选或自动选站。已知
+  限制：`suspend` 删掉非末尾的腿时，后面腿的 `/transport_legs/N/...` unknowns
+  不重编号（`user_delete` 对时段有同款缺口）；优先事项卡片对开售日仍写
+  「请在此之前完成」，`reason` 文案未渲染。
 - 0.11.1（第五波三份并行书，纯重构 + 一份 ADR，行为零变化）：`MobilityBackend.resolve`
   366 行拆成 7 个私有方法（本体 32 行，文件内最长函数 120 行）；`plan_trip`
   266 行与 `_schedule_problems` 242 行拆成 13 个阶段命名的私有函数（各 56/25
