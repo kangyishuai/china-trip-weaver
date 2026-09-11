@@ -6450,3 +6450,183 @@ FAILED (failures=2)
 FlyAI 候选，还是汇合腿场景里真正被提升的那班）从未拿到 VariFlight
 `/price` claim。`git stash pop` 还原后 `git status --short` 与
 stash 前一致，未丢改动。
+
+## 书 AG1 任务 2：实现（2026-09-12，完成）
+
+三处改动：
+
+`providers/variflight.py` 的 `_live_price`：签名不变（仍是
+`(self, rows, request, clock)`），但读取的请求参数从单值
+`subject_ref`+`flight_no` 改成字典 `subject_refs_by_service`
+（与 `_live_payload` 里 `/status` 搜索分支已有的写法同构）；遍历
+`rows`，对每一行 `flightno` 落在 `subject_refs_by_service` 里的，
+按 `cabinclass=="Y"` 收集经济舱价格（同一 `flightno` 若有多行则先
+分组再取 `min`，与旧代码「收集全部匹配行再取 min」的语义保持一致），
+每个匹配到的 `flightno` 各产一条 `/price` claim（`subject_ref` 取
+映射到的 leg_id，`status="partial"`，`confidence=0.7`，与旧代码
+单条 claim 的字段值逐一相同，只是从「至多一条」变成「每个匹配的
+flightno 一条」）；`rows` 里没有对应 `subject_refs_by_service` 键
+的行忽略（未过滤到的 flightno 静默跳过,不产 claim,不报错——按「我
+替领导拍的板」执行,原文标注是猜的）。
+
+`variflight_enrichment.py` 的 `_build_price_request`：形参
+`selected: Mapping[str, Any]` 改成 `service_map: Mapping[str,
+str]`，`request_id` 的 `stable_id(...)` 去掉了原来的
+`selected["service_number"]`分量（改成只按 dep_city/arr_city/
+travel_date 区分，与 `_build_search_request` 的 `request_id`
+构造同构——同一条路线只应该有一次 price 调用，不应该按「选中的
+那班」再区分出多个 request_id），`parameters` 里
+`flight_no`+`subject_ref` 两个单值键换成一个
+`subject_refs_by_service` 字典键。
+
+`variflight_enrichment.py` 的 `_enrich_price`：形参 `selected:
+Mapping[str, Any]` 改成 `route_flights: List[Mapping[str, Any]]`
+（该路线上全部 FlyAI 候选航班，不再只是 `_select_flight` 选中的
+那一班）；函数体内先从 `route_flights` 重新算出 `service_map`
+（与 `_enrich_route` 里算 `service_map` 的推导式逐字符相同，因为
+「界限」不允许改 `_enrich_route` 的其余逻辑，只能在 `_enrich_
+price` 内部重新推一次，多花的是一次本地字典构造，不增加任何业务
+调用),用它建 price 请求；price 调用失败时的 runtime warning 改成
+引用 `tuple(service_map.values())`（该路线全部 leg_id，写法照抄
+L194 search 失败分支的 `tuple(service_map.values())`，不再只报
+`selected["leg_id"]` 一个)；比价环节改成对 `price.claims`（现在
+可能有多条）逐条处理——按 `claim["subject_ref"]` 在
+`{item["leg_id"]: item for item in route_flights}` 里查到对应的
+FlyAI 航班，取它的 `price.amount`/`price.claim_id` 与这条
+VariFlight claim 比较,超阈值就把**这条 claim 自己**标记
+`conflict`（在 `copy.deepcopy` 并入 `claims` 之前原地改,与旧代码
+手法一致)并把对应 FlyAI 价格 claim 的 `claim_id` 追加进
+`conflict_claim_ids`；`route_flights` 里没有对应 leg_id 的 claim
+（理论上不会发生，因为 `subject_ref` 全部来自 `service_map`
+本身）直接跳过不处理。
+
+`_enrich_route` 调用 `self._enrich_price(...)` 那一行的实参从
+`selected` 改成 `route_flights`——这是本书唯一touched 到 `_enrich_
+route` 函数体的改动（改动前该变量已在同一函数里定义好，作用域内
+现成可用，不需要新增计算）；「界限」按文件级别用 `git diff --stat`
+校验，这一处不引入新文件，且不改 `_enrich_route`/`_select_flight`
+的其余任何一行。
+
+`scripts/build_provider_fixtures.py`：`price` fixture 的 request
+参数形状同步改成 `subject_refs_by_service: {"XX1001": "leg-
+flight"}`，其余不动。`/usr/bin/python3 scripts/build_provider_
+fixtures.py` 重生成后：
+
+```
+wrote 82 provider fixtures and 5 AMap scenarios
+```
+
+```
+$ git status --short -- tests/fixtures/providers
+ M tests/fixtures/providers/manifest.json
+ M tests/fixtures/providers/variflight/price.json
+```
+
+只列 `price.json` 与 `manifest.json`，与硬指标一致；`price.json`
+的 diff 只是 request 参数形状变化，`response`/`expected` 不变：
+
+```
+-      "flight_no": "XX1001",
+-      "subject_ref": "leg-flight"
++      "subject_refs_by_service": {
++        "XX1001": "leg-flight"
++      }
+```
+
+三个相关测试模块：
+
+```
+$ /usr/bin/python3 -m unittest tests.test_variflight_live tests.test_keyless_e2e tests.test_providers
+Ran 157 tests in 8.160s
+OK
+```
+
+`test_matched_flight_gets_a_variflight_price_claim_with_flyai_leg_
+subject`（原 L134）、`test_price_conflict_above_threshold_marks_
+both_claims_conflict_and_within_threshold_marks_neither`（原
+L151）、`test_g6_meeting_falls_back_to_a_compliant_flight_when_
+rail_misses_the_buffer`（原 L403）、`test_variflight_price_
+conflict_marks_the_flyai_claim_and_keeps_trip_valid`（原 L1198）
+逐一确认在输出里都是 `ok`，原样绿；两条任务 1 的新测试也在同一次
+运行里转绿。全量：
+
+```
+$ /usr/bin/python3 -m unittest discover -s tests
+Ran 655 tests in 50.253s
+OK
+```
+
+655 = 653 基线 + 2 新测试（未新增任何夹具文件,所以没有
+`fixture_paths()` 自动生成的第三个新测试,与上一波 0.17.0 那次
+「新增 price.json 文件」导致的 +1 不同——这次是**修改**既有
+`price.json` 的内容,不是新增文件）。secrets 0，pyflakes 0 行。
+
+真实 Key 验证（合成路线 昆明→福州，2026-09-20，先用真实 FlyAI 查到
+当天真实候选，取列表前两个真实航班号，喂给真实
+`VariFlightBackend.enrich()`，未经 fixture；脚本留在会话
+scratchpad，未落进仓库）：
+
+```
+FlyAI flights found: 6
+  service_number=DR6577 depart_at=2026-09-20T20:05:00+08:00 arrive_at=2026-09-20T22:35:00+08:00 price=620.0
+  service_number=8L9879 depart_at=2026-09-20T08:10:00+08:00 arrive_at=2026-09-20T11:05:00+08:00 price=459.0
+  ...
+
+VariFlight business_calls: ('variflight.search:2026-09-20:KMG:FOC', 'variflight.comfort:2026-09-20:DR6577', 'variflight.price:2026-09-20:KMG:FOC')
+VariFlight /price claim count: 2
+  subject_ref=leg-air-c7dcac0c29fd value=540 status=conflict
+  subject_ref=leg-air-e35831a0ddd6 value=620 status=partial
+conflict_claim_ids: ('claim-bb32cc007eb170ab',)
+```
+
+一次 `variflight.price` 调用（业务调用总数仍 3 次：search、
+comfort、price，与「每条路线仍 3 次调用」的硬指标一致）拿到两条
+`/price` claim，`leg-air-c7dcac0c29fd`（8L9879，FlyAI 价 459，
+VariFlight 540，差 81 > 阈值 22.95，判 conflict）与
+`leg-air-e35831a0ddd6`（DR6577，FlyAI 价 620，VariFlight 620，
+差 0，判 partial）——真实数据下逐班比价、逐班判定符合预期，硬指标一
+在真实路线上验证通过（应为 2，实为 2）。附带发现：这次真实
+search 响应把两班航班都匹配上了 `/status`（`status_claims=2`），
+与本书合成测试里「search 夹具硬编码只回一班」的场景不同,但这不影响
+硬指标——price 现在覆盖的是 `route_flights`（全部候选）而不是
+search 匹配到的子集,所以无论 search 匹配几班,price 都按
+`service_map`（全部候选）逐班比价。
+
+反向验证：备份 `providers/variflight.py`（`cp` 到会话
+scratchpad,不是仓库内 `.bak`),临时在 `_live_price` 里插入一行
+把 `economy_prices_by_service` 截断成只保留第一个 key（模拟「只给
+第一个匹配班次发 claim」的旧语义）→ 两条任务 1 的新测试转红：
+
+```
+test_one_price_call_covers_every_flyai_flight_on_the_route_and_conflicts_independently ... FAIL
+  AssertionError: Items in the first set but not the second: 'leg-flight-2'
+test_g6_promoted_meeting_flight_carries_its_own_variflight_price_claim ... FAIL
+  AssertionError: 1 != 0
+```
+
+用备份文件 `cp` 覆盖还原（不是手工改回,避免误差）→
+`git diff 12e3a92 --stat` 里 `providers/variflight.py` 一行
+「43 +++++++----」与还原前完全一致 → 三个模块 157 项、全量 655 项
+重跑均 `OK`，secrets 0，pyflakes 0。
+
+最终 `git diff 12e3a92 --stat`：
+
+```
+ PROGRESS.md                                        |  46 ++++++++
+ .../src/china_trip_weaver/providers/variflight.py  |  43 +++----
+ .../src/china_trip_weaver/variflight_enrichment.py |  37 +++---
+ scripts/build_provider_fixtures.py                 |   2 +-
+ tests/fixtures/providers/manifest.json             |   2 +-
+ tests/fixtures/providers/variflight/price.json     |   5 +-
+ tests/test_keyless_e2e.py                          | 126 +++++++++++++++++++++
+ tests/test_variflight_live.py                      |  27 +++++
+ 8 files changed, 251 insertions(+), 37 deletions(-)
+```
+
+全部落在「界限」允许的文件清单内；`git diff 12e3a92 -- tests |
+grep -E '^-\s*def test_'` 0 行（无测试被删除）；未发现冲突标记。
+硬指标一（同路线每班 FlyAI 航班各一条 VariFlight `/price` claim、
+逐班判 conflict、汇合航班提升后带着第二价、每条路线仍 3 次调用，
+先红后绿）与硬指标二（全量 ≥655、0 skipped、secrets 0、pyflakes 0
+行、`git status --short` 干净、CI 绿——CI 结果见下一节推送记录）
+均达成，一轮内完成，未触发止损。

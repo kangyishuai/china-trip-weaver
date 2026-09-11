@@ -25,8 +25,9 @@
       "arr_city": "SHA",
       "date": "2026-09-10",
       "dep_city": "BJS",
-      "flight_no": "XX1001",
-      "subject_ref": "leg-flight"
+      "subject_refs_by_service": {
+        "XX1001": "leg-flight"
+      }
     },
     "request_id": "fixture-request",
     "trace": {

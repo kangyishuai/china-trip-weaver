@@ -290,34 +290,37 @@ class VariFlightAdapter(BaseAdapter):
         request: ProviderRequest,
         clock: Clock,
     ) -> Normalization:
-        subject_ref = request.parameters.get("subject_ref")
-        flight_no = request.parameters.get("flight_no")
-        if not isinstance(subject_ref, str) or not isinstance(flight_no, str):
-            raise ContractMismatch("VariFlight price subject is missing")
-        economy_prices: List[float] = []
+        subject_refs = request.parameters.get("subject_refs_by_service")
+        if not isinstance(subject_refs, dict):
+            raise ContractMismatch("VariFlight price requires service-to-subject mapping")
+        economy_prices_by_service: Dict[str, List[float]] = {}
         for raw in rows:
-            if not isinstance(raw, dict) or raw.get("flightno") != flight_no:
+            if not isinstance(raw, dict):
+                continue
+            service = raw.get("flightno")
+            if not isinstance(service, str) or service not in subject_refs:
                 continue
             for cabin in raw.get("cabins", ()):
                 if not isinstance(cabin, dict) or cabin.get("cabinclass") != "Y":
                     continue
                 amount = cabin.get("price")
                 if isinstance(amount, (int, float)) and not isinstance(amount, bool):
-                    economy_prices.append(amount)
-        if not economy_prices:
-            return Normalization((), ())
-        claim = make_claim(
-            subject_ref=subject_ref,
-            field_path="/price",
-            value=min(economy_prices),
-            source_url="https://mcp.variflight.com/",
-            provider=self.provider,
-            status="partial",
-            confidence=0.7,
-            mode="live",
-            clock=clock,
+                    economy_prices_by_service.setdefault(service, []).append(amount)
+        claims = tuple(
+            make_claim(
+                subject_ref=subject_refs[service],
+                field_path="/price",
+                value=min(prices),
+                source_url="https://mcp.variflight.com/",
+                provider=self.provider,
+                status="partial",
+                confidence=0.7,
+                mode="live",
+                clock=clock,
+            )
+            for service, prices in economy_prices_by_service.items()
         )
-        return Normalization((), (claim,))
+        return Normalization((), claims)
 
 
 def _live_error_class(error_code: Any) -> str:

@@ -228,7 +228,7 @@ class VariFlightBackend:
             ))
         if not candidate_mode:
             self._enrich_price(
-                route, dep_city, arr_city, selected, adapter, context,
+                route, dep_city, arr_city, route_flights, adapter, context,
                 claims, calls, errors, runtime_warnings, conflict_claim_ids,
             )
 
@@ -237,7 +237,7 @@ class VariFlightBackend:
         route: Any,
         dep_city: str,
         arr_city: str,
-        selected: Mapping[str, Any],
+        route_flights: List[Mapping[str, Any]],
         adapter: VariFlightAdapter,
         context: ProviderContext,
         claims: List[Mapping[str, Any]],
@@ -246,24 +246,36 @@ class VariFlightBackend:
         runtime_warnings: List[str],
         conflict_claim_ids: List[str],
     ) -> None:
-        price_request = self._build_price_request(route, dep_city, arr_city, selected)
+        service_map = {
+            item["service_number"]: item["leg_id"]
+            for item in route_flights if item.get("service_number")
+        }
+        price_request = self._build_price_request(route, dep_city, arr_city, service_map)
         price = adapter.query(price_request, context)
         calls.append("variflight.price:%s:%s:%s" % (route.travel_date, dep_city, arr_city))
         if price.error_class:
             errors.append(price.error_class)
             runtime_warnings.extend(_runtime_failure_warnings(
                 price.error_class,
-                (selected["leg_id"],),
+                tuple(service_map.values()),
                 "flight@%s->%s" % (
                     route.from_place["ref_id"], route.to_place["ref_id"],
                 ),
-                "service=%s;date=%s;action=price" % (
-                    selected["service_number"], route.travel_date,
+                "route=%s->%s;date=%s;action=price" % (
+                    route.from_place["ref_id"], route.to_place["ref_id"], route.travel_date,
                 ),
             ))
-        elif price.claims and _price_conflict(selected["price"]["amount"], price.claims[0]["value"]):
-            price.claims[0]["status"] = "conflict"
-            conflict_claim_ids.append(selected["price"]["claim_id"])
+        flights_by_leg_id = {item["leg_id"]: item for item in route_flights}
+        for price_claim in price.claims:
+            flight = flights_by_leg_id.get(price_claim["subject_ref"])
+            if flight is None:
+                continue
+            flyai_price = flight.get("price") or {}
+            if _price_conflict(flyai_price.get("amount"), price_claim["value"]):
+                price_claim["status"] = "conflict"
+                flyai_claim_id = flyai_price.get("claim_id")
+                if flyai_claim_id is not None:
+                    conflict_claim_ids.append(flyai_claim_id)
         claims.extend(copy.deepcopy(list(price.claims)))
 
     def _build_search_request(
@@ -338,18 +350,17 @@ class VariFlightBackend:
         route: Any,
         dep_city: str,
         arr_city: str,
-        selected: Mapping[str, Any],
+        service_map: Mapping[str, str],
     ) -> ProviderRequest:
         return ProviderRequest(
-            request_id=stable_id("variflight-price", dep_city, arr_city, route.travel_date, selected["service_number"]),
+            request_id=stable_id("variflight-price", dep_city, arr_city, route.travel_date),
             capability="flight",
             parameters={
                 "action": "price",
                 "dep_city": dep_city,
                 "arr_city": arr_city,
                 "date": route.travel_date,
-                "flight_no": selected["service_number"],
-                "subject_ref": selected["leg_id"],
+                "subject_refs_by_service": service_map,
             },
             deadline_ms=int(self.deadline_seconds * 1000),
             as_of=route.travel_date,

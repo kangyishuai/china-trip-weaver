@@ -1582,3 +1582,19 @@ QA 的「horizontal overflow」判失败项不受影响）。仍按任务书要�
 对现有 7 个 candidate_mode 测试零影响的核对已写进 PROGRESS.md 本书
 「理解的目标」与「任务 2」两处，判断依据充分，未构成需要停工等待的
 分叉。
+
+## 书 AG1「VariFlight 一次票价调用覆盖整条路线每班 FlyAI 航班」（2026-09-12）：无
+
+任务书全程未出现需要管理者裁决的分叉。唯一需要说明、但不构成待裁决
+分歧的一点：「界限」把 `variflight_enrichment.py` 允许改动的范围写成
+`_enrich_price`、`_build_price_request`、warning 行三处，但
+`_enrich_price` 的形参从 `selected` 改成 `route_flights` 之后，
+`_enrich_route` 里那一行调用 `self._enrich_price(...)` 的实参必须
+跟着从 `selected` 换成 `route_flights`，否则代码根本不能跑——这是
+函数签名变化带来的机械连带，不是对 `_enrich_route` 业务逻辑的改动
+（该变量本就在同一函数作用域内现成可用，不需要新增计算，`_enrich_
+route` 的其余每一行、`_select_flight` 整个函数都未触碰）。「规矩」
+一节用 `git diff 12e3a92 --stat` 按文件校验「界限」，这一处改动仍在
+`variflight_enrichment.py` 文件内、不引入新文件，判断不算越界，已在
+PROGRESS.md 本书「任务 2」记录理由。其余「我替领导拍的板」三条均按
+标注的「猜的」原样执行，未发现需要停工等待管理者裁决的分歧。

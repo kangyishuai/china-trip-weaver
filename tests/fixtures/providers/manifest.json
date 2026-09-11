@@ -298,7 +298,7 @@
     },
     {
       "path": "variflight/price.json",
-      "sha256": "6f579aaac5d6f2aa7cbdce31508e26fe62628340c29a6d9427de3927adc17a92"
+      "sha256": "8e5d2b8d83eb5fcd89cd886d2c82c6e1ca8a898b7a37aee3b009c39aab7e183d"
     },
     {
       "path": "variflight/rate_limit.json",
