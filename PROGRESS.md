@@ -3813,3 +3813,56 @@ Fri Sep 11 15:22:28 CST 2026
 `date` 检查即止步，没有消耗任何验收轮次。下次会话满足日期条件
 （2026-09-12 或之后）后，应直接复用本 worktree/分支，从任务 0 第二步
 （`ctw doctor`）继续，无需重建 worktree、无需重写本节。
+
+## 书 AA1「拆 variflight_enrichment.enrich」（2026-09-11，main 直接干，第十一波三份并行书之一）
+
+任务 0 核对：HEAD `d11c2cb` 与任务书一致；全量 `Ran 629 tests` OK 0
+skipped（75.8s）、`scan_secrets.py` 0 命中（378 文件）、pyflakes
+（`~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src
+tests scripts`）0 行；`variflight_enrichment.py` 265 行，AST 长度命令打印
+`[(14, '__init__'), (21, 'from_spec'), (167, 'enrich')]`，与任务书逐字吻合；
+`tests/test_variflight_live.py` 10 个 `def test_`、6 处 `.enrich(`；
+`tests/test_keyless_e2e.py` 的 `VariFlightBackend`/`.enrich(` 出现在 L192、
+L846，与任务书一致；`planning.py:204` 是唯一生产调用点
+（`enrichment = active_variflight.enrich(inventory.flights, routes, clock)`）。
+全部核对通过，无出入。
+
+理解的目标：`enrich`（L75-241，167 行）按任务书建议的阶段拆开——关门早退
+（off 模式 / 无 Key 探针）独立成 `_early_exit_result`（返回 `Optional`，None
+表示放行进入 live 路径，避免与两处早退分支重复构造
+`VariFlightEnrichmentResult`）；每条路线的处理抽成 `_enrich_route`，其下再
+按建议细分 `_build_search_request`/`_select_flight`/`_build_comfort_request`
+三个子步骤（城市解析、航班过滤、candidate_mode 判定留在 `_enrich_route`
+顶部，因为这是"进入这条路线处理"的前置状态，不是独立可复用的构造/查询/
+选择动作）；循环之后的 claim_ids 回填与健康行汇总各自独立成
+`_backfill_claim_ids`/`_summarize_health`。`calls`/`errors`/
+`runtime_warnings`/`claims` 四个列表通过参数按引用传入子方法原地
+`.append`/`.extend`，不新建列表也不改变追加顺序；`copied_flights` 同理按
+引用传入，`candidate_mode` 分支里的 `.extend()` 副作用保留在原处。
+顺序：任务 1 快照（已完成，见下）→ 任务 2 六步增量拆分（每步跑
+`test_variflight_live`）→ 终验五项 → 反向验证 → 单次 commit → push。
+最大风险：`CITY_IATA` 被两处既有测试用 `mock.patch.dict` 运行时打补丁，
+新方法必须继续用模块级 `CITY_IATA.get(...)` 现查而非在 `__init__`/别处
+缓存快照，否则会读到补丁前的旧值；`_early_exit_result` 里的
+`raise ValueError(...)` 挪进子方法后调用栈多一帧，但没有测试断言这个
+异常的调用栈（`grep` 全仓 `requires its MCP transport` 只在源码本体命中一
+处），只有类型与消息字面量被隐式验证（快照会捕获），因此挪动安全。
+
+任务 1（已完成）：`.tmp/snapshot_variflight.py`（不提交）对 5 种后端
+（off、no_key、require_key、wrong_tools、empty_search 分别对应任务书的
+「off、no-key、require-key、wrong-tools、EmptySearchTransport」）×3 种航班
+列表（空、带 `service_number`、不带）×2 种路线（北京→上海、`CITY_IATA`
+里没有的武汉→长沙）＝30 条组合跑 `enrich`，成功的记 5 个字段
+canonical JSON，`wrong_tools` 组合（无 Key + 缺一个工具的 fixture 服务器）
+会在 `_early_exit_result`/原 `enrich` 内部调用 `self.transport.probe(...)`
+时对全部 6 条组合一致抛出 `ContractMismatch`（探针发生在进入路线循环之
+前，与 flights/route 无关）——这也是一种需要保持不变的"返回值"，脚本捕获
+异常类型与消息一并写入快照，不是遗漏。验收实测：`wrote 30 records`（≥20）；
+连跑两次 `diff .tmp/snap-before.json .tmp/snap-before-rerun.json` 空输出
+（IDENTICAL）。内容抽查合理：`off`/`no_key` 两种早退模式全部
+`status=missing,calls=0`；`require_key` 命中候选模式（`ready,live,calls=2,
+claims=4`）、既有 service_number 匹配模式（`ready,live,calls=2,claims=2`）、
+未支持城市（`degraded,static,calls=0`）三条分支；`empty_search` 命中"搜索
+成功但 0 结果→no_matching_flight，从不调用 comfort"分支
+（`degraded,calls=1,warnings=1`，未支持城市组合 `calls=0`）。
+
