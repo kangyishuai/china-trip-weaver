@@ -3936,3 +3936,15 @@ test_variflight_live.py' ':!PROGRESS.md' ':!BLOCKED.md'` 空输出；
 `git diff d11c2cb --stat` 只有 `PROGRESS.md`/`BLOCKED.md`/
 `variflight_enrichment.py` 三个白名单文件。止损轮次未触发（六步增量抽取
 +终验一次到位，未遇连败）。
+
+最终门（2026-09-11 实测，提交后复核）：`git log --oneline d11c2cb..HEAD`
+两个提交（`a53af9a` 任务0+1 文档checkpoint、`bc81751` 任务2 拆分+文档）；
+`git push origin main` 成功（`d11c2cb..bc81751 main -> main`）；`gh run
+list --limit 3` 最新一条 `completed success`（run 34580467322，1m9s，
+标题 "Split VariFlightBackend.enrich into phase-named private methods,
+zero…"）；`git status --short` 空（工作区干净）。硬指标一（`enrich` 24
+行、全文件最长函数 `_enrich_route` 73 行，均达标）与硬指标二（30 组合
+快照拆分前后逐字节相同、语料三命令零差异且哈希与历史基线一致、全量
+629 测试 0 skipped、secrets 0、pyflakes 0 全部达成）全部达成。BLOCKED.md
+本书只有一条「无待裁决项」记录（含不新增测试的理由说明），无待裁决项。
+止损轮次未触发（全程一次到位，未遇连败）。
