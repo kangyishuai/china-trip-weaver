@@ -251,10 +251,11 @@ class ReplanTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
             output = Path(temporary)
             cli_fixture_names = (
-                "closure.json", "delay.json", "refresh.json", "suspend.json", "user-delete.json", "weather.json",
+                "closure.json", "delay.json", "refresh.json", "suspend-first-leg.json", "suspend.json",
+                "user-delete.json", "weather.json",
             )
             fixture_paths = [FIXTURES / name for name in cli_fixture_names]
-            self.assertEqual(6, len(fixture_paths))
+            self.assertEqual(7, len(fixture_paths))
             for path in fixture_paths:
                 self.assertTrue(path.is_file(), path)
             for path in fixture_paths:
@@ -659,6 +660,61 @@ class ReplanTests(unittest.TestCase):
                 user_locked_refs=[], clock=FixedClock.from_iso("2026-10-15T12:00:00+08:00"),
             )
         self.assertEqual("locked_ref", raised.exception.code)
+
+    def test_suspend_first_leg_fixture_runs_through_run_replan_fixture(self):
+        run_replan_fixture(self, FIXTURES / "suspend-first-leg.json")
+
+    def test_suspend_first_leg_reindexes_trailing_unknowns_to_leg_zero(self):
+        """Deleting the outbound leg (index 0) shifts the return leg down to index 0;
+        its unknowns must follow, not stay pointed at the now-gone index 1."""
+
+        path = FIXTURES / "suspend-first-leg.json"
+        fixture = load(path)
+        base = load(ROOT / fixture["base_fixture"])
+        surviving_leg_id = "leg-rail-fallback-e67d77f564f5"
+        result = replan_trip(
+            base, fixture["event"], base_revision=base["revision"]["number"],
+            user_locked_refs=fixture["user_locked_refs"],
+            clock=FixedClock.from_iso("2026-10-15T12:00:00+08:00"),
+        )
+        leg_ids = [leg["leg_id"] for leg in result.trip["transport_legs"]]
+        self.assertEqual([surviving_leg_id], leg_ids)
+        leg_unknowns = {
+            item["field_path"]: item["claim_id"]
+            for item in result.trip["unknowns"]
+            if item["field_path"].startswith("/transport_legs/")
+        }
+        self.assertEqual(
+            {
+                "/transport_legs/0/service_number": "claim-293577c203a0fe70",
+                "/transport_legs/0/price/amount": "claim-98f1eeb25f5aeee7",
+            },
+            leg_unknowns,
+        )
+        claims_by_id = {claim["claim_id"]: claim for claim in result.trip["claims"]}
+        for claim_id in ("claim-293577c203a0fe70", "claim-98f1eeb25f5aeee7"):
+            self.assertEqual(surviving_leg_id, claims_by_id[claim_id]["subject_ref"])
+        report = validate_trip(result.trip)
+        self.assertTrue(report.ok, [issue.render() for issue in report.errors])
+
+    def test_suspend_first_leg_patch_replaces_exactly_two_unknown_field_paths(self):
+        path = FIXTURES / "suspend-first-leg.json"
+        fixture = load(path)
+        base = load(ROOT / fixture["base_fixture"])
+        result = replan_trip(
+            base, fixture["event"], base_revision=base["revision"]["number"],
+            user_locked_refs=fixture["user_locked_refs"],
+            clock=FixedClock.from_iso("2026-10-15T12:00:00+08:00"),
+        )
+        field_path_replacements = [
+            operation for operation in result.patch["operations"]
+            if operation["op"] == "replace" and operation["path"].endswith("/field_path")
+        ]
+        self.assertEqual(2, len(field_path_replacements))
+        self.assertEqual(
+            {"/transport_legs/0/service_number", "/transport_legs/0/price/amount"},
+            {operation["value"] for operation in field_path_replacements},
+        )
 
 
 def _shift(value: str, minutes: int) -> str:

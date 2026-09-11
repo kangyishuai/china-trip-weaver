@@ -124,6 +124,27 @@ fix-names` 会把它们列为人工项。
 - 2026-09-03/04 越界事实的唯一记录：`BLOCKED.md`（面向公众的产品未决问题，
   Open 区已于 2026-09-06 清零，现为存档）。
 
+## 书 W2「suspend 删非末尾腿的 unknowns 重编号」（2026-09-11，worktree `.tmp/wt-w2` 分支 `replan-reindex`，进行中）
+
+任务 0 核对（HEAD `d22e3e6`）：全部与任务书数字吻合——602 测试 OK 0 skip、
+secrets 0、pyflakes 0；`replan.py:401/435/474` 行号、`planning.py:1397/1403`
+生产者行号、`validate_trip.py:459-461` 只查路径能否解析、
+`test_replan.py:59` `run_replan_fixture`、CLI 循环 6 项夹具、既有
+`suspend.json` 删的是末尾回程腿（index 1）均逐字核对通过，不停工。
+额外实测（任务书未给但要写新夹具须知）：demo/trip.json 去程腿 index 0
+`leg-rail-fallback-6d95c810b44d`（day 0 slot 0，2026-10-16 08:00-13:00，
+unknowns 索引 5/6），回程腿 index 1 `leg-rail-fallback-e67d77f564f5`
+（day 2 slot 5，unknowns 索引 7/8）；用当前未修复代码试跑「删去程腿」事件
+已复现 bug：回程腿两条 unknown 删后仍停在 `/transport_legs/1/...`，此时
+transport_legs 只剩 1 个元素，`validate_trip` 报 2 条 `V_UNKNOWN_PATH`
+（这份 demo 恰好是「指向越界」而非「指错腿」的子情形，但同属任务书点名的
+同一类缺口）；当前 operation_count=30（与既有 suspend.json 结构对称，纯
+巧合）。
+
+理解的目标：在 `_apply_suspend` 删孤儿 unknowns 之后、重算账本之前加一步——对剩余 unknowns 里 `field_path` 匹配 `/transport_legs/N/...` 且 N 大于被删 leg 原下标的，整体减一并各产出一条 `replace /unknowns/k/field_path` 操作，不新建/删除 unknown 条目。
+顺序：任务 1（新夹具 `suspend-first-leg.json` 删去程腿 + 3 个新测试，先红）→ 任务 2（实现 + CLI 验收 + 反向验证）。
+最大风险：新增 2 条 replace 操作会让 `operation_count` 从 30 变 32，已用脚本跑通未修复代码实测确认 32 是正确的期望值而非猜测，且确认既有 `suspend.json`（删最后一条腿，重编号循环里 `leg_number > removed_leg_index` 永假）的 `operation_count==30` 不受影响。
+
 ## 本轮记录（2026-09-10，书 docs-drift：文档漂移清零 + 站点城市匹配接受区县，worktree `.tmp/wt-b` 分支 `docs-drift`）
 
 - 任务 0（已完成）：`git worktree add .tmp/wt-b -b docs-drift`，HEAD `c9c9c15` 与任务书吻合；任务 1 五条 grep 当前均非零（确认漂移存在）、`adr`/`research` diff 为空，均与任务书吻合；`station_distance.py:261` 确为 `_city_matches`，只剥「市」且只比 `item.get("city")`；实测发现 POI 结果（`_station_point`）的 `district` 只在 claims 里（`providers/amap.py` 的 `_pois()` 把 `district` 塞进 `identity` claim value，item 本身无 `district` 键），geocode 结果（`_city_centre`）的 `district` 才是 item 顶层字段——任务书只说「同时比对 item 的 city 与 district」，未提这个不对称，动工前已核实清楚，不算对不上,不停。唯一数字出入是 pyflakes 全仓 10→11 行，已按「不停工只记录」写入 `BLOCKED.md`。
