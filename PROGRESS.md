@@ -3948,3 +3948,144 @@ zero…"）；`git status --short` 空（工作区干净）。硬指标一（`en
 629 测试 0 skipped、secrets 0、pyflakes 0 全部达成）全部达成。BLOCKED.md
 本书只有一条「无待裁决项」记录（含不新增测试的理由说明），无待裁决项。
 止损轮次未触发（全程一次到位，未遇连败）。
+
+## 书「拆 journey._validate_connection」任务 0：核对通过（2026-09-11，worktree `.tmp/wt-aa2` 分支 `split-journey-connection`，第十一波三份并行书之一）
+
+worktree 从 main `d11c2cb` 分出，任务书列出的全部数字逐条核对，无出入：
+全量 `/usr/bin/python3 -m unittest discover -s tests` → `Ran 629 tests`
+`OK` 0 skipped（75.6s）；`scripts/scan_secrets.py` → `0 finding(s) across
+378 file(s)`；`~/miniconda3/envs/core/bin/python -m pyflakes
+plugins/china-trip-weaver/src tests scripts` 0 行；journey.py 2672 行，
+AST 长度命令输出 `[(100, '_bridge_segment_lodgings'), (103,
+'validate_journey'), (134, '_validate_connection')]` 与任务书逐字相同；
+`_validate_connection` 精确 L2523-2656，唯一调用点 L2365（`validate_journey`
+内，起始 L2272）；函数内 `"J_..."` 字面量 14 处 10 种、全文件 25 种；
+`tests/test_journey.py` 单独跑 `Ran 76 tests` `OK`，`validate_journey(`
+30 处、`segment_connections` 10 处；`demo/journey-16d/journey.json` 确为
+3 trips + 2 connections。
+
+理解的目标：把 `_validate_connection` 按三类拆成 `_check_connection_refs`
+（expected 四字段：from_trip_id/to_trip_id/from_end_date/to_start_date）、
+`_check_connection_lodging`（ref/date/gap/handoff/status）、
+`_check_connection_transport`（owner/ref/cost/not_required/separate），
+本体只留 `path` 计算 + 三次调用 + 已有的 `_validate_connection_timing`
+调用（该函数已独立，不动）。`ValidationIssue` 是
+`@dataclass(frozen=True, order=True)`，`validate_journey` 最终返回
+`sorted(set(issues))`，故三个新函数的调用顺序不影响最终报告排序，只影响
+源码可读性，仍按原文顺序（引用→住宿→交通）排列以保持最小改动面。
+
+顺序：任务 1 快照——`demo/journey-16d/journey.json` 直接读，six-city 走
+`journey_six_city_lodging_chain_case()`（`scripts.build_plan_fixtures`）+
+`plan_journey(case["request"], case["candidates"],
+FixedClock.from_iso(FIXED_NOW), RailBackend.from_spec("off", ROOT)).journey`，
+照抄 `tests/test_journey.py:322-328` 的调用方式 → 任务 2 三段抽取、每段跑
+一次 `tests.test_journey`（76 项）→ 反向验证 → 全量收尾。
+
+最大风险：`outgoing`/`incoming`/`outgoing_ref`/`incoming_ref` 四个局部
+变量全部只在住宿类别内部计算和使用，未被引用类或交通类读取；
+`connection`/`left`/`right`/`path`/`issues` 是唯一跨类别共享的入参（其中
+交通类实际不用 `left`），拆分本身不存在变量提升或跨函数依赖风险。真正
+的风险点是三段代码必须逐字节剪切而非重敲，避免消息文案、字段名或
+J_ 码字面量在搬移过程中出现打字误差。
+
+任务 1（已完成，不提交）：`.tmp/snapshot_journey_connection.py` 对两份基础
+语料——`demo/journey-16d/journey.json` 直接读，`synthetic-six-city-16d`
+经 `journey_six_city_lodging_chain_case()` + `plan_journey(...).journey`
+离线规划得到（两者都恰好是 3 trips + 2 connections）——各跑一次原样
+`validate_journey`，再对每条 connection 做 17 种确定性突变（4 个引用字段
+各改错一次；`lodging_continuity` 的 `from_lodging_id`/`to_lodging_id`/
+`overnight_date` 各改错一次；`cross_segment_transport` 的 `leg_id`/
+`included_in_trip_id`/`price_type`/`amount_min_cny` 各改错一次；
+`lodging_continuity.status`/`cross_segment_transport.status` 各轮换 3 个
+枚举全值），每次记 `(corpus, scenario, ok, [[code, path, message], ...])`
+到 `.tmp/snap-before.json`。日期字段用「加一天」、引用字段用「加后缀」、
+金额用「加 100」，均为确定性变换，不依赖随机数。
+
+验收：`records=70`（≥40）；`.tmp/snap-before.json` 连跑两次
+`diff` 空输出（byte-identical）；`grep -o '"J_[A-Z_]*"'
+plugins/china-trip-weaver/src/china_trip_weaver/journey.py | sort | uniq -c`
+→ `.tmp/j-before.txt` 共 25 行（与任务 0 核对的「全文件 25 种」一致）。
+70 条记录里 10 条 `ok=true`（未触发任何错误的身份突变，如把 status 改成
+它原本就是的值），其余 60 条命中的 `J_` 码去重后恰好覆盖
+`_validate_connection` 函数体内全部 10 种（`J_CONNECTION_REF`/
+`J_LODGING_REF`/`J_LODGING_DATE`/`J_LODGING_GAP`/`J_LODGING_HANDOFF`/
+`J_LODGING_STATUS`/`J_TRANSPORT_OWNER`/`J_TRANSPORT_REF`/
+`J_TRANSPORT_COST`/`J_TRANSPORT_NOT_REQUIRED`），外加一条
+`J_BUDGET_MISMATCH`（`amount_min_cny` 突变改变账本期望值，属
+`validate_journey` 末尾账本校验的正常连带反应，不属于
+`_validate_connection` 本体但证明突变确实生效），证明快照对三类检查的
+全部分支都有真实覆盖，不是空跑。
+
+任务 2（已完成）：一次性按三类抽出 `_check_connection_refs`（expected 四
+字段）、`_check_connection_lodging`（ref/date/gap/handoff/status）、
+`_check_connection_transport`（owner/ref/cost/not_required/separate），
+全部逐字节剪切、未重敲一个字符；`_validate_connection` 收窄成
+`path` 计算 + 三次调用 + 已有的 `_validate_connection_timing` 调用，共
+12 行。`git diff d11c2cb -- .../journey.py` 显示纯粹的函数体搬移，三个
+新函数内部逻辑与原函数完全一致，无任何字符改动。抽出后立即跑
+`tests.test_journey`：`Ran 76 tests` `OK`（当时还未加新测试）。
+
+写测试前核对：全仓库 `grep -rn` 这 10 个 J_ 码
+（`J_CONNECTION_REF`/`J_LODGING_REF`/`J_LODGING_DATE`/`J_LODGING_GAP`/
+`J_LODGING_HANDOFF`/`J_LODGING_STATUS`/`J_TRANSPORT_OWNER`/
+`J_TRANSPORT_REF`/`J_TRANSPORT_COST`/`J_TRANSPORT_NOT_REQUIRED`）在
+`tests/` 下零命中——与「拆 validate_trip.semantic_issues」任务书发现的
+同款缺口一样，既有测试从未对 `_validate_connection` 的任何具体
+`(code, path, message)` 做精确断言，只在 `_validate_connection_timing`
+的两个 `*_CONTINUITY_GAP` 码上有精确断言。若不补测试，反向验证要求的
+「至少一项测试红」无法满足。照抄该先例的做法（`tests/test_journey.py`
+白名单允许新增 `def test_`），新增
+`test_connection_checks_pin_exact_error_tuples_across_split_functions`
+（`JourneyContinuityTests` 类，用 `self.result.journey` 即
+`journey_sixteen_day_case()`，与 `demo/journey-16d` 同一份 fixture），
+3 个 subTest 各对应一个新函数的落点、各选一个产生「`report.errors`
+整体恰好一个元素」的干净突变（`from_trip_id`→`J_CONNECTION_REF`；
+`lodging_continuity.from_lodging_id`→`J_LODGING_REF`；
+`cross_segment_transport.amount_min_cny`→`J_TRANSPORT_COST`），逐一
+`assertEqual` 精确单元素集合。加入后 `Ran 77 tests` `OK`。
+
+硬指标一实测：
+```
+$ /usr/bin/python3 -c "import ast;p='plugins/china-trip-weaver/src/china_trip_weaver/journey.py';t=ast.parse(open(p).read());print(sorted(((n.end_lineno-n.lineno+1),n.name) for n in ast.walk(t) if isinstance(n,ast.FunctionDef))[-6:])"
+[(76, 'journey_risk_items'), (85, 'journey_budget_ledger'), (88, '_validate_connection_timing'), (94, 'plan_journey'), (100, '_bridge_segment_lodgings'), (103, 'validate_journey')]
+```
+`_validate_connection` 精确 12 行（`_check_connection_refs` 19 行、
+`_check_connection_lodging` 74 行、`_check_connection_transport` 52
+行，均未成为文件最长函数）；文件最长函数仍是 `validate_journey` 的
+103 行，与拆分前逐字相同。
+
+硬指标二实测：`.tmp/snap-after.json` 与 `.tmp/snap-before.json`
+`diff` 空输出（byte-identical）；J_ 码计数
+`grep -o '"J_[A-Z_]*"' .../journey.py | sort | uniq -c` 前后 `diff`
+空输出（25 行逐行相同）。三条语料命令零漂移：README demo
+（`trip_sha256=7ea7888f5478bb949e2d565e653212dfb67ff8be041ee61f0d45386a2d9c788c`/
+`html_sha256=c2d07708cb0cc088afab02331642f91e40c58ef3c45db3862b45c480a8bca927`，
+与历史基线逐字相同）；`scripts/build_plan_fixtures.py`（`wrote 3 plan
+cases, 3 invalid candidates, one Journey lodging-chain fixture...`，
+零异常）；`scripts/build_renderer_fixtures.py`
+（`journey_sha256=7ada91c09a6ef253a23f930b454a2d13510d9a4326f906f6299337ec0ce7628e`，
+与「书 Y1」「拆 validate_trip.semantic_issues」两处记录的历史基线完全
+一致）；三条命令跑完 `git status --short` 只有
+`journey.py`/`test_journey.py`/`PROGRESS.md` 三个白名单文件。全量
+`/usr/bin/python3 -m unittest discover -s tests`：`Ran 630 tests`
+`OK` 0 skipped（629 基线 + 1 个新 `def test_`）；`scan_secrets.py`
+`0 finding(s) across 378 file(s)`；
+`~/miniconda3/envs/core/bin/python -m pyflakes
+plugins/china-trip-weaver/src tests scripts` 0 行。
+
+反向验证（终端记录）：把 `_check_connection_transport` 里
+`"must preserve the owned Trip ledger range without counting it
+twice"` 改成结尾多一个 `e` 的 `"...twicee"` → 快照重跑
+`diff .tmp/snap-reverse.json .tmp/snap-after.json` 非空（5 处
+`twice`→`twicee`，对应两个语料共 5 次触达 `J_TRANSPORT_COST` 的场景）
+→ 单独跑新测试 `FAILED (failures=1)`，恰是 `code='J_TRANSPORT_COST'`
+这个 subTest 报 `AssertionError`（期望结尾 `twice`，实际
+`twicee`）→ 精确还原（`grep -c twicee` 确认残留为 0）→ 快照重跑
+`diff` 空输出（IDENTICAL AGAIN）→ `tests.test_journey` 重跑
+`Ran 77 tests` `OK`。
+
+`git diff d11c2cb -- tests | grep -E '^-\s*def test_'` 0 行；
+`git diff d11c2cb --stat -- . ':!plugins/china-trip-weaver/src/china_trip_weaver/journey.py' ':!tests/test_journey.py' ':!PROGRESS.md' ':!BLOCKED.md'`
+空输出；`git diff d11c2cb --stat` 只有三个白名单文件（`journey.py`
++35-3、`test_journey.py` +33、`PROGRESS.md` +本节）。止损轮次未触发
+（一次性按三类抽取、每段过测试即绿，未遇连败）。

@@ -2520,14 +2520,13 @@ def _validate_connection_timing(
             ))
 
 
-def _validate_connection(
+def _check_connection_refs(
     connection: Mapping[str, Any],
     left: Mapping[str, Any],
     right: Mapping[str, Any],
-    index: int,
+    path: str,
     issues: List[ValidationIssue],
 ) -> None:
-    path = "/segment_connections/%d" % index
     expected = {
         "from_trip_id": left["trip_id"],
         "to_trip_id": right["trip_id"],
@@ -2540,6 +2539,15 @@ def _validate_connection(
                 "J_CONNECTION_REF", path + "/" + field,
                 "does not match its adjacent Trip pair",
             ))
+
+
+def _check_connection_lodging(
+    connection: Mapping[str, Any],
+    left: Mapping[str, Any],
+    right: Mapping[str, Any],
+    path: str,
+    issues: List[ValidationIssue],
+) -> None:
     lodging = connection["lodging_continuity"]
     left_lodgings = {item["lodging_id"]: item for item in left["lodgings"]}
     right_lodgings = {item["lodging_id"]: item for item in right["lodgings"]}
@@ -2607,6 +2615,14 @@ def _validate_connection(
             "J_LODGING_STATUS", path + "/lodging_continuity/status",
             "departing is allowed only when the following Trip has no stay",
         ))
+
+
+def _check_connection_transport(
+    connection: Mapping[str, Any],
+    right: Mapping[str, Any],
+    path: str,
+    issues: List[ValidationIssue],
+) -> None:
     transport = connection["cross_segment_transport"]
     if transport["status"] == "included_in_next_trip":
         if transport["included_in_trip_id"] != right["trip_id"]:
@@ -2653,6 +2669,19 @@ def _validate_connection(
             "J_TRANSPORT_OWNER", path + "/cross_segment_transport/included_in_trip_id",
             "separate transport cannot also be included in a Trip",
         ))
+
+
+def _validate_connection(
+    connection: Mapping[str, Any],
+    left: Mapping[str, Any],
+    right: Mapping[str, Any],
+    index: int,
+    issues: List[ValidationIssue],
+) -> None:
+    path = "/segment_connections/%d" % index
+    _check_connection_refs(connection, left, right, path, issues)
+    _check_connection_lodging(connection, left, right, path, issues)
+    _check_connection_transport(connection, right, path, issues)
     _validate_connection_timing(connection, left, right, index, issues)
 
 

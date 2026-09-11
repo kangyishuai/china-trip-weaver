@@ -1,3 +1,26 @@
+## 书「拆 journey._validate_connection」（2026-09-11，worktree `.tmp/wt-aa2` 分支 `split-journey-connection`，第十一波三份并行书之一）：无待裁决项
+
+任务 0/1/2 全部按任务书字面执行，全程无需停工的冲突，也未发现任何 bug 或
+想改动的逻辑——纯逐字节剪切，三个新函数与原函数内部完全一致。任务书数字
+逐条核对全部吻合，无出入需要记录。
+
+唯一需要自行判断（非裁决分叉，供核对）的一点：任务书「建议名」给了
+`_check_connection_refs`/`_check_connection_lodging`/
+`_check_connection_transport` 三个名字，均照抄采用；参数列表任务书未
+指定，按各函数实际读取的字段最小化传参——`_check_connection_transport`
+不接收 `left`（函数体从未读取它），其余两个接收
+`connection`/`left`/`right`/`path`/`issues`，与「拆
+validate_trip.semantic_issues」先例（`_check_*` 函数只接收各自需要的
+上下文、`issues` 放最后一位）同构。
+
+反向验证按先例（「拆 validate_trip.semantic_issues」发现同款测试缺口）
+在 `tests/test_journey.py` 新增一个精确断言 `(code, path, message)` 的
+测试——全仓库此前对 `_validate_connection` 内 10 个 J_ 码零精确断言，
+若不补测试，反向验证要求的「至少一项测试红」无法满足；不是任务书要求
+之外的画蛇添足，而是任务书「反向验证」条款本身能兑现的必要前提，且
+「界限」明确允许 `tests/test_journey.py` 新增 `def test_`。完整实测过程
+（含反向验证的红→绿记录）见 PROGRESS.md 本书任务 2 小节。
+
 ## 书「拆 validate_trip.semantic_issues」（2026-09-11，main 直改）：无待裁决项
 
 任务 0 核对发现任务书「demo 下 5 个 trip.json」与实际不符：`find demo -name
