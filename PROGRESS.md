@@ -4575,3 +4575,87 @@ Decision四类各答、Consequences给下一本书验收命令草案）→自查
 
 验收：全部 23 条 file:line 均已用 `sed -n`/`git grep -n`/`Read` 逐条核对
 原文（过程见上）；第 17 条是离线可复现的脚本输出，不是代码推理。
+
+## 书 AC2「第二价源 ADR-0019」任务 2：ADR 写完，四类价格各给明确答案（2026-09-11，完成）
+
+`docs/design/adr/0019-second-price-source.md`（323 行）已交付，结构照
+ADR-0017（Status/Date/Context/Options/Decision/Consequences）。
+
+Context 六段：10 处 `/price` claim 全表（一行一个来源+`price_type`
+结果）；claim 冲突判定的全仓取证（`mobility.py` 是唯一两处写
+`status="conflict"` 的地方，均与 `/price` 无关）；火车票单一来源无自然
+第二源；机票——合同写了 cross-price、代码从未接线（`_tool_call` 只支持
+search/comfort 两个 action 的完整链路证据）；住宿——两个生产者互不识别
+（`_merge_lodging_candidates` 按 `lodging_id` 精确去重、两边前缀
+`"lodging"` vs `"lodging-flyai"` 永不相等的证据 + 离线探针实测复现）；
+门票——单一人工来源，三个研究期 adapter 全部硬编码 `price: None`。
+
+Options 四个（要求 ≥3）：A 不动；B 把 VariFlight 已声明但死代码的
+cross-price 接到 FlyAI 已有 leg_id 上（复用 `variflight_enrichment.py:258`
+comfort 请求已经在用的「借用已有 subject_ref」写法，不改 schema）；C 给
+住宿建跨源实体配对（成本高于 B，因为要新建匹配逻辑，不是接线）；D 给
+门票建全新官方比价 adapter（四类里唯一要「从零建新服务商」的选项）。
+
+Decision 对四类分别给出：火车票不做（12306 本身就是那趟车那个席位的
+价格，没有独立转售渠道可比）；机票做（选 B，成本最低、已有先例可抄，
+唯一真正缺的是一个 `_tool_call` 分支和一次 `adapter.query`）；住宿做但
+排在机票之后（选 C，价值真实但要先建这仓库从未给住宿做过的身份匹配）；
+门票不做（人工引用官方页面这个动作本身已经是「核对」，自动化需要
+Option D 这个仓库里毫无先例的全新集成，四类里性价比最低）。没有出现
+「只有航班需要，其余不做」这种偷懒答案——四类每类都给了独立证据支撑
+的结论，一致同意「至少一类需要」这条硬指标。
+
+意外发现（任务书未预判，实测得出，已写进 ADR Context/Options）：
+1) VariFlight 的 `EXPECTED_TOOLS` 9 个工具里 `getFlightPriceByCities`
+   已经声明在合同指纹里，但 `variflight_mcp.py:141-154` `_tool_call`
+   从未派发过这个工具——「合同已经声明」与「代码真的会调用」之间的
+   缺口比预想的更具体：不是没有能力，是从建好之后就没接线。
+2) `tests/fixtures/providers/variflight/raw_price.json`
+   （`manifest.json:296`）存在且被通用夹具回放跑到，但它测的是
+   `normalize()` 的防御性解析，不是生产链路——这个夹具的存在一度让人
+   以为「VariFlight 的跨价格链路已经有测试覆盖」，实测发现覆盖的是一段
+   生产环境永远到不了的死代码分支。
+3) 住宿三个生产者（研究候选/FlyAI/AMap 兜底）里，AMap 兜底与 FlyAI
+   互斥（`planning.py:189` `if not inventory.lodgings...`），不是三方
+   都可能同时出现——只有「研究候选 vs FlyAI」这一对才会撞上本 ADR 讨论
+   的场景。
+
+硬指标一实测（≥10 条 file:line 出处，Decision 对四类各给明确答案）：
+Context 共 23+ 条 file:line（见任务 1 小节），本轮又对写入 ADR 正文的
+全部引用做了一次独立的 `grep -oE` 提取+逐条 `sed -n` 复核（8 条抽查全部
+命中，另有此前已核对过的其余引用），无漂移：
+```
+$ grep -oE '[a-zA-Z_/]+\.(py|md|json)[:.][0-9]+(-[0-9]+)?' \
+  docs/design/adr/0019-second-price-source.md | sort -u | wc -l
+55
+```
+（55 条唯一 file:line 引用，逐条核对过程见上；随机抽查 8 条——
+`candidates.py:845`/`candidates.py:1002`/`providers/variflight.py:35`/
+`providers/variflight.py:154`/`render/html.py:100`/`render/html.py:677`/
+`validate_trip.py:410`/`flyai_inventory.py:506`——`sed -n` 全部命中定义行
+原文）。真实名字检查：
+```
+$ grep -n "fujian-2026\|福建" docs/design/adr/0019-second-price-source.md
+(无输出，exit 1)
+```
+
+硬指标二实测：
+```
+$ git diff 9d984b8 --stat -- . ':!docs/design/adr/0019-second-price-source.md' ':!PROGRESS.md' ':!BLOCKED.md'
+(空输出)
+$ git status --short
+?? docs/design/adr/0019-second-price-source.md
+$ /usr/bin/python3 -m unittest discover -s tests
+Ran 632 tests in 36.984s
+OK
+$ /usr/bin/python3 scripts/scan_secrets.py
+secret scan: 0 finding(s) across 379 file(s)
+```
+0 skipped；632 与出发基线一致（本书不改代码，测试数不应变）；分支
+`adr-second-price` 待本轮提交后推送。
+
+止损轮次未触发（任务 0→1→2 一次性做完，中途唯一的分叉是任务书建议的
+「离线跑 `ctw plan --offline-fixture`」命令本身在 CLI 层不可执行
+——`cli.py:914` 硬性要求 `--offline-fixture` 配 `--lodging off`——
+改用直接调用真实函数的等价离线验证，不算返工，已在任务 1 小节写明
+理由）。
