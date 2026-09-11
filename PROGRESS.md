@@ -3566,3 +3566,13 @@ fake-secret.json` 记录第 150 行 `forbidden`→`forbiddenn`，红）→
 plugins/china-trip-weaver/schema '*/planning.py' '*/journey.py'
 '*/replan.py' '*/render/*'`）均空输出；`git status --short` 只剩四个
 白名单文件。止损轮次未触发（3 批抽取+终验一次到位，未遇连败）。
+
+最终门（2026-09-11 实测，提交后复核）：`git log --oneline 404248e..HEAD`
+两个提交（`d2aa330` 任务0+1 文档checkpoint、`fa61ea4` 任务2 拆分+新测试）；
+`git push origin main` 成功（`404248e..fa61ea4 main -> main`）；`gh run
+list --limit 3` 最新一条 `completed success`（run 34575875656，1m3s）；
+`git status --short` 空（工作区干净）。硬指标一（`semantic_issues` 16 行、
+全文件最长函数 76 行`_validate`，均达标）与硬指标二（快照/V码计数/语料
+三命令/全量 629 测试 0 skipped/secrets 0/pyflakes 0 全部逐字节或逐条相同）
+全部达成。BLOCKED.md 本书只有任务 0 的一条非阻塞记录（demo 5→4 个
+trip.json 笔误），无待裁决项。止损轮次未触发（全程一次到位，未遇连败）。
