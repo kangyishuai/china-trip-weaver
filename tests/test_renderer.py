@@ -278,6 +278,27 @@ class RendererTests(unittest.TestCase):
         self.assertIn("官方网站", card)
         self.assertTrue(validate_html(rendered, trip).ok)
 
+    def test_html_adversarial_fixtures_report_exact_error_messages(self):
+        expected_messages = {
+            "invented-train-price-facts": {
+                ("E003", "rendered train fact is absent from Trip: G1001"),
+                ("E003", "rendered CNY fact is absent from Trip: ¥101"),
+            },
+            "csp-loosened": {("E102", "CSP is missing or wider than the renderer contract")},
+            "schematic-label-removed": {("E203", "schematic connection lacks non-route label")},
+        }
+        for case_id, expected in expected_messages.items():
+            with self.subTest(case_id=case_id):
+                fixture = load(HTML_MUTATIONS / (case_id + ".json"))
+                trip = load(ROOT / fixture["base_fixture"])
+                rendered = render_trip(trip)
+                replacement = fixture["replace"]
+                new_value = "".join(replacement["new_parts"]) if "new_parts" in replacement else replacement["new"]
+                mutated = rendered.replace(replacement["old"], new_value, replacement["count"])
+                report = validate_html(mutated, trip)
+                actual = {(item.code, item.message) for item in report.errors}
+                self.assertEqual(expected, actual)
+
 
 def _make_trip_test(path: Path):
     def test(self):

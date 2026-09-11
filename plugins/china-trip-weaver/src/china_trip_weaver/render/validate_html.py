@@ -7,7 +7,7 @@ import re
 from collections import Counter
 from dataclasses import dataclass
 from html.parser import HTMLParser
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 from urllib.parse import urlsplit
 
 from ..contracts import canonical_json
@@ -162,12 +162,37 @@ def validate_html(html_text: str, trip: Mapping[str, Any]) -> HTMLValidationRepo
     def add(code: str, message: str) -> None:
         issues.append(HTMLIssue(code, message))
 
+    _check_document_contract(parser, trip, add)
+    trip_scripts = _check_trip_data_script(parser, trip, add)
+    claim_nodes = _check_rendered_facts(parser, trip, add)
+
+    _check_dom_structure(parser, add)
+    css = _check_security_contract(parser, html_text, add)
+    _check_csp(parser, add)
+
+    _check_links_and_sources(parser, trip_scripts, add)
+    _check_secret_patterns(html_text, add)
+
+    visible = _check_trip_mode_badge(parser, trip, add)
+    _check_dynamic_fact_coverage(parser, trip, add)
+    _check_coordinates_and_schematic(parser, trip, add)
+    _check_transaction_actions(parser, visible, add)
+
+    _check_information_hygiene(parser, trip, claim_nodes, visible, add)
+    _check_accessibility_contract(parser, css, add)
+
+    return HTMLValidationReport(tuple(sorted(set(issues))))
+
+
+def _check_document_contract(parser: AuditParser, trip: Mapping[str, Any], add: Callable[[str, str], None]) -> None:
     html_attrs = next((attrs for tag, attrs in parser.all_attrs if tag == "html"), {})
     charset = any(meta.get("charset", "").lower() == "utf-8" for meta in parser.metas)
     viewport = any(meta.get("name", "").lower() == "viewport" and meta.get("content") == "width=device-width, initial-scale=1" for meta in parser.metas)
     if not parser.doctype or not charset or not viewport or html_attrs.get("lang") != trip["request"]["locale"] or parser.tags["main"] != 1 or parser.tags["h1"] != 1:
         add("E001", "doctype/charset/viewport/lang/unique main+h1 contract failed")
 
+
+def _check_trip_data_script(parser: AuditParser, trip: Mapping[str, Any], add: Callable[[str, str], None]) -> List[Dict[str, Any]]:
     trip_scripts = [item for item in parser.scripts if item["attrs"].get("id") == "trip-data"]
     if len(trip_scripts) != 1 or len(parser.scripts) != 1:
         add("E002", "trip-data must be the only script element")
@@ -181,7 +206,10 @@ def validate_html(html_text: str, trip: Mapping[str, Any]) -> HTMLValidationRepo
                 add("E002", "embedded Trip is not canonical-equal to input")
         except json.JSONDecodeError:
             add("E002", "embedded Trip cannot be parsed")
+    return trip_scripts
 
+
+def _check_rendered_facts(parser: AuditParser, trip: Mapping[str, Any], add: Callable[[str, str], None]) -> List[Tuple[str, Mapping[str, str]]]:
     expected_days = Counter(day["day_id"] for day in trip["days"])
     expected_slots = {slot["slot_id"]: slot for day in trip["days"] for slot in day["slots"]}
     expected_entities = Counter(
@@ -254,7 +282,10 @@ def validate_html(html_text: str, trip: Mapping[str, Any]) -> HTMLValidationRepo
     unexpected_prices = sorted(set(PRICE_FACT_RE.findall(user_fact_text)) - known_prices)
     if unexpected_prices:
         add("E003", "rendered CNY fact is absent from Trip: ¥%s" % unexpected_prices[0])
+    return claim_nodes
 
+
+def _check_dom_structure(parser: AuditParser, add: Callable[[str, str], None]) -> None:
     if any(count != 1 for count in parser.ids.values()):
         add("E004", "duplicate DOM id")
     for attrs in parser.links:
@@ -270,6 +301,8 @@ def validate_html(html_text: str, trip: Mapping[str, Any]) -> HTMLValidationRepo
     if set(parser.sections) != REQUIRED_SECTIONS or any(count != 1 for count in parser.sections.values()):
         add("E005", "required 12-section information architecture is incomplete")
 
+
+def _check_security_contract(parser: AuditParser, html_text: str, add: Callable[[str, str], None]) -> str:
     for tag, attrs in parser.all_attrs:
         if tag in DISALLOWED_TAGS or any(name.lower().startswith("on") for name in attrs):
             add("E101", "executable/interactive element or event handler is forbidden")
@@ -285,11 +318,16 @@ def validate_html(html_text: str, trip: Mapping[str, Any]) -> HTMLValidationRepo
     css = "\n".join(parser.styles)
     if re.search(r"(?i)@import|url\s*\(\s*['\"]?(?:https?:)?//|fetch\s*\(|xmlhttprequest|serviceworker|websocket", css + html_text[:2000]):
         add("E101", "remote resource or fetch hook detected")
+    return css
 
+
+def _check_csp(parser: AuditParser, add: Callable[[str, str], None]) -> None:
     csp_values = [meta.get("content", "") for meta in parser.metas if meta.get("http-equiv", "").lower() == "content-security-policy"]
     if len(csp_values) != 1 or _csp(csp_values[0]) != _csp(CSP):
         add("E102", "CSP is missing or wider than the renderer contract")
 
+
+def _check_links_and_sources(parser: AuditParser, trip_scripts: List[Dict[str, Any]], add: Callable[[str, str], None]) -> None:
     for attrs in parser.links:
         href = attrs.get("href", "")
         if href.startswith("#"):
@@ -306,11 +344,15 @@ def validate_html(html_text: str, trip: Mapping[str, Any]) -> HTMLValidationRepo
     if "</script" in (trip_scripts[0]["content"].lower() if trip_scripts else ""):
         add("E103", "embedded JSON can close the script element")
 
+
+def _check_secret_patterns(html_text: str, add: Callable[[str, str], None]) -> None:
     for pattern in SECRET_PATTERNS:
         if pattern.search(html_text):
             add("E104", "credential-shaped content detected")
             break
 
+
+def _check_trip_mode_badge(parser: AuditParser, trip: Mapping[str, Any], add: Callable[[str, str], None]) -> str:
     mode_nodes = [attrs for tag, attrs in parser.all_attrs if "data-trip-mode" in attrs]
     if len(mode_nodes) != 1 or mode_nodes[0]["data-trip-mode"] != trip["mode"]:
         add("E201", "rendered mode badge differs from Trip")
@@ -319,7 +361,10 @@ def validate_html(html_text: str, trip: Mapping[str, Any]) -> HTMLValidationRepo
         add("E201", "mock notice is not visible")
     if trip["mode"] in ("cached", "static") and any(phrase in visible for phrase in ("实时可用", "实时路线", "实时总价", "已验证路线", "可购买总价")):
         add("E201", "degraded/static data is presented as live")
+    return visible
 
+
+def _check_dynamic_fact_coverage(parser: AuditParser, trip: Mapping[str, Any], add: Callable[[str, str], None]) -> None:
     referenced_claims = [claim_id for day in trip["days"] for slot in day["slots"] for claim_id in slot["claim_ids"]]
     for group in ("transport_legs", "lodgings", "pois"):
         for item in trip[group]:
@@ -346,6 +391,8 @@ def validate_html(html_text: str, trip: Mapping[str, Any]) -> HTMLValidationRepo
             if node.get("data-unknown-path") != unknown["field_path"] or node.get("data-unknown-reason") != unknown["reason"]:
                 add("E202", "unknown path/reason differs from Trip")
 
+
+def _check_coordinates_and_schematic(parser: AuditParser, trip: Mapping[str, Any], add: Callable[[str, str], None]) -> None:
     null_coordinate_ids = {
         item[key]
         for group, key in ((trip["lodgings"], "lodging_id"), (trip["pois"], "poi_id"))
@@ -358,10 +405,20 @@ def validate_html(html_text: str, trip: Mapping[str, Any]) -> HTMLValidationRepo
     if has_line and not schematic_labels:
         add("E203", "schematic connection lacks non-route label")
 
+
+def _check_transaction_actions(parser: AuditParser, visible: str, add: Callable[[str, str], None]) -> None:
     forbidden_actions = ("立即购买", "立即支付", "提交订单", "登录后购买", "取消订单", "申请改签")
     if any(phrase in visible for phrase in forbidden_actions) or parser.tags["form"] or parser.tags["button"]:
         add("E204", "transaction action was rendered")
 
+
+def _check_information_hygiene(
+    parser: AuditParser,
+    trip: Mapping[str, Any],
+    claim_nodes: List[Tuple[str, Mapping[str, str]]],
+    visible: str,
+    add: Callable[[str, str], None],
+) -> None:
     all_internal_ids = {
         trip["trip_id"],
         *(day["day_id"] for day in trip["days"]),
@@ -398,6 +455,8 @@ def validate_html(html_text: str, trip: Mapping[str, Any]) -> HTMLValidationRepo
             add("E205", "alternatives and unknowns must precede itinerary detail")
             break
 
+
+def _check_accessibility_contract(parser: AuditParser, css: str, add: Callable[[str, str], None]) -> None:
     if not _css_contract(css):
         add("E001", "mobile/focus/print/reduced-motion CSS contract is incomplete")
     navs = [attrs for tag, attrs in parser.all_attrs if tag == "nav"]
@@ -406,8 +465,6 @@ def validate_html(html_text: str, trip: Mapping[str, Any]) -> HTMLValidationRepo
     for tag, attrs in parser.all_attrs:
         if tag == "svg" and (attrs.get("role") != "img" or not attrs.get("aria-labelledby")):
             add("E001", "SVG lacks accessible title/description relation")
-
-    return HTMLValidationReport(tuple(sorted(set(issues))))
 
 
 def _csp(value: str) -> Mapping[str, Tuple[str, ...]]:
