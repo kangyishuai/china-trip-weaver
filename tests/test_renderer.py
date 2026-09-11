@@ -244,6 +244,31 @@ class RendererTests(unittest.TestCase):
         self.assertNotIn('<polyline class="route-line"', rendered)
         self.assertTrue(validate_html(rendered, trip).ok)
 
+    def test_rental_ferry_fixture_renders_valid_html_with_drive_and_ferry_labels(self):
+        trip = load(VALID / "rental-ferry.json")
+        rendered = render_trip(trip)
+        report = validate_html(rendered, trip)
+
+        self.assertTrue(report.ok, [item.render() for item in report.errors])
+        self.assertIn("驾车", rendered)
+        self.assertIn("轮渡", rendered)
+
+    def test_rental_ferry_ferry_and_drive_legs_each_appear_once_in_transport_summary(self):
+        trip = load(VALID / "rental-ferry.json")
+        rendered = render_trip(trip)
+        parser = AuditParser()
+        parser.feed(rendered)
+        parser.close()
+
+        transport_modes = [
+            attrs["data-travel-mode"]
+            for tag, attrs in parser.all_attrs
+            if attrs.get("data-entity-kind") == "transport"
+        ]
+
+        self.assertEqual(1, transport_modes.count("ferry"))
+        self.assertEqual(1, transport_modes.count("drive"))
+
     def test_e104_rejects_assignment_for_every_supported_key_name(self):
         trip = load(VALID / "weekend-live.json")
         rendered = render_trip(trip)

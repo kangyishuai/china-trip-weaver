@@ -181,6 +181,57 @@ ref_id/slot_id），不要求是 POI——照抄 `multicity-static.json` 用 cit
   `handshakeAttempts: 1`
 - `scripts/scan_secrets.py` → `0 finding(s) across 376 file(s)`
 
+任务 2（已完成）：`tests/test_renderer.py` 新增 2 个 `def test_`——
+`test_rental_ferry_fixture_renders_valid_html_with_drive_and_ferry_labels`
+（渲染新夹具，`validate_html(rendered, trip).ok` 为真，且页面同时含「驾车」
+「轮渡」两个中文标签）、
+`test_rental_ferry_ferry_and_drive_legs_each_appear_once_in_transport_summary`
+（用既有 `AuditParser().all_attrs` 精确统计 `data-entity-kind="transport"`
+卡片的 `data-travel-mode` 属性，断言 `ferry`/`drive` 各恰好出现 1 次，比裸
+字符串计数更贴近「各在 transport 分区出现一次」的字面要求）。
+`tests/test_contracts.py:82` 唯一改动：`assertEqual(2, ...)` →
+`assertEqual(3, ...)`（`test_both_valid_examples_pass_schema_and_semantics`
+方法名沿用旧名不改——同 PROGRESS.md 既有先例（书「ctw replan --rail-result」
+任务 2 的 `test_all_four_replan_fixtures_...`），改名等价于删一行旧签名、
+加一行新签名，会让「不删 def test_」的 grep 非空）。`docs/design/adr/
+0016-rental-car-and-ferry.md` 命令 2、3 各加一行 `**Done (2026-09-11):**`
+说明；顺手把命令 4/5 说明段落末尾「commands 2–3 ... remain open for a
+future book」这句过时表述改成本书已交付的事实（否则会与刚加的两行 Done
+自相矛盾）——判断这是「覆盖 ADR 四件事」优先级下应做的最小一致性修正，非
+越界，记录于此供核对。
+
+硬指标验收：`/usr/bin/python3 -m unittest discover -s tests` → `Ran 614
+tests` `OK` 0 skipped（612 基线 + 2 个新 `def test_`）；pyflakes
+（`plugins/china-trip-weaver/src tests scripts`）0 行；
+`scripts/scan_secrets.py` → `0 finding(s) across 376 file(s)`；`git diff
+bf53f72 -- tests | grep -E '^-\s*def test_'` 空输出（0 行）；`git diff
+bf53f72 --stat -- plugins demo` 空输出。
+
+反向验证：临时把 `rental-ferry.json` 里 `transport_legs[0].travel_mode`
+改成 `ferryx` → `ctw validate` 报 `S_ENUM /transport_legs/0/travel_mode
+value is not in the allowed set` / `INVALID`（红）→
+`python3 -m unittest tests.test_contracts` 报
+`FAILED (failures=1)`（`test_both_valid_examples_pass_schema_and_semantics`
+断言 `False is not true`，红）→ 用会话开头复制的备份文件整体还原 →
+`git diff --stat -- tests/fixtures/trips/schema/valid/rental-ferry.json`
+空输出（字节级复原，无残留）→ `ctw validate` 重新 `VALID`、
+`tests.test_contracts` 重新 `OK`（19/19）→ 全量 `Ran 614 tests` `OK`（绿）。
+
+判断记录（`git diff main` 与 `git diff bf53f72` 不一致，非空白裁决）：验收
+期间 `main` 已被并行书 X1（「拆 validate_journey_html」，main 直改）推进一
+个提交 `6b3e076`（"docs: record task 0 verification and task 1 snapshot
+for validate_journey_html split"）。若直接对移动后的 `main` 跑
+`git diff main --stat`，会把 X1 改动的 `BLOCKED.md`/`PROGRESS.md` 一并
+列进本书的"改动"里（因为本分支缺少那个提交），造成误判。与 PROGRESS.md
+既有先例「书 A2b 任务 2」「书 W2 任务 2」同款处理：改用
+`git merge-base main HEAD` 核实的真实分叉点 `bf53f72`（与任务书「现状与
+任务 0」写的 HEAD 一致）重新比较，`git diff bf53f72 --stat` 只有
+`PROGRESS.md`/`docs/design/adr/0016-rental-car-and-ferry.md`/新夹具/
+`tests/test_contracts.py`/`tests/test_renderer.py` 五个文件，均在白名单
+内；`git diff bf53f72 --stat -- plugins demo` 空输出。不停工，供管理者
+合并时核对——merge 时 X1 的最新提交会随 main 自然出现在合并结果里，不需要
+本书额外动作。
+
 ## 书 W2「suspend 删非末尾腿的 unknowns 重编号」（2026-09-11，worktree `.tmp/wt-w2` 分支 `replan-reindex`，已完成）
 
 任务 0 核对（HEAD `d22e3e6`）：全部与任务书数字吻合——602 测试 OK 0 skip、

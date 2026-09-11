@@ -343,9 +343,19 @@ pure code, no schema edits):
 2. `ctw validate .tmp/synthetic-rental-ferry-trip.json` → `VALID` for a
    hand-authored Trip containing one `drive` rental leg and one `ferry` leg,
    against the *unmodified* schema.
+   **Done (2026-09-11):** shipped as
+   `tests/fixtures/trips/schema/valid/rental-ferry.json` (a synthetic
+   two-day Xiamen Trip: one `ferry` leg to Gulangyu, one `drive` rental leg
+   to Nanjing); `ctw validate` on it against the unmodified schema returns
+   `VALID`.
 3. `ctw validate-html .tmp/synthetic-rental-ferry-trip.html .tmp/synthetic-rental-ferry-trip.json`
    → `HTML VALID ... errors=0` (proves the existing generic transport card
    needs no new render branch).
+   **Done (2026-09-11):** `ctw render` on the same fixture followed by
+   `ctw validate-html` returns `HTML VALID ... errors=0`; the rendered page
+   shows the existing generic transport card for both legs with no new
+   render branch, labelled "驾车"/"轮渡" from the travel_mode enum already
+   in `render/html.py`.
 4. `/usr/bin/python3 -m unittest tests.test_journey -k booking_checklist -v` →
    a new test asserting a leg with a `/booking_deadline`-shaped claim produces
    a checklist item whose `deadline` is the claim's value, not `depart_at`.
@@ -356,4 +366,4 @@ pure code, no schema edits):
 6. `/usr/bin/python3 -m unittest discover -s tests` → `OK` with the same
    skip count as this book's baseline (regression gate).
 
-**Implementation note (2026-09-10):** command 5's `_apply_XXX` handler shipped as `replan.py`'s `suspend` event (`_apply_suspend`), removing the leg, its `budget_ledger` line, and any now-orphaned claim in the same patch as the slot swap, with `trigger: "disruption"`; command 4 (the `journey_booking_checklist` booking-deadline fix) shipped in the same wave as `_journey_transport_leg_deadline` in `journey.py` (rail legs now carry the 12306 presale open date, a `/booking_deadline` claim wins when present); commands 2–3 (a synthetic rental/ferry Trip and `validate-html` on it) remain open for a future book, and no `trip.schema.json` field was added, confirming the Decision above.
+**Implementation note (2026-09-10):** command 5's `_apply_XXX` handler shipped as `replan.py`'s `suspend` event (`_apply_suspend`), removing the leg, its `budget_ledger` line, and any now-orphaned claim in the same patch as the slot swap, with `trigger: "disruption"`; command 4 (the `journey_booking_checklist` booking-deadline fix) shipped in the same wave as `_journey_transport_leg_deadline` in `journey.py` (rail legs now carry the 12306 presale open date, a `/booking_deadline` claim wins when present). **Update (2026-09-11):** commands 2–3 (a synthetic rental/ferry Trip and `validate-html` on it) shipped in worktree branch `rental-ferry-fixture` as `tests/fixtures/trips/schema/valid/rental-ferry.json`, exercised by two new tests in `tests/test_renderer.py`; no `trip.schema.json` field was added, confirming the Decision above.
