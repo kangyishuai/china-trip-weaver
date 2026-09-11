@@ -174,6 +174,33 @@ class VariFlightLiveTests(unittest.TestCase):
         self.assertEqual("conflict", beyond_price_claims[0]["status"])
         self.assertEqual(("claim-flyai-price",), beyond.conflict_claim_ids)
 
+    def second_matched_flight(self, flyai_amount):
+        return {
+            "leg_id": "leg-flight-2", "travel_mode": "flight", "from_ref": "city-beijing",
+            "to_ref": "city-shanghai", "depart_at": "2026-09-10T23:00:00+08:00",
+            "service_number": "XX1002", "claim_ids": ["claim-flyai-price-2"],
+            "price": {"amount": flyai_amount, "claim_id": "claim-flyai-price-2"},
+        }
+
+    def test_one_price_call_covers_every_flyai_flight_on_the_route_and_conflicts_independently(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            resolved = credentials(True)
+            transport = self.transport(temporary, resolved, "require-key")
+            backend = VariFlightBackend("auto", resolved, transport)
+            flights = [self.matched_flight(1250.0), self.second_matched_flight(1000.0)]
+            result = backend.enrich(flights, [self.matched_route()], CLOCK)
+        price_claims = {
+            item["subject_ref"]: item for item in result.claims
+            if item["provider"] == "variflight" and item["field_path"] == "/price"
+        }
+        self.assertEqual({"leg-flight", "leg-flight-2"}, set(price_claims))
+        self.assertEqual(1300, price_claims["leg-flight"]["value"])
+        self.assertEqual("partial", price_claims["leg-flight"]["status"])
+        self.assertEqual(50, price_claims["leg-flight-2"]["value"])
+        self.assertEqual("conflict", price_claims["leg-flight-2"]["status"])
+        self.assertEqual(("claim-flyai-price-2",), result.conflict_claim_ids)
+        self.assertEqual(3, transport.business_calls)
+
     def test_independent_search_emits_price_less_verify_on_click_candidate(self):
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
             resolved = credentials(True)

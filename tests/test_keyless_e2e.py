@@ -498,6 +498,132 @@ class KeylessE2ETests(unittest.TestCase):
         html_report = validate_html(result.html, result.trip)
         self.assertTrue(html_report.ok, [item.render() for item in html_report.errors])
 
+    def test_g6_promoted_meeting_flight_carries_its_own_variflight_price_claim(self):
+        request, candidates = synthetic_grouped_meeting_input(meet_by="2026-09-10T12:30:00+08:00")
+        request["traveler_groups"] = [{
+            "group_id": "family-kunming",
+            "travelers": 2,
+            "origin": {"ref_id": "city-kunming", "name": "昆明", "city": "昆明"},
+        }]
+        rail_backend = RailBackend("fixture", ROOT, fixture={
+            "provider": "rail12306",
+            "transport": {
+                "body": {
+                    "calls": [
+                        {
+                            "arguments": {"citys": "昆明|上海"},
+                            "name": "get-station-code-of-citys",
+                            "result": {"content": [{"type": "text", "text": json.dumps({
+                                "上海": {"station_code": "SHX", "station_name": "上海示例站"},
+                                "昆明": {"station_code": "KMX", "station_name": "昆明示例站"},
+                            }, ensure_ascii=False)}]},
+                        },
+                        {
+                            "arguments": {
+                                "date": "2026-09-10", "format": "json", "fromStation": "KMX",
+                                "limitedNum": 1, "toStation": "SHX", "trainFilterFlags": "GD",
+                            },
+                            "name": "get-tickets",
+                            "result": {"content": [{"type": "text", "text": json.dumps([{
+                                "arrive_date": "2026-09-10", "arrive_time": "13:00",
+                                "dw_flag": ["示例编组"], "from_station": "昆明示例站", "from_station_telecode": "KMX",
+                                "lishi": "05:00",
+                                "prices": [{"discount": 100, "num": "有", "price": 300, "seat_name": "二等座", "seat_type_code": "O", "short": "ze"}],
+                                "start_date": "2026-09-10", "start_time": "08:00", "start_train_code": "G9001",
+                                "to_station": "上海示例站", "to_station_telecode": "SHX", "train_no": "SYNTHETIC-G9001",
+                            }], ensure_ascii=False)}]},
+                        },
+                    ],
+                    "protocol_version": "2025-06-18",
+                    "server_info": {"name": "12306-mcp", "version": "0.3.10"},
+                    "tools": [
+                        "get-current-date", "get-stations-code-in-city", "get-station-code-of-citys",
+                        "get-station-code-by-names", "get-station-by-telecode", "get-tickets",
+                        "get-interline-tickets", "get-train-route-stations",
+                    ],
+                },
+                "headers": {},
+                "kind": "response",
+                "status_code": 200,
+            },
+        })
+
+        def flight_item(flight_no, arrive_time, depart_time, price):
+            return {
+                "journeys": [{
+                    "journeyType": "直达",
+                    "segments": [{
+                        "arrCityName": "上海", "arrDateTime": "2026-09-10 " + arrive_time + ":00", "arrStationName": "上海示例机场",
+                        "depCityName": "昆明", "depDateTime": "2026-09-10 " + depart_time + ":00", "depStationName": "昆明示例机场",
+                        "duration": "140", "marketingTransportName": "示例航空", "marketingTransportNo": flight_no,
+                        "seatClassName": "经济舱",
+                    }],
+                    "totalDuration": "140",
+                }],
+                "jumpUrl": "https://www.fliggy.com/flight/search",
+                "ticketPrice": price,
+                "totalDuration": "140",
+            }
+
+        flyai_backend = FlyAIBackend(
+            "live",
+            resolve_credentials({}, ROOT / ".tmp" / "g6-flight-price-no-flyai-key"),
+            ReplayTransport({
+                "body": {
+                    "cliVersion": "1.0.16",
+                    "commands": ["search-hotel", "search-flight"],
+                    "data": {"itemList": [
+                        flight_item("XX1001", "13:00", "10:40", "1250.00"),
+                        flight_item("XX1002", "11:00", "08:40", "1000.00"),
+                    ]},
+                    "message": "success",
+                    "probe": {"command": "search-flight", "flags": ["--origin", "--destination", "--dep-date", "--journey-type"]},
+                    "status": 0,
+                    "systemMessage": "synthetic fixture; no provider request was made",
+                },
+                "headers": {},
+                "kind": "response",
+                "status_code": 200,
+            }),
+        )
+
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            temporary_path = Path(temporary)
+            variflight_credentials = resolve_credentials(
+                {"VARIFLIGHT_API_KEY": "ctw-canary-variflight-meeting-price-not-real"},
+                temporary_path / "no-variflight-file",
+            )
+            variflight_transport = VariFlightMCPTransport(
+                variflight_credentials,
+                cache_dir=temporary_path / "npm-cache",
+                temp_root=temporary_path / "variflight-home",
+                command=(sys.executable, str(VARIFLIGHT_SERVER), "require-key"),
+                cwd=ROOT,
+            )
+            variflight_backend = VariFlightBackend("auto", variflight_credentials, variflight_transport)
+            result = plan_trip(
+                request, candidates, FixedClock.from_iso(FIXED_NOW), rail_backend,
+                flyai_backend=flyai_backend,
+                variflight_backend=variflight_backend,
+            )
+
+        legs = result.trip["transport_legs"]
+        promoted = [leg for leg in legs if str(leg["leg_id"]).startswith("leg-meeting-flight-")]
+        self.assertEqual(1, len(promoted))
+        promoted_leg = promoted[0]
+        self.assertEqual("2026-09-10T11:00:00+08:00", promoted_leg["arrive_at"])
+        promoted_claims = [
+            claim for claim in result.trip["claims"]
+            if claim["subject_ref"] == promoted_leg["leg_id"]
+        ]
+        variflight_price_claims = [
+            claim for claim in promoted_claims
+            if claim["provider"] == "variflight" and claim["field_path"] == "/price"
+        ]
+        self.assertEqual(1, len(variflight_price_claims))
+        trip_report = validate_trip(result.trip)
+        self.assertTrue(trip_report.ok, [item.render() for item in trip_report.errors])
+
     def test_g6_meeting_buffer_insufficient_reports_earliest_known_arrival_across_rail_and_flight(self):
         request, candidates = synthetic_grouped_meeting_input(meet_by="2026-09-10T12:30:00+08:00")
         request["traveler_groups"] = [{
