@@ -1535,3 +1535,26 @@ docs-drift 类任务书一并处理。
    `deadline_ms`；但如果管理者在真机验收时看到并发 `doctor --probe` 下
    variflight 也报 network 层失败，值得留意是不是本机网络也在这个边界
    上，而不是直接归因为本书改动有问题。
+
+## 书 AE2「Journey 页 375px 横向溢出」：day-card h3 的「6px」不是断行问题，CSS 治不了（2026-09-11，非阻塞）
+
+真实 0.16 版行程页里「九曲溪竹筏（必须以出票班次为准）」等 3 处 slot
+标题 h3（由共享函数 `_render_day_slots`，html.py 只读，产出，但
+`.day-card h3` 是后代选择器天然覆盖它）`scrollWidth` 比 `clientWidth`
+多 6px。用 `!important` 强制该 h3 `word-break: break-all`（比任务书猜的
+`overflow-wrap: anywhere` 更激进的断行规则）重跑真实页面，6px 纹丝不动
+——而且该 h3 本来就已经从 `body { overflow-wrap: anywhere; }`
+（`assets/renderer.css:36`，全局继承）拿到过兜底，不是没加过。判断是
+CJK 右括号「）」附近的字体墨水度量伪影，不是可断行/不可断行的问题，
+断行类 CSS（`word-break`/`overflow-wrap`）治不了；它不冒泡到根级
+`horizontalOverflow`（day-card 内边距余量比页头大，局部溢出被吸收，
+QA 的「horizontal overflow」判失败项不受影响）。仍按任务书要求给
+`.day-card h3` 显式加了 `overflow-wrap: anywhere`（对现状是空操作，
+不违反任何规则，留作显式防御）。用本书新增的 `internalOverflow` 诊断
+字段实测：真实行程页应用本书修复后，`.journey-title-route` 的根级溢出
+归零，但 `internalOverflow` 仍报 12（3 个 day-card 各自的 article/ol/li/h3
+共 4 层祖先元素，就是这个未解的 6px 现象）——这不在本书「硬指标一」
+范围内（硬指标一只要求本书新增的合成测试 internalOverflow==0，该测试
+刻意不构造这个已证实不可控的案例，见 PROGRESS.md 本书任务 0）。如果
+领导认为这 12 处局部溢出值得继续查，需要新开一本任务书，方向大概率
+不是 CSS，而是字体度量或 CJK 标点避头尾（kinsoku）规则。

@@ -1656,6 +1656,42 @@ class JourneyContinuityTests(unittest.TestCase):
             for viewport in report["viewports"]:
                 self.assertEqual(0, viewport["horizontalOverflow"])
 
+    def test_synthetic_long_origin_annotation_has_no_horizontal_or_internal_overflow_at_375px(self):
+        journey = copy.deepcopy(self.result.journey)
+        journey["origin"]["name"] = "合成甲城（由合成乙县于9月24日前置）"
+        rendered = render_journey(journey)
+
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            html_path = Path(temporary) / "journey.html"
+            html_path.write_text(rendered, encoding="utf-8")
+            qa = subprocess.run(
+                [
+                    sys.executable, str(ROOT / "scripts" / "qa_renderer_browser.py"),
+                    str(html_path), "--output", str(Path(temporary) / "qa"),
+                    "--viewports", "375x812", "--sections", "16",
+                ],
+                text=True,
+                capture_output=True,
+                timeout=150,
+            )
+            report = load(Path(temporary) / "qa" / "qa-report.json")
+            viewport = report["viewports"][0]
+            self.assertEqual(0, viewport["horizontalOverflow"], report)
+            self.assertEqual(0, viewport.get("internalOverflow"), report)
+            self.assertEqual([], report["failures"])
+            self.assertEqual(0, qa.returncode, qa.stdout + qa.stderr)
+
+    def test_journey_title_route_wraps_at_separators_with_wbr(self):
+        journey = copy.deepcopy(self.result.journey)
+        journey["origin"]["name"] = "合成甲城（由合成乙县于9月24日前置）"
+        rendered = render_journey(journey)
+
+        match = re.search(r'<span class="journey-title-route">(.*?)</span>', rendered, flags=re.DOTALL)
+        self.assertIsNotNone(match)
+        self.assertIn("<wbr>", match.group(1))
+        report = validate_journey_html(rendered, journey)
+        self.assertEqual(0, len(report.errors), [item.render() for item in report.errors])
+
     def test_location_overview_renders_a_located_svg_for_a_located_poi(self):
         journey = copy.deepcopy(self.result.journey)
         reference_poi = load(VALID_TRIP)["pois"][0]

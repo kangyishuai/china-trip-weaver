@@ -5785,3 +5785,112 @@ city_code_not_airport_code` `FAILED`（`'BJS' != 'PEK'`）→ 换回；换回后
 `tests/test_variflight_live.py`、`scripts/build_provider_fixtures.py`
 共 13 个文件，全部落在"界限"允许范围；`git diff 625e818 -- tests | grep
 -E '^-\s*def test_'` 0 行。硬指标一、二均达成，一轮内完成，未触发止损。
+
+## 书 AE2「Journey 页 375px 横向溢出」（2026-09-11，worktree `.tmp/wt-ae2` 分支 `journey-title-wrap`，第十五波两份并行书之一）
+
+任务 0 核对（HEAD `625e818`）：真实 0.16 版 16 天行程页（不入库，本机路径
+`fujian-2026-09-25-to-10-10/福建中秋国庆16天行程-0.16.html`）跑
+`qa_renderer_browser.py --viewports 375x812 --sections 16` 复现
+`horizontalOverflow: 8`（`scrollWidth 383` vs `clientWidth 375`）；逐元素
+扫描定位 `.journey-title-route`（h1 内 span）`scrollWidth 367` vs
+`clientWidth 343`，与任务书数字完全一致；把 `main/header/footer` 的直接
+子元素逐个隐藏，隐藏 `<h1>` 后 `scrollWidth` 精确回落到 375，证明当前数据
+下只有 H1 造成根级溢出。合成复现（`journey_sixteen_day_case()` +
+`plan_journey`，`journey["origin"]["name"]` 改成任务书建议的
+「合成甲城（由合成乙县于9月24日前置）」）跑同一 QA 脚本得
+`horizontalOverflow: 71`（非零，复现成功）。
+
+理解的目标：h1 路线串（`.journey-title-route`）375px 下的根级溢出是真实
+可修的 bug——`overflow-wrap: normal` 覆盖了 `body` 的全局兜底、加上
+`word-break: keep-all`，把「（由个旧于9月24日前置）」这类不含任何分隔符
+的纯 CJK+数字批注段卡成一个比容器还宽的「词」。
+顺序：先锁红测试 → 改 CSS（分隔符后插 `<wbr>` + `overflow-wrap: anywhere`
+兜底）→ QA 脚本加 `internalOverflow` 上报字段 → 重生成示例 → 全量收尾。
+最大风险（已用真实页面实测验证，非猜测）：任务书猜测「`.day-card h3` 的
+6px 溢出也能靠加 `overflow-wrap: anywhere` 修」——实测 `.day-card h3`
+（含共享函数 `_render_day_slots`，html.py 只读，产出的 slot 标题 h3，因
+`.day-card h3` 是后代选择器天然覆盖它）早已从 `body { overflow-wrap:
+anywhere; }`（`assets/renderer.css:36`，全局继承）拿到这条规则；用
+`!important` 强制该 h3 `word-break: break-all`（比 anywhere 更激进）重跑
+真实页面，「九曲溪竹筏（必须以出票班次为准）」那一行的 6px（282 vs 276）
+纹丝不动，且从不冒泡到根级 `horizontalOverflow`（day-card 的内边距余量
+比页头大，局部溢出被吸收）——判断是 CJK 右括号「）」附近的字体墨水度量
+伪影，断行类 CSS 治不了。仍按书面要求给 `.day-card h3` 显式加
+`overflow-wrap: anywhere`（对现状是空操作，但不违反任何规则，留作显式
+防御）；合成红测试的 `internalOverflow` 断言改锚定 H1 自身及其祖先
+（html/body/header/span 共 5 个真正由断行规则决定、可靠红→绿的元素），
+不强行构造那个不可控的 6px 案例。
+
+任务 1（红测试，`tests/test_journey.py` 新增两条 `def test_`）：①
+`test_synthetic_long_origin_annotation_has_no_horizontal_or_internal_
+overflow_at_375px` 此刻红——`AssertionError: 0 != 71`（`internalOverflow:
+5`，即 html/body/header/h1/span 这条冒泡链）；②
+`test_journey_title_route_wraps_at_separators_with_wbr` 此刻红——
+`'<wbr>' not found in '合成甲城（由合成乙县于9月24日前置） → 上海 →
+杭州 → 苏州'`（证实 `journey_sixteen_day_case()` 的路线串确实含「→」，
+测试有效）。
+
+任务 2（改 CSS/标记/QA 脚本、重生成示例）：`journey_html.py` 把
+`.journey-title-route` 的 `overflow-wrap: normal` 改成 `anywhere`（保留
+`word-break: keep-all`，让「分隔符处换行优先、任意位置断字兜底」的顺序
+由 CSS 语义本身保证）；新增 `_route_title_markup()`，对转义后的
+`route_title` 在每个「→」「／」后插入 `<wbr>`；`.day-card h3` 显式加
+`overflow-wrap: anywhere`（对现状是空操作，见上，仍按书面要求加了）。
+`scripts/qa_renderer_browser.py` 的 `AUDIT_EXPRESSION` 新增
+`internalOverflow` 字段（自身 `scrollWidth > clientWidth+1` 且自身与
+全部祖先都不是 `overflow-x: auto/scroll` 容器的元素计数），只上报，
+`validate_report` 的判失败规则未改一行。两条新测试转绿；
+`scripts/build_renderer_fixtures.py` 重生成后
+`demo/journey-16d/journey.html` 只变了 5 行（`journey_sha256` 不变，
+只有 `html_sha256` 变，证明只改了渲染代码没碰 Journey 数据）；
+`ctw journey validate-html demo/journey-16d/journey.html
+demo/journey-16d/journey.json` → `errors=0`；
+`qa_renderer_browser.py --viewports 375x812,1440x900 --sections 16`
+→ `failures=[]`，两个视口 `horizontalOverflow:0`、`internalOverflow:0`。
+`build_plan_fixtures.py`/`build_provider_fixtures.py` 重跑后
+`git status --short -- tests/fixtures demo` 只剩已预期的
+`journey-16d/journey.html`；README Trip demo 四步管线重新走了一遍，
+`trip_sha256=7ea7888f...`/`html_sha256=c2d07708...` 与历史基线逐字节
+一致，`demo/trip.json`/`demo/trip.html` 未进入 `git status`（零漂移）。
+全量 `Ran 643 tests OK` 0 skipped（643=641 基线+2 新测试）；
+`~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-
+weaver/src tests scripts` 0 行（`/usr/bin/python3` 这台机器没装
+pyflakes，改用 miniconda 环境，二者只是解释器不同，检查的是同一份
+源码）；`scan_secrets.py` → `0 finding(s) across 381 file(s)`。
+
+反向验证：临时把 `.journey-title-route` 的 `overflow-wrap` 改回
+`normal`、`.day-card h3` 的 `overflow-wrap: anywhere` 删掉、
+`_route_title_markup()` 内的 `<wbr>` 插入逻辑删掉（用 `git diff` 存了一
+份补丁再手工改）→ 两条新测试重新变红（`horizontalOverflow: 71`、
+`internalOverflow: 5`、`<wbr>` 缺失，与任务 1 首次见到的红一致）→ 用
+`git apply` 把存好的补丁读回来（没有用 `git checkout --`，那样会连同
+真实修复一起丢掉，走过一次弯路已改正）→ 两条新测试与既有的
+`test_checked_in_sixteen_day_demo_matches_the_deterministic_renderer`/
+`test_checked_in_sixteen_day_demo_passes_offline_browser_qa` 重新全绿；
+随后又完整跑了一遍全量测试（`Ran 643 tests OK`）确认这次往返没有留下
+任何字节级差异。
+
+顺手用本书的修复直接重渲染真实 16 天行程的 `journey.json`（不入库，
+仅本机验证）：`horizontalOverflow` 从改前的 8 变成改后的 0、
+`failures: []`，证明本书修复真实解决了任务书描述的原始症状；
+`internalOverflow` 报 12（对应上面分析的那 3 个 day-card 共 4 层祖先，
+即已证实靠 CSS 治不了的 6px 现象），记入 BLOCKED.md，非本书硬指标
+范围内、非阻塞。
+
+`git diff 625e818 --stat`：
+
+```
+ PROGRESS.md                                        | 35 +++++++++++++++++++++
+ demo/journey-16d/journey.html                      |  5 +--
+ .../src/china_trip_weaver/render/journey_html.py   | 16 ++++++++--
+ scripts/qa_renderer_browser.py                     |  9 ++++++
+ tests/test_journey.py                              | 36 ++++++++++++++++++++++
+ 5 files changed, 97 insertions(+), 4 deletions(-)
+```
+
+全部落在「界限」允许的文件清单内；`git diff 625e818 -- tests | grep -E
+'^-\s*def test_'` 0 行；未发现冲突标记
+（`git grep -c '^<<<<<<< ' -- PROGRESS.md BLOCKED.md` 无命中）。硬指标
+一、二均达成，一轮内完成，未触发止损。BLOCKED.md 记了一条非阻塞判断
+（day-card h3 的 6px 不是断行问题、CSS 治不了，见上）。分支待
+`git push -u origin journey-title-wrap`。
