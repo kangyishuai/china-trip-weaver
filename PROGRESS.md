@@ -6630,3 +6630,24 @@ grep -E '^-\s*def test_'` 0 行（无测试被删除）；未发现冲突标记�
 先红后绿）与硬指标二（全量 ≥655、0 skipped、secrets 0、pyflakes 0
 行、`git status --short` 干净、CI 绿——CI 结果见下一节推送记录）
 均达成，一轮内完成，未触发止损。
+
+## 书 AG1 交付（2026-09-12）
+
+两次提交直接推 main：`f1e551e`（任务 1 红测试）、`50b27da`（任务 2
+实现）。`git push origin main` 后 `gh run list --limit 3` 最新一条
+`50b27da`：
+
+```
+in_progress   fix(variflight): one price call now prices every FlyAI flight on a route   CI   main   push   34627193481
+```
+
+等待完成后 `gh run view 34627193481 --json status,conclusion,url`：
+
+```
+{"conclusion":"success","headSha":"50b27da...","status":"completed",
+ "url":"https://github.com/kangyishuai/china-trip-weaver/actions/runs/34627193481"}
+```
+
+CI 绿，硬指标二全部达成。BLOCKED.md 随交付提交，本书「无」（见
+BLOCKED.md 对应小节）。本书不改版本号、不装机、不改 CI，均按「全局」
+约束原样未动。
