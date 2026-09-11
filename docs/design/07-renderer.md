@@ -173,4 +173,6 @@ renderer 进程不接收 provider env，Trip Schema 没有 credential 字段；�
 
 `ctw journey render` 是另一个确定性 renderer（`render/journey_html.py`），与上述单 Trip renderer 共享同一套安全/CSP/离线/mobile 合同，只是数据输入换成 Journey（内含完整子 Trip）；`render/validate_journey_html.py` 是对应的结构/安全/事实校验器，报告规则与 §7 的 E001–E204 同族。
 
+Journey 页在 §2 那 12 个分区之外另有一个必需分区 `location-overview`（`_location_overview_section`，紧跟在 route-overview 之后），复用同一个 `_location_svg`（不重写画图逻辑）：按每个 segment 内 day 顺序与 lodging/poi 城市去重分组，每城一个"第 N 段 · 城市"标题，画一张 §4.2 定义的位置示意 SVG，坐标缺失则显示"位置未核验"——与 Trip 页 §2 第 8 条同一份视觉与文案合同，只是按 segment 分组而不是整份 Trip 一次分组。
+
 Journey 页的预订/核验清单（`journey.py` 的 `journey_booking_checklist()`）按每一项实际的行动截止时间排序；`_deadline()` 按该项的 `deadline_kind` 选择四种措辞之一：rail 腿默认 `presale_open`（「开售日 %s · 当天就买 · %s 出发」，即出发前 14 天、对齐 12306 预售窗口，来自 `journey.py` 的 `_journey_transport_leg_deadline`），Trip 已带明确 `/booking_deadline` claim 时改用 `declared`（「预订截止 %s」），其余交通用 `departure`（「出发前确认 · %s 出发」），住宿用 `check_in`（「入住前确认 · %s 入住」）。不属于这四种的项（`deadline_kind=other`，例如指向 POI 的 unknown）用通用措辞「请在此之前完成 <时间>」；deadline 只有日期、没有具体时刻时，额外标注「具体时间未提供」（两句都来自 `journey_html.py` 的 labels `by` 与 `time_unknown`）。

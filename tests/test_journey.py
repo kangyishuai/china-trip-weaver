@@ -1644,7 +1644,7 @@ class JourneyContinuityTests(unittest.TestCase):
                 [
                     sys.executable, str(ROOT / "scripts" / "qa_renderer_browser.py"),
                     str(JOURNEY_DEMO / "journey.html"), "--output", str(Path(temporary) / "qa"),
-                    "--viewports", "375x812,1440x900", "--sections", "15",
+                    "--viewports", "375x812,1440x900", "--sections", "16",
                 ],
                 text=True,
                 capture_output=True,

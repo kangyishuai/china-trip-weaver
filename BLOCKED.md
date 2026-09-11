@@ -1,4 +1,35 @@
-## 书 AB1「拆 scheduler/light.schedule_day」（2026-09-11，main 直改，第十二波两本并行之一）：无
+## 书 AD3「Journey 页位置示意」（2026-09-11，worktree `.tmp/wt-ad3` 分支 `journey-location-svg`，第十四波三份并行书之一）：两处判断，非阻塞
+
+1. 「界限」写 `tests/test_journey.py（只许新增 def test_）`，但加了必需分区后
+   `demo/journey-16d/journey.html` 的 `[data-section]` 数量从 15 变成 16 是
+   任务本身唯一可能的结果（`JOURNEY_SECTIONS` 加一项、`_render_journey`
+   无条件渲染每个配置的分区，没有条件跳过的余地）；既有测试
+   `test_checked_in_sixteen_day_demo_passes_offline_browser_qa`
+   硬编码 `"--sections", "15"` 传给 `qa_renderer_browser.py`，任务书自己在
+   任务 2 验收命令里又写 `--sections 16`——书内自相矛盾，与「验收教训」记录
+   的 Z2 书 pathspec/白名单互斥是同一种情况。实测确认：不改这一行，重生成
+   demo 后该测试必红（`sectionCount=16` 与硬编码 `15` 不符，
+   `qa-report.json` 报 `"375x812 15 sections"`/`"1440x900 15 sections"`
+   两条失败），直接违反硬指标二「全量 OK 0 skipped」；改了这一行不会让
+   `git diff fd2e618 -- tests | grep -E '^-\s*def test_'` 出现任何一行（规矩
+   给出的字面判据只禁止删除/重写 `def test_` 签名行，没有禁止行内数字）。
+   处理：把这一行的 `"15"` 改成 `"16"`，不碰这条测试的其余内容、不加不删
+   断言。`scripts/qa_renderer_browser.py:305` 的 `--help` 文案里也留了一句
+   过时的 "Journey: 15"，该脚本不在「界限」允许列表内，保持只读，未改。
+2. 任务 2 写「跑 ... 与 README demo、build_plan_fixtures、
+   build_provider_fixtures」；`build_plan_fixtures.py`/`build_provider_fixtures.py`
+   已跑（`git status` 确认零新增差异）。但 README 文档的其余四份 demo
+   （`demo/trip.html`/`guangzhou-shenzhen`/`grouped-departures`/
+   `multicity-5d`）由 `ctw plan` 走 Trip 页 renderer 生成，「界限」明确写
+   `render/html.py、schema、其余 demo 只读`；实测
+   `git grep -n journey_html -- render/html.py cli.py` 只在 `cli.py` 的
+   `journey validate-html`/`journey render` 两个子命令命中，`render/html.py`
+   零命中——两条渲染路径在 import 图上互不相交，本轮只改了
+   `render/journey_html.py`，逻辑上不可能影响那四份 demo。为了不对「只读」
+   文件做写入（哪怕预期字节不变），选择用这条静态证据代替实际重跑那四条
+   `ctw plan` 命令，未触碰 `demo/trip.html` 等四个文件。
+
+
 
 任务 0/1/2 全部按任务书字面执行，全程无需停工的冲突，也未发现任何 bug 或想
 改动的逻辑——纯逐字节拆分。任务书「现状与任务 0」列出的每一项数字（HEAD、

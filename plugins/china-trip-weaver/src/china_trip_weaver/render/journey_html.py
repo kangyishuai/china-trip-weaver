@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from ..journey import (
     journey_booking_checklist,
@@ -16,6 +16,7 @@ from .html import (
     _enum_label,
     _field_label,
     _health_reason,
+    _location_svg,
     _number,
     _price,
     _provider_label,
@@ -166,6 +167,7 @@ JOURNEY_SECTIONS = frozenset((
     "truth-banner",
     "journey-nav",
     "route-overview",
+    "location-overview",
     "day-timeline",
     "budget-summary",
     "priority-actions",
@@ -265,6 +267,7 @@ def _render_journey(journey: Mapping[str, Any]) -> str:
         _journey_nav(flattened_days, labels),
         '<main id="main-content">',
         _route_section(journey, route, origins, labels),
+        _location_overview_section(journey, labels),
         _day_timeline_section(flattened_days, labels),
         _budget_section(journey, labels),
         _priority_actions_section(journey, checklist, labels),
@@ -290,6 +293,9 @@ def _journey_labels(locale: str) -> Mapping[str, str]:
             "locale": "en", "skip": "Skip to journey overview", "travelers": "Travelers",
             "segments": "Segments", "revision": "Revision", "generated": "Generated",
             "truth": "Truth and limits", "overview": "Whole-journey route",
+            "locations": "Location overview", "location_unverified": "Location not verified; no default point was added.",
+            "location_note": "Visit-order sketch, not a road route; %s coordinates show relative position only.",
+            "location_title": "Location sequence for %s", "location_desc": "Not a real road route; numbers match the places below.",
             "budget": "Total budget", "checklist": "Booking and verification checklist",
             "risks": "Risks and unresolved items", "segment_overview": "Segment overview",
             "connections": "Segment handoffs", "health": "Data-source status",
@@ -331,6 +337,9 @@ def _journey_labels(locale: str) -> Mapping[str, str]:
         "locale": "zh-CN", "skip": "跳到全程总览", "travelers": "人数", "segments": "分段",
         "revision": "修订", "generated": "生成于", "truth": "真实性与边界",
         "overview": "全程路线", "budget": "总预算", "checklist": "预订与核验清单",
+        "locations": "位置概览", "location_unverified": "位置未核验；未放置默认点。",
+        "location_note": "游览顺序示意，非道路路线；%s 坐标仅用于相对位置。",
+        "location_title": "%s位置顺序示意", "location_desc": "非真实道路路线；编号对应下方地点。",
         "risks": "风险与未解决项", "segment_overview": "分段概览", "data_modes": "数据口径",
         "connections": "跨段衔接", "health": "数据源状态", "notes": "约束与假设",
         "actions": "待办", "risk_items": "风险项", "readonly": "仅提供只读规划",
@@ -513,6 +522,52 @@ def _route_section(
         "route-overview",
         labels["overview"],
         summary + '<ol class="journey-route">%s</ol>' % "".join(items),
+        "panel panel-wide",
+    )
+
+
+def _location_overview_section(journey: Mapping[str, Any], labels: Mapping[str, str]) -> str:
+    """One visit-order location sketch per city per segment; mirrors ``_location_section``."""
+
+    groups = []
+    group_index = 0
+    for trip_index, trip in enumerate(journey["trips"]):
+        cities: List[str] = []
+        for day in trip["days"]:
+            if day["city"] not in cities:
+                cities.append(day["city"])
+        entities: List[Tuple[str, Mapping[str, Any], str]] = (
+            [("lodging", item, "lodging_id") for item in trip["lodgings"]]
+            + [("poi", item, "poi_id") for item in trip["pois"]]
+        )
+        for _, item, _ in entities:
+            if item["city"] not in cities:
+                cities.append(item["city"])
+        for city in cities:
+            city_entities = [entry for entry in entities if entry[1]["city"] == city]
+            point_candidates = [entry for entry in city_entities if entry[1]["coordinates"]]
+            crs = "WGS84" if point_candidates and all(item["coordinates"]["wgs84"] for _, item, _ in point_candidates) else "GCJ02"
+            field = "wgs84" if crs == "WGS84" else "gcj02"
+            plotted = [
+                (kind, item, key, item["coordinates"][field])
+                for kind, item, key in point_candidates if item["coordinates"][field]
+            ]
+            visual = (
+                _location_svg(plotted, crs, city, group_index, labels)
+                if plotted else '<p class="empty-state">%s</p>' % text(labels["location_unverified"])
+            )
+            groups.append(
+                '<div class="location-group" data-location-group="%s" data-trip-index="%d">'
+                '<h3>%s · %s</h3>%s</div>' % (
+                    attr(city), trip_index,
+                    text(labels["segment"] % (trip_index + 1)), text(city), visual,
+                )
+            )
+            group_index += 1
+    return _section(
+        "location-overview",
+        labels["locations"],
+        "".join(groups) or '<p class="empty-state">%s</p>' % text(labels["none"]),
         "panel panel-wide",
     )
 
