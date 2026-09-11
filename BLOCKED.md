@@ -1095,6 +1095,7 @@ JH 码字面量计数（44 个、15 种）、`tests/test_journey.py` 里
 拆分方案，大概率是任务书写作时的计数笔误（例如文件末尾换行符的计入方式
 不同），不是「对不上」的实质性分歧，不停工。
 
+<<<<<<< HEAD
 ## 书 Y1「拆 journey._merge_segment_trips」任务 0：文件总行数与任务书差 1 行（2026-09-11，判断，非阻塞）
 
 任务书写「journey.py 共 2574 行」，`wc -l` 实测 2573 行（文件确以换行符
@@ -1106,3 +1107,15 @@ JH 码字面量计数（44 个、15 种）、`tests/test_journey.py` 里
 唯一调用点 journey.py:279（`trip_document = _merge_segment_trips(atomic_trips,
 segment)`），确在 `plan_journey`（起始行 207）函数体内。判断：1 行出入不
 影响任何硬指标或拆分方案，不停工。
+=======
+## 书「租车与轮渡候选设计 ADR-0017」（2026-09-11，worktree `.tmp/wt-y3` 分支 `transport-candidates-adr`）：无待裁决项
+
+任务 0/1/2 全部按任务书字面执行，全程无需停工的分叉。任务书列出的全部
+file:line 逐条核对通过，随机抽查的 3 条（`render/html.py:57-59`、
+`candidates.py:1269`、`replan.py:21`）复核依旧吻合。Decision 选了「暂不做」
+而非 A/B 之一，但这是任务书明确列出的第三个合格选项（"『暂不做，继续手写
+Trip』也是合格答案，但要给证据"），不是回避裁决——ADR 正文列了 5 条独立
+可复现证据支持这个选择，并在 Consequences 给出了「如果以后要做，选 B 不
+选 A」的理由与验收命令草案，供领导日后裁决是否立项。硬指标一、二均已实测
+通过，见 PROGRESS.md 本书小节。
+>>>>>>> transport-candidates-adr

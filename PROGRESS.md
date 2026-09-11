@@ -3369,3 +3369,78 @@ credentials.env 里的真实 Key），补丁后（阻断请求，`except Excepti
 BLOCKED.md 无待裁决项；上面两处偏差判断为「必须修的隐藏 bug」而非
 「任务书假设不成立」，未写入 BLOCKED.md。止损轮次未触发（核心实现一次
 到位，两处 bug 各一轮定位+一轮修复即绿，未连败）。
+
+## 书「租车与轮渡候选设计 ADR-0017」任务 0：核对通过（2026-09-11，分支 transport-candidates-adr）
+
+任务书列出的全部 file:line（candidates.schema.json 顶层
+required/additionalProperties、planning.py:158/634/647/1328/1588、
+providers/flyai.py:94、candidates.py:160/1227、rental-ferry.json、
+replan.py suspend、journey.py `_journey_transport_leg_deadline`、ADR-0016、
+两个 Skill）逐条 `sed -n`/`git grep` 核对，全部命中。目标：写
+docs/design/adr/0017-transport-candidates.md，回答租车/轮渡腿该在哪声明
+（request 自由文本 vs candidates.json 新候选类型）、由哪个函数串成腿/
+日程/账本/预订提醒，要不要动 candidates.schema。顺序：任务1盘清管线
+file:line→任务2两案与决定→提交。最大风险：两案都没有代码可跑验证，只能
+靠现有函数的可复现路径推理；`additionalProperties:false` 改动对 11 个
+测试文件/8 个 fixture（`grep -rl candidates_version tests/` 实测数字）的
+连带面只能估算,不能穷举每一行。
+
+## 书「租车与轮渡候选设计 ADR-0017」任务 1/2：ADR 写完，Decision 暂不做（2026-09-11，完成）
+
+`docs/design/adr/0017-transport-candidates.md` 已交付，结构照 ADR-0016
+（Status/Date/Context/Options/Decision/Consequences）。
+
+任务 1（Context）：管线小节 18 条 bullet（声明/路线/生产 rail+flight/归一化/
+日程/账本/健康行/渲染/校验/replan/清单 deadline，外加 candidates.json 自身
+形状 6 条：顶层 required+additionalProperties、`candidates.py:175` 实体分组
+元组、`:827` 骨架字典、`:1207` `_import_item_kind`、`:1269`
+`_editable_candidates` 精确键集校验、冻结断言+夹具计数），每条一行
+file:line，全部落在函数体内实测核对（不是猜行号）。随机抽查 3 条复核：
+`render/html.py:57-59`（travel_mode→中文标签字典）、`candidates.py:1269`
+（`def _editable_candidates`）、`replan.py:21`（`VALID_EVENT_TYPES` 元组）
+`sed -n` 均命中原文。意外发现（任务书未预判，实测得出）：`_editable_candidates`
+用 `set(value) != EXPECTED_DOCUMENT_KEYS` 精确集合比较,不是子集比较——
+方案 B 若给 `transport` 键,不只 schema 层是可选新增,`ctw candidates
+add-*`/`import` 这几个编辑入口会因为多出一个键直接拒绝「not a v1 five-key
+skeleton」,除非 `EXPECTED_DOCUMENT_KEYS` 也跟着长——这条已写进 Context 与
+Option B 段落,不是被当成阻塞项停工,是给下一本执行书的真实成本清单加了
+一条。
+
+任务 2（Options + Decision）：A（`request.transport_plan`,新 $defs,撞
+SCHEMA_VERSION 冻结）与 B（candidates.json 新 `transport` 数组,附加可选
+字段,不动 trip.schema.json,不撞 `test_versions_are_frozen`)各给了声明
+JSON(6 行、8 行,均 `json.loads` 验证可解析)、生产者落点(`_plan_resolve_candidates`
+里 `planning.py:181` 旁新增函数)、租期规则/异地还车费怎么并入
+`budgetItem.reason`、预订截止复用 `journey.py:1984` 已有的
+`/booking_deadline` claim 约定、停航直接走已完工的 `replan.py:401`
+`_apply_suspend`(两案在最后三点上完全一致,差异只在声明位置与
+schema/测试连带面)。Decision:暂不做,给了 5 条独立证据(现状已经在跑、
+ADR-0016 已修完两个真缺口、`providers/` 六个 adapter 没有一个是租车或
+轮渡 API、11 文件/8 夹具的连带面是实测数字不是猜测、仓库里只有一趟真实
+行程用过这个功能)；并在 Decision 末段与 Consequences 里明确「以后若做,
+选 B 不选 A」,附 6 条验收命令草稿(硬指标要求 ≤6,实际 6 条)。
+
+硬指标一实测：
+```
+$ /usr/bin/python3 scripts/scan_secrets.py
+secret scan: 0 finding(s) across 378 file(s)
+```
+ADR 存在、Context 18 条 file:line 全部可复现、Decision 明确选「暂不做」
+并给证据、示例 JSON 2 段（要求 ≥2）。
+
+硬指标二实测：
+```
+$ git diff main --stat -- plugins tests README.md README.zh-CN.md
+(空输出)
+$ git status --short
+?? docs/design/adr/0017-transport-candidates.md
+$ /usr/bin/python3 -m unittest discover -s tests
+Ran 623 tests in 72.044s
+OK
+```
+0 skipped；分支 `transport-candidates-adr` 待本轮提交后推送。
+
+BLOCKED.md 本书小节：无待裁决项（任务书允许「暂不做」作为合格答案,不算
+回避裁决,ADR 正文给了 5 条独立证据支持这个选择）。止损轮次未触发（研究→
+写作→自查一次到位,过程中发现的 `_editable_candidates` 精确键集这一点是
+补充证据、不是推翻既有结论的返工）。
