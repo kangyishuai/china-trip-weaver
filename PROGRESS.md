@@ -3852,3 +3852,31 @@ FixedClock.from_iso(FIXED_NOW), RailBackend.from_spec("off", ROOT)).journey`，
 交通类实际不用 `left`），拆分本身不存在变量提升或跨函数依赖风险。真正
 的风险点是三段代码必须逐字节剪切而非重敲，避免消息文案、字段名或
 J_ 码字面量在搬移过程中出现打字误差。
+
+任务 1（已完成，不提交）：`.tmp/snapshot_journey_connection.py` 对两份基础
+语料——`demo/journey-16d/journey.json` 直接读，`synthetic-six-city-16d`
+经 `journey_six_city_lodging_chain_case()` + `plan_journey(...).journey`
+离线规划得到（两者都恰好是 3 trips + 2 connections）——各跑一次原样
+`validate_journey`，再对每条 connection 做 17 种确定性突变（4 个引用字段
+各改错一次；`lodging_continuity` 的 `from_lodging_id`/`to_lodging_id`/
+`overnight_date` 各改错一次；`cross_segment_transport` 的 `leg_id`/
+`included_in_trip_id`/`price_type`/`amount_min_cny` 各改错一次；
+`lodging_continuity.status`/`cross_segment_transport.status` 各轮换 3 个
+枚举全值），每次记 `(corpus, scenario, ok, [[code, path, message], ...])`
+到 `.tmp/snap-before.json`。日期字段用「加一天」、引用字段用「加后缀」、
+金额用「加 100」，均为确定性变换，不依赖随机数。
+
+验收：`records=70`（≥40）；`.tmp/snap-before.json` 连跑两次
+`diff` 空输出（byte-identical）；`grep -o '"J_[A-Z_]*"'
+plugins/china-trip-weaver/src/china_trip_weaver/journey.py | sort | uniq -c`
+→ `.tmp/j-before.txt` 共 25 行（与任务 0 核对的「全文件 25 种」一致）。
+70 条记录里 10 条 `ok=true`（未触发任何错误的身份突变，如把 status 改成
+它原本就是的值），其余 60 条命中的 `J_` 码去重后恰好覆盖
+`_validate_connection` 函数体内全部 10 种（`J_CONNECTION_REF`/
+`J_LODGING_REF`/`J_LODGING_DATE`/`J_LODGING_GAP`/`J_LODGING_HANDOFF`/
+`J_LODGING_STATUS`/`J_TRANSPORT_OWNER`/`J_TRANSPORT_REF`/
+`J_TRANSPORT_COST`/`J_TRANSPORT_NOT_REQUIRED`），外加一条
+`J_BUDGET_MISMATCH`（`amount_min_cny` 突变改变账本期望值，属
+`validate_journey` 末尾账本校验的正常连带反应，不属于
+`_validate_connection` 本体但证明突变确实生效），证明快照对三类检查的
+全部分支都有真实覆盖，不是空跑。
