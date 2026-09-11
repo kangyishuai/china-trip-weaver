@@ -3813,3 +3813,42 @@ Fri Sep 11 15:22:28 CST 2026
 `date` 检查即止步，没有消耗任何验收轮次。下次会话满足日期条件
 （2026-09-12 或之后）后，应直接复用本 worktree/分支，从任务 0 第二步
 （`ctw doctor`）继续，无需重建 worktree、无需重写本节。
+
+## 书「拆 journey._validate_connection」任务 0：核对通过（2026-09-11，worktree `.tmp/wt-aa2` 分支 `split-journey-connection`，第十一波三份并行书之一）
+
+worktree 从 main `d11c2cb` 分出，任务书列出的全部数字逐条核对，无出入：
+全量 `/usr/bin/python3 -m unittest discover -s tests` → `Ran 629 tests`
+`OK` 0 skipped（75.6s）；`scripts/scan_secrets.py` → `0 finding(s) across
+378 file(s)`；`~/miniconda3/envs/core/bin/python -m pyflakes
+plugins/china-trip-weaver/src tests scripts` 0 行；journey.py 2672 行，
+AST 长度命令输出 `[(100, '_bridge_segment_lodgings'), (103,
+'validate_journey'), (134, '_validate_connection')]` 与任务书逐字相同；
+`_validate_connection` 精确 L2523-2656，唯一调用点 L2365（`validate_journey`
+内，起始 L2272）；函数内 `"J_..."` 字面量 14 处 10 种、全文件 25 种；
+`tests/test_journey.py` 单独跑 `Ran 76 tests` `OK`，`validate_journey(`
+30 处、`segment_connections` 10 处；`demo/journey-16d/journey.json` 确为
+3 trips + 2 connections。
+
+理解的目标：把 `_validate_connection` 按三类拆成 `_check_connection_refs`
+（expected 四字段：from_trip_id/to_trip_id/from_end_date/to_start_date）、
+`_check_connection_lodging`（ref/date/gap/handoff/status）、
+`_check_connection_transport`（owner/ref/cost/not_required/separate），
+本体只留 `path` 计算 + 三次调用 + 已有的 `_validate_connection_timing`
+调用（该函数已独立，不动）。`ValidationIssue` 是
+`@dataclass(frozen=True, order=True)`，`validate_journey` 最终返回
+`sorted(set(issues))`，故三个新函数的调用顺序不影响最终报告排序，只影响
+源码可读性，仍按原文顺序（引用→住宿→交通）排列以保持最小改动面。
+
+顺序：任务 1 快照——`demo/journey-16d/journey.json` 直接读，six-city 走
+`journey_six_city_lodging_chain_case()`（`scripts.build_plan_fixtures`）+
+`plan_journey(case["request"], case["candidates"],
+FixedClock.from_iso(FIXED_NOW), RailBackend.from_spec("off", ROOT)).journey`，
+照抄 `tests/test_journey.py:322-328` 的调用方式 → 任务 2 三段抽取、每段跑
+一次 `tests.test_journey`（76 项）→ 反向验证 → 全量收尾。
+
+最大风险：`outgoing`/`incoming`/`outgoing_ref`/`incoming_ref` 四个局部
+变量全部只在住宿类别内部计算和使用，未被引用类或交通类读取；
+`connection`/`left`/`right`/`path`/`issues` 是唯一跨类别共享的入参（其中
+交通类实际不用 `left`），拆分本身不存在变量提升或跨函数依赖风险。真正
+的风险点是三段代码必须逐字节剪切而非重敲，避免消息文案、字段名或
+J_ 码字面量在搬移过程中出现打字误差。
