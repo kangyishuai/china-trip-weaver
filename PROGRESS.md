@@ -5213,3 +5213,40 @@ mtime=Sep 7 14:20、`candidates.json` mtime=Sep 6 19:34，均早于本会话
 `shasum -a 256`（本轮未采集动工前基线，此处只作为下一轮复核的参照）：
 `request.json`=`676d639a55810bdf75280232a30f4a0edd634ab9eb16009da550c582b7afca20`、
 `candidates.json`=`a1beaa0ebf5d839fc44daef9f350304d48480ff0efeaad8216c536ed47d7f25b`。
+
+## 书「路线查询改用 city」任务 0：核对现状（2026-09-11，HEAD fd2e618）
+
+实测核对，与任务书逐条相符：全量 `Ran 632 tests` OK 0 skipped；
+`scan_secrets.py` 0 命中（380 文件，任务书写 378，属自然漂移）；pyflakes
+需用 `~/miniconda3/envs/core/bin/python -m pyflakes`（系统
+`/usr/bin/python3` 没装 pyflakes 模块，直接跑会误报"1 行"其实是"No module
+named pyflakes"），结果 0 行；`git grep 'from_place\["name"\]\|to_place
+\["name"\]' -- plugins/china-trip-weaver/src` 命中 10 行、对应 5 处消费者，
+与任务书列的位置逐一核对一致（planning.py L95-96/1354-1355/1595-1596、
+flyai_inventory.py L192/196、variflight_enrichment.py L136-137）；
+`test_flyai_live.py` L551/574/597/620 与 `test_keyless_e2e.py` L634-635
+的既有断言原文核对无误；`build_plan_fixtures.py`/`build_provider_fixtures.py`/
+`build_renderer_fixtures.py` 三个脚本重跑 `git status --short` 零差异；
+分组示例重生成命令零差异，且证实了缺陷本体：CLI 输出
+`calls=rail12306.fixture:2026-09-10:北京:上海虹桥国际机场,...广州:上海虹桥
+国际机场`——目的地机场名被当城市名发给 12306。
+
+理解的目标／顺序／最大风险：
+
+1. 目标：5 处消费者从读 `name` 改成优先读 `city`，缺失 `city` 时回退
+   `name`（`.get("city") or place["name"]`），不是 strict `["city"]`。
+2. 顺序：先写 2 条红测试锁住"city 优先、缺失回退"，再改 5 处，再用既有
+   测试＋全量 632＋四个语料重生成验证绿。
+3. 为什么不能 strict：`test_variflight_live.py`（7 处）与
+   `test_flyai_live.py`（1 处，恰好是任务书点名"逐字不变"的
+   L551/574/597/620 背后的 `synthetic_route()`）既有 `SimpleNamespace`
+   路由都没有 `city` 键，这两个文件我要么只读、要么只能新增测试，strict
+   访问会把它们改炸 KeyError 且我无权修复，只有 `.get(...) or name` 回退
+   能保证它们字节不变。
+4. 最大风险：`demo/grouped-departures` 当前用 `success.json` 夹具，两条
+   汇合腿命中真实车次走 `12306-mcp`（深链用夹具内部解析出的示例站名，不读
+   `from_place`），不是 `_deep_link_leg` 回退——重生成后 trip.json 本体
+   字节很可能不变、只有 CLI `calls=` 摘要行变，与任务书"猜的"预期
+   （trip.json/trip.html 会变）不完全一致；已用零车次夹具
+   `rail12306/empty.json` 在任务 1 的新测试里单独验证 `_deep_link_leg`
+   的 fs/ts 修复本身有效，任务 2 会如实核对分组示例的真实 diff 范围。
