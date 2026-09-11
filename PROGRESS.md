@@ -6067,3 +6067,22 @@ render/demo 源码/夹具；`_resolve_rail` 未改一行；L204-206 原文逐字
 
 硬指标一、二均已满足，两轮内完成，未触发止损。BLOCKED.md 记了一条
 非阻塞判断（测试③预判不符，见上）。
+
+## 书「汇合腿铁路赶不上时取合规航班」交付（2026-09-12）
+
+两次提交直接推 main：`d0d0a94`（任务 0/1：红测试）、`cb748b7`（任务 2：
+实现+README+语料核验）。
+
+```
+$ git push origin main
+560eeeb..cb748b7  main -> main
+$ gh run list --limit 3
+completed  success  fix(planning): meeting leg falls back to a compliant flight when rail…  cb748b7
+completed  success  Release 0.16.1: ...
+completed  success  Release 0.16.0: ...
+```
+
+CI 一次即绿。`git status --short` 空。未升版本号、未跑
+`install_local_plugin.sh`、未改 CI 配置。VariFlight 机票交叉价那本书
+（`variflight-cross-price` 分支）全程未受影响：本书从未碰 L204-206 原文
+或任何 variflight 文件。
