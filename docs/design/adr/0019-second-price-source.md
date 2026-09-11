@@ -32,7 +32,7 @@ call sites:
 
 `providers/__init__.py:1-16` lists the entire adapter registry: `amap`,
 `anysearch`, `flyai`, `host_web`, `rail12306`, `variflight` — six adapters,
-no more. `candidates.py:881` `_apply_poi_candidate`.
+no more.
 
 ### Whether a subject can carry two `/price` claims today, and whether that ever produces `status="conflict"`
 
