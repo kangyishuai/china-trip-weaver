@@ -5250,3 +5250,49 @@ flyai_inventory.py L192/196、variflight_enrichment.py L136-137）；
    （trip.json/trip.html 会变）不完全一致；已用零车次夹具
    `rail12306/empty.json` 在任务 1 的新测试里单独验证 `_deep_link_leg`
    的 fs/ts 修复本身有效，任务 2 会如实核对分组示例的真实 diff 范围。
+
+## 书「路线查询改用 city」任务 1：先写红测试（2026-09-11）
+
+`tests/test_keyless_e2e.py` 新增
+`test_grouped_deep_link_fallback_and_calls_use_meeting_city_not_display_name`：
+直接读 `demo/grouped-departures` 的 request/candidates，仅在内存里把
+`meeting_anchor.meet_by` 从 13:00 改到 15:00（避免与本测试无关的
+`MEETING_BUFFER_INSUFFICIENT` 冲突——`_deep_link_leg` 的合成到达时间固定
+是 8:00+300 分钟=13:00，原始 meet_by 13:00 会导致 0 分钟缓冲不足 60
+分钟），rail 后端换成零车次夹具 `rail12306/empty.json`
+（`ReplayTransport` 对请求内容盲放，返回什么与发了什么 from_name/to_name
+无关，只要保证两条腿都拿不到匹配车次即可稳定触发 `_deep_link_leg` 回退），
+断言 `result.business_calls` 与两条 `transport_legs[i]["booking_url"]`
+（`_deep_link_leg` 写入的深链，`fs`/`ts` 用 `urllib.parse.urlencode`
+精确核对）都用「上海」而非「上海虹桥国际机场」。
+`tests/test_variflight_live.py` 新增
+`test_route_resolves_by_city_not_meeting_point_display_name`：路线
+from_place name「北京首都机场」city「北京」、to_place name「上海虹桥」
+city「上海」，用与既有 `test_independent_search_emits_price_less_verify_on_click_candidate`
+相同的 `require-key` 真实 MCP 夹具服务器，断言 `enrich` 发出了真实 search
+调用（`transport.business_calls == 2`、`result.flights` 非空、健康原因
+`errors=none`）而不是 `unsupported_city_code` 短路。
+
+两条测试改前均为红（贴自实际运行）：
+
+```
+$ /usr/bin/python3 -m unittest tests.test_keyless_e2e.KeylessE2ETests.test_grouped_deep_link_fallback_and_calls_use_meeting_city_not_display_name tests.test_variflight_live.VariFlightLiveTests.test_route_resolves_by_city_not_meeting_point_display_name -v
+test_grouped_deep_link_fallback_and_calls_use_meeting_city_not_display_name (tests.test_keyless_e2e.KeylessE2ETests) ... FAIL
+test_route_resolves_by_city_not_meeting_point_display_name (tests.test_variflight_live.VariFlightLiveTests) ... FAIL
+
+FAIL: test_grouped_deep_link_fallback_and_calls_use_meeting_city_not_display_name
+AssertionError: Tuples differ: (...'2026-09-10:北京:上海', ...'广州:上海') !=
+(...'2026-09-10:北京:上海虹桥国际机场', ...'广州:上海虹桥国际机场')
+
+FAIL: test_route_resolves_by_city_not_meeting_point_display_name
+AssertionError: 1 != 0   # result.flights 为空，因 CITY_IATA.get("北京首都机场") 为 None
+
+Ran 2 tests in 0.018s
+FAILED (failures=2)
+```
+
+为什么两条既有的类似测试没被这份新增波及：`test_keyless_e2e.py` 里已有的
+`run_grouped_meeting()`/`synthetic_grouped_meeting_input()` 用的是
+`success.json` 夹具（真实命中车次，走 `12306-mcp` 而非 `_deep_link_leg`，
+参见任务 0 的最大风险条），不会经过我要改的 5 处消费者中的 fs/ts 那一处，
+所以新增测试特意换用零车次夹具单独构造场景，不与既有测试重叠或依赖。

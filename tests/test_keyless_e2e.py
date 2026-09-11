@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import urllib.parse
 from datetime import datetime
 from pathlib import Path
 
@@ -363,6 +364,33 @@ class KeylessE2ETests(unittest.TestCase):
         html_report = validate_html(rendered, trip)
         self.assertTrue(trip_report.ok, [item.render() for item in trip_report.errors])
         self.assertTrue(html_report.ok, [item.render() for item in html_report.errors])
+
+    def test_grouped_deep_link_fallback_and_calls_use_meeting_city_not_display_name(self):
+        request = load(ROOT / "demo" / "grouped-departures" / "request.json")
+        candidates = load(ROOT / "demo" / "grouped-departures" / "candidates.json")
+        request["meeting_anchor"]["meet_by"] = "2026-09-10T15:00:00+08:00"
+        backend = RailBackend.from_spec(
+            "fixture:" + str(ROOT / "tests" / "fixtures" / "providers" / "rail12306" / "empty.json"),
+            ROOT,
+        )
+
+        result = plan_trip(request, candidates, FixedClock.from_iso(FIXED_NOW), backend)
+
+        self.assertEqual(
+            (
+                "rail12306.fixture:2026-09-10:北京:上海",
+                "rail12306.fixture:2026-09-10:广州:上海",
+            ),
+            result.business_calls,
+        )
+        legs = result.trip["transport_legs"]
+        self.assertEqual(2, len(legs))
+        expected_ts = urllib.parse.urlencode({"ts": "上海"})
+        unexpected_ts = urllib.parse.urlencode({"ts": "上海虹桥国际机场"})
+        for leg in legs:
+            self.assertEqual("12306-deep-link", leg["provider"])
+            self.assertIn(expected_ts, leg["booking_url"])
+            self.assertNotIn(unexpected_ts, leg["booking_url"])
 
     def test_g6_insufficient_meeting_buffer_is_a_structured_conflict(self):
         with self.assertRaisesRegex(ValueError, "MEETING_BUFFER_INSUFFICIENT") as raised:

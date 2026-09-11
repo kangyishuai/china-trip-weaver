@@ -138,6 +138,23 @@ class VariFlightLiveTests(unittest.TestCase):
         self.assertIn("candidates=1", result.health["reason"])
         self.assertEqual(2, transport.business_calls)
 
+    def test_route_resolves_by_city_not_meeting_point_display_name(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            resolved = credentials(True)
+            transport = self.transport(temporary, resolved, "require-key")
+            backend = VariFlightBackend("auto", resolved, transport)
+            route = SimpleNamespace(
+                from_place={"name": "北京首都机场", "city": "北京", "ref_id": "airport-beijing"},
+                to_place={"name": "上海虹桥", "city": "上海", "ref_id": "airport-shanghai"},
+                travel_date="2026-09-10",
+            )
+            result = backend.enrich([], [route], CLOCK)
+        self.assertEqual(1, len(result.flights))
+        self.assertEqual("ready", result.health["status"])
+        self.assertIn("errors=none", result.health["reason"])
+        self.assertNotIn("unsupported_city_code", result.health["reason"])
+        self.assertEqual(2, transport.business_calls)
+
     def test_search_no_results_keeps_empty_candidates_with_exact_warning_and_health(self):
         class EmptySearchTransport(VariFlightMCPTransport):
             def __init__(self, resolved):
