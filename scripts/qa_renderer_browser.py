@@ -302,7 +302,7 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--chrome", type=Path, default=None)
     parser.add_argument("--viewports", default=",".join("%dx%d" % item for item in DEFAULT_VIEWPORTS))
-    parser.add_argument("--sections", type=int, default=12, help="expected [data-section] count for this page (Trip: 12, Journey: 15)")
+    parser.add_argument("--sections", type=int, default=12, help="expected [data-section] count for this page (Trip: 12, Journey: 16)")
     parser.add_argument("--handshake-timeout", type=float, default=30.0, help="seconds to wait for the first CDP handshake (Target.createTarget) before retrying once")
     args = parser.parse_args()
     chrome = args.chrome or default_chrome()

@@ -5547,3 +5547,74 @@ degrades_instead_of_contract_mismatch` 两项立刻变红（
 二是 `docs/design/adr/0017-transport-candidates.md:90` 引用的
 `fixture_count == 79` 现在过期（应为 80），该文件不在本书界限内，留给
 下一轮 docs-drift 类任务书。
+
+## 书 AD3「Journey 页位置示意」（2026-09-11，worktree `.tmp/wt-ad3` 分支 `journey-location-svg`，第十四波三份并行书之一）
+
+任务 0 核对（HEAD `fd2e618`）：全量 `/usr/bin/python3 -m unittest discover -s
+tests` → `Ran 632 tests` `OK` 0 skipped（39.6s）；`scripts/scan_secrets.py` →
+`0 finding(s) across 380 file(s)`；journey_html.py L13-22 从 `.html` 导入 9 个
+名字（`PROVIDER_ATTRIBUTION`/`RendererError`/7 个私有函数，任务书说「9 个私有
+函数」略有出入但总数对，不停工）、L24 从 `.template` 导入含 attr/dom_id/text；
+`_render_journey` 分区调用列表在 L267-277（`_route_section` 是第一项）；
+`git grep -c '<svg\|_location_svg' render/journey_html.py` 确认零命中；
+`JOURNEY_SECTIONS`（L164-180）15 项、`validate_journey_html.py:46` 已用
+`required_sections=JOURNEY_SECTIONS` 参数化——加分区名不用改这个校验器文件。
+`html.py` 的 `_location_section`/`_location_svg` 在 L581/L627，标签键
+locations/location_unverified/location_note/location_title/location_desc 在
+`_labels()` 的 en L245-255、zh L268-279，逐字与任务书对上。实测复现 ADR-0018
+的字节测量：对 `multicity-static.json`/`weekend-live.json`/`rental-ferry.json`
+跑 `render_trip` 取 `<svg class="location-svg".*?</svg>`（不含后面的
+schematic-note 段落）得 464/666/458+463 字节，与 ADR 原文四个数字逐一相同，
+确认「字节数 400–700」量的是 svg 标签本身。
+
+理解的目标：给 Journey 页加 `_location_overview_section(journey, labels)`，
+从 `.html` 多导入一个 `_location_svg`（不复制代码），按每个 trip 内
+`day["city"]` 顺序 ∪ lodging/poi 城市顺序去重分组（照抄 `_location_section`
+L581-601 的分组/CRS 选择），每城一个 `<h3>`「第 N 段 · 城市」+ `_location_svg`
+或「位置未核验」空态；用局部 `_section()`（L975，已存在，同 html.py 版本）
+包一层 `data-section="location-overview"`；分区名加进 `JOURNEY_SECTIONS`
+即自动变必需分区，`validate_journey_html.py` 不用动。
+顺序：任务 1 先写 3 条红测试，复用 `JourneyContinuityTests.self.result.journey`
+（`journey_sixteen_day_case()`，3 段各 1 城、pois/lodgings 坐标全部
+`None`——实测验证过，正好对应任务书「三段城市数之和」=3）→ 任务 2 实现、
+07-renderer.md §10 补一句、重生成示例与全部夹具、跑全量与浏览器 QA、反向
+验证。
+最大风险：`_location_svg` 用 `group_index` 拼城市名做 `dom_id`；html.py 单
+Trip 页每次调用只有一个 trip，`enumerate(cities)` 从 0 重置没问题，但
+Journey 页有多个 segment，若照抄「每 trip 重置计数」，两个不同 segment
+恰好同名城市时会撞出重复 DOM id（触发 `JH004`）——对策是用一个跨全部
+segment 单调递增、不按 trip 重置的计数器；决定不把每城分组包成嵌套
+`<section>`（改用 `<div class="location-group">`，CSS 类名沿用 html.py 的
+`.location-group` 规则，靠 class 选择器不看 tag），避免任务 1 第③条测试用
+非贪婪正则删整个分区时被内部嵌套 `</section>` 提前截断。
+
+任务 1（三条新测试，提交 `7dde3ec`）：先红——`Ran 3 tests`
+`FAILED (failures=3)`，逐条失败原因分别是 `1 != 0`（svg 未生成）、
+`assertIn('data-section="location-overview"'...)` 断言失败（分区不存在）、
+`assertNotEqual` 失败（正则替换在旧代码上没匹配到任何东西，说明分区确实
+不存在）。
+
+任务 2（实现，提交 `81b3ffc` + 一处纯风格跟进 `ea29506`）：`_location_overview_section`
+导入 `_location_svg`（不复制），`JOURNEY_SECTIONS` 加一项，插入点在
+`_route_section` 之后；三条新测试转绿；`scripts/build_renderer_fixtures.py`
+重生成后 `demo/journey-16d/journey.html` 287673→288401 字节（+728，
+`journey_sha256` 不变——只改了渲染代码没改 Journey 数据，`html_sha256`
+从旧值变为 `6a92d719...`）；`ctw journey validate-html` → `errors=0`；
+`qa_renderer_browser.py --sections 16` → `failures=[]`
+（`sectionCount=16`、`nonEmptySections=16`，证明「位置未核验」文本让空分区
+不算 empty）；`build_plan_fixtures.py`/`build_provider_fixtures.py` 跑过、
+`git status` 零新增差异；`render/html.py`/`cli.py` 的 `journey_html` 引用
+交叉检查确认两条渲染路径 import 图不相交，另四份 demo 未重跑（详见
+BLOCKED.md）。反向验证：临时从 `_render_journey` 列表删掉调用 → 三条新
+测试 `FAILED (failures=3)`、直接调用 `render_journey`+`validate_journey_html`
+拿到 `errors=1` `JH005 required Journey information architecture is
+incomplete` → 还原 → 三条测试与全量测试重新全绿。全量收尾
+`Ran 635 tests` `OK` 0 skipped；`scan_secrets.py` `0 finding(s) across
+380 file(s)`；`pyflakes` 0 行；`git diff fd2e618 --stat` 只列 6 个文件
+（BLOCKED.md/PROGRESS.md/demo/journey-16d/journey.html/07-renderer.md/
+journey_html.py/test_journey.py），全部落在「界限」允许范围；
+`git diff fd2e618 -- tests | grep -E '^-\s*def test_'` 0 行。BLOCKED.md
+记了两处判断（既有测试 `--sections 15→16` 的必要修正、另四份 demo 用静态
+证据代替实跑）。分支已 `git push -u origin journey-location-svg`
+（远程新分支，未开 PR，按任务书交给管理者合并）。硬指标一、二均达成，
+一轮内完成，未触发止损。
