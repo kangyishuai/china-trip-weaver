@@ -342,7 +342,8 @@ class AMapStationDistanceEnricher:
                 "keywords": station_name,
                 "city": city,
                 "city_limit": "false" if nationwide else "true",
-                "page_size": 5,
+                "types": "150200",
+                "page_size": 25,
                 "page_num": 1,
             },
         )
