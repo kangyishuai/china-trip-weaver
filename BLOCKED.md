@@ -1451,3 +1451,26 @@ flight 系统性失败"的现象，与 `_flight()`/`_lodging()` 价格解析严�
 调试输出，而本书界限只允许改 PROGRESS.md/BLOCKED.md，所以无法逐字确认
 是不是恰好命中这一支——标注为**推测**，供领导判断是否值得在下一轮
 任务书里专门加日志字段验证（而非在本书界限内用改代码的方式验证）。
+
+## 书 AD2「FlyAI 空结果误判」：上条第 5 点的推测已被真实抓取推翻（2026-09-11，判断，非阻塞）
+
+书 AD2 任务 0 用真实 Key 直接抓取福州→武夷山 9/26 的原始 envelope：
+`status=1、data is None=True、message 长度=10`，且不含"结果为空/no
+result"。这不是价格字段解析问题（`_price()`/`require_numeric` 从未
+被调用到——`normalize()` 在进入 `_flight()`/`_price()` 之前就已经因为
+`status != 0` 落进 `raise ContractMismatch("FlyAI success envelope
+changed")`）。真正原因是空结果判定的关键词白名单过窄：服务商用非
+"结果为空/no result"措辞报告的失败/无结果，被当成合同不匹配处理。上条
+（第 5 条）"价格解析严格度不对称"的推测就此证伪，仅保留原文作历史
+记录，不必再作为待验证假设排期。
+
+## 书 AD2「FlyAI 空结果误判」：顺手发现一处越界的文档漂移，留给下一轮 docs-drift（2026-09-11，非阻塞）
+
+`docs/design/adr/0017-transport-candidates.md:90` 写着
+"`tests/test_providers.py:117` separately pins `fixture_count ==
+79`"——本书任务 2 把该断言改成了 `80`（新增 flyai `search_failed`
+夹具），这处引用现在是错的。该文件不在本书「界限」允许修改的清单内
+（只允许改 providers/flyai.py、cli.py 的 `_probe_flyai`、
+build_provider_fixtures.py、fixtures、三份指定测试文件、两份 README
+的夹具总数、PROGRESS.md、BLOCKED.md），所以本轮未动，留给下一轮
+docs-drift 类任务书一并处理。
