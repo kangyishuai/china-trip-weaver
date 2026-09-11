@@ -4866,3 +4866,338 @@ secret scan: 0 finding(s) across 379 file(s)
 ——`cli.py:914` 硬性要求 `--offline-fixture` 配 `--lodging off`——
 改用直接调用真实函数的等价离线验证，不算返工，已在任务 1 小节写明
 理由）。
+
+## 书 AC3「真实行程实网复核」任务 0：环境核实与实网复跑（2026-09-11）
+
+理解的目标／顺序／最大风险（动工前记录）：目标是给福建 16 天真实行程
+最新一轮（0.15.3）的每条坐标/名字 unknown、每行非 ready 的
+provider_health 找到人能懂的成因，unknown 按「真歧义／地名写法／服务商
+无数据／疑似缺陷」归类，health 按「预期降级／服务商变化／疑似缺陷」
+归类；疑似代码缺陷只记 BLOCKED，代码与真实数据一行不改。顺序按任务书
+0→1→2：先核对环境与数字对上基线，再逐条归因，最后汇总记录。最大风险
+是归因流于"看起来像"而没有证据——本轮原则是能用源码/数据精确定位判断
+分支的就引用文件:行号与实测输出，定位不到的诚实标注为推测，不臆断。
+
+环境核实（worktree `.tmp/wt-ac3`，分支 `live-recheck`，HEAD 9d984b8，
+从仓库根 `git worktree add .tmp/wt-ac3 -b live-recheck` 新建）：
+
+```
+$ date
+Fri Sep 11 18:03:08 CST 2026
+$ plugins/china-trip-weaver/scripts/ctw doctor
+{"plugin_version":"0.15.3","providers":{"amap":"configured","anysearch":"missing","flyai":"configured","variflight":"configured"},...}
+```
+
+amap/flyai/variflight 均 configured；anysearch missing（预期，credentials.env
+未配，任务书范围外）。
+
+实网命令与结果：
+
+```
+$ time plugins/china-trip-weaver/scripts/ctw journey plan \
+  --request .../fujian-2026-09-25-to-10-10/request.json \
+  --candidates .../fujian-2026-09-25-to-10-10/candidates.json \
+  --mobility live --lodging live --aviation auto \
+  --output-json .tmp/journey-live.json
+```
+
+末行：`JOURNEY_PLAN_COMPLETE ... trips=3 days=16 max_trip_days=6 ...
+journey_sha256=44059a3b480827245ef7877b87e4de96dc9daafd9ab62a24e2abf9169e36611d
+errors=0`。耗时 `2:49.70 total`（`time` 实测 real 值），与管理者"约 2 分半"
+一致。产物存于 worktree 的 `.tmp/journey-live.json`（346371 字节，被
+`.gitignore` 挡住，不提交）。
+
+统计口径：对 `.tmp/journey-live.json` 逐 trip 的 `pois`/`lodgings`/
+`unknowns` 用 Python 脚本按 `field_path` 精确匹配
+`^/(pois|lodgings)/\d+/coordinates$` 与 `^/(pois|lodgings)/\d+/name$`
+统计，非目测估算，且用 `有坐标数 + 坐标unknown数 == 实体数` 做了自检
+（80 == 80 通过）：
+
+| trip | 日期范围 | pois | lodgings | 实体数 | 有坐标 | 坐标 unknown | 名字 unknown |
+|---|---|---|---|---|---|---|---|
+| 0（北，福州/武夷山） | 9/25–9/29 | 21 | 4 | 25 | 21 | 4 | 1 |
+| 1（中，平潭/泉州） | 9/30–10/5 | 27 | 4 | 31 | 22 | 9 | 3 |
+| 2（南，厦门/南靖） | 10/6–10/10 | 20 | 4 | 24 | 19 | 5 | 3 |
+| 合计 | — | 68 | 12 | 80 | 62 | 18 | 7 |
+
+与管理者 2026-09-11 数字（80／62／18／7）逐项差值为 0，在任务书"±3 以内
+算正常"的门槛内，未触发"记 BLOCKED"条件。与 09-06 基线（78／60／12／6，
+CLAUDE.md「定位失败的实网天花板」）的差异主要是输入行程本身变了（78→80
+个地点、地点构成不同——09-06 是 `fujian-2026-trip/` 那套已废弃输入，本轮
+是 `fujian-2026-09-25-to-10-10/` 这套现役输入），两组基线不是同一批地点，
+差异不代表回归，任务书本身也注明"输入不同只作参考"。
+
+provider_health（6 provider × 3 trip 逐条读取 JSON 字段，非目测）：
+
+| provider | trip0 | trip1 | trip2 |
+|---|---|---|---|
+| 12306-mcp | degraded | degraded | degraded |
+| host-web | ready | ready | ready |
+| flyai | contract_mismatch | ready | contract_mismatch |
+| amap | degraded | degraded | degraded |
+| variflight | degraded | degraded | degraded |
+| anysearch | missing | missing | missing |
+
+与管理者描述（AMap 三段 degraded、FlyAI 两段 contract_mismatch 一段
+ready、12306-mcp 全部 degraded、variflight 全部 degraded、anysearch
+missing）逐项一致。host-web 恒 ready 不需要归因，下同。核对通过，转入
+任务 1。
+
+## 书 AC3 任务 1：逐条归因
+
+### 方法说明
+
+坐标/名字 unknown 的系统自带 `reason` 字段本身很薄（坐标类全部是同一句
+占位文案"coordinates are not verified yet"，来自研究阶段候选的原始
+claim，不是 AMap 实测失败原因），要看到 AMap 实测到底发生了什么，读了
+`mobility.py` 的解析路径：`_resolve_entity`（224 行起）对候选地点用
+`geocode_address = "%s%s" % (entity["city"], entity["name"])`
+（207/238 行）拼城市名与候选名作为查询串；POI 先过 `_resolve_poi_identity`
+（224-343 行）用 `keywords=entity["name"]` 做 AMap `poi` 关键词搜索，
+零结果时（262-276 行）只把 error/warning 计入 health 聚合，**不生成
+任何 claim**就直接放弃该实体；住宿不过这层，直接进 `_resolve_geocode`
+（346-447 行），零结果同样只计入聚合、不生成 claim（432-447 行）。这
+解释了为什么本轮全部 18 条坐标 unknown 对应的 poi_id/lodging_id 在
+`claims[]` 里 `provider=="amap"` 的记录数都是 0（脚本核对，非目测）：
+不是 AMap 没查，是查了零结果时代码设计上不留痕，trip.json 里能看到的
+只有查询前就有的占位 reason。基于这个事实，下表的"归类依据"栏区分两类
+证据：一类是从 `geocode_address = city+name` 这个**确凿的代码拼接公式**
+出发，比对候选 `name` 文本本身是否包含会让拼接串不像地址的成分（城市名
+重复、"夜游/观景/漫步/日落"等体验描述、"甲与乙"复合地名、住宿的房型/
+候选状态用语）；另一类是拼接串本身干净、仍查不到，归为服务商无数据，
+标注"意外"供人工复核。名字 unknown 的 reason 本身就带 AMap 返回的候选
+清单（`identity_conflict:...:nearby_name_candidates`），直接读取，不需要
+推断。
+
+### 坐标 unknown（18 条，去掉酒店名，住宿只标 city/area）
+
+| # | 主体 | city/区域 | reason 前80字 | 归类 | 归类依据 | 建议动作 |
+|---|---|---|---|---|---|---|
+| 1 | lodging-5e900067a98f (trip0) | 福州/福州站 | coordinates are not verified yet | 地名写法 | name 含房型/候选状态用语，拼接后非可命中地址（7 条住宿全部同款，见下方汇总） | 改候选写法：name 只留酒店专名 |
+| 2 | poi-3957b2d779e6 (trip0) | 武夷山/天游峰 | coordinates are not verified yet | 地名写法 | name 已含"武夷山"，city+name 后城市名重复两次 | 改候选写法：去掉候选名里的城市前缀 |
+| 3 | lodging-b9d71b10e5bd (trip0) | 武夷山/三姑度假区 | coordinates are not verified yet | 地名写法 | 同 #1（房型/候选状态用语） | 同 #1 |
+| 4 | lodging-952272eb8810 (trip0) | 福州/五一广场·三坊七巷 | coordinates are not verified yet | 地名写法 | 同 #1，且 city 前缀重复 | 同 #1 |
+| 5 | poi-d47e1704dfd3 (trip1) | 平潭/北部生态廊道F5观景台 | coordinates are not verified yet | 地名写法 | city 前缀重复 + "观景台"偏体验描述 | 改候选写法 |
+| 6 | poi-d480c971d59e (trip1) | 平潭/长江澳 | coordinates are not verified yet | 地名写法 | "日落"是体验描述不是地名的一部分 | 改候选写法 |
+| 7 | poi-ab03f61922f2 (trip1) | 平潭/68海里景区(猴研岛) | coordinates are not verified yet | 服务商无数据 | 拼接串"平潭68海里景区（猴研岛）"本身不含重复/体验词，仍零结果；括注副名可能是次要因素 | 人工核实该地点在 AMap POI 库中的准确名称后重试 |
+| 8 | poi-ba763194b1bd (trip1) | 平潭/坛南湾 | coordinates are not verified yet | 服务商无数据 | 拼接串"平潭坛南湾"是干净的4字查询，作为知名景点仍零结果，意外，值得人工复核 | 人工核实/换关键词重试 |
+| 9 | lodging-ef7a713b83d2 (trip1) | 平潭/龙王头·潭城 | coordinates are not verified yet | 地名写法 | 同 #1，且 city 前缀重复 | 同 #1 |
+| 10 | poi-49da2da25201 (trip1) | 泉州/西街与中山路 | coordinates are not verified yet | 地名写法 | city 前缀重复 + "夜游" + "甲与乙"复合地名，三重叠加 | 改候选写法 |
+| 11 | poi-3a8047c3053b (trip1) | 泉州/鲤城区涂门街清净寺 | coordinates are not verified yet | 地名写法 | city 前缀重复（name 已含"泉州"） | 改候选写法 |
+| 12 | poi-dca28499b01d (trip1) | 泉州/海外交通史博物馆 | coordinates are not verified yet | 地名写法 | city 前缀重复（name 已含"泉州"） | 改候选写法 |
+| 13 | lodging-40e3634b42b6 (trip1) | 泉州/西街外围 | coordinates are not verified yet | 地名写法 | 同 #1 | 同 #1 |
+| 14 | poi-6f035bdddb2d (trip2) | 厦门/沙坡尾与演武大桥 | coordinates are not verified yet | 地名写法 | "观景" + "甲与乙"复合地名 | 改候选写法 |
+| 15 | poi-1b227b7847e7 (trip2) | 厦门/鼓浪屿 | coordinates are not verified yet | 地名写法 | "漫步"是体验描述；鼓浪屿本身也是 CLAUDE.md 已记录的已知难点地名（无常规门牌地址、只能轮渡到达） | 改候选写法 |
+| 16 | lodging-530667d3b293 (trip2) | 厦门/中山路·镇海路 | coordinates are not verified yet | 地名写法 | 同 #1，且 city 前缀重复 | 同 #1 |
+| 17 | poi-ea64bb149acc (trip2) | 南靖/裕昌楼与塔下村 | coordinates are not verified yet | 地名写法 | "甲与乙"复合地名（两个真实景点合写） | 改候选写法 |
+| 18 | lodging-929ab0892f59 (trip2) | 南靖/云水谣景区 | coordinates are not verified yet | 地名写法 | 同 #1 | 同 #1 |
+
+住宿 7 条全部核对了 `name` 字段（脚本核对未打印全名，仅在会话内部核查未写
+入本文件）：全部包含"候选/房/间/套"一类房型或候选状态用字、长度
+14–25 字符（正常酒店专名通常 <15 字符），确认是系统性同款问题，不是个例。
+
+### 名字 unknown（7 条，均为 AMap POI 识别 `identity_conflict`）
+
+| # | 主体 | city/区域 | reason 摘要（候选清单） | 归类 | 建议动作 |
+|---|---|---|---|---|---|
+| 19 | poi-4c4fc303a0c4 (trip0) | 武夷山/九曲溪 | nearby_name_candidates: 九曲溪竹筏漂流 / 九曲溪竹筏码头 | 真歧义 | 人工核名二选一 |
+| 20 | poi-382f39b772b7 (trip1) | 泉州/开元寺 | 泉州大开元寺 / 泉州开元寺-古佛 | 真歧义 | 人工核名二选一 |
+| 21 | poi-e1aaf0a3f68d (trip1) | 泉州/天后宫 | 天后宫 / 天后路 | 真歧义 | 人工核名二选一 |
+| 22 | poi-8d54218e2154 (trip1) | 泉州/文庙 | 文庙 / 文庙广场 | 真歧义 | 人工核名二选一 |
+| 23 | poi-e52a54aa2c6b (trip2) | 南靖/田螺坑 | 福建土楼(南靖)田螺坑景区(暂停开放) / 田螺坑土楼群 | 真歧义 | 人工核名二选一，其中一候选标注"暂停开放"，核名时一并确认是否仍可安排行程 |
+| 24 | poi-7c1eecd389ae (trip2) | 南靖/云水谣·和贵楼 | 云水谣古镇和贵楼 / 福建土楼(南靖)云水谣景区和贵楼停车场 | 真歧义 | 人工核名二选一 |
+| 25 | poi-fa662b1c1e3f (trip2) | 南靖/云水谣·怀远楼 | 云水谣古镇-怀远楼 / 云水谣1号民宿(云水谣古道分店) | 真歧义 | 人工核名二选一 |
+
+这 7 条的判定机制是 CLAUDE.md「定位失败的实网天花板」已记录且明确"不要
+在后续迭代里放宽"的 `_poi_name_is_ambiguous` + `POI_NAME_SIMILARITY_MARGIN`
+（0.15），本轮命中方式与历史记录一致，是设计内行为，不是新问题。
+
+小计：25 条 unknown = 真歧义 7 + 地名写法 16 + 服务商无数据 2 + 疑似缺陷 0。
+
+### 非 ready 的 provider_health（14 行，逐行归因）
+
+**12306-mcp（degraded ×3）**——先用 `unknowns[]` 里 `field_path` 匹配
+`^/transport_legs/\d+/` 的条目把每个 trip 的合并 reason 拆回单条路线
+（脚本核对，非目测）：
+
+| trip | 路线/日期 | 单条 reason | 归类 |
+|---|---|---|---|
+| 0 | 福州→武夷山 9/26 | outside_presale_window | 预期降级 |
+| 0 | 武夷山→福州 9/29 | outside_presale_window | 预期降级 |
+| 0 | 北京→福州长乐机场 9/25 | ambiguous | 疑似缺陷（见 BLOCKED） |
+| 0 | 昆明(个旧前置)→福州长乐机场 9/25 | no_results | 疑似缺陷（见 BLOCKED） |
+| 1 | 福州→平潭 9/30 | outside_presale_window | 预期降级 |
+| 1 | 平潭→泉州 10/3 | outside_presale_window | 预期降级 |
+| 2 | 泉州→厦门 10/6 | outside_presale_window | 预期降级 |
+| 2 | 厦门→南靖 10/8 | outside_presale_window | 预期降级 |
+| 2 | 南靖→厦门 10/9 | outside_presale_window | 预期降级 |
+
+`outside_presale_window` 的 7 条按 T-14 开售规则（出发日减 14 天开售，
+与 CLAUDE.md 已验证过的三段真实开售日交叉核对一致）逐条核对全部成立：
+9/26→开售9/12、9/29→9/15、9/30→9/16、10/3→9/19、10/6→9/22、10/8→9/24、
+10/9→9/25，7 个开售日全部晚于今天（9/11），窗口确实还没开，判定准确。
+这行是
+health 行拆分后的**预期降级**部分。trip0 的另外两条（涉及
+`meeting_anchor` 汇合腿）是**疑似缺陷**，见 BLOCKED 第 1 条，根因是查询
+用了地点的展示名（`name`，含机场名/批注文字）而不是城市名（`city`），
+不是候选数据写法问题——`request.json` 里 `meeting_anchor.location` 与
+`traveler_groups[0].origin` 本身就同时提供了干净的 `city` 字段，是代码
+没用上。三个 trip 的 12306-mcp 健康行合计：预期降级 7 条路线（对应 2 个
+health 行完全是预期降级，1 个 health 行部分预期降级）、疑似缺陷 2 条
+路线（都在 trip0 的健康行里）。
+
+**flyai（contract_mismatch ×2，trip0/trip2；trip1 ready 不计入）**——
+用 `--rail off --mobility off --aviation off --lodging live --progress
+ndjson` 单独复现（详见下方"FlyAI contract_mismatch 定位"小节），确认
+故障**只发生在 flight 能力**，lodging 能力全部成功：
+
+| trip | reason 原文（掐头去尾，无原始响应体） | 归类 |
+|---|---|---|
+| 0 | calls=2;...;flight_items=17;errors=none; calls=2;...;lodging_items=9;flight_items=0;errors=contract_mismatch; calls=1;...;errors=contract_mismatch | 疑似缺陷（见 BLOCKED） |
+| 2 | （同款模式：长途航线成功、区域内短途航线 contract_mismatch） | 疑似缺陷（见 BLOCKED） |
+
+**amap（degraded ×3）**——三个 trip 的成功率分别为 21/25=84%、
+22/31=71%、19/24=79%，合计 62/80=77.5%，与 09-06 基线 60/78=76.9%
+同一量级；`ctw doctor --probe` 显示 amap 的 business/contract/network
+三层探针全部 passed（AMap 服务本身健康）。degraded 状态完全由任务 1
+上表列出的逐条实体判定构成（16 条地名写法 + 2 条服务商无数据 + 7 条
+真歧义），是 CLAUDE.md 已记录、明确不放宽的严格判定机制在这批新地点上
+的正常表现——归类：**预期降级**（三个 trip 一致）。
+
+**variflight（degraded ×3）**——归类：**疑似缺陷**（见 BLOCKED 第 2
+条，`CITY_IATA` 静态表只有 5 个城市，本次行程涉及的福州/武夷山/平潭/
+泉州/厦门/南靖一个都不在表里，三个 trip 的所有航线在到达 adapter 之前
+就被挡下）。另有一条通过 `ctw doctor --probe` 发现、不属于任何一个
+trip 健康行、但与 variflight 直接相关的独立信号：探针用真实凭据对
+`PEK→SHA`（硬编码 IATA，不经过 `CITY_IATA`）发起真实搜索，
+`contract=failed`，说明就算补全 `CITY_IATA`，adapter 对 VariFlight
+当前真实返回体的解析也可能仍然失败——这是与 `CITY_IATA` 缺口相互独立
+的另一个疑似缺陷，偏**服务商变化**（adapter 解析代码可能没跟上
+VariFlight 当前响应形状），详见 BLOCKED 第 3 条。
+
+**anysearch（missing ×3）**——凭据未配置，任务书界限内不索取 Key，
+归类：**预期**（非故障，不需要进一步动作）。
+
+health 行小计（14 行）：预期降级 5 行（amap×3 + 12306 trip1/trip2）+
+预期(missing) 3 行（anysearch×3）+ 疑似缺陷 6 行（12306 trip0 部分 +
+flyai×2 + variflight×3，12306 trip0 的另一部分预期降级已在上表拆分说明）。
+另有 1 条不计入 14 行、通过 doctor --probe 独立发现的疑似缺陷（variflight
+adapter 解析，偏服务商变化）。
+
+### FlyAI contract_mismatch 定位（任务书指定方法）
+
+先跑 `ctw doctor --probe`：
+
+```
+"flyai":{"business":"passed","contract":"passed","credential":"configured","network":"passed"}
+"variflight":{"business":"not_run","contract":"failed","credential":"configured","network":"passed"}
+```
+
+flyai 探针三层全绿——但这条探针（`cli.py:1562-1570` `_probe_flyai`）
+固定只测 `capability="lodging"`（city=北京, 7 天后入住），**从未测试过
+flight 能力**，所以探不到本轮实测到的 flight 专属故障，这本身也是一条
+诊断信息（见 BLOCKED 第 4 条）。
+
+再按任务书跑缩小命令（同一 request/candidates）：
+
+```
+$ plugins/china-trip-weaver/scripts/ctw journey plan \
+  --request .../request.json --candidates .../candidates.json \
+  --rail off --mobility off --aviation off --lodging live \
+  --progress ndjson --output-json .tmp/journey-live-lodging-only.json \
+  2>.tmp/lodging-only-progress.ndjson
+```
+
+`--aviation off` 只关 variflight（`VariFlightBackend.mode` 只接受
+`auto`/`off`，与 CLI 的 `{auto,off}` 对应）；flyai 由 `--lodging
+{live,off}` 整体开关（flyai 一个 provider 同时做 flight 和 lodging 两个
+能力），所以这条命令里 flyai 的 flight 查询仍会跑，反而恰好帮助把
+flight 和 lodging 两个能力的结果分开看。产物：`.tmp/journey-live-lodging-only.json`
++ `.tmp/lodging-only-progress.ndjson`（均在 worktree `.tmp/`，不提交）。
+
+ndjson 里的 `degrade` 事件精确统计：**7 条 `"capability":"flight",
+"error_class":"contract_mismatch"`，0 条 lodging 相关的 degrade**；同一
+文件里另有 5 条 `"attempt":1,"capability":"lodging","event":"query"`
+（对应 5 个城市/日期段的住宿查询）全部无后续 degrade 事件，即全部成功。
+9 次 flight 查询里 7 次 contract_mismatch、2 次成功——对照 calls 清单，
+成功的 2 次是长途干线（昆明/北京→福州），失败的 7 次全部是福建省内
+短途航线（福州↔武夷山、福州→平潭、平潭→泉州、泉州→厦门、厦门→南靖、
+南靖→厦门）。读 `providers/flyai.py` 的 `_flight()`（61-111 行）与
+`_lodging()`（113-153 行）：两者都调用同一个 `_price()` helper 解析
+价格字段，但 `_flight()` 第 72 行传 `require_numeric=True`（任何非数字/
+掩码价格直接 `raise ContractMismatch("FlyAI price lacks numeric
+context")`），`_lodging()`（121-125 行）传 `require_numeric=False` 且
+容忍 `MASKED_PRICE_RE` 掩码价格、优雅退化为 `verify-on-click`。这个
+不对称是目前能定位到的、最可能解释"同一批查询里 lodging 全过、flight
+系统性失败"这一现象的单点，但没有拿到 FlyAI 原始响应体逐字确认到底是
+哪个字段的哪种取值触发的，标注为**推测**，不作为确定结论——完整证据链
+与代码引用见 BLOCKED 第 5 条。
+
+## 书 AC3 任务 2：记录与对照
+
+本次数字（2026-09-11，0.15.3，HEAD 9d984b8）：3 trip、16 天、80 个实体
+（68 pois + 12 lodgings）、62 有坐标、18 坐标 unknown、7 名字 unknown、
+errors=0。与管理者同日同版本数字（80／62／18／7）差值为 0。与 09-06
+基线（78／60／12／6）的差异：地点总数 78→80（+2）、坐标 unknown 12→18
+（+6）、名字 unknown 6→7（+1）——如任务 0 所述，两组基线的输入行程本身
+不同（`fujian-2026-trip/` 已废弃 vs `fujian-2026-09-25-to-10-10/` 现役），
+09-06 那批 78 个地点里没有本轮这套候选，不是同一批实体的回归，任务书也
+注明"输入不同只作参考"，不触发 BLOCKED。
+
+`geocode_ambiguous` 出现次数：0（`grep -c geocode_ambiguous
+.tmp/journey-live.json`）。该字符串只会出现在 `mobility.py:387` 一处
+warning 拼接里，而任务 1"方法说明"已确认 warning 明细本身不落盘进
+trip.json，所以这个 0 次即使代码路径命中过也测不出来，如实记录为
+"0 次，且该指标在当前 trip.json 结构下不可靠、不等同于确认未发生"，
+不作为"没有歧义坐标簇"的证明。
+
+三类归因计数：
+
+- 坐标/名字 unknown 共 25 条：真歧义 7、地名写法 16、服务商无数据 2、
+  疑似缺陷 0。
+- provider_health 非 ready 14 行：预期降级 5（amap×3 + 12306 trip1/
+  trip2）、预期(missing) 3（anysearch×3）、疑似缺陷 6（12306 trip0
+  的 2 条路线 + flyai×2 + variflight×3）。另有 1 条不计入 14 行、
+  仅通过 `doctor --probe` 发现的独立疑似缺陷（variflight adapter
+  解析，见 BLOCKED 第 3 条）。
+- BLOCKED.md 本轮新增疑似代码缺陷 5 条，全部只诊断、代码未改。
+
+每步耗时：
+
+| 步骤 | 命令 | 耗时 |
+|---|---|---|
+| 环境核实 | `date` + `ctw doctor` | 数秒内 |
+| `ctw doctor --probe` | 4 provider 的探针 | 数秒（未单独计时，无明显阻塞） |
+| 主实网复跑 | `ctw journey plan ...`（mobility/lodging live, aviation auto） | `2:49.70`（`time` 实测 real 值） |
+| FlyAI 定位复跑 | `ctw journey plan ... --rail off --mobility off --aviation off --lodging live --progress ndjson` | 约 5–7 分钟（未加 `time` 包装，从会话时间戳估算；主要耗时是 9 次 flight 查询里 7 次失败前的重试延迟） |
+| 归因与写作 | 读源码定位 5 处代码位置 + 整理 25+14 条归因表 | 本会话内完成，未单独计时 |
+
+界限自检（收尾前）：真实行程目录只读；仓库内源码/文档/夹具全程只读，
+只改了 `PROGRESS.md`/`BLOCKED.md`（追加，未删改已有内容）；未索取任何
+Key；worktree 的 `.tmp/journey-live.json`、
+`.tmp/journey-live-lodging-only.json`、`.tmp/lodging-only-progress.ndjson`
+均未 `git add`（`.tmp/` 已被 `.gitignore` 挡住）；未新增依赖、未跑
+`install_local_plugin.sh`、未动版本号、未碰 CI。
+
+完成条件自检实测（2026-09-11，任务 2 收尾时跑）：
+
+```
+$ git status --short
+ M BLOCKED.md
+ M PROGRESS.md
+$ git ls-files | grep -c fujian
+0
+$ /usr/bin/python3 scripts/scan_secrets.py
+secret scan: 0 finding(s) across 378 file(s)
+$ grep -F -f <8个酒店真名清单，仅会话内临时文件> PROGRESS.md BLOCKED.md; echo exit=$?
+exit=1    # 无匹配
+```
+
+真实行程目录完整性：本轮全程只用 Python `json.load`/`Read` 工具读取
+`fujian-2026-09-25-to-10-10/request.json`、`candidates.json`，没有对
+该目录调用过任何写工具。收尾时 `ls -la` 复核，`request.json`
+mtime=Sep 7 14:20、`candidates.json` mtime=Sep 6 19:34，均早于本会话
+开始时间（本轮任务 0 于 18:03 起），证明本轮未写入；顺带记录收尾时的
+`shasum -a 256`（本轮未采集动工前基线，此处只作为下一轮复核的参照）：
+`request.json`=`676d639a55810bdf75280232a30f4a0edd634ab9eb16009da550c582b7afca20`、
+`candidates.json`=`a1beaa0ebf5d839fc44daef9f350304d48480ff0efeaad8216c536ed47d7f25b`。
