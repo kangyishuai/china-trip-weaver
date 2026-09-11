@@ -3151,3 +3151,18 @@ credentials.env 里的真实 Key），补丁后（阻断请求，`except Excepti
 BLOCKED.md 无待裁决项；上面两处偏差判断为「必须修的隐藏 bug」而非
 「任务书假设不成立」，未写入 BLOCKED.md。止损轮次未触发（核心实现一次
 到位，两处 bug 各一轮定位+一轮修复即绿，未连败）。
+
+## 书「租车与轮渡候选设计 ADR-0017」任务 0：核对通过（2026-09-11，分支 transport-candidates-adr）
+
+任务书列出的全部 file:line（candidates.schema.json 顶层
+required/additionalProperties、planning.py:158/634/647/1328/1588、
+providers/flyai.py:94、candidates.py:160/1227、rental-ferry.json、
+replan.py suspend、journey.py `_journey_transport_leg_deadline`、ADR-0016、
+两个 Skill）逐条 `sed -n`/`git grep` 核对，全部命中。目标：写
+docs/design/adr/0017-transport-candidates.md，回答租车/轮渡腿该在哪声明
+（request 自由文本 vs candidates.json 新候选类型）、由哪个函数串成腿/
+日程/账本/预订提醒，要不要动 candidates.schema。顺序：任务1盘清管线
+file:line→任务2两案与决定→提交。最大风险：两案都没有代码可跑验证，只能
+靠现有函数的可复现路径推理；`additionalProperties:false` 改动对 11 个
+测试文件/8 个 fixture（`grep -rl candidates_version tests/` 实测数字）的
+连带面只能估算,不能穷举每一行。
