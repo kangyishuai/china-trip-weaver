@@ -2,17 +2,28 @@
 
 唯一的当前进度记录。2026-09-03 到 09-06 的逐轮任务书、实测证据、验收记录已归档，见「历史索引」。
 
-## 现状速览（2026-09-11 实测，0.15.0）
+## 现状速览（2026-09-11 实测，0.15.1）
 
-- 版本：`0.15.0`，唯一来源是
+- 版本：`0.15.1`，唯一来源是
   `plugins/china-trip-weaver/.codex-plugin/plugin.json` 与
   `src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
   位置一律引用这两处之一，历史版本只以日期提及、不写字面值。
-- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 628 tests`，`OK`，0 skipped；
+- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 629 tests`，`OK`，0 skipped；
   `scripts/scan_secrets.py` 0 命中；
   `~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src
   tests scripts` 0 行。带假 Key（`ANYSEARCH_API_KEY=... unittest`）跑全量同样
-  628 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+  629 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+- 0.15.1（第十波三份并行书，行为零变化）：`validate_trip.semantic_issues` 197 行
+  拆成 `_build_reference_context` + 11 个 `_check_*`（本体 16 行，文件内最长
+  76 行是原有的 `_validate`；管理者用 404248e 旧 worktree 对 3 valid + 4 invalid
+  夹具、4 份 demo trip、journey-16d 与真实 16 天行程的子 Trip、9 份 renderer
+  突变各叠加 17 种确定性突变，共 486 条记录回放，报告逐字节相同；执行者新增
+  一条精确比对 `(code, path, message)` 的测试）；两份 README 与 docs/design
+  追平 0.9→0.15 的代码（四层站点解析、80 公里规则、`poi_around`、
+  `deadline_kind` 四种措辞、`suspend`，15 条漂移全部处理；合并时管理者改正
+  07-renderer §10 对 `deadline_kind=other` 措辞的一句误述——实际是
+  「请在此之前完成」加「具体时间未提供」）；真实行程火车票刷新实战按任务书的
+  日期门槛止步于任务 0（2026-09-11 早于 9/12 开售日），9/12 起重发。
 - 0.15.0（第九波三份并行书）：站点距离富化的两遍 POI 查询限定火车站类目
   （`types=150200`）、一页取 25 条，AMap poi 合同加可选 `types`（实测子设施
   「出站口」「售票处」仍与父类目同返，但酒店、高速出口等噪音已滤掉，逐字同名
