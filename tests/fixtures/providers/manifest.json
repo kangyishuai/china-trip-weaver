@@ -285,6 +285,10 @@
       "sha256": "4904e0be37c32584b72ca4e204310f26c59e87935a834b0db9fd4783e1aabd08"
     },
     {
+      "path": "variflight/error_object.json",
+      "sha256": "166ed2099a0996ebfa0652344d63ab4db5b558548818ef56f0bdaf29b54f5ec0"
+    },
+    {
       "path": "variflight/forbidden.json",
       "sha256": "d4c4b500e3b1475ae9896ab442718cb0dc893d8b3fc56a2486a3c33058b30480"
     },
@@ -321,7 +325,7 @@
       "sha256": "46fd6e92dfa195da7d89386332f94ba20a9279229c78bec2ec1eaf2296321f2e"
     }
   ],
-  "fixture_count": 80,
+  "fixture_count": 81,
   "generated_by": "scripts/build_provider_fixtures.py",
   "manifest_version": 1
 }

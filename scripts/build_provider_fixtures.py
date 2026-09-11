@@ -537,6 +537,22 @@ def vari_live_body(tool: str, rows: Sequence[Mapping[str, Any]]) -> Mapping[str,
     }
 
 
+def vari_live_error_body(tool: str, error_code: int, error: str) -> Mapping[str, Any]:
+    payload = {
+        "code": 200,
+        "message": "Success",
+        "data": {"error_code": error_code, "error": error},
+        "request_id": "synthetic",
+        "timestamp": 0,
+    }
+    return {
+        "tools": list(VARIFLIGHT_TOOLS),
+        "tool": tool,
+        "content": [{"type": "text", "text": canonical(payload)}],
+        "isError": False,
+    }
+
+
 def vari_live_flight() -> Mapping[str, Any]:
     return {
         "FlightNo": "XX1001",
@@ -769,6 +785,7 @@ def build() -> List[Dict[str, Any]]:
     fixtures.extend([
         fixture("variflight", "success", vari_req, response(vari_live_body("searchFlightsByDepArr", [vari_live_flight()])), source=VARIFLIGHT_SOURCE, captured_at=VARIFLIGHT_CAPTURED_AT),
         fixture("variflight", "empty", vari_req, response(vari_live_body("searchFlightsByDepArr", [])), error_class="no_results", source=VARIFLIGHT_MUTATION_SOURCE, captured_at=VARIFLIGHT_CAPTURED_AT),
+        fixture("variflight", "error_object", vari_req, response(vari_live_error_body("searchFlightsByDepArr", 12, "示例无机场")), health="degraded", error_class="invalid_request", source=VARIFLIGHT_MUTATION_SOURCE, captured_at=VARIFLIGHT_CAPTURED_AT),
     ])
     fixtures.extend(error_matrix(
         "variflight", vari_req, vari_body("flights", {"items": [vari_flight()]}, tools=VARIFLIGHT_TOOLS[:-1]),

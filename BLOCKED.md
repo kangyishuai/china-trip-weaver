@@ -1514,3 +1514,24 @@ changed")`）。真正原因是空结果判定的关键词白名单过窄：服�
 build_provider_fixtures.py、fixtures、三份指定测试文件、两份 README
 的夹具总数、PROGRESS.md、BLOCKED.md），所以本轮未动，留给下一轮
 docs-drift 类任务书一并处理。
+
+## 书 AE1「VariFlight 错误对象降级」：无待裁决项，两点非阻塞观察（2026-09-11）
+
+本书两项硬指标均已达成（PROGRESS.md 任务 2 小节有完整证据），没有需要
+管理者裁决的分歧。顺手记两点非阻塞观察：
+
+1. 上一条 docs-drift 记录的 `docs/design/adr/0017-transport-candidates.md:90`
+   `fixture_count == 79` 引用，本书任务 2 把真实断言值又推进到 `81`
+   （现在差两版而不是一版）；该文件仍不在本书「界限」内，继续留给
+   docs-drift 类任务书一并处理，不单独处理。
+2. `ctw doctor --probe` 在本次执行所用的沙箱环境下，四个 provider 并发
+   探测时 variflight 单独报 `network=failed`——根因是这个沙箱的出口网络
+   需要透传一个仅顶层 shell 持有的本机代理，子进程本来就拿不到（这是
+   `SAFE_PROCESS_ENV` 刻意不传代理变量的隔离设计，不应改），加上四个探针
+   并发抢占资源，`_probe_variflight` 硬编码的 `deadline_ms=8000` 在这个
+   组合条件下不够用；单独调用同一个 `_probe_variflight()`（不带另外三个
+   探针的并发抢占）能在 8 秒内拿到 `contract=passed`，证明判定逻辑本身没
+   问题。这只在本沙箱复现，用户真机大概率没有这层代理，不需要改
+   `deadline_ms`；但如果管理者在真机验收时看到并发 `doctor --probe` 下
+   variflight 也报 network 层失败，值得留意是不是本机网络也在这个边界
+   上，而不是直接归因为本书改动有问题。

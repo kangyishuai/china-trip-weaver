@@ -246,6 +246,23 @@ class CredentialTests(unittest.TestCase):
         self.assertEqual("degraded", report["business"])
         self.assertEqual("configured", report["credential"])
 
+    def test_probe_variflight_searches_by_city_code_not_airport_code(self):
+        from china_trip_weaver.cli import _NDJSONProgress, _probe_variflight
+        from china_trip_weaver.providers.variflight import VariFlightAdapter
+
+        result = SimpleNamespace(error_class=None)
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            path = self.make_file(
+                Path(temporary), assignment("VARIFLIGHT_API_KEY", canary("probe-variflight")),
+            )
+            credentials = resolve_credentials({}, path)
+            with mock.patch.object(VariFlightAdapter, "query", return_value=result) as query:
+                _probe_variflight(credentials, ROOT, "configured", _NDJSONProgress(None))
+        self.assertEqual(1, query.call_count)
+        probe_request = query.call_args.args[0]
+        self.assertEqual("BJS", probe_request.parameters["dep_city"])
+        self.assertEqual("SHA", probe_request.parameters["arr_city"])
+
     def test_compatibility_variflight_key_only_used_without_canonical(self):
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
             path = Path(temporary) / "missing"
