@@ -283,6 +283,13 @@ fixtures demo plugins/china-trip-weaver/schema '*/planning.py'
 不计入「同一验收连败 3 次」——每次都是「快照能感知但测试不能感知」这一
 稳定、可解释的结果，不是失败重试）。
 
+两次提交：`782c797`（任务 0/1 文档）、`35be364`（任务 2 拆分+新测试+
+判断记录）；`git push origin main` 后 `gh run list --limit 3` 最新一条
+（run `34572197689`，本次 push 触发）`completed success`，耗时 1m4s，
+无需 rerun。提交后 `git status --short` 为空。任务书结束，硬指标一、二
+全部达成，`BLOCKED.md` 已随两次提交追加两条「判断，非阻塞」记录（任务 0
+行数差 1 行；任务 2 反向验证新增测试），无待领导裁决项。
+
 ## 书 X3「租车与轮渡合成 Trip 夹具」（2026-09-11，worktree `.tmp/wt-x3` 分支 `rental-ferry-fixture`）
 
 任务 0 核对（HEAD `bf53f72`）：全部与任务书数字吻合——612 测试 OK 0 skip、secrets
