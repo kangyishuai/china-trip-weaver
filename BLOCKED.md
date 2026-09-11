@@ -1127,3 +1127,27 @@ Trip』也是合格答案，但要给证据"），不是回避裁决——ADR �
 可复现证据支持这个选择，并在 Consequences 给出了「如果以后要做，选 B 不
 选 A」的理由与验收命令草案，供领导日后裁决是否立项。硬指标一、二均已实测
 通过，见 PROGRESS.md 本书小节。
+
+## 书 Z2「文档漂移清零第二轮 docs-drift-2」（2026-09-11，worktree `.tmp/wt-z2` 分支 `docs-drift-2`）：无待裁决项，但记一条验收命令的字面矛盾
+
+任务 0/1/2 全部按任务书字面执行，未发现任何「怀疑是代码错了」的情形——
+盘清的 15 条漂移全部是「代码有、文档没有」，没有一条是「文档说的与代码
+不符」，因此没有触发「记 BLOCKED 不改代码」这条规则。
+
+唯一记录在案的是任务书「界限」段落与自身「硬指标二」验收命令之间的字面
+矛盾，不是我发现的代码问题，而是任务书本身的一处细节：「界限」明确把
+`plugins/china-trip-weaver/references/provider-contracts.md` 列为允许改的
+文件之一（任务书原话："只允许改：…provider-contracts.md…"），但硬指标二
+要求 `git diff main --stat -- plugins tests` 必须为空——这条 pathspec 用
+`plugins` 前缀会把 provider-contracts.md 自身的改动也纳入统计，与"允许改
+它"字面上互斥。按"文档不撒谎"高于"字面通过某条验收命令"的让步顺序，我
+选择照做任务书明确要求的 provider-contracts.md 改动（AMap 段列全四个能力
+与 `types`/`city_limit` 两个可选参数），并在 PROGRESS.md 里同时贴出两条
+证据：`git diff main --stat -- plugins tests` 的真实非空结果（只有
+provider-contracts.md 一个文件），以及改用真正的只读边界
+`plugins/china-trip-weaver/src plugins/china-trip-weaver/skills
+plugins/china-trip-weaver/schema tests` 作 pathspec 后结果为空——证明
+`src`/`skills`/`schema`/`tests` 这些真正只读的目录确实一字未动，只是
+硬指标二给的检查命令本身没排除掉它自己在"界限"里明确放行的那一个文件。
+这不是我猜代码错了，是任务书这两句话字面上互斥，按更具体、更明确的
+"界限"白名单执行，供领导确认这个判断是否合理。

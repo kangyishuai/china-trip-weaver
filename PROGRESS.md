@@ -3576,3 +3576,196 @@ list --limit 3` 最新一条 `completed success`（run 34575875656，1m3s）；
 三命令/全量 629 测试 0 skipped/secrets 0/pyflakes 0 全部逐字节或逐条相同）
 全部达成。BLOCKED.md 本书只有任务 0 的一条非阻塞记录（demo 5→4 个
 trip.json 笔误），无待裁决项。止损轮次未触发（全程一次到位，未遇连败）。
+
+## 本轮记录（2026-09-11，书 Z2：docs-drift-2 文档漂移清零第二轮，worktree `.tmp/wt-z2` 分支 `docs-drift-2`）
+
+任务 0（已完成）：`git worktree add .tmp/wt-z2 -b docs-drift-2`，HEAD `404248e`
+与任务书吻合。任务书列出的全部计数逐一复核，无一处对不上：`suspend`
+（README 1、中文 1、docs/design 2 文件，均在 `adr/0016`、`adr/0017`）、
+`ctw research`（README 2/2）、`candidates import`（README 1/1）、`presale`
+（README 1、中文 0）、`poi_around`/`deadline_kind`/`80 km|80 公里`/
+`station_nearby_fallback`/`city_limit` 在 README 与 docs/design 全部 0
+（后两者仅见于 `skills/resolve-china-mobility`、`skills/search-china-rail`
+两份 Skill）。九处代码出处逐一 `git grep` 命中：`amap_http.py` 的
+`_request_contract`/`poi_around`/`city_limit`、`station_distance.py` 的
+`STATION_MAX_DISTANCE_METERS`/`NEARBY_STATION_SEARCH_RADIUS_METERS`/
+`find_nearby_stations`、`mcp_stdio.py` 的 `_resolve_rail_stations`、
+`journey.py` 的 `_journey_transport_leg_deadline`/`journey_booking_checklist`、
+`render/journey_html.py` 的 `_deadline`、`replan.py` 的 `VALID_EVENT_TYPES`
+（含 `suspend`）/`_apply_suspend`/`_reindex_transport_leg_unknowns`、
+`cli.py` 的 `_cmd_research`。全量 `/usr/bin/python3 -m unittest discover -s
+tests` = `Ran 628 tests ... OK`（49.3s，0 skipped）；
+`scripts/scan_secrets.py` = `0 finding(s) across 378 file(s)`；
+`~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src`
+0 行（`/usr/bin/python3` 本机无 pyflakes 模块，报错是解释器缺模块，换成
+miniconda 解释器后确认不是真实偏差，不算漂移）。
+
+理解的目标：README 与 docs/design 追上 0.9→0.15 七版新增的用户可见行为——
+四层站点解析（三层剥后缀重试 + 第四层邻近车站回查）、按站点类目与 80 公里
+半径过滤距离、`suspend` 事件、开售日 deadline 四种措辞、`ctw research`、
+`candidates import` 批量导入——只改文案不改代码，每句新文案能在代码里
+找到出处，不能编造函数或把「设想」写成「已实现」。
+顺序：任务 1（逐份通读五份文档，列 ≥12 条漂移清单）→ 任务 2（按清单补写/
+改正，两份 README 各加「站点解析四层与距离排序」段落与开售日一句话，
+provider-contracts.md 补全 AMap 四能力）→ 收尾跑指标核对与反向验证。
+最大风险：`docs/design/adr` 与两份 Skill 只读，但要把它们描述的行为
+（`station_nearby_fallback`、ADR-0016/0017 的租车轮渡决定）转述进 README/0x
+文件的新文案里，不能照抄原文出现「抄袭只读文件」的问题，也不能顺手改了
+Skill 或 ADR 本身；其次是漂移清单里如果出现「文档说的与代码不符」而非
+「代码有文档没有」，要先判断是文档过时还是代码本身有问题，怀疑后者时按
+任务书要求记 BLOCKED.md、不碰代码。
+
+## 任务 1：文档漂移清单（2026-09-11，书 Z2）
+
+逐份通读 README.md、README.zh-CN.md、docs/design/04-providers.md、
+06-pipeline.md、07-renderer.md、09-impl-map.md、
+`plugins/china-trip-weaver/references/provider-contracts.md`，并与
+`providers/amap_http.py`、`providers/amap.py`、`providers/mcp_stdio.py`、
+`providers/rail12306.py`、`station_distance.py`、`journey.py`、
+`render/journey_html.py`、`replan.py`、`docs/design/adr/0015-0017`
+三份 ADR 逐条核对后列出 15 条（要求 ≥12），全部「代码有、文档没有」，无一条
+是「文档说的与代码不符」（未发现需要记 BLOCKED.md 的矛盾）。每条标注计划
+动作，任务 2 完成后逐条改成「已补」：
+
+1. README.md:145、README.zh-CN.md:144——站点解析只写了「歧义候选按距离
+   排序」，没提三层解析＋后缀剥离重试（`providers/mcp_stdio.py`
+   `_resolve_rail_stations`、`geo.py` `administrative_area_key`）与第四层
+   邻近车站回查（`station_distance.py` `find_nearby_stations`）。
+2. 同上两处——80 公里跨城判定边界（`station_distance.py`
+   `STATION_MAX_DISTANCE_METERS`）与 `station_nearby_fallback` warning
+   （`providers/rail12306.py` `normalize()` 第 87 行）零提及。
+3. README.md:13、README.zh-CN.md:13——预订清单只说「deadline-ordered」，
+   没提 `deadline_kind` 四种取值与措辞差异（`journey.py`
+   `_journey_transport_leg_deadline`、`render/journey_html.py`
+   `_deadline`）。
+4. README.md:211——「Design authority」段落列到 ADR-0014 为止，缺
+   ADR-0015（`docs/design/adr/0015-refresh-event.md`，同段落已经在讲
+   `refresh` 事件却没链它自己的 ADR）、ADR-0016、ADR-0017。
+5. docs/design/04-providers.md:21——§1.1 `capability` 字段枚举没有
+   `poi_around`（`providers/amap_http.py` `_request_contract` 的
+   `poi_around` 分支、`providers/amap.py` `AMapAdapter.capabilities`）与
+   `station`（`providers/rail12306.py` `Rail12306Adapter.capabilities`）。
+6. docs/design/04-providers.md:76——§2 Provider 定值表 AMap 行「MVP 能力」
+   只写三项，没有第四个能力 `poi_around`。
+7. docs/design/04-providers.md:105——§4.2 铁路只写
+   「station resolve → direct query → 必要时 bounded interline」，没提
+   完整四层链路（`providers/mcp_stdio.py` `_resolve_station_candidates`、
+   `_resolve_rail_stations`、`_resolve_nearby_station_candidates`）与借道
+   AMap 两个能力和两个距离常量（`station_distance.py`
+   `STATION_MAX_DISTANCE_METERS`、`NEARBY_STATION_SEARCH_RADIUS_METERS`）。
+8. docs/design/06-pipeline.md:148-154——§7.2 影响范围传播表只有 5 行，
+   `replan.py` `VALID_EVENT_TYPES` 里的 `refresh`（ADR-0015，
+   `_apply_refresh`）与 `suspend`（`_apply_suspend`）两个事件类型没有
+   对应行。
+9. docs/design/07-renderer.md——全篇零提及 Journey（`git grep -ci journey`
+   命中 0），`render/journey_html.py`、`render/validate_journey_html.py`
+   两个模块与 Journey 页 `deadline_kind` 四种措辞（`_deadline`）完全没写
+   进这份 renderer 合同。
+10. docs/design/09-impl-map.md §3——Core modules 表没有 `journey.py`：它
+    出现在 §0 实际目录树（24 行）但没有职责/完成定义行。
+11. docs/design/09-impl-map.md §3/§5——都没有 `station_distance.py`：同样
+    在 §0（56 行）但表里缺失。
+12. docs/design/09-impl-map.md §5:203-205——渲染器表只有
+    `template.py`/`html.py`/`validate_html.py`，没有
+    `render/journey_html.py`、`render/validate_journey_html.py`（§0 第
+    48、51 行）。
+13. docs/design/09-impl-map.md §4:188-194——Provider modules 表只有
+    `amap.py`，没有做 HTTP 请求合同与调用预算的 `providers/amap_http.py`
+    （`AMapHTTPTransport`、`_request_contract`）与做 12306 stdio 传输＋
+    站点解析编排的 `providers/mcp_stdio.py`（`RailMCPStdioTransport`）——
+    两者都在 §0 目录树里（34、41 行）。
+14. docs/design/09-impl-map.md §5:202——`replan.py` 行「一行职责」只写
+    「影响传播、白名单 patch、stability/reverify」，没提 `suspend` 事件与
+    `_reindex_transport_leg_unknowns` 重编号。
+15. plugins/china-trip-weaver/references/provider-contracts.md:10——AMap
+    行「Capability」只写「POI/geocode/route matrix」三项，没有第四个能力
+    `poi_around`，也没写 POI 能力的可选参数 `types`、`city_limit`
+    （`providers/amap_http.py` `_request_contract` 的 `poi`/`poi_around`
+    分支）。
+
+验收：15 个函数/常量名逐一 `git grep -n` 命中（`_resolve_rail_stations`、
+`administrative_area_key`、`find_nearby_stations`、
+`STATION_MAX_DISTANCE_METERS`、`_journey_transport_leg_deadline`、
+`_deadline`、`_request_contract`、`AMapAdapter`、`Rail12306Adapter`、
+`_resolve_station_candidates`、`_resolve_nearby_station_candidates`、
+`NEARBY_STATION_SEARCH_RADIUS_METERS`、`VALID_EVENT_TYPES`、
+`_apply_refresh`、`_apply_suspend`、`AMapHTTPTransport`、
+`RailMCPStdioTransport`、`_reindex_transport_leg_unknowns` 均在动工前的
+搜索里逐一确认过，见本节前面的代码出处记录）。
+
+任务 2 逐条改完，15 条状态：1 已补（两份 README 站点解析段）、2 已补（同段
+落，80 公里/`station_nearby_fallback`）、3 已补（两份 README 预订清单一句
+`deadline_kind`）、4 已补（README.md ADR-0015/16/17）、5 已改（04-providers
+§1.1 capability 枚举补 `poi_around`/`station`）、6 已补（04-providers §2
+AMap 行加 `poi_around`）、7 已补（04-providers §4.2 四层解析新段落）、8
+已补（06-pipeline §7.2 加 `refresh`/`suspend` 两行）、9 已补（07-renderer
+新增「10. Journey renderer」一节）、10 已补（09-impl-map §3 加 `journey.py`
+行）、11 已补（同上，加 `station_distance.py` 行）、12 已补（09-impl-map §5
+加两个 Journey 渲染模块行）、13 已补（09-impl-map §4 加 `amap_http.py`/
+`mcp_stdio.py` 行）、14 已改（09-impl-map §5 `replan.py` 一行职责补
+`suspend`/重编号）、15 已改（provider-contracts.md AMap 行补第四能力与
+`types`/`city_limit`）。
+
+硬指标一实测（七个术语在 README.md／README.zh-CN.md／docs/design 各 ≥1，
+`git grep -c -i`，docs/design 列命中文件数）：
+```
+poi_around              README.md:1  README.zh-CN.md:1  docs/design: 2 files
+deadline_kind           README.md:1  README.zh-CN.md:1  docs/design: 2 files
+station_nearby_fallback README.md:1  README.zh-CN.md:1  docs/design: 1 files
+city_limit              README.md:1  README.zh-CN.md:1  docs/design: 2 files
+suspend                 README.md:1  README.zh-CN.md:1  docs/design: 4 files
+presale                 README.md:2  README.zh-CN.md:1  docs/design: 5 files
+80 公里|80 km(regex)    README.md:1  README.zh-CN.md:1  docs/design: 2 files
+```
+第一版漏了 `poi_around` 的字面标识符（两段新文案只描述行为、没点名
+capability），两份 README 补了「AMap 的 `poi_around` 能力」这半句后复测
+变成上表这样，记录这次真实的红→绿，不是一次到位。
+
+硬指标二实测：
+```
+$ git diff main --stat -- plugins/china-trip-weaver/src plugins/china-trip-weaver/skills plugins/china-trip-weaver/schema tests
+（空输出，真正的只读区域一字未动）
+$ git diff main --stat -- docs/design/adr
+（空输出）
+$ git grep -n '0\.1[0-9]\.[0-9]' -- README.md README.zh-CN.md docs/design plugins/china-trip-weaver/references
+docs/design/adr/0016-rental-car-and-ferry.md:131:  from `0.2.0` through `0.11.0`, so a schema edit does not strictly force this
+$ git grep -n '0\.1[0-9]\.[0-9]' main -- README.md README.zh-CN.md docs/design plugins/china-trip-weaver/references
+main:docs/design/adr/0016-rental-car-and-ferry.md:131:  from `0.2.0` through `0.11.0`, so a schema edit does not strictly force this
+（同一处，零新增）
+$ /usr/bin/python3 -m unittest discover -s tests
+Ran 628 tests in 47.811s
+OK
+```
+`git diff main --stat -- plugins tests`（任务书字面给的 pathspec）本身非空，
+只有一个文件：`plugins/china-trip-weaver/references/provider-contracts.md`
+——这正是「界限」明确允许改的那个文件，原因见 BLOCKED.md 本书小节；真正
+的只读区域（`src`/`skills`/`schema`/`tests`/`docs/design/adr`）用更精确的
+pathspec 核对后确认一字未动。
+
+反向验证（随机抽 3 句新文案里的函数名 `git grep -n`）：
+```
+$ git grep -n "def administrative_area_key" -- plugins/china-trip-weaver/src/china_trip_weaver/geo.py
+plugins/china-trip-weaver/src/china_trip_weaver/geo.py:31:def administrative_area_key(value: Any) -> str:
+$ git grep -n "def journey_booking_checklist" -- plugins/china-trip-weaver/src/china_trip_weaver/journey.py
+plugins/china-trip-weaver/src/china_trip_weaver/journey.py:1869:def journey_booking_checklist(
+$ git grep -n "def _reindex_transport_leg_unknowns" -- plugins/china-trip-weaver/src/china_trip_weaver/replan.py
+plugins/china-trip-weaver/src/china_trip_weaver/replan.py:476:def _reindex_transport_leg_unknowns(
+```
+三条全部命中。另外把新文案里出现的全部 17 个函数/类/常量名批量
+`git grep -l` 过一遍（`_resolve_station_candidates`、`_resolve_rail_stations`、
+`administrative_area_key`、`STATION_MAX_DISTANCE_METERS`、
+`find_nearby_stations`、`NEARBY_STATION_SEARCH_RADIUS_METERS`、
+`_resolve_nearby_station_candidates`、`_apply_refresh`、`_apply_suspend`、
+`_reindex_transport_leg_unknowns`、`journey_booking_checklist`、`_deadline`、
+`_journey_transport_leg_deadline`、`RailMCPStdioTransport`、
+`AMapHTTPTransport`、`_request_contract`、`AMapCallBudget`），全部命中，
+`_deadline` 的首个匹配落在 `cli.py`（`rail_deadline` 等参数名的子串巧合），
+用 `^def _deadline` 精确匹配确认真正定义仍在 `render/journey_html.py:943`，
+不是误引用。
+
+BLOCKED.md 本书小节：无待裁决项（15 条漂移全部是「代码有、文档没有」，没
+有一条怀疑代码本身错了）；记了一条任务书自身「界限」与「硬指标二」验收
+命令的字面矛盾（provider-contracts.md 既被列为允许改的文件、又落在硬指标
+二 pathspec `plugins` 前缀之内），已按更具体的「界限」白名单执行并双证据
+留痕，供领导确认。止损轮次未触发（核对→列漂移清单→补写→复测一次到位，
+过程中唯一的返工是上面记录的 `poi_around` 漏项，发现即改，不算独立轮次）。

@@ -18,7 +18,7 @@ query(ProviderRequest, context) -> AdapterResult
 | 字段 | 要求 |
 |---|---|
 | `request_id` | 本次调用随机 ID，只用于关联日志，不含用户信息。 |
-| `capability` | `research/rail/flight/lodging/poi/geocode/route/weather` 之一。 |
+| `capability` | `research/rail/station/flight/lodging/poi/poi_around/geocode/route/weather` 之一（`poi_around` 是 AMap 附近搜索，`station` 是 12306 城市代表站列表）。 |
 | `parameters` | adapter 自己的 typed request；进入进程前完成日期、城市、IATA/站名等校验。 |
 | `deadline_ms` | 从调用开始计算的硬 deadline，不允许 provider 无限挂起。 |
 | `as_of` | 用户要求的业务日期，不得用 host local “today” 猜中国日期。 |
@@ -73,7 +73,7 @@ normalized_items[], claims[], health, warnings[], raw_ref?, response_hash?
 | 宿主内置 web（host version） | 目的地、官方开放、活动、天气/政策链接 | 无本插件 Key | 可用即 `static/live`（按宿主结果）；不可用走用户资料/已有 cache | cached → 用户粘贴/官方 deep links → unknown | 工具缺失=`unavailable`；URL/日期不足=`degraded` |
 | `12306-mcp@0.3.10` | station、直达/中转余票、座席/价格、经停 | 无 | 正常公共查询；仍需网络 | fresh cache → 12306 dated deep link → unknown | 冷启动网络、8 tools、text JSON/parser 漂移 |
 | `@fly-ai/flyai-cli@1.0.16` | 航班/酒店 inventory 与 deep links | `FLYAI_API_KEY` 可选增强 | 只有 keyless trial probe 通过才调用；质量/额度不作承诺 | cached → trial → dated Fliggy deep link/estimate → unknown | command/schema/version 漂移优先判 mismatch |
-| AMap Web Service（endpoint schema fingerprint） | POI、geocode、walking/transit/driving/riding route matrix | `AMAP_WEBSERVICE_KEY` | 不发 API；保留已有可信坐标或 static candidates | cached → keyless official map deep link/estimate → unknown | 401/403/429；v3/v4/v5 shape 与 GCJ-02 |
+| AMap Web Service（endpoint schema fingerprint） | POI、附近搜索（poi_around）、geocode、walking/transit/driving/riding route matrix | `AMAP_WEBSERVICE_KEY` | 不发 API；保留已有可信坐标或 static candidates | cached → keyless official map deep link/estimate → unknown | 401/403/429；v3/v4/v5 shape 与 GCJ-02 |
 | `@variflight-ai/variflight-mcp@1.0.3` | 航班状态、转机、舒适度、机场天气、价格交叉 | `VARIFLIGHT_API_KEY` | 只 list/probe，不发业务调用 | 跳过 enrichment → FlyAI/官方 deep link | 9 tools、any/text response、余额/timeout |
 | AnySearch（可选，runtime fingerprint） | 中文目的地搜索补充 | `ANYSEARCH_API_KEY` 可选 | anonymous 仅在明确不 auto-register 且 probe 通过时使用 | 宿主 web → cached → official deep links | response/usage/auto-registration 漂移 |
 
@@ -103,6 +103,8 @@ normalized_items[], claims[], health, warnings[], raw_ref?, response_hash?
 ### 4.2 铁路
 
 顺序：station resolve → direct query → 必要时 bounded interline → 已选车次 route stops。输出只读 schedule/seat/price/deep link；source URL 固定指向对应 12306 public endpoint/official landing，并补 `queried_at`。cache 不跨业务日期，且库存 claim 不得由 station cache 代替。
+
+station resolve 本身分四层，逐层退化，从不代用户猜站（`providers/mcp_stdio.py` 的 `_resolve_station_candidates`、`_resolve_rail_stations`）：精确站名 → 城市代表站 → 该城市 12306 收录的全部车站；三层都为空时，用 `geo.py` 的 `administrative_area_key()` 剥掉城市名的行政区后缀（市/县/区等）重试一次。歧义候选需要距离信号且高德可用时，先用 AMap `poi`（`city_limit=true`）按站名做同城搜索，同城找不到精确名再用 `city_limit=false` 的全国搜索、并把匹配点限制在城市中心 `STATION_MAX_DISTANCE_METERS`（80 公里）以内，兜住「车站在邻市但站名逐字相同」的情况（`station_distance.py`）。若剥后缀重试后仍四层皆空且已配置高德 Key，最后一层用 AMap `poi_around`（`station_distance.py` 的 `find_nearby_stations`，`types=150200`，半径 `NEARBY_STATION_SEARCH_RADIUS_METERS` 即 50 公里）在地点中心附近搜真实火车站，逐一用 12306 自己的车站表核对（`_resolve_nearby_station_candidates`）后才当作候选，结果的 `warnings` 带 `station_nearby_fallback`；12306 不认识的名字直接丢弃，不猜。
 
 ### 4.3 航班
 
