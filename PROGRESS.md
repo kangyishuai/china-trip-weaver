@@ -4576,3 +4576,66 @@ Context 要用的全部证据实测列清单（含用 `render_trip()` 实际渲�
 
 硬指标一里"≥10 条"达标（实得 24 条），全部可用 `git grep -n`/
 `sed -n`/实测命令复现，无一条凭印象或猜测。
+
+## 书「地图与图片 ADR-0018」任务 2：ADR 写完，Decision「不做/不做/不做/做」（2026-09-11，完成）
+
+`docs/design/adr/0018-map-and-images.md` 已交付，结构照 ADR-0017
+（Status/Date/Context/Options/Decision/Consequences）。
+
+Context 把任务 1 的 24 条证据归成四类小节（renderer 现行地图/图片
+合同、`_location_svg` 输入输出与 Journey 页缺口、静态图/图片会撞上的
+provider 与条款事实、体量、真实定位天花板），逐条保留 file:line。
+Options 给了三个：不动；离线 SVG 示意升级并补到 Journey 页（复用
+`_location_svg`，只改 `journey_html.py`，无 schema/`SCHEMA_VERSION`
+改动）；plan 期取高德静态图嵌 data URI（新增 `amap.py` capability、
+`trip.schema.json` 新增 image 字段、`SCHEMA_VERSION` bump、新增
+validator 检查）。每个 Option 都按任务书要求写了"要改什么文件、谁
+受益、违反哪条合同或条款、体量与离线代价"四项。
+
+Decision 对四个问题分别给了「不做」「不做」「不做」「做」：交互地图
+不做是因为 07-renderer.md:63 是既有合同、没有新证据推翻它，ADR 不
+重新解释放宽；静态图不做是因为把抓取的 PNG 字节编成 data URI 永久嵌进
+会被保存/分享的文件，是比项目已经拒绝的内存缓存更强的"直接存储"，
+撞上高德条款 3.5，且体量是 SVG 方案的 100-400 倍（假设值，已标注
+"未验证"）；图片字段不做是因为 07-renderer.md:70 要求先有可信数据源，
+而 anysearch/host_web 零图片能力、静态图路径已被独立否决，没有第二个
+来源；Journey 页位置示意「做」，因为这不是新功能审批，是把已经合规
+的 `_location_svg`（07-renderer.md §2 第 8 条既定合同）补到一个
+`journey.schema.json:60` 证明数据已经齐备、`journey_html.py:13-22`
+证明复用私有函数是既有代码风格的页面上，实测成本约 500 字节/trip
+（任务 1 证据 22），不违反任何已核对的条款。附了「若做」的最小方案
+（改 `journey_html.py` 一个文件，插入点、复用范围都给了精确 file:line）
+与 5 条 Consequences 验收命令草案。
+
+自查阶段（写作过程中自己发现、不算任务书出入）修正了 3 处引用问题，
+详见 BLOCKED.md 本书小节：研究决策 17 号路径写错（design→research）、
+`_location_section` 定义行号差 1（580→581，580 实际是空行）、验收
+命令引用了不存在的 `tests/test_journey_html.py`（改为真实存在的
+`tests/test_journey.py`）。三处均已在提交前修正。
+
+硬指标一实测：ADR 存在；Decision 对四个问题各给一个明确答案（不做/
+不做/不做/做）；Context 24 条 file:line/条款全部本轮 `git grep`/
+`sed -n`/实测核对命中（含自查阶段修正的 3 处）。
+
+硬指标二实测：
+```
+$ git diff 9d984b8 --stat -- . ':!docs/design/adr/0018-map-and-images.md' ':!PROGRESS.md' ':!BLOCKED.md'
+(空输出)
+$ grep -c "fujian-2026" docs/design/adr/0018-map-and-images.md
+0
+$ grep -icE "武夷山|福州|泉州|厦门|鼓浪屿|南平" docs/design/adr/0018-map-and-images.md
+0
+$ /usr/bin/python3 scripts/scan_secrets.py
+secret scan: 0 finding(s) across 379 file(s)
+$ ~/miniconda3/envs/core/bin/python -m pyflakes .
+(空输出，0 行，已过滤 .tmp/)
+$ /usr/bin/python3 -m unittest discover -s tests
+Ran 632 tests in 38.717s
+OK
+```
+0 skipped；分支 `adr-map-images` 待本轮提交后推送。
+
+BLOCKED.md 本书小节：无待裁决项（Decision 对四个问题给出「不做/
+不做/不做/做」，不是回避裁决；第 4 条给了肯定答案与最小方案，理由
+见上）。止损轮次未触发（研究→写作→自查一次到位，过程中自己发现并
+修正的 3 处引用错误是自查生效的证据，不是需要返工的失败）。
