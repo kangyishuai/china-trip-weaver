@@ -2,17 +2,28 @@
 
 唯一的当前进度记录。2026-09-03 到 09-06 的逐轮任务书、实测证据、验收记录已归档，见「历史索引」。
 
-## 现状速览（2026-09-11 实测，0.16.0）
+## 现状速览（2026-09-11 实测，0.16.1）
 
-- 版本：`0.16.0`，唯一来源是
+- 版本：`0.16.1`，唯一来源是
   `plugins/china-trip-weaver/.codex-plugin/plugin.json` 与
   `src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
   位置一律引用这两处之一，历史版本只以日期提及、不写字面值。
-- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 641 tests`，`OK`，0 skipped；
+- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 646 tests`，`OK`，0 skipped；
   `scripts/scan_secrets.py` 0 命中；
   `~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src
   tests scripts` 0 行。带假 Key（`ANYSEARCH_API_KEY=... unittest`）跑全量同样
-  641 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+  646 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+- 0.16.1（第十五波，两处缺陷修复）：VariFlight 返回 `data={"error_code":…}`
+  错误对象时按错误码降级（10→`no_results`、12→`invalid_request`、其余
+  `upstream_5xx`，`_live_error_class`），不再判 `contract_mismatch`；`ctw doctor
+  --probe` 的 VariFlight 探针从机场码 PEK 改成城市码 BJS；`CITY_IATA` 从 5 城扩到
+  24 城，每城执行者都用真实 Key 查过一次（武夷山 WUS 对上海无直飞，用 WUS→CAN
+  验证）；夹具 81。Journey 页头的路线串在「→」「／」后插 `<wbr>`，
+  `.journey-title-route` 改 `overflow-wrap: anywhere`，真实 16 天行程页在 375px
+  的 8 像素横向溢出归零；浏览器 QA 新增只上报不判失败的 `internalOverflow`
+  字段。已知：真实页 3 张逐日卡片里带括号的 slot 标题 h3 仍比卡片宽 6px
+  （`internalOverflow` 报 12），执行者实测 `word-break: break-all` 也治不了，判断
+  是 CJK 右括号的字体墨水度量，不冒泡到页面级溢出，暂不处理。
 - 0.16.0（第十四波，三本都改行为）：跨城路线的火车查询、机票查询、12306 深链
   与 VariFlight 城市码一律用地点的 `city` 而不是展示名 `name`（`planning.RouteSpec`
   五处消费者，缺 `city` 时回退 `name`；管理者用 fd2e618 旧代码对真实 16 天行程
