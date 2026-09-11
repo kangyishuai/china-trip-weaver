@@ -2,17 +2,25 @@
 
 唯一的当前进度记录。2026-09-03 到 09-06 的逐轮任务书、实测证据、验收记录已归档，见「历史索引」。
 
-## 现状速览（2026-09-11 实测，0.12.0）
+## 现状速览（2026-09-11 实测，0.13.0）
 
-- 版本：`0.12.0`，唯一来源是
+- 版本：`0.13.0`，唯一来源是
   `plugins/china-trip-weaver/.codex-plugin/plugin.json` 与
   `src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
   位置一律引用这两处之一，历史版本只以日期提及、不写字面值。
-- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 602 tests`，`OK`，0 skipped；
+- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 612 tests`，`OK`，0 skipped；
   `scripts/scan_secrets.py` 0 命中；
   `~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src
   tests scripts` 0 行。带假 Key（`ANYSEARCH_API_KEY=... unittest`）跑全量同样
-  602 OK，README 的 demo 重生成在有无 Key 两种环境下都零差异。
+  612 OK，README 的 demo 重生成在有无 Key 两种环境下都零差异。
+- 0.13.0（第七波三份并行书）：Journey 清单项带 `deadline_kind`
+  （presale_open/declared/departure/check_in/other），优先事项与清单卡片按种类
+  措辞——「开售日 2026-09-12 · 当天就买 · 09-26 出发」「预订截止」「出发前确认」
+  「入住前确认」，中英两套，追踪属性 `data-deadline-kind` 由 validate_journey_html
+  一并核对，item_id 不变；`suspend` 删非末尾腿时后面腿的
+  `/transport_legs/N/...` unknowns 重编号（patch 里是 replace field_path）；
+  `validate_html` 258 行拆成 13 个 `_check_*`（本体 32 行，文件内最长 74 行），
+  管理者用 d22e3e6 旧 worktree 对 29 组夹具与 demo 回放，验证报告逐字节相同。
 - 0.12.0（第六波三份并行书）：Journey 预订清单与优先事项按开售日排期——rail
   腿 deadline = 出发日减 14 天（复用 `providers/rail12306.py` 的 `PRESALE_DAYS`），
   `/booking_deadline` claim 优先，其余交通照旧，unknown 项共用同一规则（真实
