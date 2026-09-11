@@ -544,8 +544,8 @@ def _location_overview_section(journey: Mapping[str, Any], labels: Mapping[str, 
             if item["city"] not in cities:
                 cities.append(item["city"])
         for city in cities:
-            city_entities = [entry for entry in entities if entry[1]["city"] == city]
-            point_candidates = [entry for entry in city_entities if entry[1]["coordinates"]]
+            city_entities = [(kind, item, key) for kind, item, key in entities if item["city"] == city]
+            point_candidates = [(kind, item, key) for kind, item, key in city_entities if item["coordinates"]]
             crs = "WGS84" if point_candidates and all(item["coordinates"]["wgs84"] for _, item, _ in point_candidates) else "GCJ02"
             field = "wgs84" if crs == "WGS84" else "gcj02"
             plotted = [
