@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 ## 书 Y1「拆 journey._merge_segment_trips」（2026-09-11，main 直改，已按先例处理，非空白裁决）
 
 任务 0 的 1 行行数出入（2574→2573）已单独记在本文件靠后位置，不再重复。
@@ -17,7 +16,7 @@ segment`（`tests/test_journey.py`，任务书「界限」明确允许新增
 触发红的探索、诊断脚本定位真实合并点、以及一次「探索时机不对导致数错
 基线（20 vs 正确的 19）、随后自我纠正」的记录）见 PROGRESS.md 本书任务 2
 小节，不构成需要领导裁决的阻塞项。
-=======
+
 ## 书 Y2「站点 POI 查询加 types=150200、page_size 5→25」（2026-09-11，worktree `.tmp/wt-y2` 分支 `station-poi-types`）：无待裁决项
 
 本书全程未遇到需要领导裁决、又拿不准该怎么办的分叉；任务书「我替领导拍的
@@ -26,7 +25,6 @@ segment`（`tests/test_journey.py`，任务书「界限」明确允许新增
 `poi_around` 请求本身没有 `page_num` 键（合同层默认成 1），属实现细节、
 不构成裁决分叉，就地改用 `.get("page_num", 1)` 后照常验收，记录在
 PROGRESS.md 本书小节。
->>>>>>> station-poi-types
 
 ## 书 X2「12306 站点最近火车站回查」（2026-09-11，worktree `.tmp/wt-x2` 分支 `station-nearby`）：无待裁决项
 
@@ -1095,7 +1093,6 @@ JH 码字面量计数（44 个、15 种）、`tests/test_journey.py` 里
 拆分方案，大概率是任务书写作时的计数笔误（例如文件末尾换行符的计入方式
 不同），不是「对不上」的实质性分歧，不停工。
 
-<<<<<<< HEAD
 ## 书 Y1「拆 journey._merge_segment_trips」任务 0：文件总行数与任务书差 1 行（2026-09-11，判断，非阻塞）
 
 任务书写「journey.py 共 2574 行」，`wc -l` 实测 2573 行（文件确以换行符
@@ -1107,7 +1104,7 @@ JH 码字面量计数（44 个、15 种）、`tests/test_journey.py` 里
 唯一调用点 journey.py:279（`trip_document = _merge_segment_trips(atomic_trips,
 segment)`），确在 `plan_journey`（起始行 207）函数体内。判断：1 行出入不
 影响任何硬指标或拆分方案，不停工。
-=======
+
 ## 书「租车与轮渡候选设计 ADR-0017」（2026-09-11，worktree `.tmp/wt-y3` 分支 `transport-candidates-adr`）：无待裁决项
 
 任务 0/1/2 全部按任务书字面执行，全程无需停工的分叉。任务书列出的全部
@@ -1118,4 +1115,3 @@ Trip』也是合格答案，但要给证据"），不是回避裁决——ADR �
 可复现证据支持这个选择，并在 Consequences 给出了「如果以后要做，选 B 不
 选 A」的理由与验收命令草案，供领导日后裁决是否立项。硬指标一、二均已实测
 通过，见 PROGRESS.md 本书小节。
->>>>>>> transport-candidates-adr

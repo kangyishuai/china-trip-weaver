@@ -142,7 +142,6 @@ fix-names` 会把它们列为人工项。
 - 2026-09-03/04 越界事实的唯一记录：`BLOCKED.md`（面向公众的产品未决问题，
   Open 区已于 2026-09-06 清零，现为存档）。
 
-<<<<<<< HEAD
 ## 书 Y1「拆 journey._merge_segment_trips」（2026-09-11，main 直改，第九波三份并行书之一）
 
 任务 0 核对（HEAD `cab411f`）：全量 `/usr/bin/python3 -m unittest discover -s
@@ -290,7 +289,7 @@ fixtures demo plugins/china-trip-weaver/schema '*/planning.py'
 无需 rerun。提交后 `git status --short` 为空。任务书结束，硬指标一、二
 全部达成，`BLOCKED.md` 已随两次提交追加两条「判断，非阻塞」记录（任务 0
 行数差 1 行；任务 2 反向验证新增测试），无待领导裁决项。
-=======
+
 ## 书 Y2「站点 POI 查询加 types=150200、page_size 5→25」（2026-09-11，worktree `.tmp/wt-y2` 分支 `station-poi-types`，已完成）
 
 任务 0 核对（HEAD `cab411f`）：全部与任务书数字吻合——623 测试 OK 0
@@ -358,7 +357,6 @@ parameters 里的 `"types": "150200"` 一行 →
 `git diff main --stat -- tests/fixtures plugins/china-trip-weaver/schema
 '*/mcp_stdio.py' '*/rail12306.py' '*/amap.py'` 为空；未新增依赖、未跑
 `install_local_plugin.sh`、未改版本号或 CI。
->>>>>>> station-poi-types
 
 ## 书 X3「租车与轮渡合成 Trip 夹具」（2026-09-11，worktree `.tmp/wt-x3` 分支 `rental-ferry-fixture`）
 
