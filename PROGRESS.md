@@ -4598,8 +4598,11 @@ claim，不是 AMap 实测失败原因），要看到 AMap 实测到底发生了
 | 2 | 厦门→南靖 10/8 | outside_presale_window | 预期降级 |
 | 2 | 南靖→厦门 10/9 | outside_presale_window | 预期降级 |
 
-`outside_presale_window` 的 7 条按 T-14 开售规则核对全部成立（今天
-9/11，9/25 起的各日期开售日分别为 9/11–9/25，均 ≥ 今天或未到）：这行是
+`outside_presale_window` 的 7 条按 T-14 开售规则（出发日减 14 天开售，
+与 CLAUDE.md 已验证过的三段真实开售日交叉核对一致）逐条核对全部成立：
+9/26→开售9/12、9/29→9/15、9/30→9/16、10/3→9/19、10/6→9/22、10/8→9/24、
+10/9→9/25，7 个开售日全部晚于今天（9/11），窗口确实还没开，判定准确。
+这行是
 health 行拆分后的**预期降级**部分。trip0 的另外两条（涉及
 `meeting_anchor` 汇合腿）是**疑似缺陷**，见 BLOCKED 第 1 条，根因是查询
 用了地点的展示名（`name`，含机场名/批注文字）而不是城市名（`city`），
@@ -4695,3 +4698,72 @@ context")`），`_lodging()`（121-125 行）传 `require_numeric=False` 且
 系统性失败"这一现象的单点，但没有拿到 FlyAI 原始响应体逐字确认到底是
 哪个字段的哪种取值触发的，标注为**推测**，不作为确定结论——完整证据链
 与代码引用见 BLOCKED 第 5 条。
+
+## 书 AC3 任务 2：记录与对照
+
+本次数字（2026-09-11，0.15.3，HEAD 9d984b8）：3 trip、16 天、80 个实体
+（68 pois + 12 lodgings）、62 有坐标、18 坐标 unknown、7 名字 unknown、
+errors=0。与管理者同日同版本数字（80／62／18／7）差值为 0。与 09-06
+基线（78／60／12／6）的差异：地点总数 78→80（+2）、坐标 unknown 12→18
+（+6）、名字 unknown 6→7（+1）——如任务 0 所述，两组基线的输入行程本身
+不同（`fujian-2026-trip/` 已废弃 vs `fujian-2026-09-25-to-10-10/` 现役），
+09-06 那批 78 个地点里没有本轮这套候选，不是同一批实体的回归，任务书也
+注明"输入不同只作参考"，不触发 BLOCKED。
+
+`geocode_ambiguous` 出现次数：0（`grep -c geocode_ambiguous
+.tmp/journey-live.json`）。该字符串只会出现在 `mobility.py:387` 一处
+warning 拼接里，而任务 1"方法说明"已确认 warning 明细本身不落盘进
+trip.json，所以这个 0 次即使代码路径命中过也测不出来，如实记录为
+"0 次，且该指标在当前 trip.json 结构下不可靠、不等同于确认未发生"，
+不作为"没有歧义坐标簇"的证明。
+
+三类归因计数：
+
+- 坐标/名字 unknown 共 25 条：真歧义 7、地名写法 16、服务商无数据 2、
+  疑似缺陷 0。
+- provider_health 非 ready 14 行：预期降级 5（amap×3 + 12306 trip1/
+  trip2）、预期(missing) 3（anysearch×3）、疑似缺陷 6（12306 trip0
+  的 2 条路线 + flyai×2 + variflight×3）。另有 1 条不计入 14 行、
+  仅通过 `doctor --probe` 发现的独立疑似缺陷（variflight adapter
+  解析，见 BLOCKED 第 3 条）。
+- BLOCKED.md 本轮新增疑似代码缺陷 5 条，全部只诊断、代码未改。
+
+每步耗时：
+
+| 步骤 | 命令 | 耗时 |
+|---|---|---|
+| 环境核实 | `date` + `ctw doctor` | 数秒内 |
+| `ctw doctor --probe` | 4 provider 的探针 | 数秒（未单独计时，无明显阻塞） |
+| 主实网复跑 | `ctw journey plan ...`（mobility/lodging live, aviation auto） | `2:49.70`（`time` 实测 real 值） |
+| FlyAI 定位复跑 | `ctw journey plan ... --rail off --mobility off --aviation off --lodging live --progress ndjson` | 约 5–7 分钟（未加 `time` 包装，从会话时间戳估算；主要耗时是 9 次 flight 查询里 7 次失败前的重试延迟） |
+| 归因与写作 | 读源码定位 5 处代码位置 + 整理 25+14 条归因表 | 本会话内完成，未单独计时 |
+
+界限自检（收尾前）：真实行程目录只读；仓库内源码/文档/夹具全程只读，
+只改了 `PROGRESS.md`/`BLOCKED.md`（追加，未删改已有内容）；未索取任何
+Key；worktree 的 `.tmp/journey-live.json`、
+`.tmp/journey-live-lodging-only.json`、`.tmp/lodging-only-progress.ndjson`
+均未 `git add`（`.tmp/` 已被 `.gitignore` 挡住）；未新增依赖、未跑
+`install_local_plugin.sh`、未动版本号、未碰 CI。
+
+完成条件自检实测（2026-09-11，任务 2 收尾时跑）：
+
+```
+$ git status --short
+ M BLOCKED.md
+ M PROGRESS.md
+$ git ls-files | grep -c fujian
+0
+$ /usr/bin/python3 scripts/scan_secrets.py
+secret scan: 0 finding(s) across 378 file(s)
+$ grep -F -f <8个酒店真名清单，仅会话内临时文件> PROGRESS.md BLOCKED.md; echo exit=$?
+exit=1    # 无匹配
+```
+
+真实行程目录完整性：本轮全程只用 Python `json.load`/`Read` 工具读取
+`fujian-2026-09-25-to-10-10/request.json`、`candidates.json`，没有对
+该目录调用过任何写工具。收尾时 `ls -la` 复核，`request.json`
+mtime=Sep 7 14:20、`candidates.json` mtime=Sep 6 19:34，均早于本会话
+开始时间（本轮任务 0 于 18:03 起），证明本轮未写入；顺带记录收尾时的
+`shasum -a 256`（本轮未采集动工前基线，此处只作为下一轮复核的参照）：
+`request.json`=`676d639a55810bdf75280232a30f4a0edd634ab9eb16009da550c582b7afca20`、
+`candidates.json`=`a1beaa0ebf5d839fc44daef9f350304d48480ff0efeaad8216c536ed47d7f25b`。

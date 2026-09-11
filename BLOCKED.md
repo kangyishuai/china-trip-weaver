@@ -1296,3 +1296,112 @@ PROGRESS.md 本节）。
 不是待领导裁决的分叉，理由同上条。唯一新增信息：这是同一自然日内的
 第二次空跑，供管理者判断是否需要调整派发时机——建议 2026-09-12（含）
 之后再派发本书。
+
+## 书 AC3「真实行程实网复核」疑似代码缺陷（2026-09-11，只诊断不修）
+
+以下 5 条都是本轮福建 16 天真实行程实网复跑（0.15.3，`.tmp/journey-live.json`，
+`journey_sha256=44059a3b480827245ef7877b87e4de96dc9daafd9ab62a24e2abf9169e36611d`）
+中定位到的疑似代码缺陷，代码与真实数据一行未改，供领导裁决是否要修。
+
+### 1. rail12306/flyai/variflight 的路线查询统一用了地点的展示名而非城市名
+
+`request.json` 的 `meeting_anchor.location` 与 `traveler_groups[].origin`
+每个地点对象都同时提供 `name`（展示名，可能含机场名/行程批注文字）和
+`city`（干净城市名）——例如本轮 `meeting_anchor.location.name`="福州长乐
+国际机场" 而 `.city`="福州"，`traveler_groups[0].origin.name`="昆明（由
+个旧于9月24日前置）" 而 `.city`="昆明"。但 `planning.py` 的 `RouteSpec`
+（45-50 行）与 5 处消费点全部只读 `.name`、从不读 `.city`：
+`planning.py:95-96`（`RailBackend.query` 的 `from_name`/`to_name`）、
+`planning.py:1354-1355`（`_resolve_rail` 的 call 日志）、
+`planning.py:1595-1596`（12306 dated-deep-link 的 `fs`/`ts` 参数）、
+`flyai_inventory.py:192,196`、`variflight_enrichment.py:136-137`
+（`CITY_IATA.get(route.from_place["name"])`）。`_route_specs`
+（`planning.py:652-658`）把 `item["origin"]`（整个 dict）直接塞进
+`RouteSpec.from_place`，没有在这一步换成 `.city`。
+
+复现（真实数据，本轮已产生的结果）：`.tmp/journey-live.json` trip0 的
+`unknowns[]` 里两条 `field_path=/transport_legs/N/service_number`：
+`ambiguous:leg-rail-fallback-4a6455b157b9:route=city-beijing->airport-fuzhou-changle;date=2026-09-25`
+与
+`no_results:leg-rail-fallback-59677adb7500:route=city-kunming-prepositioned->airport-fuzhou-changle;date=2026-09-25`；
+对应两条 `provider=12306-deep-link` 的 claim，其 `source_url` 解码后
+`fs=北京&ts=福州长乐国际机场&date=2026-09-25` 与
+`fs=昆明（由个旧于9月24日前置）&ts=福州长乐国际机场&date=2026-09-25`——
+后者的 `fs` 参数把括号批注文字也发给了 12306，前者的 `ts` 参数用机场名
+查火车站。这两条路线只要涉及 `meeting_anchor` 汇合腿就会触发，与具体
+日期无关，不属于开售窗口问题（其余 6 条同 trip 的干净城市名路线都正常
+判定为 `outside_presale_window`，只有这两条不是）。
+
+### 2. VariFlightBackend.CITY_IATA 静态表只覆盖 5 个城市
+
+`variflight_enrichment.py:18-24`：
+
+```python
+CITY_IATA = {
+    "北京": "BJS", "上海": "SHA", "广州": "CAN",
+    "深圳": "SZX", "杭州": "HGH",
+}
+```
+
+本次行程涉及的福州/武夷山/平潭/泉州/厦门/南靖一个都不在表里。
+`_enrich_route`（同文件 136-140 行）：`dep_city`/`arr_city` 任一
+`None` 就 `errors.append("unsupported_city_code")` 直接 `return`，
+从不调用 `adapter.query(...)`。复现：本轮三个 trip 的 variflight health
+`reason` 都是 `errors=unsupported_city_code ×N`（N=该 trip 内的航线数）；
+`git blame`/`git log -p` 显示这张表从该文件最早的提交起就只有这 5 个
+城市，没有随后续版本扩展过，也没有设计文档说明"只覆盖 5 个枢纽
+城市"是有意为之。
+
+### 3. doctor --probe 对 variflight 的独立信号：adapter 解析可能跟不上当前响应形状
+
+与第 2 条不同、互相独立的另一个疑似缺陷。`ctw doctor --probe` 对
+variflight 的探针（`cli.py:1647-1663`）用真实凭据发起
+`dep_city="PEK", arr_city="SHA"` 的真实搜索——这两个是硬编码 IATA 码，
+完全不经过 `CITY_IATA`——`_probe_layers`（`cli.py:1705-1724`）判定
+`error_class == "contract_mismatch"` 从而 `contract="failed"`（且
+`business="not_run"`，因为 contract 先失败）。复现：
+
+```
+$ plugins/china-trip-weaver/scripts/ctw doctor --probe
+...  "variflight":{"business":"not_run","contract":"failed","credential":"configured","network":"passed"} ...
+```
+
+意味着即便把第 2 条的 `CITY_IATA` 补全到覆盖所有城市，北京→上海这类
+CITY_IATA 已经支持的枢纽航线，adapter 对 VariFlight 当前真实返回体的
+解析可能仍然失败——指向 `providers/variflight.py` 的 normalize 逻辑
+没跟上 VariFlight 当前的响应形状，偏服务商变化而非纯本地代码疏漏，但
+未读 `providers/variflight.py` 源码逐行定位到具体哪个字段（本轮时间
+预算内未展开，留给下一轮或领导裁决是否值得单独立项调查）。
+
+### 4. doctor --probe 对 flyai 只测 lodging 能力，测不到 flight 能力的故障
+
+`cli.py:1544-1579` `_probe_flyai`：固定 `capability="lodging"`（city=
+北京，7 天后入住 1 晚），整个探针函数没有任何测试 `capability="flight"`
+的分支。复现对照：同一时刻 `ctw doctor --probe` 报
+`"flyai":{"business":"passed","contract":"passed",...}` 全绿，但同一
+批 journey plan 实测（见第 5 条与 PROGRESS.md 任务 1）flight 能力 7/9
+次查询 `contract_mismatch`。这意味着只要 flyai 的 lodging 能力保持健康，
+`ctw doctor --probe` 会一直对 flight 能力的真实故障报绿灯，是探针覆盖
+缺口，不是"没有故障"。
+
+### 5. FlyAI flight 与 lodging 价格解析严格度不对称（推测，未获得原始响应体确认）
+
+`providers/flyai.py`：`_flight()`（61-111 行）第 72 行
+`_price(raw.get("ticketPrice", raw.get("adultPrice")), require_numeric=True)`——
+`_price()`（172-203 行）里 `require_numeric=True` 时，价格为
+`None`/布尔/无法解析成数字的字符串会直接 `raise ContractMismatch("FlyAI
+price lacks numeric context")`。`_lodging()`（113-153 行）第 121-125
+行调用同一个 `_price()` 但传 `require_numeric=False`，对同样是
+`None`/掩码字符串（`MASKED_PRICE_RE`，如"¥×××"这类）的取值会优雅退化成
+`price_type="verify-on-click"`，不抛异常。
+
+复现：按 PROGRESS.md 任务 1 "FlyAI contract_mismatch 定位" 小节的命令
+跑出的 `.tmp/lodging-only-progress.ndjson`，7 条
+`"capability":"flight","error_class":"contract_mismatch"`、0 条
+lodging 相关 degrade；9 次 flight 查询里恰好是全部 7 次省内短途航线失败、
+2 次长途干线（昆明/北京→福州）成功。这个"同批查询里 lodging 全过、
+flight 系统性失败"的现象，与 `_flight()`/`_lodging()` 价格解析严格度不
+对称的假设吻合，但本轮没有拿到 FlyAI 原始响应体——要拿到就得改代码加
+调试输出，而本书界限只允许改 PROGRESS.md/BLOCKED.md，所以无法逐字确认
+是不是恰好命中这一支——标注为**推测**，供领导判断是否值得在下一轮
+任务书里专门加日志字段验证（而非在本书界限内用改代码的方式验证）。
