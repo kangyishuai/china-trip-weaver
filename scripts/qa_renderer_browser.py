@@ -44,6 +44,14 @@ AUDIT_EXPRESSION = r"""(() => {
   const resources=performance.getEntriesByType('resource').map(entry => entry.name);
   const sections=[...document.querySelectorAll('[data-section]')];
   const svgs=[...document.querySelectorAll('svg')];
+  const scrollsHorizontally=el => ['auto','scroll'].includes(getComputedStyle(el).overflowX);
+  const internalOverflow=[...document.querySelectorAll('*')].filter(el => {
+    if (el.scrollWidth <= el.clientWidth + 1 || scrollsHorizontally(el)) return false;
+    for (let node=el.parentElement; node; node=node.parentElement) {
+      if (scrollsHorizontally(node)) return false;
+    }
+    return true;
+  }).length;
   return {
     ready:true,
     viewportWidth:innerWidth,
@@ -51,6 +59,7 @@ AUDIT_EXPRESSION = r"""(() => {
     scrollWidth:root.scrollWidth,
     clientWidth:root.clientWidth,
     horizontalOverflow:Math.max(0,root.scrollWidth-root.clientWidth),
+    internalOverflow,
     bodyFontPx:parseFloat(bodyStyle.fontSize),
     bodyLineHeightPx:parseFloat(bodyStyle.lineHeight),
     minLinkHeight:links.length ? Math.min(...links.map(link => link.getBoundingClientRect().height)) : 999,

@@ -39,7 +39,7 @@ JOURNEY_READABILITY_CSS = """
 .journey-title-route,
 .journey-title-dates { display: block; }
 .journey-title-route {
-  overflow-wrap: normal;
+  overflow-wrap: anywhere;
   word-break: keep-all;
 }
 .journey-title-dates {
@@ -82,6 +82,7 @@ JOURNEY_READABILITY_CSS = """
 .risk-item h3,
 .segment-card h3,
 .day-card h3 { margin: 0; }
+.day-card h3 { overflow-wrap: anywhere; }
 .route-stop p,
 .checklist-item p,
 .risk-item p,
@@ -254,7 +255,7 @@ def _render_journey(journey: Mapping[str, Any]) -> str:
         '<header class="page-header" data-section="header">',
         '<p class="eyebrow">China Trip Weaver · Journey · v%s</p>' % RENDERER_VERSION,
         '<h1><span class="journey-title-route">%s</span><span class="journey-title-dates">%s</span></h1>' % (
-            text(route_title), text(date_title),
+            _route_title_markup(route_title), text(date_title),
         ),
         '<div class="header-meta"><span>%s %d</span><span>%s %d</span><span>%s %s</span><span>%s %s</span></div>' % (
             text(labels["travelers"]), _journey_traveler_count(journey),
@@ -440,6 +441,17 @@ def _route_title(
         if not names or names[-1] != destination:
             names.append(destination)
     return " → ".join(names or destinations)
+
+
+def _route_title_markup(route_title: str) -> str:
+    """Escape the route title, then add <wbr> after "→"/"／" so a long
+    origin or city annotation can wrap at a separator before falling back
+    to the header's overflow-wrap: anywhere.
+    """
+    escaped = text(route_title)
+    for separator in ("→", "／"):
+        escaped = escaped.replace(separator, separator + "<wbr>")
+    return escaped
 
 
 def _truth_banner(
