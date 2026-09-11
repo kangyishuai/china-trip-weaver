@@ -2,9 +2,9 @@
 
 唯一的当前进度记录。2026-09-03 到 09-06 的逐轮任务书、实测证据、验收记录已归档，见「历史索引」。
 
-## 现状速览（2026-09-11 实测，0.15.3）
+## 现状速览（2026-09-11 实测，0.15.4）
 
-- 版本：`0.15.3`，唯一来源是
+- 版本：`0.15.4`，唯一来源是
   `plugins/china-trip-weaver/.codex-plugin/plugin.json` 与
   `src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
   位置一律引用这两处之一，历史版本只以日期提及、不写字面值。
@@ -13,6 +13,18 @@
   `~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src
   tests scripts` 0 行。带假 Key（`ANYSEARCH_API_KEY=... unittest`）跑全量同样
   632 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+- 0.15.4（第十三波，两份 ADR 加一次真实行程实网体检，代码零改动）：ADR-0018
+  「地图与图片」（Proposed）裁定交互地图、静态图、图片字段都不做，Journey 页
+  补上 Trip 页已有的离线位置示意 SVG（复用 `render/html.py` `_location_svg`，
+  实测每段约 500 字节）；ADR-0019「第二价源」（Proposed）裁定火车票不做、
+  机票做（把 VariFlight 已声明却从未派发的 `getFlightPriceByCities` 接到
+  FlyAI 已有 leg_id 上，冲突走既有 `status=conflict`）、住宿排在机票之后、
+  门票不做；真实 16 天行程用 0.15.3 整体实网重规划：80 个地点 62 有坐标、
+  18 坐标 unknown（16 条是候选名写法、2 条服务商无数据）、7 名字 unknown
+  （全部真歧义），并记下 5 条疑似代码缺陷——路线查询用地点展示名而非
+  `city`、VariFlight 城市表只有 5 城、VariFlight 探针合同失败、FlyAI 探针
+  只测住宿能力、FlyAI 机票价格解析比住宿严格（推测）。合并时管理者从
+  ADR-0018 里清掉一处本机绝对路径并改正一处行号。
 - 0.15.3（第十二波，两本纯重构，行为零变化）：`scheduler/light.schedule_day`
   133 行拆成 `_day_schedule_params`（frozen dataclass `_DayScheduleParams` 收口
   13 个参数）/`_classify_candidates`/`_beam_search`/`_finalize_day_schedule`
