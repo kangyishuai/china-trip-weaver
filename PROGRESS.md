@@ -5253,3 +5253,34 @@ segment 单调递增、不按 trip 重置的计数器；决定不把每城分组
 `<section>`（改用 `<div class="location-group">`，CSS 类名沿用 html.py 的
 `.location-group` 规则，靠 class 选择器不看 tag），避免任务 1 第③条测试用
 非贪婪正则删整个分区时被内部嵌套 `</section>` 提前截断。
+
+任务 1（三条新测试，提交 `7dde3ec`）：先红——`Ran 3 tests`
+`FAILED (failures=3)`，逐条失败原因分别是 `1 != 0`（svg 未生成）、
+`assertIn('data-section="location-overview"'...)` 断言失败（分区不存在）、
+`assertNotEqual` 失败（正则替换在旧代码上没匹配到任何东西，说明分区确实
+不存在）。
+
+任务 2（实现，提交 `81b3ffc` + 一处纯风格跟进 `ea29506`）：`_location_overview_section`
+导入 `_location_svg`（不复制），`JOURNEY_SECTIONS` 加一项，插入点在
+`_route_section` 之后；三条新测试转绿；`scripts/build_renderer_fixtures.py`
+重生成后 `demo/journey-16d/journey.html` 287673→288401 字节（+728，
+`journey_sha256` 不变——只改了渲染代码没改 Journey 数据，`html_sha256`
+从旧值变为 `6a92d719...`）；`ctw journey validate-html` → `errors=0`；
+`qa_renderer_browser.py --sections 16` → `failures=[]`
+（`sectionCount=16`、`nonEmptySections=16`，证明「位置未核验」文本让空分区
+不算 empty）；`build_plan_fixtures.py`/`build_provider_fixtures.py` 跑过、
+`git status` 零新增差异；`render/html.py`/`cli.py` 的 `journey_html` 引用
+交叉检查确认两条渲染路径 import 图不相交，另四份 demo 未重跑（详见
+BLOCKED.md）。反向验证：临时从 `_render_journey` 列表删掉调用 → 三条新
+测试 `FAILED (failures=3)`、直接调用 `render_journey`+`validate_journey_html`
+拿到 `errors=1` `JH005 required Journey information architecture is
+incomplete` → 还原 → 三条测试与全量测试重新全绿。全量收尾
+`Ran 635 tests` `OK` 0 skipped；`scan_secrets.py` `0 finding(s) across
+380 file(s)`；`pyflakes` 0 行；`git diff fd2e618 --stat` 只列 6 个文件
+（BLOCKED.md/PROGRESS.md/demo/journey-16d/journey.html/07-renderer.md/
+journey_html.py/test_journey.py），全部落在「界限」允许范围；
+`git diff fd2e618 -- tests | grep -E '^-\s*def test_'` 0 行。BLOCKED.md
+记了两处判断（既有测试 `--sections 15→16` 的必要修正、另四份 demo 用静态
+证据代替实跑）。分支已 `git push -u origin journey-location-svg`
+（远程新分支，未开 PR，按任务书交给管理者合并）。硬指标一、二均达成，
+一轮内完成，未触发止损。
