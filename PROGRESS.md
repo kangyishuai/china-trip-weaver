@@ -2659,3 +2659,136 @@ demo/journey-16d/journey.html demo/journey-16d/journey.json` →
 结束，止损轮次未触发（1 次 CI 红是本书自己的测试可移植性 bug，定位后
 一次修复即转绿，不构成任一验收点的「连败」）。BLOCKED.md 本轮仅一条
 判断记录（任务 1 的 5 测 3 红 2 天生绿），无待裁决项。
+
+## 书 W3「拆 validate_html」（2026-09-11，worktree `.tmp/wt-w3` 分支 `split-validate-html`）
+
+任务 0 核对：HEAD `d22e3e6` 与任务书一致；602 测试 OK 0 skip、secrets 0、
+pyflakes 0；`validate_html.py` 434 行 4 个顶层函数、`validate_html` L153-410
+（258 行）、E 码计数 48，均与任务书吻合；fixtures 12 html+9 trip=manifest 21
+条、字段名、`build_renderer_fixtures.py` 重跑零差异、README demo 命令，均
+吻合。调用点计数改用 `grep "validate_html("` 后 11/7/2 逐字吻合，唯一出入
+（:156 标注对不上具体测试体）判断为无关紧要的笔误，记录见 BLOCKED.md 顶部，
+不停工。
+理解的目标：把 258 行的 `validate_html` 拆成约 13 个模块私有的 `_check_*`
+函数，每个只管一类检查（文档头 E001、trip-data 脚本 E002、渲染事实 E003、
+DOM 结构 E004/E005、安全合同 E101、CSP E102、链接与来源
+E103/E105/E106、密钥模式 E104、模式徽标 E201、动态事实覆盖 E202、坐标与
+示意图 E203、交易动作 E204、信息卫生 E205、无障碍/样式合同 E001-末尾），
+`validate_html` 本体收窄成一串按原顺序调用的分发（约 28 行）；条件、E 码、
+消息文案、`add()` 调用顺序逐字不动，只搬运代码块、按需新增函数签名与
+`return`。
+顺序：任务 1 快照脚本（先固定行为基线）→ 任务 2 分约 5 批按原文件从上到下的
+顺序抽函数，每批跑一次 `test_renderer` → 长度/快照/E 码/语料/全量五项终验
+→ 反向验证 → 各任务一次 `git commit` → push。
+最大风险：4 个局部变量跨越原函数内的空行段落边界，必须显式当参数/返回值
+穿针引线，不能重算或漏传——`trip_scripts`（E002 段算出，E103 的
+`</script` 检查在 306 行复用）、`claim_nodes`（E003 段算出，E205 的证据
+折叠与风险排序检查复用）、`css`（E101 段算出，末尾 E001 的 CSS 合同检查
+复用）、`visible`（E201 段算出，E204、E205 都复用）；另外 E101 那个
+`for tag, attrs in parser.all_attrs` 循环在命中第一个违规标签/事件处理器时
+整体 `break`，必须留在同一个函数里整体搬移，不能拆成每条件一个独立循环
+（否则会在原代码从未遍历到的后续元素上多算出违规）。
+
+任务 1（已完成）：`.tmp/snapshot_validate.py`（不提交，`.tmp/` 本就被
+`.gitignore` 挡住）照抄 `tests/test_renderer.py` 的 `mutate_trip`/
+`run_trip_mutation`/`run_html_mutation` 回放逻辑，对 9 份 trip 夹具、12 份
+html 夹具、4 份 demo trip（`demo/trip.json`+`multicity-5d`+
+`grouped-departures`+`guangzhou-shenzhen`）各产出一条记录，写到
+`.tmp/snap-before.json`。唯一需要处理的分叉：9 份 trip 夹具里有 4 份
+`expected.outcome=="reject-trip"`（`dangerous-scheme`/`duplicate-day-id`/
+`fake-secret`/`url-credentials`）——`run_trip_mutation` 对这类夹具的
+断言是 `render_trip` 本身抛 `RendererError`、`validate_html` 根本不会被
+调用（trip 在渲染前就被 `validate_trip` 拦下，没有 HTML 可验）；快照脚本
+照抄同一分支，对这 4 份只记录「`render_trip` 是否抛出 `RendererError`」而
+非伪造一份 `validate_html` 报告。12（html）+9（trip，含 4 份
+render_error 标记）+4（demo）＝25，恰好落在任务书「≥25 条记录」的下限——
+说明任务书原本按「每份输入一条记录」而非「每次 validate_html 成功调用一条
+记录」计数，两种读法在这组夹具上给出不同结果（后者只有 21 条），已用前者
+（与「照 test_renderer.py 回放夹具的写法」的字面要求一致，且是唯一能达标
+≥25 的读法），不算对不上、不停工。验收实测：`wrote 25 records`；连跑两次
+`diff .tmp/snap-before.json .tmp/snap-before-2.json` 空输出（`IDENTICAL`）；
+抽查内容合理（trip 夹具全部 `ok=True` 0 issues——这批本就是测
+`render_trip` 转义安全、不是测 `validate_html` 拦截；html 夹具各带 1 条
+预期 E 码，如 `authorization-bearer`→E104、`csp-loosened`→E102、
+`interface-endpoint-link`→E106，与夹具名字义相符）。另存 E 码计数
+`.tmp/e-before.txt`（16 个 E 码、合计 48，与任务 0 的 `grep -c` 结果一致）。
+
+任务 2（已完成）：按原函数里空行分隔的段落边界抽出 13 个 `_check_*` 模块
+私有函数，分 5 批、每批抽完跑一次 `test_renderer`（40 项，全绿）：①文档头
+E001+trip-data 脚本 E002+渲染事实 E003（`_check_document_contract`/
+`_check_trip_data_script`/`_check_rendered_facts`）②DOM 结构 E004/E005+
+安全合同 E101+CSP E102（`_check_dom_structure`/`_check_security_contract`/
+`_check_csp`）③链接与来源 E103/E105/E106+密钥模式 E104
+（`_check_links_and_sources`/`_check_secret_patterns`）④模式徽标 E201+
+动态事实覆盖 E202+坐标示意图 E203+交易动作 E204（`_check_trip_mode_badge`/
+`_check_dynamic_fact_coverage`/`_check_coordinates_and_schematic`/
+`_check_transaction_actions`）⑤信息卫生 E205+末尾无障碍/样式合同 E001
+（`_check_information_hygiene`/`_check_accessibility_contract`）。4 个跨段
+变量按开工笔记预判原样穿针引线：`trip_scripts`（① 返回，③ 用）、
+`claim_nodes`（① 返回，⑤ 用）、`css`（② 返回，⑤ 用）、`visible`（④ 返回，
+④/⑤ 用）；E101 那个命中即 `break` 的标签循环整体搬进
+`_check_security_contract`，未拆成多循环。`validate_html` 本体收窄成一串
+14 行按原顺序调用（32 行含函数签名/parse/`add`闭包/`return`）。
+执行中发现的过程性事实：`_number` 在 `_check_rendered_facts` 里被调用，
+定义却在文件更靠后的位置——Python 模块级函数按调用时解析、不按定义顺序，
+不影响正确性，未改动 `_number` 位置。
+另发现一处任务书假设与现实不符、已判断不阻塞：验收要求的反向验证
+「消息文案改一个字→test_renderer 至少一项红」，实测 test_renderer.py、
+test_keyless_e2e.py、test_replan.py 里所有 `validate_html`/`html_report`
+断言只用 `.ok` 与经 `codes = {item.code ...}` 的 E 码子集比对，全仓库没有
+一处断言精确消息文本——纯改消息文案（不改码、不改触发条件）不会让任何
+既有测试变红，只有快照会变红。判断：这不是「拆错了」，是拆之前这条防线本
+就不存在；补一个新测试直接给这条防线，比宣称一条不成立的反向验证更接近
+「行为零变化」的本意，且白名单本就允许在 `tests/test_renderer.py` 新增
+`def test_`。新增
+`test_html_adversarial_fixtures_report_exact_error_messages`：对
+`invented-train-price-facts`/`csp-loosened`/`schematic-label-removed`
+三份既有 html 夹具（覆盖 `_check_rendered_facts`/`_check_csp`/
+`_check_coordinates_and_schematic` 三个新函数）各自断言
+`{(code, message) for item in report.errors}` 与写死的期望集合
+`assertEqual`（非 subset——已用快照核对这三份夹具本就恰好各产出这组
+issue，非人为放宽）。
+硬指标一实测：
+```
+max function: (74, '_check_rendered_facts')
+validate_html: (32, 'validate_html')
+all <= 120: True
+```
+硬指标二实测：`.tmp/snapshot_validate.py snap-after.json` → `diff
+.tmp/snap-before.json .tmp/snap-after.json` 空输出；`grep -o
+'"E[0-9]\{3\}"' ... | sort | uniq -c` 前后 `diff` 空输出；
+`scripts/build_renderer_fixtures.py` 重跑后 `git status --short` 只有
+`validate_html.py`/`test_renderer.py` 两个白名单内文件；全量
+`/usr/bin/python3 -m unittest discover -s tests` → `Ran 603 tests` `OK`
+0 skipped（602 基线 + 1 个新 `def test_`）；`scan_secrets.py` 0 命中；
+pyflakes（src+tests+scripts）0 行。
+反向验证（终端记录）：临时把 `_check_rendered_facts` 里
+`"rendered train fact is absent from Trip: %s"` 改成
+`"rendered train fact is absentt from Trip: %s"`（多一个 `t`）→
+`diff .tmp/snap-before.json .tmp/snap-reverse.json` 非空（第 106 行
+`absent`→`absentt`，红）→ `test_renderer`
+`FAILED (failures=1)`，恰是新增的
+`test_html_adversarial_fixtures_report_exact_error_messages`
+（`case_id='invented-train-price-facts'`）红，其余 40 项绿 → 精确还原
+`absentt`→`absent` → `git diff -- .../validate_html.py | grep -c
+absentt` 为 0（残留标记清零）→ 全量 `Ran 603 tests` `OK` 0 skipped（全绿）。
+`git diff d22e3e6 --stat`（用 fork 点 SHA 而非 `main`——中途发现 `main`
+在书 W1「优先事项卡片措辞」并行推进下已前移到
+`1e434bf`，直接 `git diff main` 会把 W1 加在 `tests/test_journey.py` 里的
+5 个新测试误判成「本书删了 5 个测试」，改用
+`git merge-base HEAD main` 核实出的固定 fork 点 `d22e3e6` 重跑即恢复
+只有 4 个白名单文件的正确结果，记录在此供以后同款情形参考）只有
+`BLOCKED.md`/`PROGRESS.md`/`validate_html.py`/`test_renderer.py` 四个
+文件；`git diff d22e3e6 -- tests | grep -E '^-\s*def test_'` 与禁区 diff
+（`tests/fixtures`/`demo`/`schema`/`validate_journey_html.py`/
+`render/html.py`/`journey_html.py`）均空输出。任务 2 单独一次 `git commit`
+（`5fafe99`，任务 0+1 的文档checkpoint 是 `bc98a0a`）。
+
+最终门（2026-09-11 实测，提交后复核）：`git log --oneline d22e3e6..HEAD` 两
+个提交；全量 `/usr/bin/python3 -m unittest discover -s tests` → `Ran 603
+tests` `OK` 0 skipped；`scan_secrets.py` 0 命中；pyflakes 0 行；长度命令
+`max: (74, '_check_rendered_facts') | validate_html: (32, 'validate_html')`；
+`git status --short` 空（工作区干净）。硬指标一、硬指标二全部达成，反向验证
+一次红→绿（终端记录见任务 2 小节），止损轮次未触发（全程一次到位，未遇
+连败）。BLOCKED.md 有一条任务 0 的判断记录（call-site 计数方法与 `:156`
+标注核对，非阻塞），无待裁决项。分支推送记录见下。
