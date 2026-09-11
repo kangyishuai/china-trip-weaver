@@ -1296,3 +1296,25 @@ PROGRESS.md 本节）。
 不是待领导裁决的分叉，理由同上条。唯一新增信息：这是同一自然日内的
 第二次空跑，供管理者判断是否需要调整派发时机——建议 2026-09-12（含）
 之后再派发本书。
+
+## 书「地图与图片 ADR-0018」（2026-09-11，worktree `.tmp/wt-ac1` 分支 `adr-map-images`）：无待裁决项
+
+任务 0/1/2 全部按任务书字面执行，全程无需停工的分叉。任务书「现状与
+任务 0」段列出的全部 file:line/条款逐一核对通过，无出入。自查阶段发现
+并当场修正了两处引用错误（均在写作过程中自己发现，非任务书本身出入）：
+研究决策 17 号的路径写成了 `docs/design/04-design-insights.md`，实际
+是 `docs/research/04-design-insights.md:87`；`render/html.py:580` 写成
+`_location_section` 定义行，实际 580 是空行、581 才是 `def` 所在行。
+另有一处措辞问题：草稿曾把验收命令写成引用不存在的
+`tests/test_journey_html.py`，改为真实存在的 `tests/test_journey.py`
+（`render_journey`/`validate_journey_html` 的全部既有测试都在这一个
+文件里，含 `JourneyContinuityTests` 类，L734）。三处均已在 ADR 定稿
+前修正，未进入最终提交版本。
+
+Decision 对四个问题给了「不做/不做/不做/做」，不是四个都"暂不做"的
+回避答案——第 4 条（Journey 页位置示意）给了肯定答案与最小实现方案，
+因为它不是新功能审批，而是把已经合规、已经实现的 `_location_svg`
+（07-renderer.md §2 第 8 条既定合同）补齐到一个尚未调用它的页面，
+证据链和 ADR-0017 先例的"暂不做"一样扎实，只是这次证据指向"可以做
+且成本极低"而非"不做"。硬指标一、二均已实测通过，见 PROGRESS.md
+本书小节。
