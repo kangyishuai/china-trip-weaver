@@ -2548,3 +2548,15 @@ skipped（正确复现了 CI 检出状态）→ 挪回。pyflakes/secrets 仍 0�
 教训写入 auto-memory：任何新测试如果要靠此前任务书要求的临时快照做断言，
 必须把断言方式改成不依赖那个文件本身存在（如算好的摘要值写死），因为
 `.tmp/` 下的文件从不进 git、CI 检出后必然缺失。
+
+`git push`（提交 `ef4bd30`）后 `gh run list --limit 3` 转
+`completed success`（3.9、3.13 两条矩阵均 `success`，run
+`34554230835`，1m3s）；上一条 `10f1e00` 仍留着 `completed failure`
+的历史记录（即本节记录的那次真失败），未重跑掩盖，按实际因果留痕。
+终验（2026-09-11 实测）：全量 `Ran 607 tests` `OK` 0 skipped；
+`scan_secrets.py` 0 命中；pyflakes 0 行；`ctw journey validate-html
+demo/journey-16d/journey.html demo/journey-16d/journey.json` →
+`errors=0`；`git status --short` 空。硬指标一、硬指标二全部达成，任务书
+结束，止损轮次未触发（1 次 CI 红是本书自己的测试可移植性 bug，定位后
+一次修复即转绿，不构成任一验收点的「连败」）。BLOCKED.md 本轮仅一条
+判断记录（任务 1 的 5 测 3 红 2 天生绿），无待裁决项。
