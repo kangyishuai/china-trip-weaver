@@ -1509,6 +1509,38 @@ class JourneyContinuityTests(unittest.TestCase):
         codes = {item.code for item in validate_journey_html(mutated, journey).errors}
         self.assertIn("JH106", codes)
 
+    def test_journey_html_adversarial_mutations_report_exact_error_messages(self):
+        journey = self.result.journey
+        rendered = render_journey(journey)
+
+        loosened_csp = rendered.replace("script-src &#x27;none&#x27;", "script-src https:", 1)
+        self.assertEqual(
+            {("JH102", "CSP is missing or wider than the renderer contract")},
+            {(item.code, item.message) for item in validate_journey_html(loosened_csp, journey).errors},
+        )
+
+        missing_risk_item = re.sub(
+            r'<li class="risk-item".*?</li>',
+            "",
+            rendered,
+            count=1,
+            flags=re.DOTALL,
+        )
+        self.assertEqual(
+            {("JH203", "risk coverage differs from derived Journey items")},
+            {(item.code, item.message) for item in validate_journey_html(missing_risk_item, journey).errors},
+        )
+
+        visible_internal_id = rendered.replace(
+            "</footer>",
+            "<p>%s</p></footer>" % journey["journey_id"],
+            1,
+        )
+        self.assertEqual(
+            {("JH205", "visible text exposes an internal id or raw state: %s" % journey["journey_id"])},
+            {(item.code, item.message) for item in validate_journey_html(visible_internal_id, journey).errors},
+        )
+
     def test_journey_source_link_shows_a_provider_label_for_a_bare_interface_endpoint(self):
         from china_trip_weaver.render.journey_html import _journey_labels, _provider_label, _source_link
         from china_trip_weaver.render.template import text

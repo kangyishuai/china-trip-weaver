@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, List, Mapping, Sequence
+from typing import Any, Callable, List, Mapping, Sequence, Tuple
 from urllib.parse import urlsplit
 
 from ..contracts import canonical_json
@@ -49,6 +49,24 @@ def validate_journey_html(
     def add(code: str, message: str) -> None:
         issues.append(HTMLIssue(code, message))
 
+    _check_segment_and_route_coverage(parser, journey, add)
+    _check_connection_coverage(parser, journey, add)
+    _check_provider_health_coverage(parser, journey, add)
+    _check_day_timeline_coverage(parser, journey, add)
+    _check_transport_overview_coverage(parser, journey, add)
+    checklist, risks = _check_checklist_priority_and_risk_traces(parser, journey, add)
+    _check_budget_ledger(parser, journey, add)
+    visible = _check_route_cities_and_origin_visible(parser, journey, add)
+    _check_information_hygiene(parser, journey, checklist, risks, visible, add)
+
+    return HTMLValidationReport(tuple(sorted(set(issues))))
+
+
+def _check_segment_and_route_coverage(
+    parser: AuditParser,
+    journey: Mapping[str, Any],
+    add: Callable[[str, str], None],
+) -> None:
     expected_segments = list(journey["trips"])
     segment_nodes = [
         attrs for _, attrs in parser.all_attrs
@@ -78,6 +96,12 @@ def validate_journey_html(
             if any(segment_nodes[index].get(key) != value for key, value in segment_expected.items()):
                 add("JH201", "segment facts differ from Journey Trip %d" % index)
 
+
+def _check_connection_coverage(
+    parser: AuditParser,
+    journey: Mapping[str, Any],
+    add: Callable[[str, str], None],
+) -> None:
     connection_nodes = [
         attrs for _, attrs in parser.all_attrs
         if "data-connection-index" in attrs
@@ -95,6 +119,12 @@ def validate_journey_html(
             if any(connection_nodes[index].get(key) != value for key, value in expected.items()):
                 add("JH201", "connection facts differ at index %d" % index)
 
+
+def _check_provider_health_coverage(
+    parser: AuditParser,
+    journey: Mapping[str, Any],
+    add: Callable[[str, str], None],
+) -> None:
     health_nodes = [
         attrs for _, attrs in parser.all_attrs
         if "data-health-trip-index" in attrs
@@ -117,6 +147,12 @@ def validate_journey_html(
             if any(health_nodes[index].get(key) != value for key, value in expected.items()):
                 add("JH201", "provider health facts differ at index %d" % index)
 
+
+def _check_day_timeline_coverage(
+    parser: AuditParser,
+    journey: Mapping[str, Any],
+    add: Callable[[str, str], None],
+) -> None:
     day_nodes = [
         attrs for _, attrs in parser.all_attrs
         if "data-day-index" in attrs
@@ -139,6 +175,12 @@ def validate_journey_html(
             if any(day_nodes[index].get(key) != value for key, value in expected.items()):
                 add("JH201", "day-timeline facts differ at index %d" % index)
 
+
+def _check_transport_overview_coverage(
+    parser: AuditParser,
+    journey: Mapping[str, Any],
+    add: Callable[[str, str], None],
+) -> None:
     transport_nodes = [
         attrs for _, attrs in parser.all_attrs
         if "data-transport-index" in attrs
@@ -161,6 +203,12 @@ def validate_journey_html(
             if any(transport_nodes[index].get(key) != value for key, value in expected.items()):
                 add("JH201", "transport-overview facts differ at index %d" % index)
 
+
+def _check_checklist_priority_and_risk_traces(
+    parser: AuditParser,
+    journey: Mapping[str, Any],
+    add: Callable[[str, str], None],
+) -> Tuple[Sequence[Mapping[str, Any]], Sequence[Mapping[str, Any]]]:
     checklist = journey_booking_checklist(journey)
     checklist_nodes = [
         attrs for _, attrs in parser.all_attrs
@@ -187,6 +235,14 @@ def validate_journey_html(
     ]
     _validate_trace_nodes(risk_nodes, risks, "risk", "JH203", add)
 
+    return checklist, risks
+
+
+def _check_budget_ledger(
+    parser: AuditParser,
+    journey: Mapping[str, Any],
+    add: Callable[[str, str], None],
+) -> None:
     budget_nodes = [
         attrs for _, attrs in parser.all_attrs
         if "data-budget-currency" in attrs
@@ -207,6 +263,12 @@ def validate_journey_html(
     ):
         add("JH204", "rendered total budget facts differ from Journey ledger")
 
+
+def _check_route_cities_and_origin_visible(
+    parser: AuditParser,
+    journey: Mapping[str, Any],
+    add: Callable[[str, str], None],
+) -> str:
     visible = " ".join(parser.visible_text)
     route_cities = {
         day["city"] for trip in journey["trips"] for day in trip["days"]
@@ -220,7 +282,17 @@ def validate_journey_html(
     )
     if any(name not in visible for name in origin_names):
         add("JH201", "a Journey origin is absent from visible text")
+    return visible
 
+
+def _check_information_hygiene(
+    parser: AuditParser,
+    journey: Mapping[str, Any],
+    checklist: Sequence[Mapping[str, Any]],
+    risks: Sequence[Mapping[str, Any]],
+    visible: str,
+    add: Callable[[str, str], None],
+) -> None:
     internal_ids = {
         journey["journey_id"],
         *(connection["connection_id"] for connection in journey["segment_connections"]),
@@ -246,8 +318,6 @@ def validate_journey_html(
     if leaked or raw_states:
         detail = leaked[0] if leaked else raw_states[0]
         add("JH205", "visible text exposes an internal id or raw state: %s" % detail)
-
-    return HTMLValidationReport(tuple(sorted(set(issues))))
 
 
 def _validate_trace_nodes(
@@ -298,6 +368,24 @@ def _shared_document_issues(
     def add(code: str, message: str) -> None:
         issues.append(HTMLIssue(code, message))
 
+    _check_document_contract(parser, locale, add)
+    _check_embedded_data_script(parser, embedded_id, embedded_value, add)
+    _check_dom_structure(parser, required_sections, add)
+    css = _check_security_contract(parser, html_text, embedded_id, add)
+    _check_csp(parser, add)
+    _check_links_and_sources(parser, add)
+    _check_secret_patterns(html_text, add)
+    _check_transaction_actions(parser, add)
+    _check_accessibility_contract(parser, css, add)
+
+    return tuple(sorted(set(issues)))
+
+
+def _check_document_contract(
+    parser: AuditParser,
+    locale: str,
+    add: Callable[[str, str], None],
+) -> None:
     html_attrs = next((attrs for tag, attrs in parser.all_attrs if tag == "html"), {})
     charset = any(meta.get("charset", "").lower() == "utf-8" for meta in parser.metas)
     viewport = any(
@@ -315,6 +403,13 @@ def _shared_document_issues(
     ):
         add("JH001", "doctype/charset/viewport/lang/unique main+h1 contract failed")
 
+
+def _check_embedded_data_script(
+    parser: AuditParser,
+    embedded_id: str,
+    embedded_value: Mapping[str, Any],
+    add: Callable[[str, str], None],
+) -> None:
     data_scripts = [
         item for item in parser.scripts
         if item["attrs"].get("id") == embedded_id
@@ -334,6 +429,12 @@ def _shared_document_issues(
         if "</script" in script["content"].lower():
             add("JH103", "embedded JSON can close the script element")
 
+
+def _check_dom_structure(
+    parser: AuditParser,
+    required_sections: Sequence[str],
+    add: Callable[[str, str], None],
+) -> None:
     if any(count != 1 for count in parser.ids.values()):
         add("JH004", "duplicate DOM id")
     for attrs in parser.links:
@@ -351,6 +452,13 @@ def _shared_document_issues(
     ):
         add("JH005", "required Journey information architecture is incomplete")
 
+
+def _check_security_contract(
+    parser: AuditParser,
+    html_text: str,
+    embedded_id: str,
+    add: Callable[[str, str], None],
+) -> str:
     for tag, attrs in parser.all_attrs:
         if tag in DISALLOWED_TAGS or any(name.lower().startswith("on") for name in attrs):
             add("JH101", "executable/interactive element or event handler is forbidden")
@@ -369,7 +477,10 @@ def _shared_document_issues(
         css + html_text[:2000],
     ):
         add("JH101", "remote resource or fetch hook detected")
+    return css
 
+
+def _check_csp(parser: AuditParser, add: Callable[[str, str], None]) -> None:
     csp_values = [
         meta.get("content", "") for meta in parser.metas
         if meta.get("http-equiv", "").lower() == "content-security-policy"
@@ -377,6 +488,8 @@ def _shared_document_issues(
     if len(csp_values) != 1 or _csp(csp_values[0]) != _csp(CSP):
         add("JH102", "CSP is missing or wider than the renderer contract")
 
+
+def _check_links_and_sources(parser: AuditParser, add: Callable[[str, str], None]) -> None:
     for attrs in parser.links:
         href = attrs.get("href", "")
         if href.startswith("#"):
@@ -401,11 +514,15 @@ def _shared_document_issues(
         if parsed.hostname in INTERFACE_HOSTS:
             add("JH106", "raw interface endpoint rendered as a clickable link")
 
+
+def _check_secret_patterns(html_text: str, add: Callable[[str, str], None]) -> None:
     for pattern in SECRET_PATTERNS:
         if pattern.search(html_text):
             add("JH104", "credential-shaped content detected")
             break
 
+
+def _check_transaction_actions(parser: AuditParser, add: Callable[[str, str], None]) -> None:
     visible = " ".join(parser.visible_text)
     forbidden_actions = (
         "立即购买", "立即支付", "提交订单", "登录后购买", "取消订单", "申请改签",
@@ -413,6 +530,8 @@ def _shared_document_issues(
     if any(phrase in visible for phrase in forbidden_actions) or parser.tags["form"] or parser.tags["button"]:
         add("JH204", "transaction action was rendered")
 
+
+def _check_accessibility_contract(parser: AuditParser, css: str, add: Callable[[str, str], None]) -> None:
     if not _css_contract(css):
         add("JH001", "mobile/focus/print/reduced-motion CSS contract is incomplete")
     navs = [attrs for tag, attrs in parser.all_attrs if tag == "nav"]
@@ -423,5 +542,3 @@ def _shared_document_issues(
             attrs.get("role") != "img" or not attrs.get("aria-labelledby")
         ):
             add("JH001", "SVG lacks accessible title/description relation")
-
-    return tuple(sorted(set(issues)))

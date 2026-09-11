@@ -2836,3 +2836,64 @@ pyflakes 0（须用 `~/miniconda3/envs/core/bin/python -m pyflakes`，系统
 真实级联，不是脚本错误）/JH201/JH201/JH205/JH106）；baseline 记录
 `ok=True`、0 errors。另存 `.tmp/jh-before.txt`（15 行计数，与任务 0 的
 `grep -o` 结果一致）。
+
+任务 2（已完成，提交见下）：先拆 `_shared_document_issues`（143→27 行）成
+9 个 `_check_*`：`_check_document_contract`（JH001 doctype 段）、
+`_check_embedded_data_script`（JH002+JH103 脚本闭合，两码同段是原代码
+本就嵌在同一 `if/else` 里、不强行拆开）、`_check_dom_structure`
+（JH004/JH005）、`_check_security_contract`（JH101，返回 `css` 供末尾
+复用）、`_check_csp`（JH102）、`_check_links_and_sources`
+（JH103/JH105/JH106）、`_check_secret_patterns`（JH104）、
+`_check_transaction_actions`（JH204）、`_check_accessibility_contract`
+（JH001，接收 `css`）；跑一次 `test_journey`（74 项 OK）。再拆
+`validate_journey_html`（225→37 行）成 9 个 `_check_*`：segment-and-route/
+connection/provider-health/day-timeline/transport-overview 五段覆盖率
+（均 JH201，各自独立、无跨段变量）、`_check_checklist_priority_and_risk_traces`
+（JH202/JH201/JH203，返回 `checklist`/`risks` 供末尾复用）、
+`_check_budget_ledger`（JH204）、`_check_route_cities_and_origin_visible`
+（JH201，返回 `visible` 供末尾复用）、`_check_information_hygiene`
+（JH205，接收 `checklist`/`risks`/`visible`）；跑一次 `test_journey`（74 项
+OK）。全部新函数模块私有、`add: Callable[[str, str], None]` 闭包范式
+照抄书 W3 的 `validate_html.py`；条件、JH 码、消息文案、`add()` 调用顺序
+一字未改，只搬运代码块+按需加返回值传递跨段变量（`css`、
+`checklist`/`risks`、`visible`，与开工笔记预判的风险点完全对应）。
+硬指标一实测：
+```
+max function: (37, 'validate_journey_html')
+validate_journey_html: 37
+_shared_document_issues: 27
+all <= 120: True
+```
+硬指标二实测：`.tmp/snapshot_journey_validate.py` 重跑 `.tmp/snap-after.json`
+与 `.tmp/snap-before.json`（任务 1 留存的 run1 副本）`diff` 空输出；
+`grep -o '"JH[0-9]\{3\}"' ... | sort | uniq -c` 前后 `diff` 空输出；
+`scripts/build_renderer_fixtures.py` 重跑后 `git status --short` 只有
+`validate_journey_html.py`/`test_journey.py` 两个白名单文件（`journey_sha256`/
+`html_sha256` 与任务 0 记录的现状一致，未验证过绝对值但零 diff 已足够）；
+全量 `/usr/bin/python3 -m unittest discover -s tests` → `Ran 613 tests`
+`OK` 0 skipped（612 基线 + 1 个新 `def test_`）；`scan_secrets.py` 0 命中
+（375 文件）；pyflakes（`~/miniconda3/envs/core/bin/python -m pyflakes`）0
+行。
+反向验证前先补一条新测试
+`test_journey_html_adversarial_mutations_report_exact_error_messages`（照抄
+书 W3 的判断：全仓库 `validate_journey_html`/`html_report` 相关断言只查
+`.ok`/`.code`，没有一处精确比对消息文本，纯改文案不会让任何既有测试变红，
+这条防线在拆之前就不存在，白名单本就允许新增 `def test_`）——对
+`loosened_csp`（覆盖 `_shared_document_issues` 一侧的 `_check_csp`）、
+`missing_risk_item`、`visible_internal_id`（覆盖 `validate_journey_html`
+一侧新拆的两个函数）三个突变各自断言
+`{(item.code, item.message) for item in ...errors}` 精确等于写死的期望
+单元素集合。反向验证（终端记录）：把 `_check_csp` 里
+`"CSP is missing or wider than the renderer contract"` 改成
+`"CSP is missingg or wider than the renderer contract"`（多一个 `g`）→
+`diff .tmp/snap-before.json .tmp/snap-after.json` 非空（第 12 行
+`missing`→`missingg`，红）→ `test_journey` `Ran 75 tests`
+`FAILED (failures=1)`，恰是新增的
+`test_journey_html_adversarial_mutations_report_exact_error_messages` 红、
+其余 74 项绿 → 精确还原 `missingg`→`missing` → `grep -c missingg` 为 0
+（残留标记清零）→ 快照重跑 `diff` 空输出（IDENTICAL AGAIN）→ 全量
+`Ran 613 tests` `OK` 0 skipped（全绿）。`git diff bf53f72 -- tests | grep
+-E '^-\s*def test_'` 0 行；`git diff bf53f72 --stat -- tests/fixtures demo
+plugins/china-trip-weaver/schema '*/journey_html.py' '*/validate_html.py'
+'*/journey.py'` 空输出（禁区未碰）；`git status --short` 只剩两个白名单
+文件。止损轮次未触发（两步拆分+终验一次到位，未遇连败）。
