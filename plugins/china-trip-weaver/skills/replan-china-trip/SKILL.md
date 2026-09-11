@@ -29,4 +29,12 @@ scripts/ctw replan --trip trip.json --event refresh-event.json --rail-result rai
 
 `--rail-result` is required when the event's `type` is `refresh` and rejected for every other event type; it only checks the file's top-level shape (provider `12306-mcp` with `transport_legs`, `claims`, and `health`), then hands it to the same revision/lock/stability rules above.
 
+A `suspend` event handles a service that stopped running altogether — a suspended ferry crossing, a cancelled train — by removing the leg and its slot in one patch instead of leaving a hand-patch step for later:
+
+```bash
+scripts/ctw replan --trip trip.json --event suspend-event.json --base-revision 1 --output-json trip-r2.json --output-html trip-r2.html
+```
+
+Give it the same `subject_ref` (the slot's `slot_id`, or the leg's `ref_id`) and a required `replacement_slot` as `closure`/`weather`, with two extra rules: `replacement_slot.kind` must be `free` or `poi`, and its `ref_id` must not point at the leg being removed. The patch removes the transport leg, the leg's `budget_ledger` line (recomputed via the same path `refresh` uses), and any claim whose `subject_ref` was that leg — they would otherwise be orphaned and fail validation. A locked leg or slot is rejected with `locked_ref`, same as every other event. The patch `trigger` is `disruption`.
+
 Treat `revision_conflict` as a stop condition. Deliver only when the command reports `errors=0`; the output Trip contains the appended patch and revision metadata.

@@ -1,0 +1,32 @@
+{
+  "base_fixture": "demo/trip.json",
+  "case_id": "suspend",
+  "event": {
+    "reason": "列车停运",
+    "replacement_slot": {
+      "claim_ids": [],
+      "end_at": "2026-10-18T21:00:00+08:00",
+      "kind": "free",
+      "locked": false,
+      "ref_id": null,
+      "slot_id": "slot-day3-suspend-alt",
+      "start_at": "2026-10-18T16:00:00+08:00",
+      "status": "tentative",
+      "title": "列车停运，改为市内活动"
+    },
+    "reverify_claim_ids": [],
+    "subject_ref": "slot-leg-rail-fallback-e67d77f564f5",
+    "type": "suspend"
+  },
+  "expected": {
+    "affected_day": "day-3",
+    "operation_count": 30,
+    "trigger": "disruption",
+    "unchanged_day_indexes": [
+      0,
+      1
+    ]
+  },
+  "fixture_version": 1,
+  "user_locked_refs": []
+}

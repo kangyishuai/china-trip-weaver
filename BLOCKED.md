@@ -881,3 +881,28 @@ china_trip_weaver/replan.py`）无歧义、按实际路径处理，不算待裁�
 `_journey_trace_deadline`，实际主逻辑在 `journey_booking_checklist`）均已
 在撰写阶段自行发现并改正，未留待裁决项，详见 `PROGRESS.md` 本书任务 1/2
 小节的记录。
+
+## 书 F2：replan suspend 事件（2026-09-10，worktree `.tmp/wt-f2` 分支 `replan-suspend`）
+
+一处判断，非阻塞：任务书「界限」明确只许 `tests/test_replan.py` 新增
+`def test_` 与改 CLI 循环夹具元组/计数这两类改动，但把 `"suspend"` 加进
+`VALID_EVENT_TYPES`（任务 0 现状小节已指出这行要改）后，`test_cli_kind_
+field_reports_type_contract` 里对 `event_type` 报错文案的 `assertEqual`
+精确匹配（`"closure, weather, delay, user_delete, refresh"`）必然与运行时
+真实文案（多一个 `, suspend`）不符，不改这一行该测试必红，直接违反硬指标二
+「全量 OK」。这不是放宽或绕过断言——断言值本身就该等于当前合法事件类型枚举
+拼出的文案，`suspend` 成为合法类型后旧字符串就是过期的，而不是被我改松了。
+已按最小改动处理：只把这一行的期望字符串追加 `, suspend`，改动计入任务 2
+的 commit（而不是任务 1，因为只有 `suspend` 真正进入枚举后这个新字符串才是
+「正确」而非巧合），未触碰同一测试里对 CLI `--help` 静态文案的另一条断言
+（`cli.py` 该处是字面量、未读 `VALID_EVENT_TYPES`，只读未改 `cli.py` 已
+确认）。留给领导复核：是否认可这一行例外，或希望改用其他方式（例如把这条
+测试整体移出白名单豁免、或事后由领导亲自改）。
+
+另记一条环境观察、非本书代码问题：验收期间发现本机 `main` 分支被另一个并行
+会话（「预订清单按开售日」书）在本书开工后推进了一个提交，往
+`tests/test_journey.py` 加了新测试，导致 `git diff main -- tests | grep
+'^-\s*def test_'` 会把那些新增测试误判成本分支「删除」——只是 `main` 作为
+比较基准提前移动的假象。改用本分支真实分叉点 `05f1056`（`git merge-base
+main HEAD` 核实）重跑同组命令，全部空输出，证据见 `PROGRESS.md` 本书任务 2
+小节。

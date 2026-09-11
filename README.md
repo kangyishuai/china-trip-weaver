@@ -195,7 +195,7 @@ ctw journey assemble --journey JOURNEY.json --replace-trip TRIP-rN.json --base-r
 
 The runtime uses no third-party Python package. Trip and Journey renderers refuse invalid input; both HTML validators block structural, CSP, remote-resource, unsafe-link, secret, fact-mapping, traceability, and transaction-action violations.
 
-`ctw replan`'s `refresh` event replaces one rail leg with a freshly queried service: run `ctw rail --output-json` first, then pass that file's path as `--rail-result`. `--rail-result` is required for a `refresh` event and rejected for every other event type.
+`ctw replan`'s `refresh` event replaces one rail leg with a freshly queried service: run `ctw rail --output-json` first, then pass that file's path as `--rail-result`. `--rail-result` is required for a `refresh` event and rejected for every other event type. A `suspend` event removes a leg that stopped running (a cancelled train, a suspended ferry crossing) together with its slot, budget-ledger line, and any now-orphaned claims in one patch, swapping the slot for a `free`- or `poi`-kind `replacement_slot`; the patch `trigger` is `disruption`.
 
 ## Tests
 
