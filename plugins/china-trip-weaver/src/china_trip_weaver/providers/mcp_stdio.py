@@ -17,6 +17,7 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 from .. import __version__
 from ..contracts import ProviderRequest, canonical_json
 from ..credentials import CredentialResolution, provider_environment
+from ..geo import administrative_area_key
 from .base import (
     ContractMismatch,
     ProviderEnvelope,
@@ -580,32 +581,25 @@ def _resolve_rail_stations(
     to_name: str,
 ) -> Mapping[str, Any]:
     endpoint_names = {"from": from_name, "to": to_name}
-    endpoint_candidates: Dict[str, Sequence[Mapping[str, Any]]] = {"from": (), "to": ()}
+    endpoint_candidates = _resolve_station_candidates(client, body, endpoint_names)
 
-    names = _unique_names((from_name, to_name))
-    exact_arguments = {"stationNames": "|".join(names)}
-    exact_payload = _call_station_tool(client, body, "get-station-code-by-names", exact_arguments)
-    exact = _mapped_station_candidates(exact_payload, names, strip_station_suffix=True)
+    # A name like "武夷山市" carries an administrative suffix 12306 does not
+    # strip on its own. Retry once, only for endpoints that came back with
+    # zero candidates from all three layers, using the stripped name. The
+    # reported "query" stays the caller's original name either way: it is
+    # checked verbatim against the request in rail12306.py's contract guard.
+    retry_names: Dict[str, str] = {}
     for endpoint, name in endpoint_names.items():
-        endpoint_candidates[endpoint] = exact[name]
-
-    unresolved = [endpoint for endpoint in ("from", "to") if not endpoint_candidates[endpoint]]
-    if unresolved:
-        city_names = _unique_names(tuple(endpoint_names[endpoint] for endpoint in unresolved))
-        city_arguments = {"citys": "|".join(city_names)}
-        city_payload = _call_station_tool(client, body, "get-station-code-of-citys", city_arguments)
-        representatives = _mapped_station_candidates(city_payload, city_names, strip_station_suffix=False)
-        for endpoint in unresolved:
-            endpoint_candidates[endpoint] = representatives[endpoint_names[endpoint]]
-
-    unresolved = [endpoint for endpoint in ("from", "to") if not endpoint_candidates[endpoint]]
-    city_results: Dict[str, Sequence[Mapping[str, Any]]] = {}
-    for endpoint in unresolved:
-        city = endpoint_names[endpoint]
-        if city not in city_results:
-            payload = _call_station_tool(client, body, "get-stations-code-in-city", {"city": city})
-            city_results[city] = _city_station_candidates(payload)
-        endpoint_candidates[endpoint] = city_results[city]
+        if endpoint_candidates[endpoint]:
+            continue
+        stripped = administrative_area_key(name)
+        if stripped and stripped != name:
+            retry_names[endpoint] = stripped
+    if retry_names:
+        retry_candidates = _resolve_station_candidates(client, body, retry_names)
+        for endpoint, candidates in retry_candidates.items():
+            if candidates:
+                endpoint_candidates[endpoint] = candidates
 
     counts = [len(endpoint_candidates[endpoint]) for endpoint in ("from", "to")]
     if any(count == 0 for count in counts):
@@ -624,3 +618,46 @@ def _resolve_rail_stations(
             for endpoint in ("from", "to")
         },
     }
+
+
+def _resolve_station_candidates(
+    client: MCPStdioClient,
+    body: Dict[str, Any],
+    endpoint_names: Mapping[str, str],
+) -> Dict[str, Sequence[Mapping[str, Any]]]:
+    """Run the three 12306 station-resolution layers for the given endpoints.
+
+    Shared by the initial resolution pass and the single suffix-stripped
+    retry pass in `_resolve_rail_stations`; both pass a plain endpoint-name
+    to query-name mapping and get candidates per endpoint back.
+    """
+
+    endpoints = tuple(endpoint_names)
+    endpoint_candidates: Dict[str, Sequence[Mapping[str, Any]]] = {endpoint: () for endpoint in endpoints}
+
+    names = _unique_names(tuple(endpoint_names.values()))
+    exact_arguments = {"stationNames": "|".join(names)}
+    exact_payload = _call_station_tool(client, body, "get-station-code-by-names", exact_arguments)
+    exact = _mapped_station_candidates(exact_payload, names, strip_station_suffix=True)
+    for endpoint, name in endpoint_names.items():
+        endpoint_candidates[endpoint] = exact[name]
+
+    unresolved = [endpoint for endpoint in endpoints if not endpoint_candidates[endpoint]]
+    if unresolved:
+        city_names = _unique_names(tuple(endpoint_names[endpoint] for endpoint in unresolved))
+        city_arguments = {"citys": "|".join(city_names)}
+        city_payload = _call_station_tool(client, body, "get-station-code-of-citys", city_arguments)
+        representatives = _mapped_station_candidates(city_payload, city_names, strip_station_suffix=False)
+        for endpoint in unresolved:
+            endpoint_candidates[endpoint] = representatives[endpoint_names[endpoint]]
+
+    unresolved = [endpoint for endpoint in endpoints if not endpoint_candidates[endpoint]]
+    city_results: Dict[str, Sequence[Mapping[str, Any]]] = {}
+    for endpoint in unresolved:
+        city = endpoint_names[endpoint]
+        if city not in city_results:
+            payload = _call_station_tool(client, body, "get-stations-code-in-city", {"city": city})
+            city_results[city] = _city_station_candidates(payload)
+        endpoint_candidates[endpoint] = city_results[city]
+
+    return endpoint_candidates

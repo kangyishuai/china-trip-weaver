@@ -302,6 +302,20 @@ class AMapHTTPTransportTests(unittest.TestCase):
                     self.assertNotIn("offset", query)
                     self.assertNotIn("page", query)
 
+    def test_poi_city_limit_false_reaches_the_query_string_for_a_nationwide_search(self):
+        opener = RecordingOpener()
+        budget = AMapCallBudget(max_calls=20, qps=1000000)
+        transport = AMapHTTPTransport(credentials(), budget=budget, opener=opener)
+        envelope = transport.execute(
+            "amap",
+            request("poi", {"keywords": "武夷山站", "city": "武夷山", "city_limit": "false"}),
+        )
+        http_request, _ = opener.requests[-1]
+        parsed = urllib.parse.urlsplit(http_request.full_url)
+        query = urllib.parse.parse_qs(parsed.query)
+        self.assertEqual(["false"], query["city_limit"])
+        self.assertEqual("poi-v5", envelope.body["api"])
+
     def test_budget_spaces_starts_and_caps_calls(self):
         now = [0.0]
         sleeps = []

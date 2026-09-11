@@ -2219,3 +2219,181 @@ md`、SKILL.md、`replan.py`、`tests/test_replan.py` 共 7 个已跟踪文件 +
 拆两次 `git commit`（任务 1 `c60b860`：夹具 + 红测试；任务 2：实现 + 文档 +
 本节），随后 `git push -u origin replan-suspend`。止损轮次未触发（任务
 0/1/2 均一轮验收通过，未出现连败）。
+
+## 书 S1：12306 站点跨城/后缀（2026-09-10，worktree `.tmp/wt-s1` 分支 `station-cross-city`）
+
+任务 0（已完成）：HEAD `05f1056` 与任务书一致；`Ran 584 tests OK` 0
+skipped、`scan_secrets` 0、pyflakes 0 行，均吻合。`mcp_stdio.py:576-626`
+`_resolve_rail_stations` 三层逐行核对吻合；`station_distance.py` 的
+`_station_point`（154-200）、`_city_or_district_matches`（270-280）、
+`_unique_point`（331-333）、`enrich`（64-125）行号吻合；`amap_http.py:
+371-378` poi 分支 `city_limit` 写死 `"true"` 吻合；`test_amap_live.py:300`
+`["true"]` 断言吻合；`geo.py:31` `administrative_area_key` 存在，对纯中文
+地名（无空格标点）是可直接复用的「剥后缀后的名字」而不仅是比较键（NFKC+
+casefold 对中文字符是恒等操作）。credentials.env 有 AMAP Key，但两条实网
+命令留到任务交付前最后核对（避免中途改动源码期间浪费真实调用）。
+理解的目标：① 后缀重试——`_resolve_rail_stations` 三层全空且
+`administrative_area_key(name) != name` 时，把三层逻辑抽成可复用的
+`_resolve_station_candidates(client, body, endpoint_names)`，对仍空的端点用
+剥后缀名再跑一遍（只重试一次），`query` 字段同步改名；②
+邻市距离——`_station_point` 加 `city_limit`/`require_city_match`/
+`centre`+`max_distance_meters` 可选参数，第一遍同城找不到距离的候选，用
+`city_limit=false`+不判城市+80km 距离过滤+`_unique_point` 去重做第二遍；
+`amap_http.py` 的 `city_limit` 从写死改成可选参数（默认 `"true"`，只收
+`"true"/"false"`，不影响现有默认行为）。
+顺序：任务 1（后缀重试，独立、收益明确）→ 任务 2（邻市距离，依赖
+`amap_http.py` 的 `city_limit` 参数化，与任务 1 无代码交集）。
+最大风险：`tests/test_rail_station_fallback.py:359`（`station_city=
+"另一座城市"`，坐标仍在 100.0,20.0 附近 104m/1045m）与首层几何推算下，站
+名逐字相同、类目相同、距离远小于 80km，新逻辑下会实际获得距离——这条会
+真的变；但 `:425`（`test_unrelated_district_does_not_gain_a_distance`，
+研究城市「平潭」对上完全不相关的「厦门市/思明区」）在 `_city_centre` 这
+一步就因为城市/区都不匹配研究地名而拿不到 `centre`（`centre is None` →
+`continue`，根本不会进入第二遍站点匹配逻辑）——按当前设计这条测试的行为
+**不会**变，「拍的板」把它也列为「钉旧规则」大概率是估计，不是逐行验证；
+处理方式：按规范实现后，先跑全量测试用真实结果说话，只有它真的红了才去
+改，不为了「用满两条既有断言改写权限」而无意义地改一条其实不需要改的
+断言（`tests/fixtures/` 零改动的硬约束意味着新增测试必须绕开 MCP 子进程
+夹具，改用直接构造 `_resolve_rail_stations`/`enrich()` 的 stub client，
+docs-drift 书任务 3 已有同款先例）。
+
+任务 1（已完成）：`mcp_stdio.py` 的 `_resolve_rail_stations` 三层逻辑抽成
+`_resolve_station_candidates(client, body, endpoint_names)`（同样的三层
+调用，只是 `("from","to")` 硬编码换成 `tuple(endpoint_names)`，行为对原始
+两端点调用逐字等价）；`_resolve_rail_stations` 先跑一遍原名，对三层后仍
+0 候选、且 `administrative_area_key(name) != name` 的端点，用剥后缀名再跑
+一遍（只这一次，不递归）。新增 3 个 `def test_`（`RailStationSuffixRetryTests`，
+用不经 12306 fixture server 的 stub client 直接调 `_resolve_rail_stations`，
+因为 `tests/fixtures/` 零改动）：三层空后剥后缀重试并 resolved、剥后缀仍空
+→ no_results 且恰 6 次调用、无后缀不重试调用数不变（4 次，同
+`test_three_empty_station_layers...` 的形状）。
+连带发现并处理：初版按「我替领导拍的板」把 retry 成功后的
+`endpoints[endpoint]["query"]` 改写成剥后缀后的名字，实网
+`ctw rail --to 武夷山市` 返回 `contract_mismatch`——`providers/rail12306.py:270`
+（只读文件）有硬校验 `query != request.parameters.get(parameter_name)` 时
+`raise`，要求 `query` 逐字等于原始请求参数。判断：目标是「武夷山市」能查到
+候选站，不是「query 字段必须显示剥后缀后的名字」（后者任务书自己标了
+「猜的」）；改为保留 `query` 为原始请求名，只让候选站点换成剥后缀重试
+结果，不碰 `rail12306.py`。完整取舍与实网对照记在 `BLOCKED.md`。
+硬指标一实测（2026-09-10，改正 query 字段之后）：
+```
+$ plugins/china-trip-weaver/scripts/ctw rail --date 2026-09-20 --from 福州 --to 武夷山市 --output-json .tmp/s1-task1-real2.json
+RAIL_COMPLETE output=.tmp/s1-task1-real2.json legs=10 status=ready error=none
+```
+基线 `--to 武夷山`（无后缀，原本就能查到）同样 `legs=10 status=ready`，
+证明后缀重试不影响既有直接命中路径。
+反向验证（终端记录，在「改正 query 字段」之后的最终代码上重做）：临时把
+`retry_names` 的构建循环整体换成 `if False:` 死代码禁用重试 →
+`RailStationSuffixRetryTests` 3 个测试里 2 个红
+（`'resolved' != 'no_results'`、`6 != 3`，第三个「无后缀不重试」测试本就不
+依赖重试逻辑，符合预期地保持绿）→ 用同一份 Python 脚本按原字符串精确还原
+→ `grep -c TEMP-REVERSE-VERIFY` 为 0（残留标记清零）→ 全量
+`Ran 587 tests` `OK` 0 skipped（584 基线 + 3 个新 `def test_`）。
+`scripts/scan_secrets.py` 0 命中；pyflakes（src+tests+scripts）0 行。
+`git diff main --stat` 会额外带出 `journey.py`/`test_journey.py`/
+`journey.html`——这是并行的「F1 预订清单按开售日」书已直接提交到 main
+（`7fc10f3`/`4809bb8`/`cccb5e4`，任务书本身允许的并行），不是我的改动；
+改用分叉点 `git diff 05f1056 --stat` 核对，只有 `BLOCKED.md`/`PROGRESS.md`/
+`mcp_stdio.py`/`tests/test_rail_station_fallback.py` 四个文件，
+`git diff 05f1056 -- tests | grep -E '^-\s*def test_'` 0 行，
+`git diff 05f1056 --stat -- tests/fixtures plugins/china-trip-weaver/schema
+'*/rail12306.py' '*/planning.py' '*/mobility.py'` 空输出——均在白名单内、
+零越界。单独一次 `git commit`（任务 1 单独提交，SHA 见下）。
+
+任务 2（已完成）：`amap_http.py` 的 `_request_contract` poi 分支
+`city_limit` 从写死 `"true"` 改成可选参数（默认 `"true"`，只接受
+`"true"/"false"`，其余值 `raise ContractMismatch`），`test_amap_live.py:300`
+的 `["true"]` 默认值断言未动，新增 1 个 `def test_` 验证
+`city_limit="false"` 落到真实查询串。`station_distance.py` 加
+`STATION_MAX_DISTANCE_METERS = 80_000`；`_station_point` 加
+`nationwide`/`centre`/`max_distance_meters` 三个可选关键字参数——
+`nationwide=True` 时查询串带 `city_limit="false"`、跳过 `_city_or_district_
+matches` 城市校验、改为要求落点到 `centre` ≤ `max_distance_meters`；
+`enrich()` 里第一遍（同城）拿不到距离的候选，改为再跑一遍 `nationwide=True`
+的第二遍，命中就写 `distance_meters`，超出阈值或多坐标（`_unique_point`
+返回 None）仍不写、候选一个不删。
+连带发现并处理：初版一律对「拿不到距离」的候选发第二遍，导致一个不在
+白名单内的既有测试
+（`test_multiple_city_stations_are_returned_sorted_and_classified_ambiguous`）
+多发一次 API 调用而断言失败——根因是该候选（`多站城未知站`/CCX）第一遍
+根本没有任何 POI 结果（不是「有 POI 但城市不对」），对这种「AMap 对这个
+关键词压根没意见」的候选做第二遍纯属浪费配额且改变了调用序列。修法：
+`_station_point` 返回值从 `Optional[Point]` 改成 `Tuple[Optional[Point],
+bool]`，第二个值 `found_any_poi` 表示第一遍是否拿到任意原始 POI（不论
+是否通过后续名称/类目/城市过滤）；`enrich()` 只在 `station is None and
+found_any_poi` 时才发第二遍。这不属于放宽断言——是让实现在「哪些候选值得
+花一次额外 AMap 配额」这件事上更保守，且证实了原有测试的通过不是偶然：
+`git diff 05f1056 --stat -- '*/mobility.py'` 仍为空，未碰定位判定的三条
+硬口径。
+`:359`/`:425` 按拍的板改写（拍的板允许改的唯一两处）：`:425`
+（`test_unrelated_district_does_not_gain_a_distance`）实测后行为
+**未变**——它的研究城市「平潭」与固定的 `centre_city=厦门市/centre_district=
+思明区` 连 `_city_centre` 这一步都匹配不上，`centre` 直接是 `None`，
+根本不会进入候选循环，所以第一遍/第二遍都不会发生，维持原断言不改，
+函数名与内容均未动（印证了 PROGRESS.md 任务 0 笔记里的预判）。`:359`
+（`test_wrong_city_station_pois_do_not_add_distance_or_remove_candidates`）
+改写：`station_city="另一座城市"` 场景下 BBX/AAX 通过第二遍拿到距离
+（104m/1045m，与「正向」测试同一组坐标算出的同一批数字），CCX 仍无
+距离；函数名保持不变（只加 docstring 说明），只改断言本身，同「replan」
+书任务 2 的既有先例（改断言、不改 `def test_` 签名，避免
+`git diff ... | grep '^-\s*def test_'` 非 0）。校验用
+`amap.requests` 的精确 `(capability, city_limit)` 序列断言，实测顺序是
+按候选原始顺序逐个「先同城后跨城」交替（非「全部同城再全部跨城」的批处理
+顺序），用直接跑一遍打印验证过再写进断言，不是猜的。
+新增 4 个 `def test_`（`RailStationNationwideDistanceTests`，新写的
+`ConfigurableStationPoiTransport` 按候选关键词分别控制两遍 POI 结果，
+`StationAMapFixtureTransport` 做不到按候选差异化，故不复用它）：30km 内
+拿到距离且 `nationwide[0].parameters["city_limit"]=="false"`；104km 外
+不拿（用 `haversine_meters` 现算两个阈值两侧的真实距离，不是拍脑袋挑的
+坐标）；第二遍两个不同坐标不拿；第一遍已同城解析出坐标的候选不触发第二遍
+调用（同时验证另一候选确实触发了）。
+硬指标一实测（2026-09-10，真实 AMap Key，直接探针，不经 `ctw` 命令）：
+```
+$ ...AMapHTTPTransport 直接查询「武夷山东站」，city="武夷山"
+city_limit=true  -> 5 条结果，全部是"武夷山站(出站口)"等子设施，无逐字
+                     同名的"武夷山东站"
+city_limit=false -> 5 条结果，新增一条 name="南平市站" cityname="南平市"
+                     adname="建阳区"（只在跨城搜索里出现，验证了"同名邻市
+                     站在 city_limit=false 时才会浮现"这条机制本身在真实
+                     AMap 数据上成立），但同样没有逐字同名的"武夷山东站"
+```
+这次探针没能拿到一个「逐字同名 + 跨城」的端到端真实例子（AMap 数据库里没
+有恰好叫「武夷山东站」的逐字索引条目，`_station_names_match` 要求逐字，
+按「不猜站」原则正确地保持 unknown，不是 bug）；但探针本身证实了底层
+机制（`city_limit=false` 会浮现同城搜索找不到的邻区站点）是真实的，不是
+凭空假设。任务书「完成条件」对任务 2 的硬指标一只要求「四个测试绿 + 反向
+验证红→绿」，不强制实网，故不算未达标。
+`/usr/bin/python3 -m unittest discover -s tests` → `Ran 592 tests` `OK`
+0 skipped（584 基线 + 3 任务 1 + 1 `test_amap_live` city_limit 落地 + 4
+邻市距离）；`scripts/scan_secrets.py` 0 命中；pyflakes（src+tests+scripts）
+0 行。
+反向验证（终端记录）：临时把 `STATION_MAX_DISTANCE_METERS` 改成 `0` →
+`RailStationNationwideDistanceTests` 4 个里 2 个红（`within_threshold`
+用例 `KeyError: 'distance_meters'`、`does_not_trigger_a_nationwide_call`
+用例的跨城候选也拿不到距离了）、另 2 个（`beyond_threshold`/
+`two_distinct_coordinates`，本就断言"拿不到距离"）保持绿——符合预期，
+不是失败 → 精确字符串还原 → `grep -c TEMP-REVERSE-VERIFY` 为 0 → 全量
+`Ran 592 tests` `OK` 0 skipped。
+`git diff 05f1056 --stat` 只有 `BLOCKED.md`/`PROGRESS.md`/`amap_http.py`/
+`mcp_stdio.py`/`station_distance.py`/`test_amap_live.py`/
+`test_rail_station_fallback.py` 七个文件，均在白名单内；`git diff 05f1056
+-- tests | grep -E '^-\s*def test_'` 0 行；`git diff 05f1056 --stat --
+tests/fixtures plugins/china-trip-weaver/schema '*/rail12306.py'
+'*/planning.py' '*/mobility.py'` 空输出。任务 2 单独一次 `git commit`
+（`7d46d4a`）。
+
+交付前最终复核（2026-09-10）：实网 `ctw rail --date 2026-09-20 --from 福州
+--to 武夷山市 --output-json .tmp/s1-final-check.json` → `RAIL_COMPLETE
+... legs=10 status=ready error=none`；`git diff 05f1056 --stat` 只有
+`BLOCKED.md`/`PROGRESS.md`/`amap_http.py`/`mcp_stdio.py`/
+`station_distance.py`/`test_amap_live.py`/`test_rail_station_fallback.py`
+七个文件；`git diff 05f1056 -- tests | grep -E '^-\s*def test_'` 0 行；
+禁区 diff（`tests/fixtures`/`schema`/`rail12306.py`/`planning.py`/
+`mobility.py`）空输出；全量 `Ran 592 tests` `OK` 0 skipped（≥591 达标，
+584 基线 + 8 个新 `def test_`：任务 1 的 3 个 + 任务 2 的 `test_amap_live`
+1 个 + `RailStationNationwideDistanceTests` 4 个）；`scan_secrets.py`
+0 命中；pyflakes 0 行。硬指标一、硬指标二均达成，两个任务各一次反向验证
+（红→绿，终端记录见各自小节），止损轮次未触发（两个任务各遇到一次实测
+才暴露的问题——任务 1 的 `query` 字段与 `rail12306.py` 硬校验冲突、任务 2
+的额外 API 调用冲撞既有测试——均一次定位、一次修复、复测即绿，不构成
+「连败」）。分支推送记录见本节末尾。
