@@ -4125,3 +4125,111 @@ bfa1e012be32ae1e9bd0613f27128c56e7847b17  fujian-2026-09-25-to-10-10/journey.jso
 不要提前交付"（指 9/11 的上一次派发）；本次是同一自然日内的第二次派发，
 再次空跑同一结论。建议 2026-09-12（含）之后再派发本书本身，而非在门槛前
 重试。
+
+## 书 AB1「拆 scheduler/light.schedule_day」（2026-09-11，main 直改，第十二波两本并行之一）
+
+任务 0 核对（HEAD `0cc7d55`）：全量 `/usr/bin/python3 -m unittest discover -s
+tests` → `Ran 630 tests` `OK` 0 skipped（53.8s）；`scripts/scan_secrets.py` →
+`0 finding(s) across 378 file(s)`；pyflakes（`plugins/china-trip-weaver/src
+tests scripts`）0 行；light.py 625 行，`schedule_day` L119-251（133 行）、
+`_evaluate` L436（111 行）、`_order_key` L412（23 行）、`schedule_plan` L253
+（调 `self.schedule_day(problem)` 于 L262、`self.schedule_day(day_problem)`
+于 L307，逐字核对）；`schedule_day` 函数体内 `_no_solution(` 4 处（L151/162/
+193/217）、`raise ValueError` 1 处（L130，另两处 L116/L552 分别在
+`__init__`/`_dt`，不属 `schedule_day`）；`tests/fixtures/scheduler/golden`
+20 份、`no_solution` 8 份（`manifest.json` 里另有 `replan` 4 份，任务书
+「28 份」不含它，核对一致）；`tests/test_scheduler.py` `def test_` 21 个、
+`schedule_day(` 直接调用 6 处。任务书数字与实测逐字吻合，零出入，无需停工。
+
+理解的目标：`schedule_day`（133 行）按读参数（含节奏档缺省，L120-148）→
+筛候选与排序（L149-172）→ 束搜索循环（L173-204）→ 终评/落选理由/目标向量
+（L206-251）四段拆出，本体 ≤40 行；`_evaluate`/`_order_key` 共同的 11 个
+参数（day_id/day_start/day_end/travel_mode/buffer_minutes/budget/
+max_optional/max_travel/max_pois/max_walking_segment_meters/
+requires_senior_recovery）打包成新私有 frozen dataclass `_DayScheduleParams`
+（另带 profile/pace 供终评阶段用），两个方法只改签名接收该对象、方法体顶部
+解包成同名局部变量后其余逐字节不动。顺序：任务 1 快照（已完成）→按四段抽取、
+每段跑 test_scheduler→长度命令→快照比对→四语料命令→全量→反向验证→
+commit/push。最大风险：候选分类与束搜索内部各有提前 return（duplicate_ref
+于 L150-151、required-but-unavailable 于 L161-162、no_feasible_insertion
+于 L192-197、no_feasible_state 于 L216-217），拆出的子函数必须原样把
+ScheduleResult 一路带出、不多构造任何原代码不会执行的对象（如失败分支顺带
+新建空 RouteMatrix）。
+
+任务 1（已完成，不提交）：`.tmp/snapshot_schedule_day.py` 对 golden(20)+
+no_solution(8) 共 28 份夹具的全部 47 个 day problem，每个跑 1 次原始
++ 4 种确定性突变（首候选标 closed / buffer_minutes+60 / budget_cny 减半 /
+max_optional=1）共 235 条记录（`ScheduleResult.as_dict()` 的 canonical
+JSON，异常记类型+消息），写入 `.tmp/snap-before.json`；连跑两次
+（`snap-before.json`/`snap-before-run2.json`）`diff` 空输出，235≥100 达标。
+
+任务 2（已完成）：按四段分四次抽取，每段抽完单独跑一次
+`tests.test_scheduler`（49/50 项全部一次通过，无需回退重来）：①`_classify_
+candidates`（23 行，候选分类+提前 return+排序）；②新增模块级 frozen
+dataclass `_DayScheduleParams`（13 字段：`_evaluate`/`_order_key` 实际读取
+的 11 个只读参数 + `profile`/`pace` 供终评阶段用）+ `_day_schedule_params`
+（45 行，读参数含节奏档缺省，与原 L120-148 逐字节相同，只是把散落局部变量
+收口成一次 dataclass 构造）+ 同步把 `_evaluate`/`_order_key` 签名从 14/14
+参数收窄成 `(order, candidates, matrix, params)` 4 参数——`_order_key`
+本体只是转发给 `_evaluate`，无需解包，签名一改反而从 23 行降到 9 行；
+`_evaluate` 先按「每字段一行」解包出 11 行前言，签名省下 10 行、净增 1 行，
+变成 112 行、超出「≤111」硬指标 1 行，改成两两一行的解包（6 行前言）后
+降到 107 行，`_evaluate` 内部真正做计算的 94 行区间保持逐字节不变（判断
+记录见 BLOCKED.md 本书条目）；③`_beam_search`（30 行，束搜索循环，提前
+return 时把 `(None, ScheduleResult)` 一路带出，不构造任何原代码不会执行
+的对象）；④`_finalize_day_schedule`（44 行，终评+落选理由+目标向量拼装，
+`profile`/`str(problem["pace"])` 换成 `params.profile`/`params.pace`，
+后者是 `_day_schedule_params` 里预先算好的同一个字符串，值不变）。
+
+硬指标一（长度命令）：
+```
+(13, 'schedule_day')
+(23, '_classify_candidates')
+(30, '_beam_search')
+(44, '_finalize_day_schedule')
+(45, '_day_schedule_params')
+(68, '_slow_fallback')
+(89, 'schedule_plan')
+(107, '_evaluate')
+```
+`schedule_day` 本体 13 行（≤40）；文件内最长函数 `_evaluate` 107 行
+（≤111，`_slow_fallback`/`schedule_plan` 均为拆分前既有函数、本轮未动，
+行数不变）。
+
+硬指标二：拆分后 `.tmp/snapshot_schedule_day.py` 重跑得到的
+`snap-after.json` 与 `snap-before.json` `diff` 空输出（235 条记录逐字节
+相同）；四个语料命令重跑：README demo（`ctw plan`→`validate`→
+`validate-html`→`scan_secrets.py`，`trip_sha256`/`html_sha256` 与拆分前
+一致，`git status --short -- demo/trip.json demo/trip.html` 空）、
+`scripts/build_plan_fixtures.py`（`git status --short -- tests/fixtures/
+e2e` 空）、`scripts/build_renderer_fixtures.py`（`journey_sha256=
+7ada91c09a6ef253a23f930b454a2d13510d9a4326f906f6299337ec0ce7628e`，与
+「书 Y1」「书 R2」两份历史记录的基线值逐字节相同，`git status --short --
+demo` 空）、`scripts/build_scheduler_fixtures.py`（`git status --short --
+tests/fixtures/scheduler` 空）；全量 `/usr/bin/python3 -m unittest
+discover -s tests` → `Ran 631 tests`（630 基线 + 1 个新增 `def test_`）
+`OK` 0 skipped（55.7s）；`scripts/scan_secrets.py` → `0 finding(s) across
+378 file(s)`；pyflakes（`plugins/china-trip-weaver/src tests scripts`）
+0 行；`git status --short` 提交前只有 `PROGRESS.md`/`light.py`/
+`test_scheduler.py` 三个文件。
+
+反向验证：全仓对 `_no_solution` 的 message 精确文本零断言（既有
+`compare_no_solution` 只 `assertTrue(...["message"])` 断真值），按「书
+Y1」「书 AA2」同款先例新增 1 个断言性质的测试
+`test_closed_required_candidate_reports_exact_conflict_and_relaxation`
+（`tests/fixtures/scheduler/no_solution/closed-required.json` 直接调
+`schedule_day`，精确断言 `conflict == {"code": "closed", "message":
+"closed-required is required but unavailable"}` 与
+`relaxations == ("unlock-or-replace:closed-required",)`）。把
+`_classify_candidates` 里这条 message 尾部加字符
+（`unavailableXXXTEMPREVERSEVERIFYXXX`）→ 新测试
+`AssertionError`（红）且快照 diff 非空 → 改回 → 新测试 `ok`、
+`tests.test_scheduler` 50 项全绿、快照与 `snap-before.json` 重新逐字节
+相同（绿）；`grep -c TEMPREVERSEVERIFY light.py` 为 0，确认无残留。
+
+`git diff 0cc7d55 -- tests | grep -E '^-\s*def test_'` 0 行（未删任何
+测试）；`git diff 0cc7d55 --stat -- . ':!plugins/china-trip-weaver/src/
+china_trip_weaver/scheduler/light.py' ':!tests/test_scheduler.py'
+':!PROGRESS.md' ':!BLOCKED.md'` 为空（改动完全落在白名单四个文件内）。
+一轮验收即全部通过，未触发止损。BLOCKED.md 记录见该文件本书条目：无
+待裁决项。

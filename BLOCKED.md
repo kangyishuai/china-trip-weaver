@@ -1,3 +1,26 @@
+## 书 AB1「拆 scheduler/light.schedule_day」（2026-09-11，main 直改，第十二波两本并行之一）：无
+
+任务 0/1/2 全部按任务书字面执行，全程无需停工的冲突，也未发现任何 bug 或想
+改动的逻辑——纯逐字节拆分。任务书「现状与任务 0」列出的每一项数字（HEAD、
+630 测试、secrets 0、pyflakes 0、625 行、`schedule_day`/`_evaluate`/
+`_order_key`/`schedule_plan` 的行号与调用点、`_no_solution(`/`ValueError`
+计数、golden 20/no_solution 8 夹具、`def test_` 21 个、`schedule_day(`
+调用 6 处）逐条核对全部吻合，零出入，无需记录任何一条差异。
+
+唯一需要自行判断（非裁决分叉，供核对）的一点：新私有类型命名为
+`_DayScheduleParams`（frozen dataclass，任务书只给了「NamedTuple 或 frozen
+dataclass」两个选项，未点名具体类名），选择理由是与文件里已有的
+`PaceProfile`/`Candidate`/`EvaluatedSchedule`/`ScheduleResult` 四个
+`@dataclass(frozen=True)` 风格一致；字段除 `_evaluate`/`_order_key` 实际
+读取的 11 个外，另加 `profile`/`pace` 两个供 `schedule_day` 终评阶段使用，
+均为只读透传、不影响两个方法的内部逻辑。`_evaluate` 签名从 14 参数收窄到
+4 个（省 10 行）后，若像 `_order_key` 一样完全不加解包前言，函数会变成
+101 行；但若像最初尝试那样每个字段各占一行解包（11 行前言），会变成 112
+行、超出「≤111」硬指标 1 行——已改为两两一行的解包写法（6 行前言，107
+行），内部计算部分保持逐字节不变，供核对为什么解包不是「一个字段一行」的
+最直观写法。完整实测过程（含把 112 行发现并修正为 107 行的记录）见
+PROGRESS.md 本书任务 2 小节。
+
 ## 书「拆 journey._validate_connection」（2026-09-11，worktree `.tmp/wt-aa2` 分支 `split-journey-connection`，第十一波三份并行书之一）：无待裁决项
 
 任务 0/1/2 全部按任务书字面执行，全程无需停工的冲突，也未发现任何 bug 或

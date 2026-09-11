@@ -110,13 +110,30 @@ class ScheduleResult:
         }
 
 
+@dataclass(frozen=True)
+class _DayScheduleParams:
+    day_id: str
+    profile: Optional[PaceProfile]
+    pace: Optional[str]
+    day_start: datetime
+    day_end: datetime
+    travel_mode: str
+    buffer_minutes: int
+    budget: Optional[float]
+    max_optional: int
+    max_travel: Optional[int]
+    max_pois: Optional[int]
+    max_walking_segment_meters: Optional[int]
+    requires_senior_recovery: bool
+
+
 class LightScheduler:
     def __init__(self, beam_width: int = 24) -> None:
         if beam_width <= 0:
             raise ValueError("beam width must be positive")
         self.beam_width = beam_width
 
-    def schedule_day(self, problem: Mapping[str, Any]) -> ScheduleResult:
+    def _day_schedule_params(self, problem: Mapping[str, Any]) -> _DayScheduleParams:
         day_id = problem["day_id"]
         profile = pace_profile(str(problem["pace"])) if problem.get("pace") else None
         day_value = str(problem.get("date", ""))
@@ -146,11 +163,39 @@ class LightScheduler:
         requires_senior_recovery = bool(problem.get("requires_senior_recovery", False))
         max_travel = problem.get("max_travel_minutes")
         max_travel_value = int(max_travel) if max_travel is not None else None
+        return _DayScheduleParams(
+            day_id=day_id,
+            profile=profile,
+            pace=str(problem["pace"]) if problem.get("pace") else None,
+            day_start=day_start,
+            day_end=day_end,
+            travel_mode=travel_mode,
+            buffer_minutes=buffer_minutes,
+            budget=budget_value,
+            max_optional=max_optional,
+            max_travel=max_travel_value,
+            max_pois=max_pois_value,
+            max_walking_segment_meters=max_walking_value,
+            requires_senior_recovery=requires_senior_recovery,
+        )
+
+    def schedule_day(self, problem: Mapping[str, Any]) -> ScheduleResult:
+        params = self._day_schedule_params(problem)
         candidates = {item.ref_id: item for item in (Candidate.from_mapping(raw) for raw in problem["candidates"])}
         if len(candidates) != len(problem["candidates"]):
             return _no_solution("duplicate_ref", "candidate refs must be unique", ())
         matrix = RouteMatrix.from_mappings(problem.get("matrix", ()))
+        blocked, active, failure = self._classify_candidates(candidates)
+        if failure is not None:
+            return failure
+        states, failure = self._beam_search(active, candidates, matrix, params)
+        if failure is not None:
+            return failure
+        return self._finalize_day_schedule(states, candidates, matrix, params, blocked)
 
+    def _classify_candidates(
+        self, candidates: Mapping[str, Candidate]
+    ) -> Tuple[Dict[str, str], List[Candidate], Optional[ScheduleResult]]:
         blocked: Dict[str, str] = {}
         active: List[Candidate] = []
         for candidate in candidates.values():
@@ -159,7 +204,7 @@ class LightScheduler:
                 reason = "invalid_duration"
             if reason:
                 if candidate.required or candidate.locked:
-                    return _no_solution(reason, "%s is required but unavailable" % candidate.ref_id, ("unlock-or-replace:%s" % candidate.ref_id,))
+                    return blocked, active, _no_solution(reason, "%s is required but unavailable" % candidate.ref_id, ("unlock-or-replace:%s" % candidate.ref_id,))
                 blocked[candidate.ref_id] = reason
             else:
                 active.append(candidate)
@@ -170,6 +215,15 @@ class LightScheduler:
             -item.utility,
             item.ref_id,
         ))
+        return blocked, active, None
+
+    def _beam_search(
+        self,
+        active: List[Candidate],
+        candidates: Mapping[str, Candidate],
+        matrix: RouteMatrix,
+        params: _DayScheduleParams,
+    ) -> Tuple[Optional[List[Tuple[str, ...]]], Optional[ScheduleResult]]:
         states: List[Tuple[str, ...]] = [()]
         last_failures: List[str] = []
         for candidate in active:
@@ -179,38 +233,32 @@ class LightScheduler:
             for state in states:
                 for position in range(len(state) + 1):
                     order = state[:position] + (candidate.ref_id,) + state[position:]
-                    evaluated, failure = self._evaluate(
-                        order, candidates, matrix, day_id, day_start, day_end,
-                        travel_mode, buffer_minutes, budget_value, max_optional,
-                        max_travel_value, max_pois_value, max_walking_value,
-                        requires_senior_recovery,
-                    )
+                    evaluated, failure = self._evaluate(order, candidates, matrix, params)
                     if evaluated is not None:
                         next_states.append(order)
                     elif failure:
                         last_failures.append(failure)
             if not next_states:
-                return _no_solution(
+                return None, _no_solution(
                     last_failures[-1] if last_failures else "no_feasible_insertion",
                     "required candidate %s has no feasible insertion" % candidate.ref_id,
                     ("relax-window-or-route:%s" % candidate.ref_id,),
                 )
-            unique = sorted(set(next_states), key=lambda order: self._order_key(
-                order, candidates, matrix, day_id, day_start, day_end,
-                travel_mode, buffer_minutes, budget_value, max_optional,
-                max_travel_value, max_pois_value, max_walking_value,
-                requires_senior_recovery,
-            ))
+            unique = sorted(set(next_states), key=lambda order: self._order_key(order, candidates, matrix, params))
             states = unique[: self.beam_width]
+        return states, None
 
+    def _finalize_day_schedule(
+        self,
+        states: List[Tuple[str, ...]],
+        candidates: Mapping[str, Candidate],
+        matrix: RouteMatrix,
+        params: _DayScheduleParams,
+        blocked: Dict[str, str],
+    ) -> ScheduleResult:
         evaluated_states = []
         for state in states:
-            evaluated, _ = self._evaluate(
-                state, candidates, matrix, day_id, day_start, day_end,
-                travel_mode, buffer_minutes, budget_value, max_optional,
-                max_travel_value, max_pois_value, max_walking_value,
-                requires_senior_recovery,
-            )
+            evaluated, _ = self._evaluate(state, candidates, matrix, params)
             if evaluated is not None:
                 evaluated_states.append(evaluated)
         if not evaluated_states:
@@ -221,12 +269,7 @@ class LightScheduler:
         for candidate in candidates.values():
             if candidate.ref_id in selected or candidate.ref_id in excluded:
                 continue
-            _, failure = self._evaluate(
-                best.order + (candidate.ref_id,), candidates, matrix, day_id,
-                day_start, day_end, travel_mode, buffer_minutes, budget_value,
-                max_optional, max_travel_value, max_pois_value, max_walking_value,
-                requires_senior_recovery,
-            )
+            _, failure = self._evaluate(best.order + (candidate.ref_id,), candidates, matrix, params)
             excluded[candidate.ref_id] = failure or "low-score"
         objective = {
             "required_selected": sum(1 for ref in best.order if candidates[ref].required or candidates[ref].locked),
@@ -237,9 +280,9 @@ class LightScheduler:
         }
         if best.unknown_cost_refs:
             objective["unknown_cost_refs"] = list(best.unknown_cost_refs)
-        if profile is not None:
+        if params.profile is not None:
             objective.update({
-                "pace": str(problem["pace"]),
+                "pace": params.pace,
                 "poi_selected": sum(1 for ref in best.order if candidates[ref].kind == "poi"),
                 "walking_distance_meters": best.total_walking_meters,
             })
@@ -414,23 +457,9 @@ class LightScheduler:
         order: Tuple[str, ...],
         candidates: Mapping[str, Candidate],
         matrix: RouteMatrix,
-        day_id: str,
-        day_start: datetime,
-        day_end: datetime,
-        travel_mode: str,
-        buffer_minutes: int,
-        budget: Optional[float],
-        max_optional: int,
-        max_travel: Optional[int],
-        max_pois: Optional[int],
-        max_walking_segment_meters: Optional[int],
-        requires_senior_recovery: bool,
+        params: _DayScheduleParams,
     ) -> Tuple[Any, ...]:
-        evaluated, _ = self._evaluate(
-            order, candidates, matrix, day_id, day_start, day_end, travel_mode,
-            buffer_minutes, budget, max_optional, max_travel, max_pois,
-            max_walking_segment_meters, requires_senior_recovery,
-        )
+        evaluated, _ = self._evaluate(order, candidates, matrix, params)
         return _evaluated_key(evaluated) if evaluated else (999999, order)
 
     def _evaluate(
@@ -438,18 +467,14 @@ class LightScheduler:
         order: Sequence[str],
         candidates: Mapping[str, Candidate],
         matrix: RouteMatrix,
-        day_id: str,
-        day_start: datetime,
-        day_end: datetime,
-        travel_mode: str,
-        buffer_minutes: int,
-        budget: Optional[float],
-        max_optional: int,
-        max_travel: Optional[int],
-        max_pois: Optional[int],
-        max_walking_segment_meters: Optional[int],
-        requires_senior_recovery: bool,
+        params: _DayScheduleParams,
     ) -> Tuple[Optional[EvaluatedSchedule], Optional[str]]:
+        day_id, day_start = params.day_id, params.day_start
+        day_end, travel_mode = params.day_end, params.travel_mode
+        buffer_minutes, budget = params.buffer_minutes, params.budget
+        max_optional, max_travel = params.max_optional, params.max_travel
+        max_pois, max_walking_segment_meters = params.max_pois, params.max_walking_segment_meters
+        requires_senior_recovery = params.requires_senior_recovery
         optional_count = sum(1 for ref in order if not (candidates[ref].required or candidates[ref].locked))
         if optional_count > max_optional:
             return None, "capacity"

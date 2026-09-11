@@ -337,6 +337,16 @@ class SchedulerCorpusTests(unittest.TestCase):
         self.assertEqual("NO_SOLUTION", failed.status)
         self.assertEqual("senior-recovery-required", failed.conflict["code"])
 
+    def test_closed_required_candidate_reports_exact_conflict_and_relaxation(self):
+        fixture = load(NO_SOLUTION / "closed-required.json")
+        result = LightScheduler().schedule_day(fixture["days"][0])
+        self.assertEqual("NO_SOLUTION", result.status)
+        self.assertEqual(
+            {"code": "closed", "message": "closed-required is required but unavailable"},
+            result.conflict,
+        )
+        self.assertEqual(("unlock-or-replace:closed-required",), result.relaxations)
+
     def test_manifest_hashes_counts_and_coverage(self):
         manifest = load(FIXTURES / "manifest.json")
         self.assertEqual({"golden": 20, "no_solution": 8, "replan": 4}, manifest["counts"])
