@@ -1064,3 +1064,15 @@ JH 码字面量计数（44 个、15 种）、`tests/test_journey.py` 里
 计数（8 个）全部逐字吻合。判断：428→427 的 1 行出入不影响任何硬指标或
 拆分方案，大概率是任务书写作时的计数笔误（例如文件末尾换行符的计入方式
 不同），不是「对不上」的实质性分歧，不停工。
+
+## 书 Y1「拆 journey._merge_segment_trips」任务 0：文件总行数与任务书差 1 行（2026-09-11，判断，非阻塞）
+
+任务书写「journey.py 共 2574 行」，`wc -l` 实测 2573 行（文件确以换行符
+结尾，非漏算末行）。与「拆 validate_journey_html」任务 0 的 428→427 同一类
+情形——真正约束本书范围的三个数字全部逐字吻合：71 个顶层函数、
+`_merge_segment_trips` 行号 L859-1071、长度 213 行（AST 命令实测
+`[(859, 1071, 213, '_merge_segment_trips')]`，另两个 `_merge*` 开头的既有
+函数 `_merged_identifier`14 行、`_merge_provider_health`56 行不在本书范围）；
+唯一调用点 journey.py:279（`trip_document = _merge_segment_trips(atomic_trips,
+segment)`），确在 `plan_journey`（起始行 207）函数体内。判断：1 行出入不
+影响任何硬指标或拆分方案，不停工。

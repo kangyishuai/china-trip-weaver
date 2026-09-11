@@ -142,6 +142,56 @@ fix-names` 会把它们列为人工项。
 - 2026-09-03/04 越界事实的唯一记录：`BLOCKED.md`（面向公众的产品未决问题，
   Open 区已于 2026-09-06 清零，现为存档）。
 
+## 书 Y1「拆 journey._merge_segment_trips」（2026-09-11，main 直改，第九波三份并行书之一）
+
+任务 0 核对（HEAD `cab411f`）：全量 `/usr/bin/python3 -m unittest discover -s
+tests` → `Ran 623 tests` `OK` 0 skipped（80.8s，机器负载区间内）；
+`scripts/scan_secrets.py` → `0 finding(s) across 377 file(s)`；
+`~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src
+tests scripts` 0 行；journey.py 71 个顶层函数、`_merge_segment_trips`
+L859-1071（213 行，AST 命令实测 `[(859, 1071, 213,
+'_merge_segment_trips')]`）、唯一调用点 journey.py:279（`plan_journey` 内，
+`plan_journey` 起始行 207）；`scripts/build_renderer_fixtures.py:110-125`
+用 `plan_journey` 生成 `demo/journey-16d`，`main()` 打印
+`journey_sha256=result.journey_sha256`；`tests/fixtures/journey/
+synthetic-six-city-16d.json` 存在，`test_journey.py:60` `LODGING_CHAIN_
+FIXTURE` 指向它；`test_journey.py` 里 `plan_journey(` 恰 14 处。唯一出入：
+journey.py 总行数 2573（任务书写 2574，差 1 行，与「拆 validate_journey_html」
+任务 0 同款情形，记入 BLOCKED.md，不停工）。
+
+理解的目标：`_merge_segment_trips`（213 行）按内部阶段——合并 request/生成
+trip_id、合并 days、合并 transport_legs/lodgings/pois、合并 provider_health、
+合并 claims、重写引用、合并 unknowns、组装最终字典+账本+校验——拆成模块
+私有小函数，本体 ≤60 行、新函数各 ≤80 行，任何输入合并出的 Journey 逐字节
+不变；不改任何去重规则、条件、字段顺序、文案。
+顺序：任务 1 快照（已完成）→ 任务 2 按阶段逐段抽出、每段跑一次
+`tests.test_journey` → 反向验证 → 全量收尾。
+最大风险：函数体第 906 行定义的局部变量 `group_specs`（三元组：分组名/id
+字段名/合并冲突前缀）在两处被用到——合并 transport_legs/lodgings/pois 的
+循环（914-945）与之后重写 claim 引用的循环（980-982）——拆成两个函数后
+若各自重新字面量定义一份 `group_specs`，值和顺序必须逐字相同，否则两处
+遍历顺序不一致会被快照哈希放大成红；对策是把它提升为模块级常量，两个新
+函数都引用同一个对象，不改变任何计算内容，只改定义位置（同 R2 book
+`_repo_root()` 先例）。
+
+任务 1（已完成，不提交）：`.tmp/snapshot_journey.py` 对 `demo/journey-16d`
+磁盘上的 `request.json`/`candidates.json`（同 `build_renderer_fixtures.py`
+的 `FixedClock.from_iso("2026-09-05T09:00:00+08:00")`+
+`RailBackend.from_spec("off", ROOT)` 调用方式）与 `LODGING_CHAIN_FIXTURE`
+（`tests/fixtures/journey/synthetic-six-city-16d.json`，同
+`test_journey.py` 内的调用方式）各跑一次 `plan_journey`，直接取
+`result.journey_sha256`（`plan_journey` 内部就是
+`hashlib.sha256(canonical_json(journey)...)`，不重算）写入
+`.tmp/snap-before.json`。验收：两条哈希——`journey-16d`=
+`7ada91c09a6ef253a23f930b454a2d13510d9a4326f906f6299337ec0ce7628e`、
+`synthetic-six-city-16d`=
+`ad80e1cc3e486599d4f8d3907e4fa0c906e8148f296d352c2f8b8ed8106d013c`；连跑
+两次（`snap-before.json`/`snap-before-run2.json`）`diff` 空输出；重跑
+`scripts/build_renderer_fixtures.py` 打印
+`journey_sha256=7ada91c09a6ef253a23f930b454a2d13510d9a4326f906f6299337ec0ce7628e`
+与快照的 `journey-16d` 逐字节相同，`git status --short` 为空（该哈希也与
+PROGRESS.md「书 R2」反向验证记录的基线值 `7ada91c0...` 吻合，交叉印证）。
+
 ## 书 X3「租车与轮渡合成 Trip 夹具」（2026-09-11，worktree `.tmp/wt-x3` 分支 `rental-ferry-fixture`）
 
 任务 0 核对（HEAD `bf53f72`）：全部与任务书数字吻合——612 测试 OK 0 skip、secrets
