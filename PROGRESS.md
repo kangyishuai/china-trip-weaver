@@ -4432,3 +4432,146 @@ exceededX plugins/.../base.py` 为 0，残留清零）→ 快照重跑
 `git diff 0cc7d55 --stat` 只有两个白名单文件（`base.py` 126 行变化、
 `test_providers.py` +15 行）。止损轮次未触发（一次性按四阶段+一个
 额外助手方法拆分，每步验证均一次通过，未遇连败）。
+
+## 书 AC2「第二价源 ADR-0019」任务 0：核对通过（2026-09-11，worktree `.tmp/wt-ac2` 分支 `adr-second-price`，第十三波三份并行书之一）
+
+任务书列出的全部 file:line（`/price` claim 10 处、04-providers.md
+L105/L111、trip.schema.json L196-222/L736、evidence.py L1/L14、
+render/html.py `_price`+evidence 区）逐条 `git grep -n`/`sed -n` 核对，
+全部命中，无偏差。
+
+理解的目标：写 `docs/design/adr/0019-second-price-source.md`（Status:
+Proposed，仿 ADR-0017 结构），对火车票/机票/住宿/门票四类价格各给一个
+明确答案（做/不做/已有），每条结论带 file:line 出处；只研究写作，不改
+代码/schema/Skill。
+顺序：任务1取证（≥10条 file:line 清单 + 离线跑一次候选+FlyAI 夹具看
+claims 是否共存/冲突）→任务2写ADR（Context只放证据、Options≥3、
+Decision四类各答、Consequences给下一本书验收命令草案）→自查两条硬指标。
+最大风险：候选文件 lodging 的 `nightly_price` 与 FlyAI 房价是否真的会
+在同一次规划里同时产生 claim，这决定「只在已有数据内交叉」这个 Option
+是否成立——必须离线实跑 `ctw plan` 看 claims 列表验证，不能只读代码猜。
+次要风险：同一 subject_ref today 能否合法挂两个 `/price` claim（决定
+`status=conflict` 这条路径是否已经存在，还是要新建）。
+
+## 书 AC2「第二价源 ADR-0019」任务 1：取证清单（2026-09-11）
+
+意外发现（任务书未预判）：`ctw plan --offline-fixture` 在 CLI 层硬性要求
+`--lodging off`（`cli.py:914`、`journey plan` 同款校验在 `cli.py:1002`）——
+任务书建议的「离线跑 `ctw plan --offline-fixture` 看 FlyAI 住宿 claims」
+这条命令本身在 CLI 层不可执行，改用直接调用真实函数
+`planning._merge_lodging_candidates`（纯函数、无 I/O）的离线脚本达到同等
+验证效果，证据见下方「候选住宿 vs FlyAI 住宿」条目与其实测输出。
+
+### 火车票（单一来源，12306）
+
+1. `providers/rail12306.py:168` 是铁路唯一的 `/price` claim 产生点；
+   `providers/rail12306.py:199` `"price_type": "live" if amount is not None
+   else "unknown"`——价格来自 12306 同一次响应里的座席列表选价
+   （`_select_price`），不是跨源比价。
+2. `providers/__init__.py:1-16` 全仓 adapter 注册表只有 6 个：`amap`、
+   `anysearch`、`flyai`、`host_web`、`rail12306`、`variflight`——没有第二个
+   铁路票价 adapter。
+3. `docs/design/04-providers.md:105`：铁路管线只读 schedule/seat/price/deep
+   link，合同本身没有为铁路设计第二价源。
+
+### 机票（合同写了 VariFlight cross-price，代码从未接线到能产出真实价格）
+
+4. `providers/flyai.py:76` 是 FlyAI 自己的航班 `/price` claim（`status`
+   `"partial" if amount is not None else "unknown"`）。
+5. `providers/variflight_mcp.py:141-154` `_tool_call`：生产环境只支持两个
+   action——`"search"`→工具 `searchFlightsByDepArr`，`"comfort"`→工具
+   `flightHappinessIndex`；其余 action 直接 `raise ContractMismatch`。
+6. `providers/variflight_mcp.py:59-72` `execute()`：`tool_name` 只能来自
+   `_tool_call`，并原样写回 `body["tool"]`（L72 `"tool": tool_name`）——
+   真实 transport 返回的 `tool` 字段永远是上一条的两者之一。
+7. `providers/variflight.py:35-44` `normalize()`：`tool in
+   ("searchFlightsByDepArr","flightHappinessIndex")` 时才走
+   `_live_payload`——按第 6 条，生产环境这个分支永远成立。
+8. `providers/variflight.py:114-152` `_live_payload` 的非 candidate_mode
+   分支（即 FlyAI 已经找到航班号时）：只产出 `/status` claim（`subject_ref`
+   取自 FlyAI 已有的 `leg_id`，`providers/variflight.py:125`
+   `subject_refs_by_service`），从不产出 `/price`。
+9. `providers/variflight.py:154-221` `_live_candidates`（仅当 FlyAI 一无
+   所获、VariFlight 变成唯一航班来源即 candidate_mode=True 时才会用到）：
+   L198 的 `/price` claim 硬编码 `value=None,status="unknown",
+   confidence=0`——这条路径下价格永远未知，不是真实报价。
+10. `providers/variflight.py:58-97`（`kind in ("flights","raw_price")`
+    分支，L75-80 是这条链路里唯一会写非空 `/price` 数值的地方）：按第
+    6/7 条，生产环境 `body["tool"]` 永远等于 `_tool_call` 选中的工具名，
+    这个分支在生产环境不可达；仅被
+    `tests/fixtures/providers/variflight/raw_price.json`
+    （`manifest.json:296` 登记，走通用夹具回放，绕过真实 `_tool_call`）
+    用来测试 `normalize()` 自身的防御性解析。
+11. `variflight_enrichment.py:125-197` `_enrich_route`：只调用两次
+    `adapter.query`（search 一次、comfort 一次），从不构造能触达上一条
+    分支的请求——「合同写了 cross-price」与「代码真的产出 cross-price」
+    之间存在缺口，`04-providers.md:111` 的措辞比代码实现更强。
+12. 全仓唯一两处写 `claim["status"]="conflict"` 的位置是
+    `mobility.py:894-901`（`_business_claims_with_conflict`，只处理
+    `/provider_identity`、`/business` 字段）与 `mobility.py:965-999`
+    （`_semantic_location_checks`，处理坐标重复/同城离群的地理冲突）——
+    没有任何代码路径会把 `/price` claim 标成 `status=conflict`；
+    `04-providers.md:111` 说的「冲突写两个 claims 和 status=conflict」
+    对航班价格这条从未被真正触发过。
+
+### 住宿（候选文件与 FlyAI 各自独立产生实体，互不感知彼此存在）
+
+13. `candidates.py:845` `add_poi_candidate`（附近 `candidates.py:1002`
+    `add_lodging_candidate`）→ `candidates.py:1119`
+    `"price_type": "verify-on-click" if nightly_price is None else
+    "reference"`——研究 Skill 人工录入单一来源价格。
+14. `providers/flyai.py:113-153` `_lodging`：FlyAI 实时库存的价格，
+    `price_type` 取决于 `_has_lodging_request_context`（上下文完整才可能
+    是 `"live"`，否则退化）。
+15. `flyai_inventory.py:506-548` `_amap_lodging_candidate`：AMap POI 兜底
+    住宿，价格永远 `amount=None`/`"verify-on-click"`；`planning.py:188-193`
+    显示它只在 `not inventory.lodgings`（FlyAI 一无所获）时才会被调用，
+    与 FlyAI 互斥、不会同时出现。
+16. `planning.py:794-829` `_merge_lodging_candidates`：三路（研究候选/
+    FlyAI/AMap）按 `lodging_id` 字符串精确匹配去重；候选文件的
+    `lodging_id` 前缀是 `"lodging"`（`candidates.py:1074`
+    `stable_id("lodging", city, name, check_in, check_out)`），FlyAI 的
+    前缀是 `"lodging-flyai"`（`providers/flyai.py:118`），两个前缀不同→
+    同一家实体酒店从两个来源来的记录 `stable_id` 必然不同，合并函数按
+    `lodging_id` 去重时永远认不出它们是同一家。
+17. 离线实测（直接调用真实的 `planning._merge_lodging_candidates`，脚本见
+    `.tmp/wt-ac2` 会话 scratchpad `lodging_merge_probe.py`，构造同名同城
+    同入离店日但价格不同的候选记录 + FlyAI 记录）：
+    ```
+    $ /usr/bin/python3 lodging_merge_probe.py
+    merged count: 2
+    lodging-flyai-demo001-samplehotel-2026-10-16 示例酒店 720.0 live
+    lodging-demo-city-samplehotel-2026-10-16-2026-10-18 示例酒店 680.0 reference
+    ```
+    两条记录都保留，无冲突判定、无去重、无价格比较——证实第 16 条的推理，
+    不是猜测。
+
+### 门票/景点门票（单一来源，人工录入，无任何 live producer）
+
+18. `candidates.py:881` `_apply_poi_candidate`（由 `add_poi_candidate`
+    L845 调用）→ L951/L957 一带：POI 价格只在人工传 `--price` 时写入，
+    `price_type` 恒为 `"reference"`（无价格则走 L967 `_append_unknown`）。
+19. `providers/amap.py:106`、`providers/amap.py:173`、
+    `providers/anysearch.py:67`、`providers/host_web.py:50`：三个研究期
+    adapter（AMap/AnySearch/host_web）产出 POI 时全部硬编码
+    `"price": None`——仓库里没有任何 live/API 门票价格来源。
+
+### schema / 校验 / 渲染
+
+20. `trip.schema.json:196-222` `price` 对象与 5 个 `price_type` 取值；
+    `trip.schema.json:736` claim `status` 枚举含 `conflict`。
+21. `render/html.py:41-42`、`render/html.py:71-72`：5 个 `price_type` 都有
+    中英文标签，含 `"estimate"`；但 `git grep -n '"estimate"'
+    plugins/china-trip-weaver/src` 只命中这两行标签定义本身——全仓没有
+    任何生产者写过 `price_type="estimate"`，是有定义无实现的枚举值。
+22. `validate_trip.py:410-422` `_check_prices`：只做内部一致性检查
+    （`unknown` 价必须 `amount=null`；price 的 `claim_id` 指向的 claim 的
+    `subject_ref` 必须等于该实体自己的 id），不跨实体比较价格是否一致。
+23. `render/html.py:677-695` `_evidence_section` 按
+    `render/html.py:100-103` 的 `CLAIM_RISK_ORDER` 排序（`conflict`权重
+    8，全表最高）——如果某天真有 `/price` claim 被标成 `conflict`，页面
+    会把它排在证据区最前面，但今天没有任何生产者会触发这一路径（见第
+    12 条）。
+
+验收：全部 23 条 file:line 均已用 `sed -n`/`git grep -n`/`Read` 逐条核对
+原文（过程见上）；第 17 条是离线可复现的脚本输出，不是代码推理。
