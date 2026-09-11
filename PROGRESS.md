@@ -5213,3 +5213,27 @@ mtime=Sep 7 14:20、`candidates.json` mtime=Sep 6 19:34，均早于本会话
 `shasum -a 256`（本轮未采集动工前基线，此处只作为下一轮复核的参照）：
 `request.json`=`676d639a55810bdf75280232a30f4a0edd634ab9eb16009da550c582b7afca20`、
 `candidates.json`=`a1beaa0ebf5d839fc44daef9f350304d48480ff0efeaad8216c536ed47d7f25b`。
+
+## 书 AD2「FlyAI 空结果误判」任务 0：核对与动工前记录（2026-09-11，worktree `.tmp/wt-ad2` 分支 `flyai-empty-envelope`）
+
+核对：基线 `Ran 632 tests` OK 0 skipped、secrets 0、pyflakes 0，与书面一致。
+真实 Key 直接调 `transport.execute("flyai", request)`：福州→武夷山
+9/26（短途）`status=1、data is None=True、message 长度=10`，且不含
+「结果为空/no result」——按现有代码确实会落进 `raise
+ContractMismatch("FlyAI success envelope changed")` 这一支，与书面描述
+逐项吻合；北京→福州 9/25（长途）`status=0、data is None=False、
+message 长度=7`（即"success"），长途航线成功不受影响，与 09-11 实网
+体检"长途 2 次成功"一致。两条路线均对上，不触发 BLOCKED。
+
+理解的目标：把 FlyAI `normalize()` 对 `status=1,data=null` 的空结果判定
+从"白名单关键词命中才算空结果"改成"命中关键词按空结果、不命中按
+`ProviderFailure` 降级"，不再让短途航线的失败提示被误判成
+`contract_mismatch`；顺带给 `doctor --probe` 补上 flight 能力探针，
+消除"lodging 全绿掩盖 flight 故障"的探针盲区。
+顺序：任务 1 先让新夹具与新测试红，任务 2 再改 `normalize`/`_probe_flyai`
+让其转绿，最后反向验证（改回旧判定应重新变红）。
+最大风险：`error_class` 只能在 `no_results`（health=ready）与
+`upstream_5xx`（health=degraded）二选一，`errors.py` 的 `ERROR_POLICIES`
+表决定了两者的 `health_status` 不同——书面要求 health 必须
+`degraded`，故只能选 `upstream_5xx`，即使这个名字字面意为"上游 5xx"、
+语义上不是完全精确的类比；此决定与理由记入任务 2。

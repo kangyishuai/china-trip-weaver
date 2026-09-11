@@ -149,6 +149,10 @@
       "sha256": "6e77137300d16c28b2ba69e18716b0c4d11f0a5a84416d2a52bf19b69bb9cdf5"
     },
     {
+      "path": "flyai/search_failed.json",
+      "sha256": "7fd7780058f7349f708809e4c1aad7e00b4c82e86c496723b09136efff521c42"
+    },
+    {
       "path": "flyai/stderr_error.json",
       "sha256": "21a620b6833bce9d73267a78af15802b8aa658fd35618577b9237411dc762f5e"
     },
@@ -317,7 +321,7 @@
       "sha256": "46fd6e92dfa195da7d89386332f94ba20a9279229c78bec2ec1eaf2296321f2e"
     }
   ],
-  "fixture_count": 79,
+  "fixture_count": 80,
   "generated_by": "scripts/build_provider_fixtures.py",
   "manifest_version": 1
 }

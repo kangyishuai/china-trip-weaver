@@ -251,6 +251,19 @@ class FlyAISubprocessTests(unittest.TestCase):
         self.assertEqual("contract_mismatch", result.error_class)
         self.assertEqual((), result.normalized_items)
 
+    def test_unrecognized_empty_envelope_message_degrades_instead_of_contract_mismatch(self):
+        fixture = load(ROOT / "tests" / "fixtures" / "providers" / "flyai" / "search_failed.json")
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            resolved = resolve_credentials({}, Path(temporary) / "missing")
+            transport = ReplayTransport(fixture["transport"])
+            result = FlyAIAdapter().query(request("flight"), ProviderContext(CLOCK, resolved, transport))
+        self.assertEqual("upstream_5xx", result.error_class)
+        self.assertEqual("degraded", result.health["status"])
+        self.assertIn("示例搜索失败", result.health["reason"])
+        self.assertEqual((), result.normalized_items)
+        self.assertEqual((), result.claims)
+        self.assertEqual(1, transport.calls)
+
     def test_node_preload_redirects_homedir_without_home_variable(self):
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
             resolved = resolve_credentials({}, Path(temporary) / "missing")
