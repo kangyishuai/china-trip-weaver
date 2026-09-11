@@ -5377,3 +5377,173 @@ meeting_city_not_display_name` 立刻红（`assertNotIn` 抓到未编码的机�
 分支与 `.tmp/wt-ad3` worktree 全程只读未碰。
 
 硬指标一、二均已满足，BLOCKED.md 本轮记「无」。
+
+## 书 AD2「FlyAI 空结果误判」任务 0：核对与动工前记录（2026-09-11，worktree `.tmp/wt-ad2` 分支 `flyai-empty-envelope`）
+
+核对：基线 `Ran 632 tests` OK 0 skipped、secrets 0、pyflakes 0，与书面一致。
+真实 Key 直接调 `transport.execute("flyai", request)`：福州→武夷山
+9/26（短途）`status=1、data is None=True、message 长度=10`，且不含
+「结果为空/no result」——按现有代码确实会落进 `raise
+ContractMismatch("FlyAI success envelope changed")` 这一支，与书面描述
+逐项吻合；北京→福州 9/25（长途）`status=0、data is None=False、
+message 长度=7`（即"success"），长途航线成功不受影响，与 09-11 实网
+体检"长途 2 次成功"一致。两条路线均对上，不触发 BLOCKED。
+
+理解的目标：把 FlyAI `normalize()` 对 `status=1,data=null` 的空结果判定
+从"白名单关键词命中才算空结果"改成"命中关键词按空结果、不命中按
+`ProviderFailure` 降级"，不再让短途航线的失败提示被误判成
+`contract_mismatch`；顺带给 `doctor --probe` 补上 flight 能力探针，
+消除"lodging 全绿掩盖 flight 故障"的探针盲区。
+顺序：任务 1 先让新夹具与新测试红，任务 2 再改 `normalize`/`_probe_flyai`
+让其转绿，最后反向验证（改回旧判定应重新变红）。
+最大风险：`error_class` 只能在 `no_results`（health=ready）与
+`upstream_5xx`（health=degraded）二选一，`errors.py` 的 `ERROR_POLICIES`
+表决定了两者的 `health_status` 不同——书面要求 health 必须
+`degraded`，故只能选 `upstream_5xx`，即使这个名字字面意为"上游 5xx"、
+语义上不是完全精确的类比；此决定与理由记入任务 2。
+
+## 书 AD2「FlyAI 空结果误判」任务 1：三处红测试（2026-09-11）
+
+`build_provider_fixtures.py` 新增 flyai 夹具 `search_failed`（`fly_empty_body()`
+换成 message「示例搜索失败」，`expected` 按拍板填 `error_class=
+upstream_5xx`/`health=degraded`），跑脚本后 `wrote 80 provider
+fixtures`，新文件只有 `tests/fixtures/providers/flyai/search_failed.json`
+一份，`manifest.json` 随之更新；顺手把 `test_providers.py:117` 硬编码的
+`79` 改成 `80`（这是夹具计数的机械同步，不是本书要修的判定逻辑，放在
+任务 1 一起做是为了让接下来的红测试只暴露"判定逻辑还没改"这一个原因，
+不被计数不同步的红混在一起）。`test_flyai_live.py` 新增
+`test_unrecognized_empty_envelope_message_degrades_instead_of_contract_mismatch`
+（直接调 `FlyAIAdapter().query()`，断言 `error_class=upstream_5xx`、
+`health.status=degraded`、`health.reason` 含"示例搜索失败"）；
+`test_credentials.py` 只新增一个 `def test_`（未改任何既有行，`git diff
+-- tests/test_credentials.py` 全部是 `+`）：
+`test_probe_flyai_adds_a_flight_capability_probe_and_reports_the_worse_layer`，
+用 `mock.patch.object(FlyAIAdapter, "query", side_effect=[...])` 让
+`_probe_flyai` 在不发真实请求的前提下跑两次（lodging/flight 各一次），
+断言返回里有 `capabilities.{lodging,flight}` 两个键。三处此刻红：
+
+```
+test_fixture_flyai_search_failed ... FAIL
+  AssertionError: 'degraded' != 'contract_mismatch'
+test_unrecognized_empty_envelope_message_degrades_instead_of_contract_mismatch ... FAIL
+  AssertionError: 'upstream_5xx' != 'contract_mismatch'
+test_probe_flyai_adds_a_flight_capability_probe_and_reports_the_worse_layer ... FAIL
+  AssertionError: 2 != 1   # query.call_count，现有 _probe_flyai 只探 lodging
+```
+
+pyflakes 0 行；`git diff -- tests | grep -E '^-\s*def test_'` 0 行。
+提交 `402c06b`。
+
+## 书 AD2「FlyAI 空结果误判」任务 2：改判定与探针、双向验证（2026-09-11）
+
+**改 `providers/flyai.py` `normalize()`**：把原来"`status=1`+`data=null`+
+消息命中关键词才判空结果、命中不了直接摔进`FlyAI success envelope
+changed`合同不匹配"，改成"先看是不是`status=1`+`data=null`+字符串
+消息这个大类，是的话再细分：关键词命中仍旧空结果；命中不了就
+`raise ProviderFailure("upstream_5xx", sanitize_text(message, 40))`"，
+不再落到合同不匹配那一支。`error_class` 在"任务 0"记录的两个候选
+（`no_results`/`upstream_5xx`）里选了 `upstream_5xx`：`errors.py` 的
+`ERROR_POLICIES["no_results"].health_status == "ready"`，而书面明确
+要求 health 必须是 `degraded`，只有 `upstream_5xx` 映射到 `degraded`，
+`no_results` 选了就会直接违反硬指标，这不是我更偏好哪个名字、是另一
+个选项在代码里根本走不通。
+
+**改 `cli.py` 的 `_probe_flyai`**（界限内唯一允许改的函数，新增的
+"取更差一档"逻辑写成函数体内的字面量字典 `layer_rank = {"passed": 0,
+"not_run": 1, "degraded": 2, "failed": 3}` 加一个内嵌 `max(...,
+key=...)`，没有在 cli.py 别处新增顶层函数，避免碰到"只改
+`_probe_flyai`"这条边界）：原来只发一次 `capability="lodging"` 探针，
+现在按书面"北京→上海，7 天后"再发一次 `capability="flight"`
+探针，`credential`/`contract`/`network`/`business` 四个既有键各自取
+两次里更差的一档（`credential` 两次必然相同，取哪个都一样），另加
+`capabilities:{lodging:{...}, flight:{...}}` 子对象保留两次各自的
+完整四键结果，不丢信息。
+
+硬指标一实测（真实 Key，同一条福州→武夷山 9/26 短途航线，改判定前后
+各跑一次 `FlyAIAdapter().query()`）：
+
+```
+# 改判定前（把 normalize() 临时改回旧条件）
+error_class='contract_mismatch'
+health.status='contract_mismatch'
+# 还原判定后
+error_class='upstream_5xx'
+health.status='degraded'
+health.reason starts with error_class: True
+normalized_items=()
+```
+
+本机 `ctw doctor --probe`（真实 Key）里 flyai 一项：
+
+```json
+"flyai": {
+  "business": "passed", "contract": "passed", "credential": "configured", "network": "passed",
+  "capabilities": {
+    "flight":   {"business": "passed", "contract": "passed", "credential": "configured", "network": "passed"},
+    "lodging":  {"business": "passed", "contract": "passed", "credential": "configured", "network": "passed"}
+  }
+}
+```
+
+`flight` 子探针今天报的是 `passed`：探针路线固定用"北京→上海"这条
+长途干线（书面拍板、也是 VariFlight 探针的既有惯例），跟本轮真正复现
+误判的"省内短途"航线不是同一类路线，这符合预期——`doctor --probe`
+的价值是"flight 能力从此有独立信号、不再被 lodging 全绿掩盖"，不是
+"必然复现这一个具体 bug"；BLOCKED 第 4 条描述的探针盲区（改之前
+lodging 全绿时 flight 故障完全不可见）已经消除。
+
+硬指标二实测：`/usr/bin/python3 scripts/build_provider_fixtures.py` →
+`wrote 80 provider fixtures`，`git status --short` 只剩两个源码文件
+被改、夹具目录零输出（零漂移）；两份 README 的夹具计数已改成 80
+（`README.md` "80 unmistakably synthetic provider fixtures"、
+`README.zh-CN.md` "80 个一眼可辨合成服务商夹具"）。四个语料命令重跑
+（本书唯一改到语料的是 provider 一项，另外三项用来确认没有被波及）：
+README demo（`ctw plan`→`validate`→`validate-html`→`scan_secrets.py`，
+`trip_sha256=7ea7888f5478bb949e2d565e653212dfb67ff8be041ee61f0d45386a2d9c788c`/
+`html_sha256=c2d07708cb0cc088afab02331642f91e40c58ef3c45db3862b45c480a8bca927`，
+与书 R2/AB2 等历史记录的基线值一致，`git status --short -- demo/` 空）、
+`scripts/build_plan_fixtures.py`（`git status --short -- tests/fixtures/e2e
+demo` 空）、`scripts/build_renderer_fixtures.py`（
+`journey_sha256=7ada91c09a6ef253a23f930b454a2d13510d9a4326f906f6299337ec0ce7628e`，
+与历史基线一致，空 diff）、`scripts/build_provider_fixtures.py`（上面已述，
+零漂移）。全量 `/usr/bin/python3 -m unittest discover -s tests` →
+`Ran 635 tests`（632 基线 + 3 个新 `def test_`）`OK` 0 skipped；
+`scan_secrets.py` → `0 finding(s) across 381 file(s)`；pyflakes
+（`plugins/china-trip-weaver/src tests scripts`）0 行。
+
+反向验证：把 `normalize()` 临时改回旧条件，`test_fixture_
+flyai_search_failed`/`test_unrecognized_empty_envelope_message_
+degrades_instead_of_contract_mismatch` 两项立刻变红（
+`'degraded' != 'contract_mismatch'`/`'upstream_5xx' !=
+'contract_mismatch'`）；改回新代码后两项复绿，全量与四语料命令按上面
+重新过了一遍，`git diff` 与改动前逐字节相同（确认反向验证没有在代码上
+留下痕迹）。
+
+`git diff fd2e618 --stat`（累计任务 1+2，PROGRESS.md 行数随写入实时变化，
+此处是任务 2 收尾时的快照）：
+
+```
+ BLOCKED.md                                         |  23 +++
+ PROGRESS.md                                        | 168 +++++++++++++++++++++
+ README.md                                          |   2 +-
+ README.zh-CN.md                                    |   2 +-
+ .../china-trip-weaver/src/china_trip_weaver/cli.py |  46 ++++--
+ .../src/china_trip_weaver/providers/flyai.py       |  12 +-
+ scripts/build_provider_fixtures.py                 |   1 +
+ tests/fixtures/providers/flyai/search_failed.json  |  61 ++++++++
+ tests/fixtures/providers/manifest.json             |   6 +-
+ tests/test_credentials.py                          |  22 +++
+ tests/test_flyai_live.py                           |  13 ++
+ tests/test_providers.py                            |   2 +-
+ 12 files changed, 338 insertions(+), 20 deletions(-)
+```
+
+全部落在「界限」允许的文件清单内；`git diff fd2e618 -- tests | grep -E
+'^-\s*def test_'` 0 行；测试数 635 ≥ 632，0 skipped。
+
+顺手发现两处记入 BLOCKED（均非阻塞，本书未改代码之外的文件）：一是
+上一条"价格解析严格度不对称"的推测被本轮真实抓取推翻（真正原因是
+空结果关键词白名单过窄，`_price()`/`require_numeric` 根本没被走到）；
+二是 `docs/design/adr/0017-transport-candidates.md:90` 引用的
+`fixture_count == 79` 现在过期（应为 80），该文件不在本书界限内，留给
+下一轮 docs-drift 类任务书。

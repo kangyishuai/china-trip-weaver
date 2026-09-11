@@ -224,6 +224,28 @@ class CredentialTests(unittest.TestCase):
                     layers["contract"], layers["network"], layers["business"],
                 ))
 
+    def test_probe_flyai_adds_a_flight_capability_probe_and_reports_the_worse_layer(self):
+        from china_trip_weaver.cli import _NDJSONProgress, _probe_flyai
+        from china_trip_weaver.providers.flyai import FlyAIAdapter
+
+        lodging_result = SimpleNamespace(error_class=None)
+        flight_result = SimpleNamespace(error_class="upstream_5xx")
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            credentials = resolve_credentials({}, Path(temporary) / "missing")
+            with mock.patch.object(
+                FlyAIAdapter, "query", side_effect=[lodging_result, flight_result],
+            ) as query:
+                report = _probe_flyai(credentials, ROOT, "configured", _NDJSONProgress(None))
+        self.assertEqual(2, query.call_count)
+        self.assertEqual(
+            {"credential", "contract", "network", "business", "capabilities"}, set(report),
+        )
+        self.assertEqual({"lodging", "flight"}, set(report["capabilities"]))
+        self.assertEqual("passed", report["capabilities"]["lodging"]["business"])
+        self.assertEqual("degraded", report["capabilities"]["flight"]["business"])
+        self.assertEqual("degraded", report["business"])
+        self.assertEqual("configured", report["credential"])
+
     def test_compatibility_variflight_key_only_used_without_canonical(self):
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
             path = Path(temporary) / "missing"

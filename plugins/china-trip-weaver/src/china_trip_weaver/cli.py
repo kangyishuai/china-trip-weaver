@@ -1559,7 +1559,17 @@ def _probe_flyai(
     clock = SystemClock()
     check_in = (clock.now().date() + timedelta(days=7)).isoformat()
     check_out = (clock.now().date() + timedelta(days=8)).isoformat()
-    request = ProviderRequest(
+
+    def probe_transport() -> FlyAISubprocessTransport:
+        return FlyAISubprocessTransport(
+            credentials,
+            cache_dir=repo_root / ".npm-cache",
+            temp_root=repo_root / ".tmp" / "doctor-flyai",
+            cwd=repo_root,
+            progress=progress.emit if progress.enabled else None,
+        )
+
+    lodging_request = ProviderRequest(
         request_id=stable_id("doctor-flyai", check_in),
         capability="lodging",
         parameters={"city": "北京", "check_in": check_in, "check_out": check_out},
@@ -1568,15 +1578,33 @@ def _probe_flyai(
         cache_policy="bypass",
         trace={"stage": "doctor"},
     )
-    transport = FlyAISubprocessTransport(
-        credentials,
-        cache_dir=repo_root / ".npm-cache",
-        temp_root=repo_root / ".tmp" / "doctor-flyai",
-        cwd=repo_root,
-        progress=progress.emit if progress.enabled else None,
+    lodging_result = FlyAIAdapter().query(lodging_request, ProviderContext(clock, credentials, probe_transport()))
+    flight_request = ProviderRequest(
+        request_id=stable_id("doctor-flyai-flight", check_in),
+        capability="flight",
+        parameters={
+            "origin": "北京", "destination": "上海", "date": check_in,
+            "from_ref": "doctor-flyai-bjs", "to_ref": "doctor-flyai-sha",
+        },
+        deadline_ms=8000,
+        as_of=check_in,
+        cache_policy="bypass",
+        trace={"stage": "doctor"},
     )
-    result = FlyAIAdapter().query(request, ProviderContext(clock, credentials, transport))
-    return _probe_layers(credential_status, result)
+    flight_result = FlyAIAdapter().query(flight_request, ProviderContext(clock, credentials, probe_transport()))
+
+    lodging_layers = _probe_layers(credential_status, lodging_result)
+    flight_layers = _probe_layers(credential_status, flight_result)
+    layer_rank = {"passed": 0, "not_run": 1, "degraded": 2, "failed": 3}
+    worse_layers = {
+        key: max(
+            (lodging_layers[key], flight_layers[key]),
+            key=lambda value: layer_rank.get(value, 0),
+        )
+        for key in ("credential", "contract", "network", "business")
+    }
+    worse_layers["capabilities"] = {"lodging": lodging_layers, "flight": flight_layers}
+    return worse_layers
 
 
 def _probe_amap(

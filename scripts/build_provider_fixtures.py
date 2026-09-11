@@ -687,6 +687,7 @@ def build() -> List[Dict[str, Any]]:
     fixtures.extend([
         fixture("flyai", "success", fly_req, response(fly_body([flight_item()])), credential_state="missing", item_count=1, schema_refs=[SCHEMA_REFS["leg"]], source=FLYAI_SOURCE, captured_at=FLYAI_CAPTURED_AT),
         fixture("flyai", "empty", fly_req, response(fly_empty_body()), error_class="no_results", source=FLYAI_KEYED_SOURCE + "; synthetic no-result envelope", captured_at=FLYAI_CAPTURED_AT),
+        fixture("flyai", "search_failed", fly_req, response(dict(fly_empty_body(), message="示例搜索失败")), health="degraded", error_class="upstream_5xx", source=FLYAI_MUTATION_SOURCE, captured_at=FLYAI_CAPTURED_AT),
     ])
     fixtures.extend(error_matrix(
         "flyai", fly_req, "not-json",

@@ -35,13 +35,11 @@ class FlyAIAdapter(BaseAdapter):
             raise ProviderFailure("forbidden", "FlyAI rejected the credential")
         if body.get("status") == 429:
             raise ProviderFailure("rate_limited", "FlyAI quota response")
-        if (
-            body.get("status") == 1
-            and body.get("data") is None
-            and isinstance(body.get("message"), str)
-            and ("结果为空" in body["message"] or "no result" in body["message"].lower())
-        ):
-            return Normalization((), ())
+        if body.get("status") == 1 and body.get("data") is None and isinstance(body.get("message"), str):
+            message = body["message"]
+            if "结果为空" in message or "no result" in message.lower():
+                return Normalization((), ())
+            raise ProviderFailure("upstream_5xx", sanitize_text(message, 40))
         if body.get("status") != 0 or body.get("message") != "success" or not isinstance(body.get("data"), dict):
             raise ContractMismatch("FlyAI success envelope changed")
         item_list = body["data"].get("itemList")
