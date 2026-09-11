@@ -133,8 +133,8 @@ class VariFlightBackend:
         errors: List[str],
         runtime_warnings: List[str],
     ) -> None:
-        dep_city = CITY_IATA.get(route.from_place["name"])
-        arr_city = CITY_IATA.get(route.to_place["name"])
+        dep_city = CITY_IATA.get(route.from_place.get("city") or route.from_place.get("name"))
+        arr_city = CITY_IATA.get(route.to_place.get("city") or route.to_place.get("name"))
         if dep_city is None or arr_city is None:
             errors.append("unsupported_city_code")
             return

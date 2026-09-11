@@ -92,8 +92,8 @@ class RailBackend:
             return None
         parameters = {
             "date": route.travel_date,
-            "from_name": route.from_place["name"],
-            "to_name": route.to_place["name"],
+            "from_name": route.from_place.get("city") or route.from_place.get("name"),
+            "to_name": route.to_place.get("city") or route.to_place.get("name"),
             "from_ref": route.from_place["ref_id"],
             "to_ref": route.to_place["ref_id"],
             "train_filter_flags": "GD",
@@ -1351,8 +1351,8 @@ def _resolve_rail(
             calls.append("rail12306.%s:%s:%s:%s" % (
                 backend.mode,
                 route.travel_date,
-                route.from_place["name"],
-                route.to_place["name"],
+                route.from_place.get("city") or route.from_place.get("name"),
+                route.to_place.get("city") or route.to_place.get("name"),
             ))
         selected: Optional[Mapping[str, Any]] = None
         selected_claims: Sequence[Mapping[str, Any]] = ()
@@ -1592,8 +1592,8 @@ def _deep_link_leg(route: RouteSpec, clock: Clock) -> Tuple[Mapping[str, Any], S
     arrive = depart + timedelta(minutes=duration)
     query = urllib.parse.urlencode({
         "linktypeid": "dc",
-        "fs": route.from_place["name"],
-        "ts": route.to_place["name"],
+        "fs": route.from_place.get("city") or route.from_place.get("name"),
+        "ts": route.to_place.get("city") or route.to_place.get("name"),
         "date": route.travel_date,
         "flag": "N,N,Y",
     })

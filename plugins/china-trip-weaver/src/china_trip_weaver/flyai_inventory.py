@@ -188,12 +188,14 @@ class FlyAIBackend:
                 )
 
         for route in routes:
+            from_city = route.from_place.get("city") or route.from_place.get("name")
+            to_city = route.to_place.get("city") or route.to_place.get("name")
             flight_result = self.query_flight(
-                route.from_place["name"], route.to_place["name"], route.travel_date,
+                from_city, to_city, route.travel_date,
                 route.from_place["ref_id"], route.to_place["ref_id"], clock,
             )
             calls.append("flyai.flight:%s:%s:%s" % (
-                route.travel_date, route.from_place["name"], route.to_place["name"],
+                route.travel_date, from_city, to_city,
             ))
             flights.extend(copy.deepcopy(list(flight_result.normalized_items)))
             claims.extend(copy.deepcopy(list(flight_result.claims)))

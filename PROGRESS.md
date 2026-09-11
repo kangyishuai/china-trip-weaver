@@ -5296,3 +5296,84 @@ FAILED (failures=2)
 `success.json` 夹具（真实命中车次，走 `12306-mcp` 而非 `_deep_link_leg`，
 参见任务 0 的最大风险条），不会经过我要改的 5 处消费者中的 fs/ts 那一处，
 所以新增测试特意换用零车次夹具单独构造场景，不与既有测试重叠或依赖。
+
+## 书「路线查询改用 city」任务 2：改五处并重生成（2026-09-11，完成）
+
+实现：5 处一律改成 `place.get("city") or place.get("name")`——没有直接改
+成 strict `["city"]`，也没有把回退写成 `["name"]`（会让
+`git grep 'from_place\["name"\]\|to_place\["name"\]'`
+命中回退表达式里的 `["name"]` 子串，摸到硬指标一的字面红线），而是回退也
+走 `.get("name")`，这样字面 grep 对`from_place["name"]`/`to_place["name"]`
+（方括号写法）精确为 0，语义上仍是"city 缺失或为空就退回 name"，对
+`test_variflight_live.py`（7 处 `SimpleNamespace` 路由无 `city` 键）与
+`test_flyai_live.py`（`synthetic_route()` 同样无 `city` 键，L551/574/597/
+620 的既有断言必须逐字不变）行为零影响。`flyai_inventory.py` 因
+`from_city`/`to_city` 在同一循环体内被查询与日志两处复用，提到局部变量
+里避免同一表达式写两遍；其余 4 处原地替换取值来源，不改变量结构。
+
+验证（实测命令与输出）：
+
+```
+$ git grep -c 'from_place\["name"\]\|to_place\["name"\]' -- plugins/china-trip-weaver/src
+（无输出，exit=1，0 命中）
+
+$ /usr/bin/python3 -m unittest tests.test_keyless_e2e tests.test_variflight_live tests.test_flyai_live
+Ran 76 tests in 7.904s
+OK   # 含两条新测试，且 test_variflight_live.py 全部 7 处裸 name 路由、
+     # test_flyai_live.py 的 synthetic_route() 均未受影响
+
+$ plugins/china-trip-weaver/scripts/ctw plan --request demo/grouped-departures/request.json ...(同任务书重生成命令)
+PLAN_COMPLETE ... calls=rail12306.fixture:2026-09-10:北京:上海,rail12306.fixture:2026-09-10:广州:上海
+trip_sha256=4be53526d0c77112344b3a0aa99f0168f03a2cf75ba54f0b2b5afb9c18206c96
+html_sha256=3715615d7514a8ace116235a72c68caf2d03f173d190606d0d115c1d85774162
+$ git status --short -- demo/grouped-departures/
+（无输出——trip.json/trip.html 与修复前逐字节相同）
+```
+
+如任务 0 已判断：分组示例的 `calls=` 摘要行从机场名变成了「上海」，但
+**trip.json/trip.html 本体零字节差异**——两条汇合腿在 `success.json` 夹具
+下命中的是 `12306-mcp` 真实车次（深链用夹具内部解析出的示例站名"上海示例
+站"，从不读 `from_place`），`_deep_link_leg` 回退从未触发，所以任务书
+"猜的"预期（trip.json/trip.html 会随之改变）没有发生；这是"其余语料零
+差异"的更强版本（连允许变的示例都没变），不算未达标。
+
+```
+$ /usr/bin/python3 scripts/build_plan_fixtures.py && ...build_provider_fixtures.py && ...build_renderer_fixtures.py && git status --short
+（三行 wrote.../packaged reference verified，git status 只剩源码 3 个文件，语料零差异）
+
+$ /usr/bin/python3 -m unittest discover -s tests
+Ran 634 tests in 94.777s
+OK
+
+$ /usr/bin/python3 scripts/scan_secrets.py
+secret scan: 0 finding(s) across 380 file(s)
+
+$ ~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src tests scripts | wc -l
+0
+
+$ git diff fd2e618 --stat
+PROGRESS.md | 83 ++
+.../flyai_inventory.py | 6 +-
+.../planning.py | 12 +-
+.../variflight_enrichment.py | 4 +-
+tests/test_keyless_e2e.py | 28 ++
+tests/test_variflight_live.py | 17 +
+6 files changed, 140 insertions(+), 10 deletions(-)   # 与"界限"允许的文件逐一对应
+
+$ git diff fd2e618 -- tests | grep -E '^-\s*def test_'
+（无输出，0 行，没有测试被删）
+```
+
+反向验证：把 `_deep_link_leg` 的 `fs`/`ts` 临时改回 `route.from_place["name"]`
+/`route.to_place["name"]` → `test_grouped_deep_link_fallback_and_calls_use_
+meeting_city_not_display_name` 立刻红（`assertNotIn` 抓到未编码的机场名
+落回 `booking_url`）→ 还原 → 该测试与
+`test_route_resolves_by_city_not_meeting_point_display_name` 一起复跑，绿。
+
+界限自检：`git status --short` 只剩源码 3 个文件待提交（本条记录本身
+提交后即清空）；`ref_id` 与所有页面展示名（`name`）字段全程未碰；
+`RouteSpec` 结构未改；未新增依赖、未跑 `install_local_plugin.sh`、未动
+版本号、未碰 CI；`flyai-empty-envelope`/`journey-location-svg` 两个并行
+分支与 `.tmp/wt-ad3` worktree 全程只读未碰。
+
+硬指标一、二均已满足，BLOCKED.md 本轮记「无」。
