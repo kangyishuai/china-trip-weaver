@@ -2023,6 +2023,48 @@ class JourneyReplaceTripTests(unittest.TestCase):
             self.assertEqual(self.journey["journey_id"], updated["journey_id"])
             self.assertEqual(2, updated["revision"]["number"])
 
+    def test_availability_claim_renders_seats_in_all_four_journey_views(self):
+        journey = copy.deepcopy(self.journey)
+        trip = journey["trips"][0]
+        leg = trip["transport_legs"][0]
+        leg["provider"] = "12306-mcp"
+        leg["booking_url"] = (
+            "https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc"
+            "&fs=北京示例站,BEX&ts=上海示例站,SHX&date=2026-10-01"
+        )
+        claim = copy.deepcopy(trip["claims"][0])
+        claim.update({
+            "claim_id": "claim-rail-availability",
+            "subject_ref": leg["leg_id"],
+            "field_path": "/availability",
+            "value": [
+                {"seat_name": "商务座", "availability": "2", "available": True, "price": 1000},
+                {"seat_name": "无座", "availability": "无", "available": False, "price": 300},
+            ],
+            "status": "verified",
+            "confidence": 0.95,
+            "mode": "live",
+        })
+        trip["claims"].append(claim)
+        leg["claim_ids"].append(claim["claim_id"])
+
+        rendered = render_journey(journey)
+        seat_line = "座位：商务座 有 · 无座 无"
+        segments = rendered.split('id="segment-overview"', 1)[1].split("</section>", 1)[0]
+        transport = rendered.split('id="transport-overview"', 1)[1].split("</section>", 1)[0]
+        timeline = rendered.split('id="day-timeline"', 1)[1].split("</section>", 1)[0]
+        checklist = rendered.split('id="booking-checklist"', 1)[1].split("</section>", 1)[0]
+        report = validate_journey_html(rendered, journey)
+
+        self.assertEqual(4, rendered.count(seat_line))
+        self.assertEqual(1, segments.count(seat_line))
+        self.assertEqual(1, transport.count(seat_line))
+        self.assertEqual(1, timeline.count(seat_line))
+        self.assertEqual(1, checklist.count(seat_line))
+        self.assertNotIn("商务座 CNY 1000", rendered)
+        self.assertNotIn("无座 CNY 300", rendered)
+        self.assertTrue(report.ok, [item.render() for item in report.errors])
+
 
 if __name__ == "__main__":
     unittest.main()

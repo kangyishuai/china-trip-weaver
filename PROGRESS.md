@@ -7427,3 +7427,9 @@ beeb906 -- tests | grep -E '^-\s*def test_'` 为 0 行，判断没有违反
 6. 最大风险：claim 只能经腿自己的 `claim_ids` 取首条，不能按 subject 全局扫描而误取旧 leg_id 撞车遗留 claim。
 7. 最大风险：Journey 四个入口必须复用同一纯函数，逐日入口仍需沿用现有 leg 索引；任何 `price` 数字都不能进入可见文本。
 8. 静态核对：`_seat` 字段与 `_has_inventory` 规则、`NO_INVENTORY`、success 夹具四档「有/有/有/无」均与任务书一致；无待裁决项。
+
+## 书 AJ2 任务 1：先写红测试（2026-09-12）
+
+`tests/test_renderer.py` 新增两条：带两档 availability claim 时要求 Trip 显示「商务座 有 · 无座 无」、不显示两档 CNY 票价且校验通过；无 claim 时要求复用函数返回空串且页面无「座位：」。`tests/test_journey.py` 文件末尾新增一条：同一 claim 在四个指定分区各显示一次、全页恰四次，不显示舱位票价且 Journey HTML 校验通过。
+
+三条改前实测均红：Trip 有 claim 为 `AssertionError: '座位：商务座 有 · 无座 无' not found`；Trip 无 claim 为 `ImportError: cannot import name '_rail_seat_line'`；Journey 为 `AssertionError: 4 != 0`。汇总：`Ran 3 tests in 0.090s`，`FAILED (failures=2, errors=1)`；生产实现未改。
