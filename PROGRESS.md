@@ -7426,3 +7426,9 @@ beeb906 -- tests | grep -E '^-\s*def test_'` 为 0 行，判断没有违反
 5. 基线：指定 9 项 Journey 测试 `Ran 9 tests ... OK`；全量 `Ran 667 tests in 49.539s ... OK`，0 skipped；secrets 0，pyflakes 零输出。
 6. 现状复现：原 Journey `known_cost_cny=4200`、中段原账本为 `1400`；删中段账本后装配为 `2800`，对应 item reason=`Trip does not contain a budget ledger`，与任务书吻合。
 7. 设计按任务书已拍板落点执行；当前无待裁决项。
+
+## 书 AJ1 任务 1：先写红测试（2026-09-12）
+
+紧跟原缺账本容忍测试新增三条：①删中段账本后，补算账本须与 demo 原账本 `canonical_json` 相等且 Journey `known_cost_cny` 不变；②`replace_trip_in_journey` 收到无账本替换 Trip 后须补出账本并通过 `validate_journey`；③三个 Trip 全有账本时装配须与 demo 逐字节相同。
+
+红绿基线：①②合跑 `Ran 2 tests in 0.041s`，`FAILED (failures=1, errors=1)`；①在读取装配后中段 `budget_ledger` 时 `KeyError`，②断言替换后的 Trip 含该键失败。③单跑 `Ran 1 test in 0.022s ... OK`。生产代码尚未修改，符合“两红一绿”。

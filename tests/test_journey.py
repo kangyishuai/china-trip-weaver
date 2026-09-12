@@ -1825,6 +1825,60 @@ class JourneyExtractAssembleTests(unittest.TestCase):
         report = validate_journey(reassembled)
         self.assertTrue(report.ok, [item.render() for item in report.errors])
 
+    def test_assemble_recomputes_a_missing_trip_budget_ledger_and_journey_known_cost(self):
+        trips = self.extract_all()
+        middle = trips[1]
+        original_ledger = copy.deepcopy(middle["budget_ledger"])
+        del middle["budget_ledger"]
+        middle["unknowns"] = [
+            item for item in middle["unknowns"]
+            if not str(item["field_path"]).startswith("/budget_ledger/")
+        ]
+
+        reassembled = assemble_journey_from_trips(
+            trips, self.request, FixedClock.from_iso(FIXED_NOW),
+        )
+        reassembled_middle = next(
+            item for item in reassembled["trips"]
+            if item["trip_id"] == middle["trip_id"]
+        )
+        self.assertEqual(
+            canonical_json(original_ledger),
+            canonical_json(reassembled_middle["budget_ledger"]),
+        )
+        self.assertEqual(
+            self.journey["budget_ledger"]["known_cost_cny"],
+            reassembled["budget_ledger"]["known_cost_cny"],
+        )
+
+    def test_replace_trip_recomputes_a_missing_budget_ledger(self):
+        replacement = self.extract_all()[1]
+        del replacement["budget_ledger"]
+        replacement["unknowns"] = [
+            item for item in replacement["unknowns"]
+            if not str(item["field_path"]).startswith("/budget_ledger/")
+        ]
+
+        updated = replace_trip_in_journey(
+            self.journey,
+            replacement,
+            1,
+            FixedClock.from_iso(FIXED_NOW),
+        )
+        replaced = next(
+            item for item in updated["trips"]
+            if item["trip_id"] == replacement["trip_id"]
+        )
+        self.assertTrue("budget_ledger" in replaced)
+        report = validate_journey(updated)
+        self.assertTrue(report.ok, [item.render() for item in report.errors])
+
+    def test_assemble_with_all_trip_ledgers_remains_byte_for_byte_unchanged(self):
+        reassembled = assemble_journey_from_trips(
+            self.extract_all(), self.request, FixedClock.from_iso(FIXED_NOW),
+        )
+        self.assertEqual(canonical_json(self.journey), canonical_json(reassembled))
+
     def test_cli_journey_extract_and_assemble_round_trip_the_checked_in_demo(self):
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
             output = Path(temporary)
