@@ -1457,13 +1457,15 @@ class JourneyContinuityTests(unittest.TestCase):
 
         rendered = render_journey(journey)
         station_line = "车站：北京示例站 → 上海示例站"
+        segments = rendered.split('id="segment-overview"', 1)[1].split("</section>", 1)[0]
         transport = rendered.split('id="transport-overview"', 1)[1].split("</section>", 1)[0]
         timeline = rendered.split('id="day-timeline"', 1)[1].split("</section>", 1)[0]
         checklist = rendered.split('id="booking-checklist"', 1)[1].split("</section>", 1)[0]
         report = validate_journey_html(rendered, journey)
 
         self.assertEqual(4, rendered.count(station_line))
-        self.assertEqual(2, transport.count(station_line))
+        self.assertEqual(1, segments.count(station_line))
+        self.assertEqual(1, transport.count(station_line))
         self.assertEqual(1, timeline.count(station_line))
         self.assertEqual(1, checklist.count(station_line))
         self.assertTrue(report.ok, [item.render() for item in report.errors])

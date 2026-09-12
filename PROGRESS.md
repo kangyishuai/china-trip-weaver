@@ -7342,3 +7342,17 @@ beeb906 -- tests | grep -E '^-\s*def test_'` 为 0 行，判断没有违反
 `tests/test_renderer.py` 只新增两个 `def test_`：带 `fs=北京示例站,BEX&ts=上海示例站,SHX` 的 12306-mcp 铁路腿要求 Trip 页面恰有一行站名且 `validate_html` 为绿；无站码的 `fs=北京&ts=上海` 要求 `rail_station_names` 返回 `None` 且页面无「车站：」。`tests/test_journey.py` 只新增一个 `def test_`：同一带站码腿要求 Journey 全页恰有四行，交通汇总/卡片所在 `transport-overview` 两行、`day-timeline` 一行、`booking-checklist` 一行，且 `validate_journey_html` 为绿。
 
 红测实测：`test_coded_12306_rail_deep_link_renders_station_names_and_validates` FAIL（`AssertionError: 1 != 0`）；`test_uncoded_rail_deep_link_does_not_render_station_names` ERROR（`ImportError: cannot import name 'rail_station_names'`）；`test_coded_12306_rail_deep_link_renders_stations_in_all_journey_views` FAIL（`AssertionError: 4 != 0`）。汇总：`Ran 3 tests in 0.405s`，`FAILED (failures=2, errors=1)`；三条均红。
+
+## 书 AI2 任务 2：实现与验收（2026-09-12）
+
+实现：`html.py` 新增纯函数 `rail_station_names(booking_url)`，用 `urlsplit`/`parse_qs` 解码 query，`fs`/`ts` 各对第一个逗号 `partition`，仅两端站名非空且站码都 `fullmatch([A-Z]{3})` 才返回二元组；Trip 交通卡在城市对后渲染站名。`journey_html.py` 导入该函数复用，分段交通列表、跨城交通卡、逐日 transport slot（按 `ref_id` 查 leg）、预订清单各渲染一处；priority actions 明确不加，确保 Journey 恰好四处。中英 labels 新增「车站」/`Stations`。`docs/design/07-renderer.md` 说明来源是深链、不是 schema 字段，缺码不显示也不推测。
+
+新测试转绿：三项 `Ran 3 tests in 0.415s ... OK`；两模块回归 `Ran 128 tests in 12.899s ... OK`。反向验证把函数临时短路为 `return None` 后三项均 FAIL（Trip `1 != 0`、纯函数期望元组却得 `None`、Journey `4 != 0`），`Ran 3 tests ... FAILED (failures=3)`；补丁还原、按既有缓存教训 `touch html.py`，`git grep TEMP_REVERSE_VERIFY` 0 命中，复跑 `Ran 3 tests in 0.412s ... OK`。
+
+生成与哈希：只用 PROGRESS「书 AD1」两条 `ctw plan` 命令和 `build_renderer_fixtures.py` 更新允许产物；分组示例 HTML 从 `97e0964867b92601341332c294039257651c5b4311f44ef500f22ae9c74b5a89` 变为 `6ec3dca87d71cfd66cdb777a921b005a41823f6806085edb231205a2e8301958`，只新增北京/广州两条真实站名；README demo `c2d07708...`、journey-16d `13962ec33...`、renderer manifest `ece5da2d...` 均逐字节不变。分组页站名行 2，两个占位 demo 均 0。
+
+六套语料：普通 demo、分组 demo、plan/provider/renderer/scheduler 四个 fixture builder 全部再跑一遍；运行前后 `git diff --binary -- demo tests/fixtures | shasum -a 256` 都是 `4ab3ef746c5ba01f7d0ba7321a2b49da933be0c606daaf72bf56e600eb90310f`，证明第二轮零新增差异；最终语料区只剩预期的 `demo/grouped-departures/trip.html` 修改。
+
+最终门禁：`discover -s tests` 为 `Ran 664 tests in 46.075s ... OK`，0 skipped；secrets `0 finding(s) across 384 file(s)`；pyflakes 0 行。两套 CLI 校验为 `HTML VALID ... errors=0` / `JOURNEY HTML VALID ... errors=0`。浏览器命令 `qa_renderer_browser.py demo/grouped-departures/trip.html --output .tmp/qa --viewports 375x812` 返回 `failures=[]`、`horizontalOverflow=0`、`sectionCount=12`、`handshakeAttempts=1`。
+
+范围门禁：`git diff c19461b -- tests | grep -E '^-\s*def test_'` 0 行；最终 diff 只含任务界限允许文件。实现与任务书裁定一致，无替代设计、无待裁决项。

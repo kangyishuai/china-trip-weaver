@@ -351,6 +351,13 @@ class RendererTests(unittest.TestCase):
 
         rendered = render_trip(trip)
 
+        self.assertEqual(
+            ("北京示例站", "上海示例站"),
+            rail_station_names(
+                "https://kyfw.12306.cn/otn/leftTicket/init"
+                "?fs=北京示例站,BEX&ts=上海示例站,SHX"
+            ),
+        )
         self.assertIsNone(rail_station_names(leg["booking_url"]))
         self.assertNotIn("车站：", rendered)
 

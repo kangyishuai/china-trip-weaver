@@ -21,6 +21,7 @@ from .html import (
     _price,
     _provider_label,
     _render_day_slots,
+    rail_station_names,
 )
 from .template import CSP, RENDERER_VERSION, attr, claim_source_html, dom_id, embedded_json, external_link, renderer_css, text
 
@@ -316,6 +317,7 @@ def _journey_labels(locale: str) -> Mapping[str, str]:
             "open_booking": "Open official booking page", "open_lodging": "Open lodging page",
             "segment": "Segment %d", "days": "%d days", "mode": "Data mode",
             "transport": "Transport", "lodging": "Lodging", "no_transport": "No transport leg",
+            "stations": "Stations",
             "no_lodging": "No overnight stay", "connection": "Next-segment handoff",
             "same_stay": "same stay continues", "changed_stay": "change stay after the boundary night",
             "departing_stay": "no following overnight stay", "included_transport": "boundary transport is in the next segment",
@@ -357,6 +359,7 @@ def _journey_labels(locale: str) -> Mapping[str, str]:
         "source": "追溯", "open_source": "查看来源", "open_booking": "打开官方购票页",
         "open_lodging": "打开住宿页", "segment": "第 %d 段", "days": "%d 天",
         "mode": "数据口径", "transport": "交通", "lodging": "住宿",
+        "stations": "车站",
         "no_transport": "本段无交通腿", "no_lodging": "本段无过夜住宿", "connection": "下一段衔接",
         "same_stay": "同一住宿延续", "changed_stay": "边界夜后更换住宿", "departing_stay": "下一段不再过夜",
         "included_transport": "跨段交通已计入下一段", "separate_transport": "跨段交通单独安排",
@@ -408,6 +411,7 @@ def _journey_days(journey: Mapping[str, Any]) -> Sequence[Mapping[str, Any]]:
     for trip_index, trip in enumerate(journey["trips"]):
         lodging_by_id = {item["lodging_id"]: item for item in trip["lodgings"]}
         claims = {claim["claim_id"]: claim for claim in trip["claims"]}
+        transport_legs = {leg["leg_id"]: leg for leg in trip["transport_legs"]}
         for day in trip["days"]:
             stay = lodging_by_id.get(day.get("stay_id"))
             result.append({
@@ -415,6 +419,7 @@ def _journey_days(journey: Mapping[str, Any]) -> Sequence[Mapping[str, Any]]:
                 "trip_id": trip["trip_id"],
                 "day": day,
                 "claims": claims,
+                "transport_legs": transport_legs,
                 "stay_name": stay["name"] if stay else None,
                 "anchor_id": dom_id("journey-day", "%s:%s" % (trip["trip_id"], day["day_id"])),
             })
@@ -602,7 +607,13 @@ def _day_timeline_section(
                 text(labels["day_label"] % (index + 1)), text(day["date"]), text(_weekday(day["date"], labels)),
                 text(day["city"]), text(labels["lodging"]), text(stay_text),
                 entry["trip_index"] + 1, text(labels["segment"] % (entry["trip_index"] + 1)),
-                _render_day_slots(day, entry["claims"], labels, anchored_claims=False),
+                _render_day_slots(
+                    day,
+                    entry["claims"],
+                    labels,
+                    anchored_claims=False,
+                    transport_legs=entry["transport_legs"],
+                ),
             )
         )
     return _section("day-timeline", labels["day_timeline"], "".join(cards), "panel panel-wide")
@@ -650,7 +661,12 @@ def _checklist_item_html(
         heading = "%s · %s" % (labels["lodging_action"], _display_source(item, labels))
     else:
         heading = "%s · %s" % (labels["unknown_action"], _display_source(item, labels))
-    detail = _checklist_detail(journey, item, labels)
+    detail = _checklist_detail(
+        journey,
+        item,
+        labels,
+        include_stations=prefix == "checklist",
+    )
     return '<li class="checklist-item" %s><span class="deadline">%s</span><h3>%s</h3>%s%s</li>' % (
         _trace_attributes(prefix, item), _deadline(item, labels),
         text(heading), detail, _trace_note(item, labels),
@@ -719,11 +735,12 @@ def _segments_section(journey: Mapping[str, Any], labels: Mapping[str, str]) -> 
         names = _trip_reference_names(trip)
         for leg in trip["transport_legs"]:
             service = " · %s" % leg["service_number"] if leg["service_number"] else ""
-            legs.append('<li>%s%s · %s → %s · %s</li>' % (
+            legs.append('<li>%s%s · %s → %s · %s%s</li>' % (
                 text(_enum_label(labels, "travel_mode", leg["travel_mode"])), text(service),
                 text(names.get(leg["from_ref"], labels["unknown"])),
                 text(names.get(leg["to_ref"], labels["unknown"])),
                 _time_or_date(leg.get("depart_at"), labels),
+                _rail_station_line(leg, labels),
             ))
         stays = [
             '<li>%s · %s — %s</li>' % (
@@ -782,12 +799,13 @@ def _transport_overview_section(journey: Mapping[str, Any], labels: Mapping[str,
             cards.append(
                 '<article class="entity-card" data-transport-index="%d" data-trip-index="%d" '
                 'data-leg-id="%s" data-travel-mode="%s"><h3>%s · %s · %s</h3>'
-                '<p>%s → %s</p><p>%s — %s</p>%s</article>' % (
+                '<p>%s → %s</p>%s<p>%s — %s</p>%s</article>' % (
                     index, trip_index, attr(leg["leg_id"]), attr(leg["travel_mode"]),
                     text(labels["segment"] % (trip_index + 1)),
                     text(_enum_label(labels, "travel_mode", leg["travel_mode"])), text(service),
                     text(names.get(leg["from_ref"], labels["unknown"])),
                     text(names.get(leg["to_ref"], labels["unknown"])),
+                    _rail_station_line(leg, labels),
                     _time_or_date(leg.get("depart_at"), labels), _time_or_date(leg.get("arrive_at"), labels),
                     _price(leg["price"], leg["leg_id"], labels),
                 )
@@ -866,6 +884,8 @@ def _checklist_detail(
     journey: Mapping[str, Any],
     item: Mapping[str, Any],
     labels: Mapping[str, str],
+    *,
+    include_stations: bool = False,
 ) -> str:
     entity = _entity_for_item(journey, item)
     if item["kind"] == "unknown":
@@ -873,14 +893,27 @@ def _checklist_detail(
         body = '<p>%s</p>' % text(labels["verify_detail"] % field)
     elif item["kind"] == "transport" and entity is not None:
         service = entity.get("service_number") or labels["unknown"]
-        body = '<p>%s · %s</p>' % (
+        body = '<p>%s · %s</p>%s' % (
             text(_enum_label(labels, "travel_mode", entity["travel_mode"])), text(service),
+            _rail_station_line(entity, labels) if include_stations else "",
         )
     elif item["kind"] == "lodging" and entity is not None:
         body = '<p>%s — %s</p>' % (text(entity["check_in"]), text(entity["check_out"]))
     else:
         body = ""
     return body + _source_link(journey, item, labels)
+
+
+def _rail_station_line(leg: Mapping[str, Any], labels: Mapping[str, str]) -> str:
+    if leg.get("travel_mode") != "rail":
+        return ""
+    stations = rail_station_names(leg.get("booking_url"))
+    if stations is None:
+        return ""
+    separator = "：" if labels["locale"] == "zh-CN" else ": "
+    return "<p>%s%s%s → %s</p>" % (
+        text(labels["stations"]), separator, text(stations[0]), text(stations[1]),
+    )
 
 
 def _source_link(
