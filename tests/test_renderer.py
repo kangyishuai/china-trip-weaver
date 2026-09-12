@@ -361,6 +361,55 @@ class RendererTests(unittest.TestCase):
         self.assertIsNone(rail_station_names(leg["booking_url"]))
         self.assertNotIn("车站：", rendered)
 
+    def test_availability_claim_renders_seats_without_seat_fares_and_validates(self):
+        trip = load(VALID / "multicity-static.json")
+        leg = trip["transport_legs"][0]
+        leg["provider"] = "12306-mcp"
+        leg["booking_url"] = (
+            "https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc"
+            "&fs=北京示例站,BEX&ts=上海示例站,SHX&date=2026-11-01"
+        )
+        claim = copy.deepcopy(trip["claims"][0])
+        claim.update({
+            "claim_id": "claim-rail-availability",
+            "subject_ref": leg["leg_id"],
+            "field_path": "/availability",
+            "value": [
+                {"seat_name": "商务座", "availability": "2", "available": True, "price": 1000},
+                {"seat_name": "无座", "availability": "无", "available": False, "price": 300},
+            ],
+            "status": "verified",
+            "confidence": 0.95,
+            "mode": "live",
+        })
+        trip["claims"].append(claim)
+        leg["claim_ids"].append(claim["claim_id"])
+
+        rendered = render_trip(trip)
+        report = validate_html(rendered, trip)
+
+        self.assertIn("座位：商务座 有 · 无座 无", rendered)
+        self.assertNotIn("商务座 CNY 1000", rendered)
+        self.assertNotIn("无座 CNY 300", rendered)
+        self.assertTrue(report.ok, [item.render() for item in report.errors])
+
+    def test_leg_without_availability_claim_does_not_render_seats(self):
+        from china_trip_weaver.render.html import _rail_seat_line
+
+        trip = load(VALID / "multicity-static.json")
+        leg = trip["transport_legs"][0]
+        leg["provider"] = "12306-mcp"
+        leg["booking_url"] = (
+            "https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc"
+            "&fs=北京示例站,BEX&ts=上海示例站,SHX&date=2026-11-01"
+        )
+        claims = {claim["claim_id"]: claim for claim in trip["claims"]}
+
+        rendered = render_trip(trip)
+
+        self.assertEqual("", _rail_seat_line(leg, claims, {"locale": "zh-CN", "seats": "座位"}))
+        self.assertNotIn("座位：", rendered)
+
 
 def _make_trip_test(path: Path):
     def test(self):

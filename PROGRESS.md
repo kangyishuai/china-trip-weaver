@@ -7442,3 +7442,30 @@ beeb906 -- tests | grep -E '^-\s*def test_'` 为 0 行，判断没有违反
 - 三套语料零差异：AD1 普通 demo 哈希 `7ea7888f.../c2d07708...`、分组 demo `8d7a6b49.../6ec3dca8...`；renderer builder 输出 9 Trip/12 HTML、Journey `7ada91c0.../13962ec3...`，各次限定 `git status` 均空。
 - 结果实测：补算账本与 demo 原账本 `canonical_json` 相等，Journey `known_cost_cny=4200`，调用者传入的中段 Trip 仍无账本（未被污染）；连接价格为 `unknown/None/None`。
 - 全量：`Ran 670 tests in 57.186s ... OK`，0 skipped；secrets `0 finding(s) across 385 file(s)`；pyflakes 零输出。删测 grep 0 行，`git diff --check` 零输出，兜底文案仍在 `journey.py` 命中 1 次。
+
+## 书 AJ2「Trip/Journey 显示 12306 座位余票」任务 0（2026-09-12，worktree `.tmp/wt-aj2`，分支 `render-seat-availability`）
+
+1. 目标：只取腿 `claim_ids` 中首条 `/availability` claim，按原序显示座位名与有/无；不显示舱位票价，无 claim 不显示。
+2. 页面：Trip 交通卡一处；Journey 交通汇总、交通卡、逐日时间轴、预订清单四处，与既有车站行相邻。
+3. 顺序：任务 0 核对并提交 → 任务 1 三条红测试并提交 → 任务 2 实现、生成、反向验证、全门禁并提交 → 推送。
+4. 基线：`Ran 667 tests in 49.455s`，`OK`，0 skipped；secrets `0 finding(s) across 385 file(s)`；pyflakes 0 行。
+5. 合成 Trip：挂两档 `/availability` 后当前页面「座位」计数 `0`；手工插入「座位：商务座 有 · 无座 无」后 `ctw validate-html` 为 `errors=0`。
+6. 最大风险：claim 只能经腿自己的 `claim_ids` 取首条，不能按 subject 全局扫描而误取旧 leg_id 撞车遗留 claim。
+7. 最大风险：Journey 四个入口必须复用同一纯函数，逐日入口仍需沿用现有 leg 索引；任何 `price` 数字都不能进入可见文本。
+8. 静态核对：`_seat` 字段与 `_has_inventory` 规则、`NO_INVENTORY`、success 夹具四档「有/有/有/无」均与任务书一致；无待裁决项。
+
+## 书 AJ2 任务 1：先写红测试（2026-09-12）
+
+`tests/test_renderer.py` 新增两条：带两档 availability claim 时要求 Trip 显示「商务座 有 · 无座 无」、不显示两档 CNY 票价且校验通过；无 claim 时要求复用函数返回空串且页面无「座位：」。`tests/test_journey.py` 文件末尾新增一条：同一 claim 在四个指定分区各显示一次、全页恰四次，不显示舱位票价且 Journey HTML 校验通过。
+
+三条改前实测均红：Trip 有 claim 为 `AssertionError: '座位：商务座 有 · 无座 无' not found`；Trip 无 claim 为 `ImportError: cannot import name '_rail_seat_line'`；Journey 为 `AssertionError: 4 != 0`。汇总：`Ran 3 tests in 0.090s`，`FAILED (failures=2, errors=1)`；生产实现未改。
+
+## 书 AJ2 任务 2：实现与验收（2026-09-12）
+
+- 实现：`html.py` 新增共用 `_rail_seat_line`，仅对 rail 腿按 `claim_ids` 原序取第一条 `field_path == "/availability"` 的 claim；逐项只读 `seat_name` 与布尔 `available`，忽略 `availability` 原文和 `price`。Trip 交通卡接在车站行后；Journey 导入复用，在分段概览、跨城交通、逐日时间轴、预订清单四处接在车站行后。中英 labels 为「座位」/`Seats`、有无/available-unavailable；07-renderer 同步规则。
+- 新测试：三项 `Ran 3 tests in 0.082s ... OK`；两模块回归 `Ran 131 tests in 43.026s ... OK`。Trip/Journey 合成页均不出现舱位 CNY 票价，两个校验器断言为绿。
+- 反向验证：临时把 `_rail_seat_line` 恒改为 `return None`，三项均 FAIL（Trip 缺座位行、无 claim 返回值 `'' != None`、Journey `4 != 0`），`Ran 3 tests ... FAILED (failures=3)`；还原并 `touch html.py` 后 `Ran 3 tests in 0.332s ... OK`。
+- 生成与哈希：分组 HTML `6ec3dca87d71cfd66cdb777a921b005a41823f6806085edb231205a2e8301958` → `2facd5cb4ab09bccf137893ada050147a5371eced70e594a71df75702d735472`，页面两条腿各显示「商务座 有 · 一等座 有 · 二等座 有 · 无座 无」；README demo 保持 `c2d07708...`，journey-16d 保持 `13962ec33...`，renderer manifest 保持 `ece5da2d...`。
+- 六套语料：两条 AD1 demo 命令与 plan/provider/renderer/scheduler 四个 builder 全部复跑；运行前后 `git diff --binary -- demo tests/fixtures | shasum -a 256` 均为 `73e66318e1b5e459295d0c11931814ae800e87aa402f4672ff046a20ffa5243b`，零新增差异；最终语料只改分组 HTML。
+- 校验与浏览器：`ctw validate-html` 为 `errors=0`，`ctw journey validate-html` 为 `errors=0`；375x812 QA 返回 `failures=[]`、`horizontalOverflow=0`、`sectionCount=12`、`handshakeAttempts=1`。
+- 最终门禁：全量 `Ran 670 tests in 47.148s ... OK`，0 skipped；secrets `0 finding(s) across 385 file(s)`；pyflakes 0 行。
