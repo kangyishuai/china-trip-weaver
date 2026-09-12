@@ -795,6 +795,91 @@ class ReplanTests(unittest.TestCase):
         self.assertNotIn("claim-g1902a-depart", claim_ids_in_trip)
         self.assertNotIn("claim-g1902a-price", claim_ids_in_trip)
 
+    def test_refresh_service_number_same_arrival_reports_each_departure(self):
+        base = load(ROOT / "demo/trip.json")
+        service_fuzhou_south = _refresh_service(
+            leg_id="leg-rail-live-g1902-fuzhou-south", service_number="G1902",
+            depart_at="2026-10-16T07:50:00+08:00", arrive_at="2026-10-16T09:30:00+08:00",
+            claim_ids=["claim-g1902-south-depart", "claim-g1902-south-price"],
+        )
+        service_fuzhou = _refresh_service(
+            leg_id="leg-rail-live-g1902-fuzhou", service_number="G1902",
+            depart_at="2026-10-16T08:12:00+08:00", arrive_at="2026-10-16T09:30:00+08:00",
+            claim_ids=["claim-g1902-fuzhou-depart", "claim-g1902-fuzhou-price"],
+        )
+        rail_result = _refresh_rail_result(legs=[service_fuzhou_south, service_fuzhou])
+        with self.assertRaises(ReplanError) as raised:
+            replan_trip(
+                base, _refresh_event(service_number="G1902", arrive_at="09:30"),
+                base_revision=base["revision"]["number"], user_locked_refs=[],
+                clock=FixedClock.from_iso("2026-10-15T12:00:00+08:00"), rail_result=rail_result,
+            )
+        self.assertEqual("refresh_service_ambiguous", raised.exception.code)
+        message = str(raised.exception)
+        self.assertIn("07:50", message)
+        self.assertIn("08:12", message)
+
+    def test_refresh_service_number_depart_at_disambiguates_and_copies_only_that_rows_claims(self):
+        base = load(ROOT / "demo/trip.json")
+        service_fuzhou_south = _refresh_service(
+            leg_id="leg-rail-live-g1902-fuzhou-south", service_number="G1902",
+            depart_at="2026-10-16T07:50:00+08:00", arrive_at="2026-10-16T09:30:00+08:00",
+            claim_ids=["claim-g1902-south-depart", "claim-g1902-south-price"],
+        )
+        service_fuzhou = _refresh_service(
+            leg_id="leg-rail-live-g1902-fuzhou", service_number="G1902",
+            depart_at="2026-10-16T08:12:00+08:00", arrive_at="2026-10-16T09:30:00+08:00",
+            claim_ids=["claim-g1902-fuzhou-depart", "claim-g1902-fuzhou-price"],
+        )
+        rail_result = _refresh_rail_result(
+            legs=[service_fuzhou_south, service_fuzhou],
+            claims=(
+                _refresh_claims(
+                    service_fuzhou_south["leg_id"],
+                    "claim-g1902-south-depart", "claim-g1902-south-price",
+                )
+                + _refresh_claims(
+                    service_fuzhou["leg_id"],
+                    "claim-g1902-fuzhou-depart", "claim-g1902-fuzhou-price",
+                )
+            ),
+        )
+        result = replan_trip(
+            base, _refresh_event(service_number="G1902", depart_at="07:50"),
+            base_revision=base["revision"]["number"], user_locked_refs=[],
+            clock=FixedClock.from_iso("2026-10-15T12:00:00+08:00"), rail_result=rail_result,
+        )
+        report = validate_trip(result.trip)
+        self.assertEqual(0, len(report.errors), [issue.render() for issue in report.errors])
+        leg = next(
+            item for item in result.trip["transport_legs"]
+            if item["leg_id"] == "leg-rail-fallback-6d95c810b44d"
+        )
+        self.assertEqual("2026-10-16T07:50:00+08:00", leg["depart_at"])
+        self.assertEqual(
+            ["claim-g1902-south-depart", "claim-g1902-south-price"], leg["claim_ids"],
+        )
+
+    def test_refresh_service_number_depart_at_without_matching_row_is_ambiguous(self):
+        base = load(ROOT / "demo/trip.json")
+        service_fuzhou_south = _refresh_service(
+            leg_id="leg-rail-live-g1902-fuzhou-south", service_number="G1902",
+            depart_at="2026-10-16T07:50:00+08:00", arrive_at="2026-10-16T09:30:00+08:00",
+        )
+        service_fuzhou = _refresh_service(
+            leg_id="leg-rail-live-g1902-fuzhou", service_number="G1902",
+            depart_at="2026-10-16T08:12:00+08:00", arrive_at="2026-10-16T09:30:00+08:00",
+        )
+        with self.assertRaises(ReplanError) as raised:
+            replan_trip(
+                base, _refresh_event(service_number="G1902", depart_at="07:55"),
+                base_revision=base["revision"]["number"], user_locked_refs=[],
+                clock=FixedClock.from_iso("2026-10-15T12:00:00+08:00"),
+                rail_result=_refresh_rail_result(legs=[service_fuzhou_south, service_fuzhou]),
+            )
+        self.assertEqual("refresh_service_ambiguous", raised.exception.code)
+        self.assertIn("no row matches", str(raised.exception))
+
     def test_suspend_removes_leg_and_recomputes_budget_and_unknowns(self):
         """Beyond the generic run_replan_fixture checks, assert directly on the leg,
         budget_ledger, and unknowns the way test_replan_refresh_resolves_to_live_service

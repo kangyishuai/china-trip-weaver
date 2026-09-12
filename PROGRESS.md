@@ -7568,3 +7568,9 @@ beeb906 -- tests | grep -E '^-\s*def test_'` 为 0 行，判断没有违反
 5. 真实 Key：9/26 福州→武夷山共 10 腿；G1902 恰两行，07:50→09:30 与 08:12→09:30，和任务书一致。
 6. 最大风险：两个过滤键必须求交且零命中不可回退，重复时刻行的既有首行选择、显式 `arrive_at` 和无 `service_number` 默认路径都不能漂移。
 7. 当前无待裁决项；采用任务书已拍板的先 `depart_at` 后 `arrive_at` 方案。
+
+## 书 AL1 任务 1：先写红测试（2026-09-12）
+
+`tests/test_replan.py` 只新增三个 `def test_`：同到 09:30 时歧义文案须含 07:50 与 08:12；`depart_at=07:50` 须选中该行、只复制其两条 claim 且通过 `validate_trip`；`depart_at=07:55` 零命中须保留 `refresh_service_ambiguous` 并含 `no row matches`。
+
+改前实测 `Ran 3 tests in 0.007s`，`FAILED (failures=2, errors=1)`：第一条缺 `07:50`，第二条抛现有歧义异常，第三条缺 `no row matches`；三条全部为红，生产代码未改。
