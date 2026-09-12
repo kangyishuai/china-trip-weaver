@@ -57,17 +57,33 @@
 - 审计：中英文座位行分别显示「未开售／候补／有／无」与 `not on sale yet/waitlist/available/unavailable`；基线 16 份 rail 夹具（任务书误写 15，详见 `BLOCKED.md`）item_count 16/16 零变化，只新增 `presale_star`。
 - 删测 grep 0 行、`git diff --check` 0；当前 diff 仅含任务书白名单中的 15 个文件，分组示例页零差异。当前验收轮次 1/6。
 
-## 现状速览（2026-09-12 实测，0.19.1）
+## 现状速览（2026-09-12 实测，0.20.0）
 
-- 版本：`0.19.1`，唯一来源是
+- 版本：`0.20.0`，唯一来源是
   `plugins/china-trip-weaver/.codex-plugin/plugin.json` 与
   `src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
   位置一律引用这两处之一，历史版本只以日期提及、不写字面值。
-- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 680 tests`，`OK`，0 skipped；
+- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 684 tests`，`OK`，0 skipped；
   `scripts/scan_secrets.py` 0 命中；
   `~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src
   tests scripts` 0 行。带假 Key（`ANYSEARCH_API_KEY=... unittest`）跑全量同样
-  680 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+  684 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+- 0.20.0（第二十二波，一本事件新键加一本夹具卫生）：refresh 事件带 `service_number`
+  时可再带 `depart_at`（完整 ISO 或 `HH:MM`，与 `arrive_at` 同款；
+  `_disambiguate_service_matches` 先按 `depart_at` 再按 `arrive_at` 逐层过滤，
+  `_matches_arrive_at` 改名 `_matches_time`），只剩一行即选中，否则
+  `refresh_service_ambiguous` 文案按 `(depart_at, arrive_at)` 排序列出「出发→到达」，
+  挑行键零命中时前缀 `no row matches depart_at=… arrive_at=…; `；默认选车、
+  `_apply_refresh`、schema 未动；ADR-0015 追加 Amendment，README 两份与 replan Skill 各加
+  半句。`build_scheduler_fixtures.py` `build_replans()` 现在生成全部 7 份 replan 金样（新增
+  refresh、suspend、suspend-first-leg 三个字典字面量，refresh 的 `rail_result` 抽成
+  `_refresh_rail_result()`），7 份逐字节不变，manifest `counts.replan` 4→7、files 32→35，
+  `test_manifest_covers_every_replan_fixture` 锁住路径集合；README 两份与 09-impl-map 同步
+  为 7。管理者验收：用 journey-r4 的 north 与 14:34 的真实 12306 结果回放，
+  `depart_at=07:50` 选中 G1902 福州南 07:50→09:30（fs=FYS）、3 条 claim、校验通过；只带
+  `arrive_at=09:30` 报歧义并列出 07:50→09:30 与 08:12→09:30 两对；`depart_at=07:55` 报
+  `no row matches`；默认路径仍选 G1648 08:00；15:17 实测 9/26 十趟 40 个席别仍全是 `*`，
+  真实行程未重刷、页面未重渲染（本波不改渲染）。AL2 执行者没写书名，合并时补上。
 - 0.19.1（第二十一波，两本都是修正）：12306 余票 `num="*"` 判为未开售——
   `providers/rail12306.py` `NO_INVENTORY` 加入 `"*"`，`_has_inventory("*")` 为 False、
   `_seat` 写 `available=false`，claim 原文照旧保留 `*`；`render/html.py` `_rail_seat_line`
