@@ -7325,3 +7325,14 @@ server.py` 的 `ticket_payload()` 换成按 `arguments["fromStation"]/
 "正确"），只改了这一行数字，未删除/未重写任何测试函数体，`git diff
 beeb906 -- tests | grep -E '^-\s*def test_'` 为 0 行，判断没有违反
 「只许新增」的实质用意（防止悄悄削弱既有测试覆盖）。
+
+## 书 AI2「Trip/Journey 火车腿显示到发站」任务 0（2026-09-12，worktree `.tmp/wt-ai2`，分支 `render-station-names`，HEAD c19461b）
+
+1. 目标：只从 12306 `booking_url` 的 `fs`/`ts` 读取站名；两端均有三位大写站码才显示，绝不改 schema 或猜站名。
+2. 页面：Trip 交通卡一处、Journey 交通汇总/交通卡/逐日时间轴/预订清单四处一致显示；占位深链全部不显示。
+3. 顺序：任务 0 基线核对并提交 → 任务 1 三条红测试并提交 → 任务 2 实现、语料重生成、反向验证和全门禁并提交 → 推送。
+4. 基线：`ctw render`=`c2d0770...`、`ctw journey render`=`13962ec...`，均与现有页面逐字节相同且 `errors=0`；手工各插一行站名后两套校验仍 `errors=0`。
+5. 门禁：`Ran 661 tests in 46.125s`、`OK`、0 skipped；secrets `0 finding(s) across 384 file(s)`；pyflakes 0 行。
+6. 最大风险：Journey 同一腿有四个渲染入口，尤其逐日 slot 只持有 `ref_id`，必须用 leg 索引且不能误显示占位 URL。
+7. 最大风险：HTML 已转义的链接不能拿来解析；应在渲染前对原始 `booking_url` 用标准 query parser，并严格验证两端 `[A-Z]{3}`。
+8. 现状代码核对：12306 `_deep_link` 写 `站名,站码`；planning `_deep_link_leg` 只写城市名，符合任务书；当前无待裁决项。
