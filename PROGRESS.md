@@ -7485,3 +7485,11 @@ beeb906 -- tests | grep -E '^-\s*def test_'` 为 0 行，判断没有违反
 - 六套语料：两条 AD1 demo 命令与 plan/provider/renderer/scheduler 四个 builder 全部复跑；运行前后 `git diff --binary -- demo tests/fixtures | shasum -a 256` 均为 `73e66318e1b5e459295d0c11931814ae800e87aa402f4672ff046a20ffa5243b`，零新增差异；最终语料只改分组 HTML。
 - 校验与浏览器：`ctw validate-html` 为 `errors=0`，`ctw journey validate-html` 为 `errors=0`；375x812 QA 返回 `failures=[]`、`horizontalOverflow=0`、`sectionCount=12`、`handshakeAttempts=1`。
 - 最终门禁：全量 `Ran 670 tests in 47.148s ... OK`，0 skipped；secrets `0 finding(s) across 385 file(s)`；pyflakes 0 行。
+
+## 书 AK1「refresh 清理同腿旧 claim」任务 0（2026-09-12，main 直改，HEAD 64919f3）
+- 目标：refresh 换腿时只删 `subject_ref` 等于目标 `leg_id` 的旧 claim，patch 逐条记录 remove，再追加当次 claim；其它 subject 一条不动。
+- 顺序：任务 0 核对并提交 → 任务 1 三条先红测试并提交 → 任务 2 实现、脚本重生成、文档、反向验证、全验收、提交并推送。
+- 最大风险：倒序删除后的索引与后续 add path 必须可回放，且不能按未引用状态扩大清理范围而误删其它腿或 POI 的 claim。
+- 基线：`/usr/bin/python3 -m unittest discover -s tests` → `Ran 673 tests in 56.194s`，`OK`，0 skipped；secrets `0 finding(s) across 385 file(s)`；pyflakes 零输出。
+- 金样：`operation_count=31`，base 同腿 2 条 deep-link claim，rail_result 2 条新 claim；实跑后同腿 4 条、patch 的 `/claims/` remove 为 0 条，与任务书完全吻合。
+- 当前无待裁决项；严格采用任务书已拍板的倒序 pop 方案，不新增私有函数。
