@@ -7641,3 +7641,83 @@ beeb906 -- tests | grep -E '^-\s*def test_'` 为 0 行，判断没有违反
 ## 书 AM1 任务 1：先写红测试（2026-09-12）
 
 新增 `tests/test_design_docs.py`，且只有一个 `def test_`：枚举 `plugins/china-trip-weaver/src/china_trip_weaver/**/*.py` 与 `scripts/*.py`，硬断言总数为 48，并逐文件检查 basename 出现在 `docs/design/09-impl-map.md`。改文档前实测 `Ran 1 test in 0.005s`、`FAILED (failures=1)`，失败输出恰列 7 个缺名：`anysearch_http.py`、`build_plan_fixtures.py`、`build_provider_fixtures.py`、`build_renderer_fixtures.py`、`build_scheduler_fixtures.py`、`qa_renderer_browser.py`、`scan_secrets.py`；生产代码与设计文档尚未改。
+
+## 书 AM1 任务 2：写文档前的代码证据（2026-09-12）
+
+以下均在改四份设计文档前用 `git grep -n` 命中；行号属于 HEAD `91786dd` 的只读代码/测试：
+
+```text
+planning.py:73:    limit: int = 30
+cli.py:345:    rail.add_argument("--limit", type=int, default=30)
+cli.py:1229:                "limited_num": args.limit,
+mcp_stdio.py:391:                            ticket_arguments["limitedNum"] = limited_num
+rail12306.py:29:NO_INVENTORY = frozenset(("", "*", "无", "--", "候补", "售罄", "not available"))
+rail12306.py:104:            raw_tickets, row_warnings = _filter_direct_rows(payload, station_candidates, request)
+rail12306.py:372:def _filter_direct_rows(
+rail12306.py:398:        warnings += ("station_rows_filtered:%d" % dropped,)
+rail12306.py:400:            warnings += ("station_rows_all_filtered",)
+mcp_stdio.py:746:        city_payload = _call_station_tool(client, body, "get-station-code-of-citys", city_arguments)
+mcp_stdio.py:756:            payload = _call_station_tool(client, body, "get-stations-code-in-city", {"city": city})
+```
+
+`CITY_IATA` 的 `git grep -n -A25 'CITY_IATA = {'` 从 `variflight_enrichment.py:18` 命中到 `:43`，中间 `:19`–`:42` 恰为 24 条城市→IATA 映射；其余航空证据：
+
+```text
+variflight.py:24:    "getFlightPriceByCities",
+variflight.py:112:                raise ProviderFailure(_live_error_class(rows.get("error_code")), ...)
+variflight.py:287:    def _live_price(
+variflight.py:326:def _live_error_class(error_code: Any) -> str:
+variflight.py:327:    if error_code == 10:
+variflight.py:328:        return "no_results"
+variflight.py:329:    if error_code == 12:
+variflight.py:330:        return "invalid_request"
+variflight.py:331:    return "upstream_5xx"
+variflight_enrichment.py:46:PRICE_CONFLICT_MIN_DELTA = 20.0
+variflight_enrichment.py:47:PRICE_CONFLICT_RATIO = 0.05
+variflight_enrichment.py:230:            self._enrich_price(
+variflight_enrichment.py:235:    def _enrich_price(
+variflight_enrichment.py:422:    threshold = max(PRICE_CONFLICT_MIN_DELTA, abs(flyai_amount) * PRICE_CONFLICT_RATIO)
+flyai.py:34:        if body.get("status") in (401, 403):
+flyai.py:36:        if body.get("status") == 429:
+flyai.py:38:        if body.get("status") == 1 and body.get("data") is None and isinstance(body.get("message"), str):
+flyai.py:40:            if "结果为空" in message or "no result" in message.lower():
+flyai.py:42:            raise ProviderFailure("upstream_5xx", sanitize_text(message, 40))
+```
+
+流水线、replan 与 Journey 证据：
+
+```text
+planning.py:211:    transport_legs, claims = _validate_meeting_anchor(
+planning.py:1503:_MEETING_FLIGHT_LEG_PREFIX = "leg-meeting-flight"
+planning.py:1552:def _promote_meeting_flight_leg(
+planning.py:1561:        if _meeting_leg_is_compliant(flight, meet_by, required_buffer)
+planning.py:1564:    chosen = min(candidates, key=lambda item: (item["arrive_at"], item.get("depart_at") or ""))
+planning.py:1594:def _validate_meeting_anchor(
+planning.py:1648:            "code": "MEETING_BUFFER_INSUFFICIENT",
+replan.py:349:def _select_refresh_service(
+replan.py:371:        feasible = [item for item in same_day if str(item["depart_at"]) >= earliest_depart]
+replan.py:374:            "refresh_overlap",
+replan.py:377:    return min(feasible, key=lambda item: (item["arrive_at"], item["depart_at"]))
+replan.py:380:def _disambiguate_service_matches(
+replan.py:389:    requested_depart_at = event.get("depart_at")
+replan.py:394:    requested_arrive_at = event.get("arrive_at")
+replan.py:412:        "refresh_service_ambiguous",
+replan.py:290:    claim_remove_indexes = sorted(
+replan.py:291:        (index for index, claim in enumerate(trip["claims"]) if claim.get("subject_ref") == leg["leg_id"]),
+journey.py:1665:def _with_missing_budget_ledgers(
+journey.py:1672:        if "budget_ledger" in trip:
+journey.py:1676:        ledger, budget_unknowns = _budget_ledger(
+journey.py:1712:    ordered_trips = _with_missing_budget_ledgers(ordered_trips)
+```
+
+7 份 replan 名称由 `tests/fixtures/scheduler/manifest.json:121`–`:145` 的 `git grep -n` 命中：`closure.json`、`delay.json`、`refresh.json`、`suspend-first-leg.json`、`suspend.json`、`user-delete.json`、`weather.json`；`:5` 为 `"replan": 7`。实现地图缺失文件的代码/测试命中包括 `cli.py:1287`/`:1708` 的 `.providers.anysearch_http`，四个 builder 各自 `generated_by` 行，`tests/test_journey.py:1669` 的 `qa_renderer_browser.py`，以及 `tests/test_credentials.py:284` 的 `scan_secrets.py`。当前仍无待裁决项，现可开始写文档。
+
+补充记录动笔前已查看的相邻命中：`rail12306.py:374`/`:375` 的 `station_candidates`/`request`、`:377`–`:380` 的 `from_resolved`/`to_resolved` 与 `from_prefix`/`to_prefix`、`:383`/`:384` 的 `from_station`/`to_station`；`planning.py:1537` 的 `meet_by` 缓冲计算、`:1545`/`:1546` 的同 `from_ref`/`to_ref` 过滤、`:1606` 的 `buffer_minutes`；`replan.py:234` 的 `_apply_refresh`、`:290`–`:296` 的旧 subject claims 倒序删除；`anysearch_http.py:29` 的 `AnySearchHTTPTransport`、`:76` 的 `method: "tools/call"`。这些行与上方主体证据一样均在写文档前只读核过，补录是为了让新文案里的标识符都有显式索引。
+
+## 书 AM1 任务 2：文档与验收进度（2026-09-12）
+
+- 四份文档已追平：04 增加 12306 行过滤/限量/未开售与飞常准第二价源/错误分档/FlyAI 空信封；06 增加 §5.4 汇合腿并补全 refresh 默认选车、消歧和旧 claim 清理；08 将 replan golden 改为 7 并列全名；09 补 `anysearch_http.py`、6 个脚本及 Journey 缺账本补算。
+- 文档覆盖测试转绿：`Ran 1 test in 0.002s ... OK`。反向验证时先暂存 09，临时删其唯一 `scan_secrets.py` 行后 `Ran 1 ... FAILED (failures=1)`，missing 只列 `['scan_secrets.py']`；按任务书 `git checkout -- docs/design/09-impl-map.md` 还原后 `Ran 1 ... OK`。
+- 14 个验收名的 `git grep -c -- <名> -- docs/design/0\*.md` 全部 exit 0：04 中 `_filter_direct_rows=2`、`station_rows_filtered=1`、`getFlightPriceByCities=1`、`PRICE_CONFLICT_MIN_DELTA=1`、`_live_error_class=1`、`CITY_IATA=1`；06 中 `_validate_meeting_anchor=1`、`MEETING_BUFFER_INSUFFICIENT=1`、`refresh_overlap=1`、`refresh_service_ambiguous=1`、`depart_at=2`；09 中 `_with_missing_budget_ledgers=1`、`anysearch_http.py=2`、`qa_renderer_browser.py=1`。
+- 完整验收第 1 轮：`Ran 685 tests in 59.507s ... OK`，0 skipped；secret scan `0 finding(s) across 387 file(s)`；pyflakes exit 0、诊断 0 行；`git grep -l -- '/Users/' -- docs/design` exit 1、输出为空；`git diff --check` exit 0。
+- 范围检查：`git diff 2983165 --name-only` 只列 `PROGRESS.md`、四份目标设计文档和 `tests/test_design_docs.py`；运行时 42 + scripts 6 = 48；新测试文件恰一个 `def test_`。当前无待裁决项。

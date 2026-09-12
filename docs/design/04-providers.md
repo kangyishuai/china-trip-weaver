@@ -106,9 +106,17 @@ normalized_items[], claims[], health, warnings[], raw_ref?, response_hash?
 
 station resolve 本身分四层，逐层退化，从不代用户猜站（`providers/mcp_stdio.py` 的 `_resolve_station_candidates`、`_resolve_rail_stations`）：精确站名 → 城市代表站 → 该城市 12306 收录的全部车站；三层都为空时，用 `geo.py` 的 `administrative_area_key()` 剥掉城市名的行政区后缀（市/县/区等）重试一次。歧义候选需要距离信号且高德可用时，先用 AMap `poi`（`city_limit=true`）按站名做同城搜索，同城找不到精确名再用 `city_limit=false` 的全国搜索、并把匹配点限制在城市中心 `STATION_MAX_DISTANCE_METERS`（80 公里）以内，兜住「车站在邻市但站名逐字相同」的情况（`station_distance.py`）。若剥后缀重试后仍四层皆空且已配置高德 Key，最后一层用 AMap `poi_around`（`station_distance.py` 的 `find_nearby_stations`，`types=150200`，半径 `NEARBY_STATION_SEARCH_RADIUS_METERS` 即 50 公里）在地点中心附近搜真实火车站，逐一用 12306 自己的车站表核对（`_resolve_nearby_station_candidates`）后才当作候选，结果的 `warnings` 带 `station_nearby_fallback`；12306 不认识的名字直接丢弃，不猜。
 
+`get-stations-code-in-city` 按 12306 自己的城市分组返回该城市收录的全部车站；直达 `get-tickets` 返回后，`_filter_direct_rows` 再按已解析候选站名或请求城市去行政区后缀后的前缀核对 `from_station`/`to_station`。丢行写 `station_rows_filtered:<数量>`，若全部丢完再写 `station_rows_all_filtered`，不把异地站行发布成候选。
+
+`ctw rail --limit` 默认 30，经 `limited_num` 原样转成 MCP 的 `limitedNum`；`_filter_direct_rows` 处理的是该有限结果集，因此过滤发生在 provider 限量返回之后。座席 `num="*"` 属于 `NO_INVENTORY`，表示未开售/当前无可售库存，不得当作有票。
+
 ### 4.3 航班
 
 以 `flight_no + departure airport + arrival airport + local departure date` 建 identity；FlyAI 提供候选/deep link，VariFlight 只补 status/comfort/weather/cross-price。币种、税费、舱位或日期不同不得直接比较；冲突写两个 claims 和 `status=conflict`，不做平均。[依据：开放问题 Q6](../research/05-open-questions.md#q6-航班价格库存状态跨-flyai-与-variflight-如何同一航段对齐)
+
+非候选模式下，`_enrich_price` 每条路线调用一次 `getFlightPriceByCities`，由 `_live_price` 按航班号把飞常准经济舱最低价映射到该路线的每个 FlyAI 航班，成为第二价源。价差严格大于 `max(PRICE_CONFLICT_MIN_DELTA, FlyAI 价 × PRICE_CONFLICT_RATIO)`（当前即 `max(20, FlyAI 价 × 5%)`）时，VariFlight 与 FlyAI 两条价格 claim 都标为 `conflict`；候选模式不调用该比价。
+
+飞常准城市码只接受 `CITY_IATA` 当前列出的 24 城。飞常准成功信封中若 `data` 是错误对象，`_live_error_class` 将 `error_code=10` 降级为 `no_results`、`error_code=12` 降级为 `invalid_request`，其余错误码降级为 `upstream_5xx`。FlyAI 若收到 `status=1`、`data=null` 且 message 不含「结果为空」或 `no result`，同样按 `upstream_5xx` 降级；明确空结果则保持空候选而不是伪造航班。
 
 ### 4.4 住宿
 

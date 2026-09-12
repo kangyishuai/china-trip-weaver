@@ -60,7 +60,7 @@ PASS 当且仅当：
 - 1/2 天城市周末各 3；2–7 天跨城各类 5；moving day/早晚交通 3。
 - overlapping opening windows、closed day、meal/rest、不同 pace、预算/步行限制、unreachable matrix、estimate matrix。
 - locked/accepted/booking、同分 deterministic tie、候选 >8 的 prune/threshold。
-- 下雨、闭馆、误车/延误、用户删点 4 个 replan golden。[依据：开放问题 Q11](../research/05-open-questions.md#q11-局部重排的最小-patchstability-contract-应是什么)
+- replan golden 共 7 个：`closure.json`、`delay.json`、`refresh.json`、`suspend-first-leg.json`、`suspend.json`、`user-delete.json`、`weather.json`。[依据：开放问题 Q11](../research/05-open-questions.md#q11-局部重排的最小-patchstability-contract-应是什么)
 
 Golden 不锁完整漂亮文案，只锁：selected IDs/order/start/end、hard constraints、matrix hops、excluded reason codes、objective vector、patch operations/stability/reverify set。
 

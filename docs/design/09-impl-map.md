@@ -33,6 +33,7 @@ plugins/china-trip-weaver/src/china_trip_weaver/
 │   ├── amap.py
 │   ├── amap_http.py
 │   ├── anysearch.py
+│   ├── anysearch_http.py
 │   ├── base.py
 │   ├── flyai.py
 │   ├── flyai_cli.py
@@ -56,6 +57,14 @@ plugins/china-trip-weaver/src/china_trip_weaver/
 ├── station_distance.py
 ├── validate_trip.py
 └── variflight_enrichment.py
+
+scripts/
+├── build_plan_fixtures.py
+├── build_provider_fixtures.py
+├── build_renderer_fixtures.py
+├── build_scheduler_fixtures.py
+├── qa_renderer_browser.py
+└── scan_secrets.py
 
 tests/
 ├── test_amap_live.py
@@ -178,7 +187,7 @@ tests/
 | `geo.py` | CRS 标记与单次 WGS84↔GCJ02 转换 | math only | §03.3；[决策 11](../research/04-design-insights.md#11-采用同时保存-provider-native-与规范化坐标不做无标记的单坐标) | known points/边界/unknown/double-conversion tests |
 | `matrix.py` | bounded route query plan、cell 合并与 coverage | geo/providers/evidence | §06.4；[决策 13](../research/04-design-insights.md#13-采用先真实-travel-time-matrix再排-time-windows不以直线连线冒充路线) | final hops covered；unreachable/estimate 不伪 live |
 | `pipeline.py` | P0–P6 状态机、checkpoint、取消与 stage invalidation | all core | §06.1–2 | resume/hash/version tests；失败不越 stage boundary |
-| `journey.py` | 长行程拆分为多个 1–7 天子 Trip、`extract`/`assemble`/`--replace-trip`、Journey 校验、按 `deadline_kind` 排序的预订/核验清单（`journey_booking_checklist`） | contracts/validate_trip | §01；[决策 4](../research/04-design-insights.md#4-采用一个版本化-itineraryjson-是所有层的唯一事实源) | 段拆分/连续性 golden；`ctw journey` 全子命令 tests |
+| `journey.py` | 长行程拆分为多个 1–7 天子 Trip、`extract`/`assemble`/`--replace-trip`、Journey 校验、按 `deadline_kind` 排序的预订/核验清单（`journey_booking_checklist`）；装配前由 `_with_missing_budget_ledgers` 只为缺失账本的子 Trip 按现有事实补算 `budget_ledger` | contracts/validate_trip | §01；[决策 4](../research/04-design-insights.md#4-采用一个版本化-itineraryjson-是所有层的唯一事实源) | 段拆分/连续性 golden；缺失账本补算；`ctw journey` 全子命令 tests |
 | `station_distance.py` | 铁路站点歧义候选的高德距离富化（`AMapStationDistanceEnricher`）：同城/跨城两遍 POI 查询、80 km 距离上限，以及站点全空时的 50 km 邻近车站回查（`find_nearby_stations`） | providers/amap、geo | §04.2 | 距离富化/邻近回查 fixtures 全过；无 Key 不发请求 |
 
 `validate_trip.py` 不尝试重新实现任意 JSON Schema 引擎；它实现本产品固定 v1 release-critical checks，并用设计期 `jsonschema` suite 交叉验证。完整 Draft 2020-12 校验保留在 CI/开发工具，不让默认 `python3` 依赖手动 venv。此取舍见 ADR-0002。
@@ -196,6 +205,7 @@ tests/
 | `amap_http.py` | AMap 的 stdlib HTTP 传输（`AMapHTTPTransport`）：按 capability 构造请求（`_request_contract`，含 `poi` 的 `types`/`city_limit` 与 `poi_around`），执行按 Trip 计的调用预算（`AMapCallBudget`） | base/credentials | §04.2、§04.5 | 4 capability 请求 shape 与预算耗尽 fixtures 全过 |
 | `variflight.py` | 调可选 MCP 航空增强并对齐 flight identity | base/credentials | §04.2–4.3；[Q6](../research/05-open-questions.md#q6-航班价格库存状态跨-flyai-与-variflight-如何同一航段对齐) | 9-tool fingerprint；无 Key 0 business call；conflict tests |
 | `anysearch.py` | 可选搜索补充，拒绝 auto-registration | base/credentials | §04.2–4.1；[Q8](../research/05-open-questions.md#q8-目的地调研应使用内置-webanysearch还是两者组合) | 默认 off；usage/402/429/auto-key fixtures 全过 |
+| `anysearch_http.py` | AnySearch 的有界标准库 HTTP transport，固定 origin、JSON-RPC `tools/call` 与响应上限 | base/credentials | §04.1、§04.5 | 缺凭据不发请求；redirect/timeout/network/wrong-shape fixtures 全过 |
 
 ## 5. Scheduler、replan 与 renderer
 

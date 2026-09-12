@@ -115,6 +115,10 @@ AMap query 一律使用 GCJ-02。无 Key/失败时：fresh cached cell → publi
 
 以下是实现前的设计稿：曾设想在满足显式开关、依赖探测、完整 matrix 三个前置条件后，按候选数/时间窗/跨日耦合等阈值切换到一个可选的第二排程引擎。该引擎从未接入 `planning.py` 或任何生产调用点，2026-09-08 已整体删除对应桥接模块与其专属测试；轻量确定性算法（`scheduler/light.py`）是唯一排程引擎，没有开关、没有阈值切换逻辑。若将来需要第二引擎，属于新的架构决策，应从 `planning.py` 的真实调用点开始，而不是恢复被删的桥接模块。[依据：ADR-0014](adr/0014-remove-ortools-bridge.md)（原阈值设计见[开放问题 Q10](../research/05-open-questions.md#q10-轻量排程与-or-tools-的切换阈值是什么)，因引擎已删除而不再适用）
 
+### 5.4 汇合腿（`meet_by`）
+
+FlyAI 候选解析并经 VariFlight 增强后，`_validate_meeting_anchor` 才校验各组抵达 `meet_by` 前是否仍留足 `buffer_minutes`。当前铁路腿不合规时，`_promote_meeting_flight_leg` 只在同一 `from_ref`/`to_ref` 路线中选满足缓冲的航班，并按 `arrive_at`、再按 `depart_at` 取最早抵达者；若铁路和航班都不能满足缓冲，则抛出 `MEETING_BUFFER_INSUFFICIENT`，并报告已知最早到达与实际缓冲。
+
 ## 6. P5：发布前语义校验
 
 依次运行；前一层 FAIL 仍可汇总后续独立错误，但最终不可渲染：
@@ -152,7 +156,7 @@ user_locked_refs[], optional allowed_changes[], now
 | local delay | 延迟 leg/slot | 从该点到下一个 locked anchor 之间 |
 | cross-city train/flight delay/cancel | 该 transport leg | 到达 day、接驳/check-in；只有跨午夜/失去住宿时才扩下一 day |
 | provider claim stale/conflict | 引用该 claim 的字段 | 依赖该字段的 slot/hop/price summary |
-| rail leg refresh（`replan.py` 的 `_apply_refresh`，[ADR-0015](adr/0015-refresh-event.md)） | 该 rail leg 与其 slot | 若新到达时间推迟，顺延同日之后的 slots；从调用方提供的 `rail_result` 里为新 leg 复制匹配的 claims |
+| rail leg refresh（`replan.py` 的 `_apply_refresh`，[ADR-0015](adr/0015-refresh-event.md)） | 该 rail leg 与其 slot | `_select_refresh_service` 默认排除会与前一 slot 重叠的行（无可行行报 `refresh_overlap`），再按 `arrive_at`、`depart_at` 选最早到达者；显式车次有多行时，`_disambiguate_service_matches` 依次用事件的 `depart_at`、`arrive_at` 挑行，仍非唯一则报 `refresh_service_ambiguous`；换腿时先删除旧 leg 的 claims，再只复制所选行的 claims；若新到达时间推迟，顺延同日之后的 slots |
 | transport leg suspend（`_apply_suspend`） | 该 leg 的 slot | 该 leg 本身、其 budget_ledger 行、引用该 leg 的 claims 与 unknowns 全部移除；非末尾腿被删时，后面腿的 `/transport_legs/N/...` unknowns 由 `_reindex_transport_leg_unknowns` 重新编号 |
 
 范围外 days/refs 不进入 provider requery 或 scheduler state。
