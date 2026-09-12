@@ -7506,3 +7506,5 @@ beeb906 -- tests | grep -E '^-\s*def test_'` 为 0 行，判断没有违反
 - 实测：第一次刷新目标腿只剩两条新 claim，patch remove 为 `/claims/6`、`/claims/5`，总操作数 33，claims 可完整回放；其它 subject 的 13 条 claim `canonical_json` 相同；第二次刷新仍只剩第二轮两条。
 - `/usr/bin/python3 scripts/build_scheduler_fixtures.py` 实跑输出 `20 golden, 8 no-solution, 4 replan` 且零差异；现有生成器没有 refresh。为不手改夹具，调用同脚本的 `write_group()` 生成 `refresh.json`，最终金样唯一差异为 `operation_count 31→33`，manifest 按真实四份生成集保持不变；理由与不可兼得的验收项详见 BLOCKED。
 - 全量 `Ran 676 tests in 68.538s ... OK`，0 skipped；secrets `0 finding(s) across 385 file(s)`；pyflakes 零输出。删测 grep 与 `git diff --check` 均零输出；当前 stat 只含任务书允许文件。
+- 持续目标第 2 次审计发现 `replan.py` 文件末尾比 `64919f3` 少一条空白行；已恢复，`git diff --unified=0 64919f3 -- replan.py` 现在只显示 `_apply_refresh` 新增的 8 行，严格消除函数范围外差异。fixture 的 `remove` grep 冲突再次由当前文件、生成器和 `test_scheduler` 三方证据确认，仍无范围内解法。
+- 第 2 轮全量复验：`Ran 676 tests in 92.181s ... OK`，0 skipped；secrets `0 finding(s) across 385 file(s)`；pyflakes 零输出。

@@ -549,3 +549,4 @@ def _find_transport_leg(trip: Mapping[str, Any], target_slot: Mapping[str, Any])
             if item["leg_id"] == ref_id:
                 return index, item
     raise ReplanError("suspend_not_transport", "suspend requires a transport leg")
+
