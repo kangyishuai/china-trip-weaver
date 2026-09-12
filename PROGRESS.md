@@ -57,17 +57,35 @@
 - 审计：中英文座位行分别显示「未开售／候补／有／无」与 `not on sale yet/waitlist/available/unavailable`；基线 16 份 rail 夹具（任务书误写 15，详见 `BLOCKED.md`）item_count 16/16 零变化，只新增 `presale_star`。
 - 删测 grep 0 行、`git diff --check` 0；当前 diff 仅含任务书白名单中的 15 个文件，分组示例页零差异。当前验收轮次 1/6。
 
-## 现状速览（2026-09-12 实测，0.20.0）
+## 现状速览（2026-09-12 实测，0.20.1）
 
-- 版本：`0.20.0`，唯一来源是
+- 版本：`0.20.1`，唯一来源是
   `plugins/china-trip-weaver/.codex-plugin/plugin.json` 与
   `src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
   位置一律引用这两处之一，历史版本只以日期提及、不写字面值。
-- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 684 tests`，`OK`，0 skipped；
+- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 685 tests`，`OK`，0 skipped；
   `scripts/scan_secrets.py` 0 命中；
   `~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src
   tests scripts` 0 行。带假 Key（`ANYSEARCH_API_KEY=... unittest`）跑全量同样
-  684 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+  685 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+- 0.20.1（第二十三波，纯文档加一条测试）：`docs/design/` 四份现役设计文档追平
+  0.16.0–0.20.0 的代码——04-providers §4.2 补 12306 直达行按到发站过滤
+  （`_filter_direct_rows`、`station_rows_filtered:<n>`／`station_rows_all_filtered`）、
+  `--limit` 默认 30 经 `limited_num` 转 MCP `limitedNum` 且过滤在其后、`num="*"` 属
+  `NO_INVENTORY`；§4.3 补飞常准 `getFlightPriceByCities` 第二价源（非候选模式每路线一次、
+  `_live_price` 按航班号取经济舱最低价、阈值 `max(PRICE_CONFLICT_MIN_DELTA, FlyAI 价×
+  PRICE_CONFLICT_RATIO)` 即 max(20, 5%)，严格大于才 conflict）、`CITY_IATA` 24 城、
+  `_live_error_class` 10→no_results／12→invalid_request／其余→upstream_5xx、FlyAI
+  `status=1,data=null` 非空结果按 upstream_5xx；06-pipeline 新增 §5.4 汇合腿
+  （`_validate_meeting_anchor` 在 FlyAI/VariFlight 之后、`_promote_meeting_flight_leg`
+  同路线合规航班取最早到达、`MEETING_BUFFER_INSUFFICIENT` 报最早到达与实际缓冲），§7.2
+  refresh 行补默认选车、`depart_at`/`arrive_at` 挑行、换腿删旧 claim；08-testing replan
+  golden 4→7 并列全名；09-impl-map 补 `providers/anysearch_http.py` 与 `scripts/` 六个脚本、
+  `journey.py` 行补 `_with_missing_budget_ledgers`。新增 tests/test_design_docs.py：运行时
+  42 个模块加 scripts 6 个脚本共 48 个文件名都必须出现在 09-impl-map。管理者验收：逐句
+  对码（两个 warning 的嵌套、阈值严格大于、经济舱 Y 最低价、24 城、错误码、汇合腿调用
+  顺序与报错字段、anysearch 固定 origin 与 4 MB 上限）全部属实；docs/design 无 `/Users/`、
+  无真实酒店名；删掉 09 的 `scan_secrets.py` 一行新测试立刻红。
 - 0.20.0（第二十二波，一本事件新键加一本夹具卫生）：refresh 事件带 `service_number`
   时可再带 `depart_at`（完整 ISO 或 `HH:MM`，与 `arrive_at` 同款；
   `_disambiguate_service_matches` 先按 `depart_at` 再按 `arrive_at` 逐层过滤，
