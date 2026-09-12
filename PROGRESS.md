@@ -2,17 +2,41 @@
 
 唯一的当前进度记录。2026-09-03 到 09-06 的逐轮任务书、实测证据、验收记录已归档，见「历史索引」。
 
-## 现状速览（2026-09-12 实测，0.17.0）
+## 现状速览（2026-09-12 实测，0.17.1）
 
-- 版本：`0.17.0`，唯一来源是
+- 版本：`0.17.1`，唯一来源是
   `plugins/china-trip-weaver/.codex-plugin/plugin.json` 与
   `src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
   位置一律引用这两处之一，历史版本只以日期提及、不写字面值。
-- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 653 tests`，`OK`，0 skipped；
+- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 655 tests`，`OK`，0 skipped；
   `scripts/scan_secrets.py` 0 命中；
   `~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src
   tests scripts` 0 行。带假 Key（`ANYSEARCH_API_KEY=... unittest`）跑全量同样
-  653 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+  655 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+- 0.17.1（第十七波，一本改行为加一次真实行程实战）：VariFlight 票价一次调用覆盖整条
+  路线——`_build_price_request` 改传 `subject_refs_by_service`（与 search 同构），
+  `_live_price` 对返回行里落在表中的每个 `flightno` 各产一条 `/price` claim（仍取
+  经济舱最低价），`_enrich_price` 拿全部 `route_flights` 逐班比价、逐班标 conflict
+  （FlyAI 那条经 `conflict_claim_ids`），comfort 仍只给 `_select_flight` 那一班；
+  每条路线仍 3 次调用；夹具 82（price.json 只改请求形状）。执行者与管理者各用真实
+  Key 验证：昆明→福州两班真实航班得 2 条 `/price`；管理者用会合 17:30 的副本实网
+  重规划真实行程：north 段 17 班航班全部带第二价（6 班判 conflict），两条被提升的
+  汇合航班（昆明组 FU6538、北京组 SC2203）都带 `/price`，80/62/18/7 不变。真实行程
+  火车票刷新实战（书 Z3 第三次派发）2026-09-12 跑通：`ctw rail` 9/26 福州→武夷山
+  10 趟 ready → `journey extract` → refresh 事件 → `replan --rail-result`（north
+  revision 2，trigger provider_change）→ `journey assemble --replace-trip`（journey
+  revision 3）→ render/validate/validate-html/浏览器 QA 全过，产物 `journey-r3.json`
+  与 `-r3.html` 只新增不覆盖，真实目录 45 个原文件字节不变；反向验证
+  `--base-revision 1` 报 revision_conflict；管理者重渲染 r3 页 sha256 逐字节相同。
+  链路缺陷两条（BLOCKED「书 Z3」）：①不指定 `service_number` 时
+  `_select_refresh_service` 只按最早到达取车、不看是否早于前一时段结束，10 趟里
+  9 趟撞 `refresh_overlap`，执行者显式指定 G1902（07:50→09:30，二等座 128.5）才
+  走通；②12306 对同车次同发车不同到站返回两行（G1902 到武夷山北 09:30 与到南平市站
+  09:15），`leg_id = stable_id("leg-rail", service, depart_at, from_ref, to_ref)`
+  不含站码，两行同 id，claims 6 条重复写入、3 条游离。管理者复核：自己 00:39 的
+  抓取同样两行同 id；即便 `--to 武夷山北` 查询，10 行里 8 行到达站仍是南平市（原
+  武夷山东，建阳区），12306 按城市分组返回；实网重规划的 north 段 9/26 腿因此选到
+  G2374 07:06→08:08 到南平市站的车。第十八波修。
 - 0.17.0（第十六波，两本都改行为）：汇合腿（分组出发各组到会合点那条腿）——
   `_validate_meeting_anchor` 的调用点从 `_resolve_rail` 之后挪到 FlyAI/VariFlight
   解析之后，签名加 `claims`/`flights`、返回 `(legs, claims)`；铁路腿留不出
