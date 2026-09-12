@@ -30,17 +30,39 @@
 - 审计：中英文座位行分别显示「未开售／候补／有／无」与 `not on sale yet/waitlist/available/unavailable`；基线 16 份 rail 夹具（任务书误写 15，详见 `BLOCKED.md`）item_count 16/16 零变化，只新增 `presale_star`。
 - 删测 grep 0 行、`git diff --check` 0；当前 diff 仅含任务书白名单中的 15 个文件，分组示例页零差异。当前验收轮次 1/6。
 
-## 现状速览（2026-09-12 实测，0.19.0）
+## 现状速览（2026-09-12 实测，0.19.1）
 
-- 版本：`0.19.0`，唯一来源是
+- 版本：`0.19.1`，唯一来源是
   `plugins/china-trip-weaver/.codex-plugin/plugin.json` 与
   `src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
   位置一律引用这两处之一，历史版本只以日期提及、不写字面值。
-- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 673 tests`，`OK`，0 skipped；
+- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 680 tests`，`OK`，0 skipped；
   `scripts/scan_secrets.py` 0 命中；
   `~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src
   tests scripts` 0 行。带假 Key（`ANYSEARCH_API_KEY=... unittest`）跑全量同样
-  673 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+  680 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+- 0.19.1（第二十一波，两本都是修正）：12306 余票 `num="*"` 判为未开售——
+  `providers/rail12306.py` `NO_INVENTORY` 加入 `"*"`，`_has_inventory("*")` 为 False、
+  `_seat` 写 `available=false`，claim 原文照旧保留 `*`；`render/html.py` `_rail_seat_line`
+  按 claim 项 `availability` 原文分三档：`*`→「未开售」（en `not on sale yet`）、
+  `候补`→「候补」（en `waitlist`）、其余按 `available` 显示「有／无」，Trip/Journey 两份
+  labels 各加两键；新夹具 `presale_star`（四档 `*`，item_count 1，腿价仍二等座 300，四档
+  `available` 全 False），夹具 85；provider-contracts 与 07-renderer 各加半句。refresh 换腿
+  时清旧 claim——`replan._apply_refresh` 在复制新 claim 前按 `subject_ref == leg_id` 倒序
+  pop 旧 claim 并逐条记 `/claims/<i>` remove，其它 subject 一条不动；金样 refresh.json
+  `operation_count` 31→33；ADR-0015 Amendment、README 两份、replan Skill 各加一句。
+  执行者纠出任务书两处失误：`build_scheduler_fixtures.py` 从不生成 refresh.json（它是
+  手写金样，执行者用同脚本的 `write_group()` 重写、manifest 不变），且夹具只存
+  `operation_count`、不存 patch 操作，`git grep remove` 永远为 0（按让步顺序保留「金样
+  只改操作数」）；既有 rail 夹具是 16 份不是 15。AK2 执行者把书名写成 AK1，合并时改回。
+  管理者验收：真实 Key 14:34 查 9/26 福州→武夷山 10 趟四档仍 `*`、`available` 全 False、
+  腿价 128.5；用 journey-r4.json 渲染 `福建中秋国庆16天行程-0.19.1.html`，四处座位行都是
+  「未开售」，校验零错误、QA 零失败；对 r4 的 north 默认刷新（G1648）后 9/26 腿从 8 条
+  claim（3 条被引用）变成恰 3 条全被引用、其它 23 条逐字节不变、总 31→26，patch 8 条
+  remove，第二轮默认刷新仍 3 条。新发现：G1902 在 12306 有两行（福州南 07:50 与福州 08:12，
+  同到 09:30），指定车次加 `arrive_at` 仍报 `refresh_service_ambiguous`，文案还说「到达
+  时间不同」——第二十二波加 `depart_at` 挑行。发版时管理者的脚本把 tag v0.19.1 先打在了
+  未升版本号的合并提交上，一分钟内删除 tag 与 Release 后重打。
 - 0.19.0（第二十波，一本改装配语义加一本页面新增）：`journey assemble`（首次装配与
   `--replace-trip` 都经 `assemble_journey_from_trips`）对缺 `budget_ledger` 的子 Trip
   用 planning `_budget_ledger` 现算（新私有函数 `_with_missing_budget_ledgers`，排序
