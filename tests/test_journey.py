@@ -1446,6 +1446,30 @@ class JourneyContinuityTests(unittest.TestCase):
         self.assertEqual(3, sum("data-route-index" in attrs for _, attrs in parser.all_attrs))
         self.assertEqual(3, sum("data-segment-index" in attrs for _, attrs in parser.all_attrs))
 
+    def test_coded_12306_rail_deep_link_renders_stations_in_all_journey_views(self):
+        journey = copy.deepcopy(self.result.journey)
+        leg = journey["trips"][0]["transport_legs"][0]
+        leg["provider"] = "12306-mcp"
+        leg["booking_url"] = (
+            "https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc"
+            "&fs=北京示例站,BEX&ts=上海示例站,SHX&date=2026-10-01"
+        )
+
+        rendered = render_journey(journey)
+        station_line = "车站：北京示例站 → 上海示例站"
+        segments = rendered.split('id="segment-overview"', 1)[1].split("</section>", 1)[0]
+        transport = rendered.split('id="transport-overview"', 1)[1].split("</section>", 1)[0]
+        timeline = rendered.split('id="day-timeline"', 1)[1].split("</section>", 1)[0]
+        checklist = rendered.split('id="booking-checklist"', 1)[1].split("</section>", 1)[0]
+        report = validate_journey_html(rendered, journey)
+
+        self.assertEqual(4, rendered.count(station_line))
+        self.assertEqual(1, segments.count(station_line))
+        self.assertEqual(1, transport.count(station_line))
+        self.assertEqual(1, timeline.count(station_line))
+        self.assertEqual(1, checklist.count(station_line))
+        self.assertTrue(report.ok, [item.render() for item in report.errors])
+
     def test_journey_html_rejects_loosened_csp(self):
         journey = self.result.journey
         rendered = render_journey(journey)

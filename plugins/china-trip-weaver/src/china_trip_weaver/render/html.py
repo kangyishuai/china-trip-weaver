@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import urllib.parse
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
 from ..validate_trip import validate_trip
@@ -134,6 +135,30 @@ def safe_output_name(trip_id: str) -> str:
     return cleaned[:64] + ".html"
 
 
+def rail_station_names(booking_url: Optional[str]) -> Optional[Tuple[str, str]]:
+    """Return station names only when both 12306 query endpoints carry station codes."""
+
+    if not isinstance(booking_url, str) or not booking_url:
+        return None
+    try:
+        query = urllib.parse.parse_qs(
+            urllib.parse.urlsplit(booking_url).query,
+            keep_blank_values=True,
+        )
+    except ValueError:
+        return None
+    names = []
+    for field in ("fs", "ts"):
+        values = query.get(field)
+        if not values:
+            return None
+        station_name, separator, station_code = values[0].partition(",")
+        if not separator or not station_name or re.fullmatch(r"[A-Z]{3}", station_code) is None:
+            return None
+        names.append(station_name)
+    return names[0], names[1]
+
+
 def _request_traveler_count(request: Mapping[str, Any]) -> int:
     groups = request.get("traveler_groups")
     if groups:
@@ -242,6 +267,7 @@ def _labels(locale: str) -> Mapping[str, str]:
             "skip": "Skip to itinerary", "travelers": "Travelers", "revision": "Revision",
             "generated": "Generated", "mode": "Data mode", "truth": "Truth and limits", "request": "Trip request",
             "transport": "Transport", "lodging": "Lodging", "days": "Daily itinerary",
+            "stations": "Stations",
             "locations": "Location overview", "unknowns": "Alternatives and unknowns",
             "evidence": "Evidence", "health": "Data-source status", "none": "None provided",
             "readonly": "Read-only planning only", "source": "Open source", "price_unknown": "Price unknown",
@@ -265,6 +291,7 @@ def _labels(locale: str) -> Mapping[str, str]:
         "locale": "zh-CN",
         "skip": "跳到行程正文", "travelers": "人数", "revision": "修订", "generated": "生成于", "mode": "数据口径",
         "truth": "真实性与边界", "request": "行程需求", "transport": "交通摘要",
+        "stations": "车站",
         "lodging": "住宿摘要", "days": "逐日行程", "locations": "位置概览",
         "unknowns": "备选与未知项", "evidence": "证据", "health": "数据源状态",
         "none": "无 / 未提供", "readonly": "仅提供只读规划", "source": "查看来源",
@@ -496,19 +523,32 @@ def _transport_section(
         cards.append(
             '<article class="entity-card" data-entity-id="%s" data-entity-kind="transport" data-travel-mode="%s" '
             'data-service-number="%s" data-from-ref="%s" data-to-ref="%s">'
-            '<h3>%s · %s</h3>%s<p>%s → %s</p><p>%s — %s · %s %s</p>'
+            '<h3>%s · %s</h3>%s<p>%s → %s</p>%s<p>%s — %s · %s %s</p>'
             '%s<p>%s</p>%s</article>' % (
                 attr(leg["leg_id"]), attr(leg["travel_mode"]), attr(leg["service_number"] or ""),
                 attr(leg["from_ref"]), attr(leg["to_ref"]),
                 text(_enum_label(labels, "travel_mode", leg["travel_mode"])), text(service),
                 _entity_badges(leg["leg_id"], states, unknown_refs, labels),
                 text(_reference_name(leg["from_ref"], names, labels)), text(_reference_name(leg["to_ref"], names, labels)),
+                _rail_station_line(leg, labels),
                 _time_or_unknown(leg["depart_at"], labels), _time_or_unknown(leg["arrive_at"], labels),
                 text(leg["duration_minutes"] if leg["duration_minutes"] is not None else labels["none"]), text(labels["minutes"]),
                 _price(leg["price"], leg["leg_id"], labels), links, _claim_links(leg["claim_ids"], claims, labels),
             )
         )
     return _section("transport-summary", labels["transport"], "".join(cards) or _empty(labels), "panel")
+
+
+def _rail_station_line(leg: Mapping[str, Any], labels: Mapping[str, str]) -> str:
+    if leg.get("travel_mode") != "rail":
+        return ""
+    stations = rail_station_names(leg.get("booking_url"))
+    if stations is None:
+        return ""
+    separator = "：" if labels["locale"] == "zh-CN" else ": "
+    return "<p>%s%s%s → %s</p>" % (
+        text(labels["stations"]), separator, text(stations[0]), text(stations[1]),
+    )
 
 
 def _lodging_section(
@@ -539,6 +579,7 @@ def _render_day_slots(
     labels: Mapping[str, str],
     *,
     anchored_claims: bool = True,
+    transport_legs: Optional[Mapping[str, Mapping[str, Any]]] = None,
 ) -> str:
     """Render one day's slot timeline as ``<li>`` items; shared with the Journey day-timeline.
 
@@ -551,16 +592,19 @@ def _render_day_slots(
     for slot in day["slots"]:
         lock = '<span class="lock-badge" data-locked="true">%s</span>' % text(labels["locked"]) if slot["locked"] else ""
         state = {"scheduled": "selected", "tentative": "alternative", "skipped": "skipped", "unknown": "unknown"}[slot["status"]]
+        leg = transport_legs.get(slot["ref_id"]) if transport_legs and slot["ref_id"] else None
+        station_line = _rail_station_line(leg, labels) if leg else ""
         slots.append(
             '<li class="timeline-item" data-slot-id="%s" data-ref-id="%s" data-slot-kind="%s" data-slot-status="%s" '
             'data-start-at="%s" data-end-at="%s">'
             '<span class="slot-time"><time datetime="%s">%s</time>–<time datetime="%s">%s</time></span>'
-            '<h3>%s</h3><div class="badge-row"><span class="status-badge" data-kind="%s">%s</span>%s%s</div>%s</li>' % (
+            '<h3>%s</h3><div class="badge-row"><span class="status-badge" data-kind="%s">%s</span>%s%s</div>%s%s</li>' % (
                 attr(slot["slot_id"]), attr(slot["ref_id"] or ""), attr(slot["kind"]), attr(slot["status"]),
                 attr(slot["start_at"]), attr(slot["end_at"]),
                 attr(slot["start_at"]), _clock(slot["start_at"]), attr(slot["end_at"]), _clock(slot["end_at"]),
                 text(slot["title"]), attr(slot["kind"]), text(_enum_label(labels, "kind", slot["kind"])),
                 _selection_badge(state, labels), lock,
+                station_line,
                 _claim_links(slot["claim_ids"], claims, labels, anchored=anchored_claims),
             )
         )

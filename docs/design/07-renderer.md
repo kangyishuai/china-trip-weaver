@@ -36,6 +36,8 @@ validate_html(trip.html, validated_trip) -> report
 11. `provider-health`：所有 provider version/mode/status/check time/reason。
 12. `footer`：只读/不保证库存价格/不下单实名支付退改声明，schema/renderer version。
 
+Trip 与 Journey 的铁路腿仅在 12306 `booking_url` 深链的 `fs`/`ts` 两端都包含三位大写站码时显示到发站名；站名来源于该深链，不是 `transportLeg` schema 字段，缺码时不显示也不推测。
+
 每个展示的时间、价格、车次、开放状态、路线时长必须能从 embedded Trip 精确定位；模板不得引入经验数字。
 
 ## 3. 手机优先与可访问性
