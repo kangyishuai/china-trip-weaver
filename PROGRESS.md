@@ -7559,3 +7559,12 @@ beeb906 -- tests | grep -E '^-\s*def test_'` 为 0 行，判断没有违反
 - 全量 `Ran 676 tests in 68.538s ... OK`，0 skipped；secrets `0 finding(s) across 385 file(s)`；pyflakes 零输出。删测 grep 与 `git diff --check` 均零输出；当前 stat 只含任务书允许文件。
 - 持续目标第 2 次审计发现 `replan.py` 文件末尾比 `64919f3` 少一条空白行；已恢复，`git diff --unified=0 64919f3 -- replan.py` 现在只显示 `_apply_refresh` 新增的 8 行，严格消除函数范围外差异。fixture 的 `remove` grep 冲突再次由当前文件、生成器和 `test_scheduler` 三方证据确认，仍无范围内解法。
 - 第 2 轮全量复验：`Ran 676 tests in 92.181s ... OK`，0 skipped；secrets `0 finding(s) across 385 file(s)`；pyflakes 零输出。
+
+## 书 AL1「refresh 事件加 depart_at 消歧」任务 0（2026-09-12，main@b6d63e0）
+1. 目标：显式车次多行时支持 `depart_at` 与 `arrive_at` 逐层过滤；歧义文案按出发→到达列候选，默认选车与既有到达时间行为不变。
+2. 顺序：任务 0 基线和真实数据核对并提交 → 任务 1 三条红测试并提交 → 任务 2 两函数、四文档、反向验证和全验收并提交 → 推送查 CI。
+3. 基线：`Ran 680 tests in 86.175s`、`OK`、0 skipped；secrets `0 finding(s) across 386 file(s)`；pyflakes 0 行。
+4. 合成复现：G1902 两行 07:50/08:12 同到 09:30，`arrive_at=09:30` 得 `refresh_service_ambiguous`，文案列两次完整 09:30 到达时间。
+5. 真实 Key：9/26 福州→武夷山共 10 腿；G1902 恰两行，07:50→09:30 与 08:12→09:30，和任务书一致。
+6. 最大风险：两个过滤键必须求交且零命中不可回退，重复时刻行的既有首行选择、显式 `arrive_at` 和无 `service_number` 默认路径都不能漂移。
+7. 当前无待裁决项；采用任务书已拍板的先 `depart_at` 后 `arrive_at` 方案。
