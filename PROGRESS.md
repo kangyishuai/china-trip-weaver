@@ -7625,3 +7625,15 @@ beeb906 -- tests | grep -E '^-\s*def test_'` 为 0 行，判断没有违反
 - 反向验证：临时注掉 `depart_at` 过滤后②报 `refresh_service_ambiguous`、③缺 `no row matches`，`Ran 2 tests in 0.005s`、`FAILED (failures=1, errors=1)`；逐字还原并 `touch replan.py` 后两项 `Ran 2 tests in 0.013s ... OK`，临时标记零命中。
 - 全量 `Ran 683 tests in 80.236s ... OK`，0 skipped；secrets `0 finding(s) across 386 file(s)`；pyflakes 零输出。四份文档 `depart_at` 计数为 README 1、README.zh-CN 1、ADR 8、Skill 1；删测 grep 0，`git diff --check` 零输出，范围只含任务书白名单文件。
 - 实现采用任务书拍板方案，无替代设计或待裁决项；默认选车、`_apply_refresh`、schema、夹具、CI、版本号均未改。
+
+## 书 AM1「0.16.0–0.20.0 设计文档追平」任务 0（2026-09-12，main@2983165，≤10 行）
+
+1. 目标：只把代码已实现且可 `git grep` 取证的铁路、航班、汇合腿、replan、Journey 账本与实现地图行为追平到四份现役设计文档，并用一条文档覆盖测试锁住 48 个运行时/脚本文件。
+2. 顺序：任务 0 基线核对并提交 → 任务 1 新测试先红并提交 → 任务 2 逐条取证后写文档、反向验证、全量验收并提交 → push 与 CI。
+3. 不改代码、README、Skill、ADR、schema；只写任务书白名单文件，拿不准的写 `BLOCKED.md` 后跳过。
+4. 每句新增行为先把代码中的函数名、常量、warning、错误码和数字命中记录在本文件；查不到的不写。
+5. 最大风险：设计文案把多个层次的真实行为压成一句后夸大适用范围，尤其 12306 双端过滤、VariFlight 错误分档、汇合腿候选顺序和 replan claim 清理。
+6. 基线：HEAD=`2983165`、branch=`main`、worktree clean；全量 `Ran 684 tests in 46.488s`、`OK`、0 skipped；secret scan `0 finding(s) across 386 file(s)`。
+7. 静态门：`uvx --from pyflakes pyflakes plugins/china-trip-weaver/src scripts tests` exit 0、诊断 0 行；系统 Python未预装 pyflakes，故用机器已有 uvx 临时运行，未改仓库或系统 Python 环境。
+8. 漂移复现：四份目标文档逐份执行 `git grep -c` 查 `_filter_direct_rows|getFlightPriceByCities|_validate_meeting_anchor|refresh_overlap|anysearch_http.py`，均 exit 1、输出为空；`git grep -l -- '/Users/' -- docs/design` 同为 exit 1、输出为空。
+9. 文件数现状：运行时 `*.py` 42 个、`scripts/*.py` 6 个，合计 48；当前无待裁决项。
