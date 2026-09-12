@@ -6938,3 +6938,21 @@ journey-r3.json:
 此前两次「书 Z3」止步记录的先例（`8961bad`/`19f9a36`，均是单次
 session 单次提交），本轮任务 0＋1＋2 只提交一次，commit message 里
 写清覆盖范围。
+
+## 书 AH1「refresh 默认选车过滤可行性」任务 0（2026-09-12，main 直改）
+
+- 目标：`_select_refresh_service` 无 `service_number` 时先过滤「发车 ≥
+  前一时段结束」再取最早到达；全部不可行才报 `refresh_overlap`（带候选数
+  与结束时间）；`service_number` 命中多行且到达时间不同时报新码
+  `refresh_service_ambiguous`，`arrive_at` 可挑一行；有 `service_number`
+  时不做可行性过滤，保留 L545 既有语义。
+- 顺序：不静默选错 > 默认路径自己找到可行车 > 既有错误码语义不变 > 做得快。
+- 最大风险：①过滤边界用 `>=` 还是 `>` 会不会误伤 L545——已确认 L545 走
+  `service_number` 分支不受影响；②`arrive_at` 消歧格式是猜的，用「过滤后
+  必须恰好一行否则一律 ambiguous」兜底避免静默选错。
+- 任务 0 复现：`leg-rail-fallback-e67d77f564f5`（前一时段 16:00 结束）+
+  两候选（A 14:30 发/18:30 到，B 16:00 发/19:00 到）、事件不带
+  `service_number` → 现状选中到达更早的 A → `ReplanError refresh_overlap`
+  「refreshed service departs before the previous slot ends」，与任务书
+  描述一致；基线 655 测试 OK、secrets 0、pyflakes 0，与任务书数字全部
+  吻合。
