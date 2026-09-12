@@ -57,7 +57,8 @@ The version literal lives in exactly two files, and they must always agree:
 `plugins/china-trip-weaver/.codex-plugin/plugin.json` (the `version` field) and
 `plugins/china-trip-weaver/src/china_trip_weaver/__init__.py` (`__version__`).
 Every other reference in the repository imports `__version__` rather than
-repeating the literal.
+repeating the literal; only the per-version entries in `PROGRESS.md` and the
+git tags carry version numbers as an index.
 
 1. Bump the version in both files to the same new value.
 2. Run the full check suite from [Running the checks](#running-the-checks)
@@ -68,7 +69,9 @@ repeating the literal.
    cache and the source tree now agree (exit 0, zero differences).
 4. Commit the version bump, then tag it:
    `git tag -a v<version> -m "Release <version>"`.
-5. Push the commit and the tag: `git push origin main --tags`.
+5. Push the commit, then push that one tag by name:
+   `git push origin main && git push origin v<version>`. Never `--tags`: a
+   local-only backup tag must not reach GitHub.
 6. Publish the GitHub Release from the tag:
    `gh release create v<version> --generate-notes`.
 
