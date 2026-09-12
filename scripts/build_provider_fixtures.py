@@ -167,6 +167,12 @@ RAIL_TICKET = {
     ],
     "dw_flag": ["示例编组", "示例静音车厢"],
 }
+# Same-fixture stand-in for a second origin city (grouped-meeting scenarios replay this file for every route).
+RAIL_TICKET_GUANGZHOU_SHANGHAI = copy.deepcopy(RAIL_TICKET)
+RAIL_TICKET_GUANGZHOU_SHANGHAI.update({
+    "train_no": "SYNTHETIC-G1005", "start_train_code": "G1005",
+    "from_station": "广州示例站", "from_station_telecode": "GZX",
+})
 RAIL_INTERLINE = [{
     "lishi": "03:30",
     "start_time": "13:00",
@@ -708,7 +714,7 @@ def build() -> List[Dict[str, Any]]:
     })
     rail_common = {"source": RAIL_SOURCE, "captured_at": RAIL_CAPTURED_AT}
     fixtures.extend([
-        fixture("rail12306", "success", rail_req, response(rail_recording([RAIL_TICKET])), item_count=1, schema_refs=[SCHEMA_REFS["leg"]], **rail_common),
+        fixture("rail12306", "success", rail_req, response(rail_recording([RAIL_TICKET, RAIL_TICKET_GUANGZHOU_SHANGHAI])), item_count=1, schema_refs=[SCHEMA_REFS["leg"]], **rail_common),
         fixture("rail12306", "empty", empty_req, response(rail_recording([], from_city="北京", to_city="北京")), error_class="no_results", **rail_common),
         fixture("rail12306", "auth", rail_req, response({"error": "auth"}, 403), health="forbidden", error_class="forbidden", **rail_common),
         fixture("rail12306", "rate_limit", rail_req, response({"error": "quota"}, 429, {"Retry-After": "30"}), health="rate_limited", error_class="rate_limited", **rail_common),

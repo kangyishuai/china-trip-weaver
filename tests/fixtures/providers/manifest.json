@@ -254,7 +254,7 @@
     },
     {
       "path": "rail12306/success.json",
-      "sha256": "b0075c6f78b6f255dc7bc50391d3112030e47cbec147d4d33b1e378a3902a1e2"
+      "sha256": "f7219e69523e85dad3db69439841e6f7e2c2aa297b446e5003e9ce0b5a349f08"
     },
     {
       "path": "rail12306/timeout.json",

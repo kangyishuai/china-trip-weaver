@@ -92,6 +92,7 @@ class Rail12306Adapter(BaseAdapter):
         if not isinstance(payload, list):
             raise ContractMismatch("12306 ticket text must decode to an array")
         raw_tickets: Iterable[Any]
+        row_warnings: Tuple[str, ...] = ()
         if call["name"] == "get-interline-tickets":
             flattened: List[Any] = []
             for itinerary in payload:
@@ -100,7 +101,7 @@ class Rail12306Adapter(BaseAdapter):
                 flattened.extend(itinerary["ticketList"])
             raw_tickets = flattened
         else:
-            raw_tickets = payload
+            raw_tickets, row_warnings = _filter_direct_rows(payload, station_candidates, request)
 
         items: List[Mapping[str, Any]] = []
         claims: List[Mapping[str, Any]] = []
@@ -110,7 +111,7 @@ class Rail12306Adapter(BaseAdapter):
             leg, leg_claims = self._ticket(raw, request, clock)
             items.append(leg)
             claims.extend(leg_claims)
-        return Normalization(tuple(items), tuple(claims))
+        return Normalization(tuple(items), tuple(claims), row_warnings)
 
     def _failure(self, error_class: str, reason: str, request: ProviderRequest, clock: Clock) -> AdapterResult:
         if error_class == "no_results" and reason.startswith("outside_presale_window"):
@@ -140,7 +141,9 @@ class Rail12306Adapter(BaseAdapter):
         duration = _minutes(raw["lishi"])
         from_ref = sanitize_text(request.parameters["from_ref"], 80)
         to_ref = sanitize_text(request.parameters["to_ref"], 80)
-        leg_id = stable_id("leg-rail", service, depart_at, from_ref, to_ref)
+        from_telecode = sanitize_text(raw.get("from_station_telecode", ""), 16)
+        to_telecode = sanitize_text(raw.get("to_station_telecode", ""), 16)
+        leg_id = stable_id("leg-rail", service, depart_at, arrive_at, from_ref, to_ref, from_telecode, to_telecode)
         source_url = _deep_link(raw, request)
 
         prices = raw.get("prices")
@@ -325,6 +328,79 @@ def _station_resolution(
     if status != derived_status:
         raise ContractMismatch("12306 station resolution status contradicts its candidates")
     return status, tuple(normalized)
+
+
+_ADMIN_SUFFIXES = ("市", "县", "区")
+
+
+def _admin_stripped(name: str) -> str:
+    if len(name) > 1 and name[-1] in _ADMIN_SUFFIXES:
+        return name[:-1]
+    return name
+
+
+def _resolved_endpoint_name(station_candidates: Sequence[Mapping[str, Any]], endpoint: str) -> Optional[str]:
+    for candidate in station_candidates:
+        if candidate.get("resolution_for") == endpoint:
+            return candidate.get("name")
+    return None
+
+
+def _row_station_name(raw: Any, key: str) -> Optional[str]:
+    if not isinstance(raw, dict):
+        return None
+    name = raw.get(key)
+    return name if isinstance(name, str) and name.strip() else None
+
+
+def _station_name_matches(name: str, resolved_name: Optional[str], fallback_prefix: str) -> bool:
+    if resolved_name is not None and name == resolved_name:
+        return True
+    return name.startswith(fallback_prefix)
+
+
+def _endpoint_match_flags(
+    payload: Sequence[Any], key: str, resolved_name: Optional[str], fallback_prefix: str,
+) -> List[Optional[bool]]:
+    flags: List[Optional[bool]] = []
+    for raw in payload:
+        name = _row_station_name(raw, key)
+        flags.append(None if name is None else _station_name_matches(name, resolved_name, fallback_prefix))
+    return flags
+
+
+def _filter_direct_rows(
+    payload: Sequence[Any],
+    station_candidates: Sequence[Mapping[str, Any]],
+    request: ProviderRequest,
+) -> Tuple[List[Any], Tuple[str, ...]]:
+    # get-tickets groups by city (BLOCKED.md "书 Z3" #2); an endpoint is policed only once some row confirms a match for it.
+    from_resolved = _resolved_endpoint_name(station_candidates, "from")
+    to_resolved = _resolved_endpoint_name(station_candidates, "to")
+    from_prefix = _admin_stripped(sanitize_text(request.parameters["from_name"], 80))
+    to_prefix = _admin_stripped(sanitize_text(request.parameters["to_name"], 80))
+
+    from_flags = _endpoint_match_flags(payload, "from_station", from_resolved, from_prefix)
+    to_flags = _endpoint_match_flags(payload, "to_station", to_resolved, to_prefix)
+    police_from = any(flag is True for flag in from_flags)
+    police_to = any(flag is True for flag in to_flags)
+
+    kept: List[Any] = []
+    dropped = 0
+    for raw, from_flag, to_flag in zip(payload, from_flags, to_flags):
+        from_ok = not police_from or from_flag is not False
+        to_ok = not police_to or to_flag is not False
+        if from_ok and to_ok:
+            kept.append(raw)
+        else:
+            dropped += 1
+
+    warnings: Tuple[str, ...] = ()
+    if dropped:
+        warnings += ("station_rows_filtered:%d" % dropped,)
+        if not kept:
+            warnings += ("station_rows_all_filtered",)
+    return kept, warnings
 
 
 def _call_payload(call: Mapping[str, Any], request: ProviderRequest, clock: Clock) -> Any:
