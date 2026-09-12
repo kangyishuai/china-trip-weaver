@@ -2,7 +2,7 @@
   "counts": {
     "golden": 20,
     "no_solution": 8,
-    "replan": 4
+    "replan": 7
   },
   "files": [
     {
@@ -124,6 +124,18 @@
     {
       "path": "replan/delay.json",
       "sha256": "72ec8504a2bd6f81b81790835ff96c84d690955dfe0e3468cd64c8cc487e67b5"
+    },
+    {
+      "path": "replan/refresh.json",
+      "sha256": "6606a7fd906497fe4625d811f86b63e1b9af82b8ce421bb5bc8c30a1a8abcc50"
+    },
+    {
+      "path": "replan/suspend-first-leg.json",
+      "sha256": "49710682aad315736276190bb1da41d6caf74e5d0a24430310987a1da8e775ff"
+    },
+    {
+      "path": "replan/suspend.json",
+      "sha256": "cc608ee9b64bee280511f81be68af497ac4ee0419e0e69c1e36ebb36e6be0b8a"
     },
     {
       "path": "replan/user-delete.json",

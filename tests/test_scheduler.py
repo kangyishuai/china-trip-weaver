@@ -349,7 +349,7 @@ class SchedulerCorpusTests(unittest.TestCase):
 
     def test_manifest_hashes_counts_and_coverage(self):
         manifest = load(FIXTURES / "manifest.json")
-        self.assertEqual({"golden": 20, "no_solution": 8, "replan": 4}, manifest["counts"])
+        self.assertEqual({"golden": 20, "no_solution": 8, "replan": 7}, manifest["counts"])
         for entry in manifest["files"]:
             data = (FIXTURES / entry["path"]).read_bytes()
             self.assertEqual(entry["sha256"], hashlib.sha256(data).hexdigest(), entry["path"])
@@ -357,6 +357,18 @@ class SchedulerCorpusTests(unittest.TestCase):
         for path in GOLDEN.glob("*.json"):
             tags.update(load(path)["tags"])
         self.assertTrue({"1-day", "2-day", "cross-city", "moving-day", "opening-window", "budget", "walking-limit", "unreachable", "tie", "candidate>8"}.issubset(tags))
+
+    def test_manifest_covers_every_replan_fixture(self):
+        manifest = load(FIXTURES / "manifest.json")
+        manifest_paths = {
+            entry["path"] for entry in manifest["files"]
+            if entry["path"].startswith("replan/")
+        }
+        fixture_paths = {
+            "replan/" + path.name
+            for path in (FIXTURES / "replan").glob("*.json")
+        }
+        self.assertEqual(fixture_paths, manifest_paths)
 
     def test_determinism_twenty_runs(self):
         fixture = load(GOLDEN / "candidate-prune-threshold.json")

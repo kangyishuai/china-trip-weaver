@@ -220,7 +220,7 @@ tests/
 |---|---|---|---|---|
 | `tests/fixtures/providers` | 脱敏 raw→normalized contract corpus | provider pins | §08.2 | 每 provider 7 类；manifest/hash/redaction/secret scan |
 | `tests/fixtures/trips` | valid/invalid/schema/revision/adversarial Trips | schema | §03、§08.4 | 与设计 examples 同步；每 invalid 单因 |
-| `tests/fixtures/scheduler` | 20+ golden、8+ no-solution、4 replan | matrix/trips | §08.3 | corpus 数量/coverage assertions |
+| `tests/fixtures/scheduler` | 20+ golden、8+ no-solution、7 replan | matrix/trips | §08.3 | corpus 数量/coverage assertions |
 | `tests/fixtures/renderer` | snapshots/DOM expectations | renderer | §08.4 | mobile/desktop/print/offline references 审核 |
 | `test_contracts.py` | schema/canonical/cross-ref tests | contracts/validator | §03、§08 | Python 3.9 pass；design checker 交叉 pass |
 | `test_credentials.py` | 0600/parser/isolation/五禁令 canary | credentials | §05、§08 | secret scan 0；invalid permissions fail closed |

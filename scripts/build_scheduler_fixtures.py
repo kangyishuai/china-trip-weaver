@@ -337,6 +337,98 @@ def replacement(slot_id: str, start_at: str, end_at: str, title: str) -> Mapping
     }
 
 
+def _refresh_rail_result() -> Mapping[str, Any]:
+    source_url = (
+        "https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc&"
+        "fs=%E5%8C%97%E4%BA%AC&ts=%E4%B8%8A%E6%B5%B7&"
+        "date=2026-10-16&flag=N%2CN%2CY"
+    )
+    return {
+        "claims": [
+            {
+                "as_of": "2026-09-10T00:00:00+08:00",
+                "claim_id": "claim-refresh-depart",
+                "confidence": 0.95,
+                "field_path": "/depart_at",
+                "json_path": "/start_time",
+                "mode": "live",
+                "provider": "12306-mcp",
+                "queried_at": "2026-09-10T00:00:00+08:00",
+                "raw_ref": None,
+                "response_hash": None,
+                "source_url": source_url,
+                "status": "verified",
+                "subject_ref": "leg-rail-live-g1001",
+                "value": {
+                    "arrive_at": "2026-10-16T12:00:00+08:00",
+                    "depart_at": "2026-10-16T08:00:00+08:00",
+                    "duration_minutes": 240,
+                },
+            },
+            {
+                "as_of": "2026-09-10T00:00:00+08:00",
+                "claim_id": "claim-refresh-price",
+                "confidence": 0.95,
+                "field_path": "/price",
+                "json_path": "/prices",
+                "mode": "live",
+                "provider": "12306-mcp",
+                "queried_at": "2026-09-10T00:00:00+08:00",
+                "raw_ref": None,
+                "response_hash": None,
+                "source_url": source_url,
+                "status": "verified",
+                "subject_ref": "leg-rail-live-g1001",
+                "value": {
+                    "amount": 553,
+                    "currency": "CNY",
+                    "seat_name": "二等座",
+                },
+            },
+        ],
+        "error_class": None,
+        "health": {
+            "capabilities": ["rail", "station"],
+            "checked_at": "2026-09-10T00:00:00+08:00",
+            "mode": "live",
+            "provider": "12306-mcp",
+            "reason": "contract probe and normalization passed",
+            "status": "ready",
+            "version": "0.3.10",
+        },
+        "provider": "12306-mcp",
+        "provider_version": "0.3.10",
+        "queried_at": "2026-09-10T00:00:00+08:00",
+        "transport_legs": [
+            {
+                "arrive_at": "2026-10-16T12:00:00+08:00",
+                "booking_url": source_url,
+                "claim_ids": ["claim-refresh-depart", "claim-refresh-price"],
+                "data_mode": "live",
+                "depart_at": "2026-10-16T08:00:00+08:00",
+                "duration_minutes": 240,
+                "from_ref": "place-beijing-live",
+                "leg_id": "leg-rail-live-g1001",
+                "locked": False,
+                "price": {
+                    "amount": 553,
+                    "claim_id": "claim-refresh-price",
+                    "currency": "CNY",
+                    "includes_taxes": True,
+                    "price_type": "live",
+                    "queried_at": "2026-09-10T00:00:00+08:00",
+                    "unit": "per_person",
+                },
+                "provider": "12306-mcp",
+                "service_number": "G1001",
+                "to_ref": "place-shanghai-live",
+                "travel_mode": "rail",
+            }
+        ],
+        "warnings": [],
+    }
+
+
 def build_replans() -> List[Dict[str, Any]]:
     base = "tests/fixtures/trips/schema/valid/weekend-live.json"
     return [
@@ -359,6 +451,22 @@ def build_replans() -> List[Dict[str, Any]]:
             "fixture_version": 1, "case_id": "user-delete", "base_fixture": base,
             "event": {"type": "user_delete", "subject_ref": "slot-3", "reason": "用户删除备选活动", "reverify_claim_ids": []},
             "user_locked_refs": [], "expected": {"affected_day": "day-2", "unchanged_day_indexes": [0], "operation_count": 1, "trigger": "user_edit"},
+        },
+        {
+            "fixture_version": 1, "case_id": "refresh", "base_fixture": "demo/trip.json",
+            "event": {"type": "refresh", "subject_ref": "leg-rail-fallback-6d95c810b44d", "reason": "12306 real-time service located for the outbound leg", "service_number": "G1001", "reverify_claim_ids": []},
+            "rail_result": _refresh_rail_result(),
+            "user_locked_refs": [], "expected": {"affected_day": "day-1", "unchanged_day_indexes": [1, 2], "operation_count": 33, "trigger": "provider_change"},
+        },
+        {
+            "fixture_version": 1, "case_id": "suspend", "base_fixture": "demo/trip.json",
+            "event": {"type": "suspend", "subject_ref": "slot-leg-rail-fallback-e67d77f564f5", "reason": "列车停运", "replacement_slot": replacement("slot-day3-suspend-alt", "2026-10-18T16:00:00+08:00", "2026-10-18T21:00:00+08:00", "列车停运，改为市内活动"), "reverify_claim_ids": []},
+            "user_locked_refs": [], "expected": {"affected_day": "day-3", "unchanged_day_indexes": [0, 1], "operation_count": 30, "trigger": "disruption"},
+        },
+        {
+            "fixture_version": 1, "case_id": "suspend-first-leg", "base_fixture": "demo/trip.json",
+            "event": {"type": "suspend", "subject_ref": "slot-leg-rail-fallback-6d95c810b44d", "reason": "列车停运", "replacement_slot": replacement("slot-day1-suspend-alt", "2026-10-16T08:00:00+08:00", "2026-10-16T13:00:00+08:00", "列车停运，改为市内活动"), "reverify_claim_ids": []},
+            "user_locked_refs": [], "expected": {"affected_day": "day-1", "unchanged_day_indexes": [1, 2], "operation_count": 32, "trigger": "disruption"},
         },
     ]
 
