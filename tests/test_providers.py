@@ -114,7 +114,7 @@ class ProviderCorpusTests(unittest.TestCase):
         manifest = load(FIXTURES / "manifest.json")
         listed = {entry["path"] for entry in manifest["files"]}
         actual = {path.relative_to(FIXTURES).as_posix() for path in fixture_paths()}
-        self.assertEqual(84, manifest["fixture_count"])
+        self.assertEqual(85, manifest["fixture_count"])
         self.assertEqual(listed, actual)
         for entry in manifest["files"]:
             data = (FIXTURES / entry["path"]).read_bytes()
@@ -191,6 +191,17 @@ class ProviderCorpusTests(unittest.TestCase):
         availability = [claim for claim in result.claims if claim["field_path"] == "/availability"]
         self.assertEqual(1, len(availability))
         self.assertTrue(any(seat["available"] for seat in availability[0]["value"]))
+
+    def test_rail_presale_star_has_no_inventory_and_keeps_fallback_price(self):
+        result = run_fixture_value(FIXTURES / "rail12306" / "presale_star.json")
+        availability = next(
+            claim for claim in result.claims if claim["field_path"] == "/availability"
+        )
+
+        self.assertEqual(1, len(result.normalized_items))
+        self.assertEqual(300, result.normalized_items[0]["price"]["amount"])
+        self.assertEqual(["*"] * 4, [seat["availability"] for seat in availability["value"]])
+        self.assertTrue(all(not seat["available"] for seat in availability["value"]))
 
     def test_rail_station_rows_are_filtered_by_endpoint_and_leg_ids_stay_unique(self):
         result = run_fixture_value(FIXTURES / "rail12306" / "station_rows.json")

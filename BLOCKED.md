@@ -1,3 +1,15 @@
+## 书 AK1「12306 未开售星号」（2026-09-12）：任务书既有 rail 夹具数少写 1，非阻塞
+
+任务书写「既有 15 份 rail 夹具 item_count 不变」，但 `64919f3` 的 Git tree
+实际已有 16 份 `tests/fixtures/providers/rail12306/*.json`（auth、cross_day、
+empty、malicious、no_seat、outside_presale、pipe_drift、rate_limit、station、
+station_rows、station_rows_none、success、timeout、transfer、waitlist、
+wrong_shape），不是 15。此差异在任务 2 的逐文件基线审计时发现；功能现状、
+总夹具 84、测试 673 与任务书均吻合，因此没有需要停下等待的实现分叉。
+处理：以 Git 基线的 16 份为准逐个比较 `expected.item_count`，结果 16/16 零变化；
+只新增 `presale_star`，当前 rail 夹具 17、provider 总夹具 85。请管理者裁决是否
+仅修正后续任务书口径；本分支不篡改历史夹具来迁就数字。
+
 ## 书 AD3「Journey 页位置示意」（2026-09-11，worktree `.tmp/wt-ad3` 分支 `journey-location-svg`，第十四波三份并行书之一）：两处判断，非阻塞
 
 1. 「界限」写 `tests/test_journey.py（只许新增 def test_）`，但加了必需分区后
@@ -1762,7 +1774,7 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 
 任务 0/1/2 均按任务书裁定完成，没有需要领导裁决的冲突或未决项。
 
-## 书 AK1「refresh 清理同腿旧 claim」（2026-09-12）：夹具生成与 grep 验收互相冲突，待裁决
+## 书 AK2「refresh 清理同腿旧 claim」（2026-09-12）：夹具生成与 grep 验收互相冲突，待裁决
 
 `64919f3` 的实际生成链与任务书“猜的”描述不一致。`scripts/build_scheduler_fixtures.py:340` 的 `build_replans()` 只返回 closure、weather、delay、user-delete 四份；全文件没有 `refresh` 字样。提交历史也显示 `refresh.json` 是 `c208ba0` 后来单独新增，生成脚本从未改过。实跑任务书原命令只输出 `wrote 20 golden, 8 no-solution, 4 replan fixtures`，`git status --short -- tests/fixtures` 零输出；现有 `tests/test_scheduler.py:352` 又硬断言 manifest 的 replan count 恰为 4，而本书界限不允许改生成脚本或该测试。因此无法让原命令同时生成 refresh 并令 manifest 改动。执行者未改脚本、未手改夹具，而是调用该脚本现成的 `write_group()` 生成器函数重写 refresh；最终夹具唯一差异仍是任务书要求的 `operation_count 31→33`，manifest 保持不变。
 

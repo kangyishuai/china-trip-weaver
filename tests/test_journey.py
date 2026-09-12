@@ -2119,6 +2119,37 @@ class JourneyReplaceTripTests(unittest.TestCase):
         self.assertNotIn("无座 CNY 300", rendered)
         self.assertTrue(report.ok, [item.render() for item in report.errors])
 
+    def test_presale_availability_renders_in_all_four_journey_views(self):
+        journey = copy.deepcopy(self.journey)
+        trip = journey["trips"][0]
+        leg = trip["transport_legs"][0]
+        leg["provider"] = "12306-mcp"
+        claim = copy.deepcopy(trip["claims"][0])
+        claim.update({
+            "claim_id": "claim-rail-presale-availability",
+            "subject_ref": leg["leg_id"],
+            "field_path": "/availability",
+            "value": [
+                {"seat_name": "商务座", "availability": "*", "available": False, "price": 1000},
+                {"seat_name": "一等座", "availability": "候补", "available": False, "price": 500},
+                {"seat_name": "二等座", "availability": "有", "available": True, "price": 300},
+                {"seat_name": "无座", "availability": "无", "available": False, "price": 300},
+            ],
+            "status": "verified",
+            "confidence": 0.95,
+            "mode": "live",
+        })
+        trip["claims"].append(claim)
+        leg["claim_ids"].append(claim["claim_id"])
+
+        rendered = render_journey(journey)
+        seat_line = "座位：商务座 未开售 · 一等座 候补 · 二等座 有 · 无座 无"
+        report = validate_journey_html(rendered, journey)
+
+        self.assertEqual(4, rendered.count(seat_line))
+        self.assertEqual(4, rendered.count("未开售"))
+        self.assertTrue(report.ok, [item.render() for item in report.errors])
+
 
 if __name__ == "__main__":
     unittest.main()

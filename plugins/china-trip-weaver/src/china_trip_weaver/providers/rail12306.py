@@ -26,7 +26,7 @@ from .mcp_stdio import EXPECTED_12306_TOOLS
 EXPECTED_TOOLS = EXPECTED_12306_TOOLS
 MCP_PROTOCOL_VERSION = "2025-06-18"
 PRESALE_DAYS = 15
-NO_INVENTORY = frozenset(("", "无", "--", "候补", "售罄", "not available"))
+NO_INVENTORY = frozenset(("", "*", "无", "--", "候补", "售罄", "not available"))
 
 
 def _minutes(value: Any) -> int:

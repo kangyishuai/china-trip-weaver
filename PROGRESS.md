@@ -2,6 +2,34 @@
 
 唯一的当前进度记录。2026-09-03 到 09-06 的逐轮任务书、实测证据、验收记录已归档，见「历史索引」。
 
+## 书 AK1「12306 未开售星号」开工理解（2026-09-12，≤10 行）
+
+1. 目标：`num="*"` 的席别必须 `available=false`，页面显示「未开售」；`候补` 显示「候补」，其余「有／无」不变。
+2. 顺序：任务 0 基线与合成／实网复现并提交 → 任务 1 三条先红测试与 85 份夹具并提交 → 任务 2 最小实现、重生成、反向与全量验收并提交 → 推送。
+3. 腿价选择必须不变：先选有库存的有价席别，没有库存时仍从全部有价席别选最低价；合成四星场景应保持二等座 CNY 300。
+4. 最大风险：渲染必须按 claim 中原始 `availability` 分三档，不能改 schema、不能丢掉原始 `*`，也不能把 `候补` 混入普通无票。
+5. 最大风险：Trip 一处与 Journey 四处共用同一座位行函数；两份 labels 必须同步，既有座位测试与分组示例页必须保持行为／字节符合任务书。
+6. 任务 0 实测：基线 `Ran 673 tests ... OK`、0 skipped，secrets 0/385，pyflakes 0；84 夹具与 HEAD `64919f3` 均吻合。
+7. 合成复现：四档 `('*', True)`，腿价 300；真实 9/26 福州→武夷山：10 腿 ready，首 claim 四档原文均 `*` 且均 True，首腿价 128.5。
+8. 当前无待裁决项；严格只改任务书白名单，不碰 main、replan、版本、CI，不运行本地插件安装脚本。
+
+## 书 AK1 任务 1：先写红测试（2026-09-12）
+
+- `scripts/build_provider_fixtures.py` 新增 `presale_star`：`RAIL_TICKET` 四档 `num` 均为 `*`；脚本实跑输出 `wrote 85 provider fixtures and 5 AMap scenarios`，manifest、两份 README 与夹具总数断言同步为 85。
+- Provider 新测试要求 1 条腿、四档 `availability="*"` 且 `available=false`、腿价仍为 300；Trip 新测试要求完整三态座位行并通过 `validate_html`；Journey 文件末尾新测试要求同一完整座位行与「未开售」各出现四次并通过校验。
+- 三条精准测试实跑 `Ran 3 tests in 0.072s`，`FAILED (failures=3)`：Provider 因四档仍为 True 红；Trip 实际为「商务座 无 · 一等座 无 · 二等座 有 · 无座 无」红；Journey 期望座位行 4 次、实际 0 次红。三条均由待实现行为导致。
+
+## 书 AK1 任务 2：实现与验收（2026-09-12）
+
+- 实现：`NO_INVENTORY` 只新增 `"*"`；`_rail_seat_line` 只按原始 `availability` 将 `*`/`候补` 分流到新 `seat_presale`/`seat_waitlist` labels，其余仍按 `available`；Trip/Journey 中英 labels 与两份合同文档同步。claim 原文、schema 与 `_select_price` 均未改。
+- 三条新测试加四条指定旧测试：`Ran 7 tests in 0.143s ... OK`；模块回归 providers/renderer/journey 分别 `Ran 105/48/88 tests ... OK`。
+- 重生成：provider=`85 provider fixtures and 5 AMap scenarios`；renderer=`9 Trip and 12 HTML`。两个 AD1 demo 与 renderer manifest 的运行前后 SHA-256 逐字节相同，`git diff 64919f3 -- demo/grouped-departures` 与 `tests/fixtures/renderer` 均为 0 行。
+- 反向验证：临时从 `NO_INVENTORY` 删除 `"*"` 后 provider 新测试 `Ran 1 ... FAILED (failures=1)`；还原并 `touch` 后同测试 `Ran 1 ... OK`。
+- 全量：`Ran 677 tests in 59.089s ... OK`，0 skipped；secret scan `0 finding(s) across 386 file(s)`；pyflakes 0 行（exit 0）。
+- 实网复验：9/26 福州→武夷山 `RAIL_COMPLETE ... legs=10 status=ready error=none`；首 claim 四档均保留 `availability="*"` 且均 `available=False`，首腿价仍 128.5。
+- 审计：中英文座位行分别显示「未开售／候补／有／无」与 `not on sale yet/waitlist/available/unavailable`；基线 16 份 rail 夹具（任务书误写 15，详见 `BLOCKED.md`）item_count 16/16 零变化，只新增 `presale_star`。
+- 删测 grep 0 行、`git diff --check` 0；当前 diff 仅含任务书白名单中的 15 个文件，分组示例页零差异。当前验收轮次 1/6。
+
 ## 现状速览（2026-09-12 实测，0.19.0）
 
 - 版本：`0.19.0`，唯一来源是
@@ -7486,7 +7514,8 @@ beeb906 -- tests | grep -E '^-\s*def test_'` 为 0 行，判断没有违反
 - 校验与浏览器：`ctw validate-html` 为 `errors=0`，`ctw journey validate-html` 为 `errors=0`；375x812 QA 返回 `failures=[]`、`horizontalOverflow=0`、`sectionCount=12`、`handshakeAttempts=1`。
 - 最终门禁：全量 `Ran 670 tests in 47.148s ... OK`，0 skipped；secrets `0 finding(s) across 385 file(s)`；pyflakes 0 行。
 
-## 书 AK1「refresh 清理同腿旧 claim」任务 0（2026-09-12，main 直改，HEAD 64919f3）
+## 书 AK2「refresh 清理同腿旧 claim」任务 0（2026-09-12，main 直改，HEAD 64919f3）
+（管理者合并时注：执行者把本书误写成 AK1，三处标题已改为 AK2，正文未动。）
 - 目标：refresh 换腿时只删 `subject_ref` 等于目标 `leg_id` 的旧 claim，patch 逐条记录 remove，再追加当次 claim；其它 subject 一条不动。
 - 顺序：任务 0 核对并提交 → 任务 1 三条先红测试并提交 → 任务 2 实现、脚本重生成、文档、反向验证、全验收、提交并推送。
 - 最大风险：倒序删除后的索引与后续 add path 必须可回放，且不能按未引用状态扩大清理范围而误删其它腿或 POI 的 claim。
@@ -7494,12 +7523,12 @@ beeb906 -- tests | grep -E '^-\s*def test_'` 为 0 行，判断没有违反
 - 金样：`operation_count=31`，base 同腿 2 条 deep-link claim，rail_result 2 条新 claim；实跑后同腿 4 条、patch 的 `/claims/` remove 为 0 条，与任务书完全吻合。
 - 当前无待裁决项；严格采用任务书已拍板的倒序 pop 方案，不新增私有函数。
 
-## 书 AK1 任务 1：先写红测试（2026-09-12）
+## 书 AK2 任务 1：先写红测试（2026-09-12）
 `tests/test_replan.py` 只新增三个 `def test_`：①金样刷新后目标腿 claim id 集合须恰等于 rail_result 两条，且 patch 有两条 `/claims/` remove；②对结果用 G2002 与另两条 claim 再刷新，目标腿仍只剩第二轮两条；③其它腿与 POI 的 claim 前后 `canonical_json` 相同且 `validate_trip` 通过。
 
 改前单跑：① FAIL，多出 `claim-a69d7c41fdea2e04`/`claim-c67876a05486110b`；② FAIL，多出这两条 deep-link 与第一轮 `claim-refresh-depart`/`claim-refresh-price`；③ ok。汇总 `Ran 3 tests in 0.008s`，`FAILED (failures=2)`，准确达到“两红一绿”，生产实现未改。
 
-## 书 AK1 任务 2：实现与第 1 轮验收（2026-09-12）
+## 书 AK2 任务 2：实现与第 1 轮验收（2026-09-12）
 - `_apply_refresh` 在复制新 claim 前按目标旧腿 `leg_id` 找下标、倒序 pop，并逐条追加 `/claims/<i>` remove；其余逻辑未改。README 中英文、ADR-0015 末尾与 replan Skill 各同步一句；Skill quick validation 为 `Skill is valid!`。
 - 三条新测试先 `Ran 3 tests in 0.008s ... OK`；`tests.test_replan` 完整回归 `Ran 42 tests in 1.564s ... OK`，L447 起既有 refresh 测试全绿。
 - 反向验证：临时注掉清理段后①② `Ran 2 tests in 0.004s`、`FAILED (failures=2)`；逐字恢复并 `touch replan.py` 后 `Ran 2 tests in 0.003s ... OK`。
