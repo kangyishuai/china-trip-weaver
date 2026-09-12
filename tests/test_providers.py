@@ -192,6 +192,19 @@ class ProviderCorpusTests(unittest.TestCase):
         self.assertEqual(1, len(availability))
         self.assertTrue(any(seat["available"] for seat in availability[0]["value"]))
 
+    def test_rail_station_rows_are_filtered_by_endpoint_and_leg_ids_stay_unique(self):
+        result = run_fixture_value(FIXTURES / "rail12306" / "station_rows.json")
+        self.assertIsNone(result.error_class)
+        self.assertEqual(2, len(result.normalized_items))
+        leg_ids = [item["leg_id"] for item in result.normalized_items]
+        self.assertEqual(len(leg_ids), len(set(leg_ids)))
+        for item in result.normalized_items:
+            claims_for_leg = [claim for claim in result.claims if claim["subject_ref"] == item["leg_id"]]
+            self.assertEqual(3, len(claims_for_leg))
+        self.assertIn("station_rows_filtered:1", result.warnings)
+        transfer = run_fixture_value(FIXTURES / "rail12306" / "transfer.json")
+        self.assertEqual(2, len(transfer.normalized_items))
+
     def test_timeout_exhaustion_pins_the_exact_retry_reason_text(self):
         fixture = load(FIXTURES / "amap" / "timeout.json")
         adapter = ADAPTERS[fixture["provider"]]()

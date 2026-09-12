@@ -698,6 +698,14 @@ def build() -> List[Dict[str, Any]]:
         "start_time": "23:00", "arrive_time": "07:00",
         "arrive_date": "2026-09-11", "lishi": "08:00",
     })
+    station_rows_same_city_ticket = copy.deepcopy(RAIL_TICKET)
+    station_rows_same_city_ticket.update({
+        "to_station": "上海南示例站", "to_station_telecode": "SNX", "arrive_time": "11:50",
+    })
+    station_rows_other_city_ticket = copy.deepcopy(RAIL_TICKET)
+    station_rows_other_city_ticket.update({
+        "to_station": "苏州示例站", "to_station_telecode": "SUX", "arrive_time": "11:30",
+    })
     rail_common = {"source": RAIL_SOURCE, "captured_at": RAIL_CAPTURED_AT}
     fixtures.extend([
         fixture("rail12306", "success", rail_req, response(rail_recording([RAIL_TICKET])), item_count=1, schema_refs=[SCHEMA_REFS["leg"]], **rail_common),
@@ -716,6 +724,7 @@ def build() -> List[Dict[str, Any]]:
         fixture("rail12306", "waitlist", rail_req, response(rail_recording([waitlist_ticket])), item_count=1, schema_refs=[SCHEMA_REFS["leg"]], **rail_common),
         fixture("rail12306", "transfer", rail_req, response(rail_recording(RAIL_INTERLINE, tool_name="get-interline-tickets")), item_count=2, schema_refs=[SCHEMA_REFS["leg"], SCHEMA_REFS["leg"]], **rail_common),
         fixture("rail12306", "cross_day", rail_req, response(rail_recording([cross_day_ticket])), item_count=1, schema_refs=[SCHEMA_REFS["leg"]], **rail_common),
+        fixture("rail12306", "station_rows", rail_req, response(rail_recording([RAIL_TICKET, station_rows_same_city_ticket, station_rows_other_city_ticket])), item_count=2, schema_refs=[SCHEMA_REFS["leg"], SCHEMA_REFS["leg"]], **rail_common),
         fixture("rail12306", "pipe_drift", rail_req, response(rail_recording([], result=mcp_text_result("train|missing|columns"))), health="contract_mismatch", error_class="contract_mismatch", **rail_common),
         fixture("rail12306", "outside_presale", outside_req, response(rail_recording([], date="2026-10-16", result=outside_result)), health="degraded", error_class="no_results", **rail_common),
     ])

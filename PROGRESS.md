@@ -6938,3 +6938,61 @@ journey-r3.json:
 此前两次「书 Z3」止步记录的先例（`8961bad`/`19f9a36`，均是单次
 session 单次提交），本轮任务 0＋1＋2 只提交一次，commit message 里
 写清覆盖范围。
+
+## 书 AH2「12306 按到发站过滤 get-tickets 行 + leg_id 唯一」任务 0（2026-09-12，worktree `.tmp/wt-ah2` 分支 `rail-station-rows`，HEAD beeb906）
+
+任务 0 核对：`rail_recording([RAIL_TICKET, variant])`（variant 只改
+`to_station`→苏州示例站、`to_station_telecode`→SUX、`arrive_time`→
+11:30）喂 `Rail12306Adapter().normalize`，此刻 `item_count=2`、两行
+`leg_id` 均为 `leg-rail-9c67f843f9d7`（相同）、`claims=6`、
+`warnings=()`——与任务书预判完全一致，缺陷复现，继续动工。
+
+目标：`get-tickets` 直达行按到发站是否匹配请求地点过滤（不匹配计入
+`station_rows_filtered:<n>`，全删加 `station_rows_all_filtered`，
+`get-interline-tickets` 中转行不过滤）；`leg_id` 纳入 `arrive_at` 与
+两个 `*_station_telecode`，同车次不同到站不再共享 `leg_id`。
+
+顺序：任务 1 先写红测试与新夹具 `station_rows`（G1001 08:00 三行，期望
+item_count=2、`station_rows_filtered:1`）→ 任务 2 实现过滤+leg_id 公式、
+83 份夹具与 README 同步、重生成 demo/grouped-departures、全量+六套语料、
+真实 Key 验证 9/26 福州→武夷山。
+
+最大风险：①现有 14 份 rail 夹具的 transcript 都不带 `station_resolution`
+字段（`_station_resolution` 返回 `(None, ())`），过滤必须走「请求名去掉
+市/县/区后缀做前缀匹配」这条回退规则而非候选名精确匹配，否则这 14 份
+的 item_count 会跌；②demo/grouped-departures 用 `success.json`（1 行
+真实车次）会因 leg_id 公式变化而 trip_sha256 必然改变——这是「现状」
+已预告要重生成提交的结果，不是对「六套语料零差异」的违反，届时会在
+六套语料里逐一列出这一条命令的新旧哈希差异并说明理由，而非笼统宣称
+「零差异」。
+
+## 书 AH2 任务 1：先写红测试（2026-09-12）
+
+`scripts/build_provider_fixtures.py` 新增 `station_rows_same_city_ticket`
+（`to_station`=上海南示例站/SNX/11:50）与 `station_rows_other_city_ticket`
+（`to_station`=苏州示例站/SUX/11:30），连同未改的 `RAIL_TICKET`（到上海
+示例站/SHX/12:00）三行一起注册成 `rail12306` 的 `station_rows` 夹具
+（复用 `rail_req`，`item_count=2`，两个 `SCHEMA_REFS["leg"]`）。
+`tests/test_providers.py` 新增
+`test_rail_station_rows_are_filtered_by_endpoint_and_leg_ids_stay_unique`：
+断言 `station_rows` 结果 2 行、`leg_id` 互异、每个 leg 恰 3 条 claims、
+`warnings` 含 `station_rows_filtered:1`，并顺带断言 `transfer` 夹具仍
+`item_count=2`。
+
+```
+$ /usr/bin/python3 scripts/build_provider_fixtures.py
+wrote 83 provider fixtures and 5 AMap scenarios
+
+$ /usr/bin/python3 -m unittest tests.test_providers.ProviderCorpusTests.test_fixture_rail12306_station_rows tests.test_providers.ProviderCorpusTests.test_rail_station_rows_are_filtered_by_endpoint_and_leg_ids_stay_unique -v
+test_fixture_rail12306_station_rows ... FAIL
+test_rail_station_rows_are_filtered_by_endpoint_and_leg_ids_stay_unique ... FAIL
+AssertionError: 2 != 3   （两处都是，过滤还没实现，三行原样都通过）
+Ran 2 tests in 0.002s
+FAILED (failures=2)
+```
+
+两条新测试此刻均红，达到任务 1 验收。副作用（已预期）：写出的 83 份
+夹具让既有 `test_manifest_hashes_and_file_set_are_exact` 也从绿转红
+（`AssertionError: 82 != 83`，该测试硬编码总数）——这条不是「新测试」，
+是任务 2 实现阶段要处理的既有测试，先如实记录、任务 2 一并修正并说明
+为什么改动它不违反「只许新增 def test_」（见任务 2）。
