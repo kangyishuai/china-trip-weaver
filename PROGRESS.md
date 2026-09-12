@@ -7416,3 +7416,14 @@ beeb906 -- tests | grep -E '^-\s*def test_'` 为 0 行，判断没有违反
 最终门禁：`discover -s tests` 为 `Ran 664 tests in 46.075s ... OK`，0 skipped；secrets `0 finding(s) across 384 file(s)`；pyflakes 0 行。两套 CLI 校验为 `HTML VALID ... errors=0` / `JOURNEY HTML VALID ... errors=0`。浏览器命令 `qa_renderer_browser.py demo/grouped-departures/trip.html --output .tmp/qa --viewports 375x812` 返回 `failures=[]`、`horizontalOverflow=0`、`sectionCount=12`、`handshakeAttempts=1`。
 
 范围门禁：`git diff c19461b -- tests | grep -E '^-\s*def test_'` 0 行；最终 diff 只含任务界限允许文件。实现与任务书裁定一致，无替代设计、无待裁决项。
+
+## 书 AJ2「Trip/Journey 显示 12306 座位余票」任务 0（2026-09-12，worktree `.tmp/wt-aj2`，分支 `render-seat-availability`）
+
+1. 目标：只取腿 `claim_ids` 中首条 `/availability` claim，按原序显示座位名与有/无；不显示舱位票价，无 claim 不显示。
+2. 页面：Trip 交通卡一处；Journey 交通汇总、交通卡、逐日时间轴、预订清单四处，与既有车站行相邻。
+3. 顺序：任务 0 核对并提交 → 任务 1 三条红测试并提交 → 任务 2 实现、生成、反向验证、全门禁并提交 → 推送。
+4. 基线：`Ran 667 tests in 49.455s`，`OK`，0 skipped；secrets `0 finding(s) across 385 file(s)`；pyflakes 0 行。
+5. 合成 Trip：挂两档 `/availability` 后当前页面「座位」计数 `0`；手工插入「座位：商务座 有 · 无座 无」后 `ctw validate-html` 为 `errors=0`。
+6. 最大风险：claim 只能经腿自己的 `claim_ids` 取首条，不能按 subject 全局扫描而误取旧 leg_id 撞车遗留 claim。
+7. 最大风险：Journey 四个入口必须复用同一纯函数，逐日入口仍需沿用现有 leg 索引；任何 `price` 数字都不能进入可见文本。
+8. 静态核对：`_seat` 字段与 `_has_inventory` 规则、`NO_INVENTORY`、success 夹具四档「有/有/有/无」均与任务书一致；无待裁决项。
