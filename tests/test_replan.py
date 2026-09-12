@@ -474,6 +474,75 @@ class ReplanTests(unittest.TestCase):
         self.assertTrue(html_report.ok, [issue.render() for issue in html_report.errors])
         self.assertIn(leg["service_number"], html)
 
+    def test_refresh_replaces_target_leg_claims_and_records_removals(self):
+        fixture = load(FIXTURES / "refresh.json")
+        base = load(ROOT / fixture["base_fixture"])
+        result = replan_trip(
+            base, fixture["event"], base_revision=base["revision"]["number"],
+            user_locked_refs=fixture["user_locked_refs"], clock=FixedClock.from_iso(FIXED_NOW),
+            rail_result=fixture["rail_result"],
+        )
+        leg_id = fixture["event"]["subject_ref"]
+        actual_claim_ids = {
+            claim["claim_id"] for claim in result.trip["claims"] if claim.get("subject_ref") == leg_id
+        }
+        expected_claim_ids = {claim["claim_id"] for claim in fixture["rail_result"]["claims"]}
+        self.assertEqual(expected_claim_ids, actual_claim_ids)
+        claim_removes = [
+            operation for operation in result.patch["operations"]
+            if operation["op"] == "remove" and operation["path"].startswith("/claims/")
+        ]
+        self.assertEqual(2, len(claim_removes), claim_removes)
+
+    def test_refresh_twice_keeps_only_the_second_service_claims(self):
+        fixture = load(FIXTURES / "refresh.json")
+        base = load(ROOT / fixture["base_fixture"])
+        first = replan_trip(
+            base, fixture["event"], base_revision=base["revision"]["number"],
+            user_locked_refs=fixture["user_locked_refs"], clock=FixedClock.from_iso(FIXED_NOW),
+            rail_result=fixture["rail_result"],
+        )
+        second_leg_id = "leg-rail-live-g2002"
+        second_claim_ids = ["claim-refresh-depart-2", "claim-refresh-price-2"]
+        second_service = _refresh_service(
+            leg_id=second_leg_id, service_number="G2002",
+            depart_at="2026-10-16T09:00:00+08:00", arrive_at="2026-10-16T13:00:00+08:00",
+            claim_ids=second_claim_ids,
+        )
+        second = replan_trip(
+            first.trip, _refresh_event(service_number="G2002"),
+            base_revision=first.trip["revision"]["number"], user_locked_refs=[],
+            clock=FixedClock.from_iso("2026-10-15T12:01:00+08:00"),
+            rail_result=_refresh_rail_result(
+                legs=[second_service], claims=_refresh_claims(second_leg_id, *second_claim_ids),
+            ),
+        )
+        leg_id = fixture["event"]["subject_ref"]
+        actual_claim_ids = {
+            claim["claim_id"] for claim in second.trip["claims"] if claim.get("subject_ref") == leg_id
+        }
+        self.assertEqual(set(second_claim_ids), actual_claim_ids)
+        self.assertEqual(2, len(actual_claim_ids))
+
+    def test_refresh_preserves_other_leg_and_poi_claims(self):
+        fixture = load(FIXTURES / "refresh.json")
+        base = load(ROOT / fixture["base_fixture"])
+        target_leg_id = fixture["event"]["subject_ref"]
+        protected_refs = {
+            leg["leg_id"] for leg in base["transport_legs"] if leg["leg_id"] != target_leg_id
+        }
+        protected_refs.update(poi["poi_id"] for poi in base["pois"])
+        before = [claim for claim in base["claims"] if claim.get("subject_ref") in protected_refs]
+        result = replan_trip(
+            base, fixture["event"], base_revision=base["revision"]["number"],
+            user_locked_refs=fixture["user_locked_refs"], clock=FixedClock.from_iso(FIXED_NOW),
+            rail_result=fixture["rail_result"],
+        )
+        after = [claim for claim in result.trip["claims"] if claim.get("subject_ref") in protected_refs]
+        self.assertEqual(canonical_json(before), canonical_json(after))
+        report = validate_trip(result.trip)
+        self.assertTrue(report.ok, [issue.render() for issue in report.errors])
+
     def test_refresh_no_same_day_service_fails(self):
         base = load(ROOT / "demo/trip.json")
         rail_result = _refresh_rail_result(legs=[_refresh_service(

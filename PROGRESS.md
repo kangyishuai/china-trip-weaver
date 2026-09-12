@@ -7493,3 +7493,8 @@ beeb906 -- tests | grep -E '^-\s*def test_'` 为 0 行，判断没有违反
 - 基线：`/usr/bin/python3 -m unittest discover -s tests` → `Ran 673 tests in 56.194s`，`OK`，0 skipped；secrets `0 finding(s) across 385 file(s)`；pyflakes 零输出。
 - 金样：`operation_count=31`，base 同腿 2 条 deep-link claim，rail_result 2 条新 claim；实跑后同腿 4 条、patch 的 `/claims/` remove 为 0 条，与任务书完全吻合。
 - 当前无待裁决项；严格采用任务书已拍板的倒序 pop 方案，不新增私有函数。
+
+## 书 AK1 任务 1：先写红测试（2026-09-12）
+`tests/test_replan.py` 只新增三个 `def test_`：①金样刷新后目标腿 claim id 集合须恰等于 rail_result 两条，且 patch 有两条 `/claims/` remove；②对结果用 G2002 与另两条 claim 再刷新，目标腿仍只剩第二轮两条；③其它腿与 POI 的 claim 前后 `canonical_json` 相同且 `validate_trip` 通过。
+
+改前单跑：① FAIL，多出 `claim-a69d7c41fdea2e04`/`claim-c67876a05486110b`；② FAIL，多出这两条 deep-link 与第一轮 `claim-refresh-depart`/`claim-refresh-price`；③ ok。汇总 `Ran 3 tests in 0.008s`，`FAILED (failures=2)`，准确达到“两红一绿”，生产实现未改。
