@@ -2,17 +2,33 @@
 
 唯一的当前进度记录。2026-09-03 到 09-06 的逐轮任务书、实测证据、验收记录已归档，见「历史索引」。
 
-## 现状速览（2026-09-12 实测，0.18.1）
+## 现状速览（2026-09-12 实测，0.19.0）
 
-- 版本：`0.18.1`，唯一来源是
+- 版本：`0.19.0`，唯一来源是
   `plugins/china-trip-weaver/.codex-plugin/plugin.json` 与
   `src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
   位置一律引用这两处之一，历史版本只以日期提及、不写字面值。
-- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 667 tests`，`OK`，0 skipped；
+- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 673 tests`，`OK`，0 skipped；
   `scripts/scan_secrets.py` 0 命中；
   `~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src
   tests scripts` 0 行。带假 Key（`ANYSEARCH_API_KEY=... unittest`）跑全量同样
-  667 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+  673 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+- 0.19.0（第二十波，一本改装配语义加一本页面新增）：`journey assemble`（首次装配与
+  `--replace-trip` 都经 `assemble_journey_from_trips`）对缺 `budget_ledger` 的子 Trip
+  用 planning `_budget_ledger` 现算（新私有函数 `_with_missing_budget_ledgers`，排序
+  后、连接定价前；已有账本的 Trip 原样传递，demo 逐字节往返不变；L1810 容忍测试的
+  `price_type` 断言改成 `"unknown"`，两端金额仍 None）；README 两份与 plan Skill 各加
+  一句。行程页火车腿显示座位余票——`render/html.py` `_rail_seat_line` 只取腿自己
+  `claim_ids` 里第一条 `/availability` claim，按 `available` 显示「有／无」、不显示
+  舱位票价（Trip 页校验器只认实体价格），Trip 页一处、Journey 页四处与「车站」行
+  相邻；分组示例页多两行座位，README demo 与 journey-16d 零差异；07-renderer 加一句。
+  管理者验收：对真实 journey-r3.json 做一次 `--replace-trip`（north 原样）得
+  journey-r4.json（revision 4）：三个子 Trip 都有账本，Journey 已知费用 385.5
+  （G1902 二等座 128.5 × 3 人），页面「已知费用」不再是 0；渲染
+  `福建中秋国庆16天行程-0.19.0.html`，9/26 腿显示车站与座位行。数据语义问题：12306
+  对未开售席别返回 `num="*"`（我 00:39 与 13:04 两次实测 9/26 福州→武夷山与泉州→厦门
+  全部席别都是 `*`，真实 journey-r3 的 availability claim 也是），`_has_inventory`
+  把 `*` 当有票，页面把 9/26 四档座位都写成「有」——第二十一波修。
 - 0.18.1（第十九波，一本修正加一本页面新增）：12306 站名过滤去掉「证据门控」——
   `tests/fixtures/mcp_stdio_server.py` 的 `ticket_payload` 按站码在自己的站表反查
   真实站名，`_filter_direct_rows` 对确认不匹配的行一律删、全删返回零行并带
