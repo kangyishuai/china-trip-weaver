@@ -349,7 +349,7 @@ class SchedulerCorpusTests(unittest.TestCase):
 
     def test_manifest_hashes_counts_and_coverage(self):
         manifest = load(FIXTURES / "manifest.json")
-        self.assertEqual({"golden": 20, "no_solution": 8, "replan": 4}, manifest["counts"])
+        self.assertEqual({"golden": 20, "no_solution": 8, "replan": 7}, manifest["counts"])
         for entry in manifest["files"]:
             data = (FIXTURES / entry["path"]).read_bytes()
             self.assertEqual(entry["sha256"], hashlib.sha256(data).hexdigest(), entry["path"])

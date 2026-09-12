@@ -17,6 +17,16 @@
 - `tests/test_scheduler.py` 新增 `test_manifest_covers_every_replan_fixture`，精确比较 manifest 的 `replan/` 路径集合与磁盘上全部 replan JSON 路径集合。
 - 精准运行：`Ran 1 test in 0.002s`，`FAILED (failures=1)`；差集恰为 `replan/refresh.json`、`replan/suspend.json`、`replan/suspend-first-leg.json`，证明测试因待实现的 manifest 覆盖缺口而红。
 
+## 书「scheduler replan 七份金样纳管」任务 2：实现与验收（2026-09-12）
+
+- `build_replans()` 按 closure/weather/delay/user-delete/refresh/suspend/suspend-first-leg 顺序生成 7 份；三份新增字典与现文件 `json.load` 等价，refresh 完整 `rail_result` 由私有函数返回，operation_count 沿用 33/30/32。
+- 生成器两次均输出 `wrote 20 golden, 8 no-solution, 7 replan fixtures`；第二次前后 manifest SHA-256 均为 `14b02f...b4edc`；manifest 为 replan 7、files 35，夹具状态只改 manifest。
+- 7 份 replan SHA-256 与任务 0 逐行一致，`git diff b6d63e0 -- tests/fixtures/scheduler/replan` 为零；指定模块 `Ran 93 tests in 5.251s ... OK`。
+- 反向验证：refresh 末尾临时空格使 manifest 哈希测试 `Ran 1 ... FAILED (failures=1)`，还原后 hash 回到 `6606a7f...abcc50` 且同测试 `Ran 1 ... OK`。
+- README 中英文与 09-impl-map 均同步 4→7；全量 `Ran 681 tests in 82.521s ... OK`、0 skipped；secrets 0/386；pyflakes 0 行。
+- 审计：删测试 grep 0 行，`git diff --check` 0；相对 `b6d63e0` 只含 8 个白名单文件且不含 replan JSON。当前验收轮次 1/6，无待裁决项。
+- 三个任务各一条提交；分支 `scheduler-replan-goldens` 已成功推送并跟踪 `origin/scheduler-replan-goldens`。
+
 ## 书 AK1「12306 未开售星号」开工理解（2026-09-12，≤10 行）
 
 1. 目标：`num="*"` 的席别必须 `available=false`，页面显示「未开售」；`候补` 显示「候补」，其余「有／无」不变。
