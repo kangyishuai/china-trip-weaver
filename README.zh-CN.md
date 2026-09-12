@@ -196,7 +196,7 @@ ctw journey assemble --journey JOURNEY.json --replace-trip TRIP-rN.json --base-r
 
 运行时不使用任何第三方 Python 包。Trip 与 Journey renderer 都会拒绝无效输入；两套 HTML validator 都会拦截结构、CSP、远程资源、危险链接、密钥、事实映射、追溯缺口和交易动作等违规。
 
-`ctw replan` 的 `refresh` 事件用新查到的车次原地换掉一条火车腿：先跑 `ctw rail --output-json`，再把输出文件路径传给 `--rail-result`。`refresh` 事件必须带 `--rail-result`，其余事件类型一律拒绝。`suspend` 事件在同一个 patch 里删掉停运的腿（列车停运、轮渡停航）及其时段、budget_ledger 条目与随之孤儿化的 claim，用 `kind` 为 `free` 或 `poi` 的 `replacement_slot` 换掉原时段；patch 的 `trigger` 是 `disruption`。
+`ctw replan` 的 `refresh` 事件用新查到的车次原地换掉一条火车腿：先跑 `ctw rail --output-json`，再把输出文件路径传给 `--rail-result`。`refresh` 事件必须带 `--rail-result`，其余事件类型一律拒绝。事件不带 `service_number` 时，默认选车只在发车不早于前一时段结束的候选里取到达最早的一班，全部不可行才报 `refresh_overlap`（message 带候选数与前一时段结束时间）；带 `service_number` 却命中多行且到达时间不同时报 `refresh_service_ambiguous`，除非事件的 `arrive_at`（完整 ISO 时间戳或 `HH:MM`）能唯一挑出一行。`suspend` 事件在同一个 patch 里删掉停运的腿（列车停运、轮渡停航）及其时段、budget_ledger 条目与随之孤儿化的 claim，用 `kind` 为 `free` 或 `poi` 的 `replacement_slot` 换掉原时段；patch 的 `trigger` 是 `disruption`。
 
 ## 测试
 

@@ -80,3 +80,46 @@ Three boundaries scope this change:
   --rail-result ... --base-revision 1` produced revision 2 with
   `trigger=provider_change`, passed `ctw validate` and `ctw validate-html`,
   and the rendered HTML contained the refreshed service number `G1001`.
+
+## Amendment (2026-09-12)
+
+The default selection path (no `service_number` in the event) previously
+picked the same-day service with the earliest arrival with no regard for
+whether it could depart after the previous slot ends, so `_apply_refresh`'s
+existing overlap check then failed the whole `replan` call whenever that
+happened to be infeasible — which real-world same-day rail schedules hit far
+more often than not (a real refresh drill hit it on 9 of 10 candidates).
+`_select_refresh_service` now takes an additional `earliest_depart` argument
+(the previous slot's `end_at`, or `None` for a day's first slot, computed and
+passed by `_apply_refresh`) and, when no `service_number` is given, first
+narrows the same-day candidates to those whose `depart_at` is not earlier
+than `earliest_depart` before taking the earliest arrival among what remains.
+Only when every same-day candidate is infeasible does it raise
+`refresh_overlap`, now with a message naming both the candidate count and the
+previous slot's end time (for example: "2 same-day services all depart
+before the previous slot ends at 2026-10-18T16:00:00+08:00"). When the event
+does give a `service_number`, this feasibility filter is not applied, and
+`_apply_refresh`'s existing overlap check is unchanged — so `refresh_overlap`
+from an explicit `service_number` still means exactly what it meant before
+this amendment.
+
+Requesting an explicit `service_number` can still match more than one
+same-day candidate — 12306 sometimes returns two rows for the same service
+number with different arrival times. `_select_refresh_service` now
+disambiguates: rows whose `depart_at` and `arrive_at` are both identical are
+treated as duplicates and the first one is used; otherwise the event may
+supply `arrive_at` (a full ISO timestamp or a bare `HH:MM`) to pick the
+matching row. When `arrive_at` is absent, or still resolves to more than one
+row, `_select_refresh_service` raises the new error code
+`refresh_service_ambiguous`, with a message listing every candidate's
+`arrive_at` so the caller can retry with a disambiguating value.
+
+Evidence: `tests/test_replan.py` —
+`test_refresh_default_selection_skips_services_departing_before_previous_slot`,
+`test_refresh_default_selection_reports_overlap_with_all_same_day_candidates`,
+`test_refresh_service_number_ambiguous_arrival_times_without_disambiguator`,
+`test_refresh_service_number_arrive_at_disambiguates_and_copies_only_that_rows_claims`;
+the three tests already listed above under Evidence
+(`test_replan_refresh_resolves_to_live_service`,
+`test_refresh_rejects_overlap_with_previous_slot`,
+`test_refresh_later_arrival_shifts_subsequent_same_day_slots`) pass unchanged.

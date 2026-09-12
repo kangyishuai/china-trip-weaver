@@ -6974,3 +6974,49 @@ disambiguates_and_copies_only_that_rows_claims`（同③但事件带
 既有测试原样绿（`tests.test_replan`：`Ran 39 tests`、`FAILED (failures=3,
 errors=1)`，四个失败/报错正是新增的①②③④）。
 
+## 书 AH1「refresh 默认选车过滤可行性」任务 2（2026-09-12，main 直改）
+
+`_select_refresh_service` 加形参 `earliest_depart=None`（由
+`_apply_refresh` 传入前一时段 `end_at`，日内第一个时段传 `None`）；无
+`service_number` 时先按 `depart_at >= earliest_depart` 过滤（`earliest_
+depart` 为 `None` 时不过滤）再取 `min(arrive_at, depart_at)`，过滤后为空
+抛 `refresh_overlap`，message 为「`%d same-day services all depart before
+the previous slot ends at %s`」（候选数、`earliest_depart`）；有
+`service_number` 时改调用新 helper `_disambiguate_service_matches`——单行直
+接返回；多行但 `depart_at`/`arrive_at` 两两相同视为重复取第一行；否则若
+事件带 `arrive_at`（`_matches_arrive_at` 支持完整 ISO 或 `HH:MM`，用
+`item_value[11:16]` 切片比较）且唯一命中一行则返回该行；否则抛新码
+`refresh_service_ambiguous`，message 列出全部候选的 `arrive_at`。
+`_apply_refresh` 原有的「`selected["depart_at"] < previous_slot["end_at"]`
+则 `refresh_overlap`」检查保留不动，`service_number` 分支不做可行性过滤，
+继续靠这条检查兜底（保住 L545 逐字节语义）；无 `service_number` 分支因为
+已经过滤过，这条检查恒为 False，不会重复触发。
+
+验收：①②③④与 L447/L545/L565 全绿（`tests.test_replan`：`Ran 39 tests
+... OK`）；全量 `Ran 659 tests ... OK` 0 skipped；secrets 0；pyflakes 对
+`plugins/china-trip-weaver/src tests scripts` 0 行；`build_scheduler_
+fixtures.py` 后 `git status --short -- tests/fixtures` 空（refresh 金样
+仍带 `service_number`，未受影响）；`git grep -c refresh_service_ambiguous`
+对 `README.md`/`README.zh-CN.md`/`docs/design/adr/0015-refresh-event.md`/
+`plugins/china-trip-weaver/skills/replan-china-trip/SKILL.md` 各命中 1 次；
+反向验证：把过滤条件临时改成 `str(item["depart_at"]) <= earliest_depart`
+→ ①从 `ok` 变 `ERROR`（现状复现的同一个 `refresh_overlap`，因为 A/B 都满足
+`<=` 16:00 里的一个、`min` 又选回到达更早的 A）→ 用备份文件还原 → `tests.
+test_replan` 重新 `Ran 39 tests ... OK`。
+
+文档：ADR-0015 末尾加「Amendment (2026-09-12)」一节讲新过滤规则、新
+`refresh_overlap` message 与 `refresh_service_ambiguous` 的完整语义；
+README.md:200、README.zh-CN.md:199 的 refresh 段落各加一句；`skills/
+replan-china-trip/SKILL.md` 的 `--rail-result` 段落加两句。均只追加/插入
+一句，未改动其余原文。
+
+判断：`_disambiguate_service_matches` 里「事件给了 `arrive_at` 但零命中」
+这一分支任务书没写全（只写「没带或仍多于一行」两种），按「不静默选错」处理
+成同样报 `refresh_service_ambiguous`，不新开错误码，详见 BLOCKED.md 本书
+条目；未单独编号写测试锁定这个分支（任务 1 只要求①②③④四条）。
+
+`git diff beeb906 --stat`：`BLOCKED.md`、`PROGRESS.md`、`README.md`、
+`README.zh-CN.md`、`docs/design/adr/0015-refresh-event.md`、
+`plugins/.../skills/replan-china-trip/SKILL.md`、`plugins/.../replan.py`、
+`tests/test_replan.py` 八个文件，全部在「界限」白名单内；`git diff beeb906
+-- tests | grep -E '^-\s*def test_'` 0 行。

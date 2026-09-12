@@ -247,7 +247,8 @@ def _apply_refresh(
     if rail_result is None:
         raise ReplanError("refresh_result_required", "refresh requires a rail_result")
     travel_date = str(leg["depart_at"])[:10]
-    selected = _select_refresh_service(event, rail_result, travel_date)
+    earliest_depart = trip["days"][day_index]["slots"][slot_index - 1]["end_at"] if slot_index > 0 else None
+    selected = _select_refresh_service(event, rail_result, travel_date, earliest_depart)
     if str(selected["arrive_at"])[:10] != str(selected["depart_at"])[:10]:
         raise ReplanError(
             "refresh_unsupported", "refresh does not support a service that arrives on a different day",
@@ -341,6 +342,7 @@ def _select_refresh_service(
     event: Mapping[str, Any],
     rail_result: Mapping[str, Any],
     travel_date: str,
+    earliest_depart: Optional[str] = None,
 ) -> Mapping[str, Any]:
     same_day = [
         item for item in rail_result.get("transport_legs", ())
@@ -353,10 +355,50 @@ def _select_refresh_service(
             raise ReplanError(
                 "refresh_service_not_found", "no rail service matches the requested service_number",
             )
-        return matches[0]
+        return _disambiguate_service_matches(event, matches)
     if not same_day:
         raise ReplanError("refresh_no_service", "no rail service is available for the requested date")
-    return min(same_day, key=lambda item: (item["arrive_at"], item["depart_at"]))
+    feasible = same_day
+    if earliest_depart is not None:
+        feasible = [item for item in same_day if str(item["depart_at"]) >= earliest_depart]
+    if not feasible:
+        raise ReplanError(
+            "refresh_overlap",
+            "%d same-day services all depart before the previous slot ends at %s" % (len(same_day), earliest_depart),
+        )
+    return min(feasible, key=lambda item: (item["arrive_at"], item["depart_at"]))
+
+
+def _disambiguate_service_matches(
+    event: Mapping[str, Any], matches: List[Mapping[str, Any]],
+) -> Mapping[str, Any]:
+    if len(matches) == 1:
+        return matches[0]
+    distinct = {(item.get("depart_at"), item.get("arrive_at")) for item in matches}
+    if len(distinct) == 1:
+        return matches[0]
+    requested_arrive_at = event.get("arrive_at")
+    if requested_arrive_at:
+        selected = [
+            item for item in matches if _matches_arrive_at(item.get("arrive_at"), str(requested_arrive_at))
+        ]
+        if len(selected) == 1:
+            return selected[0]
+    arrive_ats = ", ".join(str(item.get("arrive_at")) for item in matches)
+    raise ReplanError(
+        "refresh_service_ambiguous",
+        "multiple rail services match the requested service_number with different arrival times: "
+        + arrive_ats,
+    )
+
+
+def _matches_arrive_at(item_arrive_at: Any, requested: str) -> bool:
+    item_value = str(item_arrive_at)
+    if item_value == requested:
+        return True
+    if len(requested) == 5 and requested[2] == ":":
+        return item_value[11:16] == requested
+    return False
 
 
 def _recompute_rail_health(trip: Dict[str, Any], operations: List[Dict[str, Any]], now: str) -> None:
