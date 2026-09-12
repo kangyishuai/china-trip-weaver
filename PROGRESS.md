@@ -7637,3 +7637,7 @@ beeb906 -- tests | grep -E '^-\s*def test_'` 为 0 行，判断没有违反
 7. 静态门：`uvx --from pyflakes pyflakes plugins/china-trip-weaver/src scripts tests` exit 0、诊断 0 行；系统 Python未预装 pyflakes，故用机器已有 uvx 临时运行，未改仓库或系统 Python 环境。
 8. 漂移复现：四份目标文档逐份执行 `git grep -c` 查 `_filter_direct_rows|getFlightPriceByCities|_validate_meeting_anchor|refresh_overlap|anysearch_http.py`，均 exit 1、输出为空；`git grep -l -- '/Users/' -- docs/design` 同为 exit 1、输出为空。
 9. 文件数现状：运行时 `*.py` 42 个、`scripts/*.py` 6 个，合计 48；当前无待裁决项。
+
+## 书 AM1 任务 1：先写红测试（2026-09-12）
+
+新增 `tests/test_design_docs.py`，且只有一个 `def test_`：枚举 `plugins/china-trip-weaver/src/china_trip_weaver/**/*.py` 与 `scripts/*.py`，硬断言总数为 48，并逐文件检查 basename 出现在 `docs/design/09-impl-map.md`。改文档前实测 `Ran 1 test in 0.005s`、`FAILED (failures=1)`，失败输出恰列 7 个缺名：`anysearch_http.py`、`build_plan_fixtures.py`、`build_provider_fixtures.py`、`build_renderer_fixtures.py`、`build_scheduler_fixtures.py`、`qa_renderer_browser.py`、`scan_secrets.py`；生产代码与设计文档尚未改。
