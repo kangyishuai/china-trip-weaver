@@ -267,7 +267,7 @@ def _labels(locale: str) -> Mapping[str, str]:
             "skip": "Skip to itinerary", "travelers": "Travelers", "revision": "Revision",
             "generated": "Generated", "mode": "Data mode", "truth": "Truth and limits", "request": "Trip request",
             "transport": "Transport", "lodging": "Lodging", "days": "Daily itinerary",
-            "stations": "Stations",
+            "stations": "Stations", "seats": "Seats", "seat_available": "available", "seat_unavailable": "unavailable",
             "locations": "Location overview", "unknowns": "Alternatives and unknowns",
             "evidence": "Evidence", "health": "Data-source status", "none": "None provided",
             "readonly": "Read-only planning only", "source": "Open source", "price_unknown": "Price unknown",
@@ -291,7 +291,7 @@ def _labels(locale: str) -> Mapping[str, str]:
         "locale": "zh-CN",
         "skip": "跳到行程正文", "travelers": "人数", "revision": "修订", "generated": "生成于", "mode": "数据口径",
         "truth": "真实性与边界", "request": "行程需求", "transport": "交通摘要",
-        "stations": "车站",
+        "stations": "车站", "seats": "座位", "seat_available": "有", "seat_unavailable": "无",
         "lodging": "住宿摘要", "days": "逐日行程", "locations": "位置概览",
         "unknowns": "备选与未知项", "evidence": "证据", "health": "数据源状态",
         "none": "无 / 未提供", "readonly": "仅提供只读规划", "source": "查看来源",
@@ -523,7 +523,7 @@ def _transport_section(
         cards.append(
             '<article class="entity-card" data-entity-id="%s" data-entity-kind="transport" data-travel-mode="%s" '
             'data-service-number="%s" data-from-ref="%s" data-to-ref="%s">'
-            '<h3>%s · %s</h3>%s<p>%s → %s</p>%s<p>%s — %s · %s %s</p>'
+            '<h3>%s · %s</h3>%s<p>%s → %s</p>%s%s<p>%s — %s · %s %s</p>'
             '%s<p>%s</p>%s</article>' % (
                 attr(leg["leg_id"]), attr(leg["travel_mode"]), attr(leg["service_number"] or ""),
                 attr(leg["from_ref"]), attr(leg["to_ref"]),
@@ -531,6 +531,7 @@ def _transport_section(
                 _entity_badges(leg["leg_id"], states, unknown_refs, labels),
                 text(_reference_name(leg["from_ref"], names, labels)), text(_reference_name(leg["to_ref"], names, labels)),
                 _rail_station_line(leg, labels),
+                _rail_seat_line(leg, claims, labels),
                 _time_or_unknown(leg["depart_at"], labels), _time_or_unknown(leg["arrive_at"], labels),
                 text(leg["duration_minutes"] if leg["duration_minutes"] is not None else labels["none"]), text(labels["minutes"]),
                 _price(leg["price"], leg["leg_id"], labels), links, _claim_links(leg["claim_ids"], claims, labels),
@@ -549,6 +550,36 @@ def _rail_station_line(leg: Mapping[str, Any], labels: Mapping[str, str]) -> str
     return "<p>%s%s%s → %s</p>" % (
         text(labels["stations"]), separator, text(stations[0]), text(stations[1]),
     )
+
+
+def _rail_seat_line(
+    leg: Mapping[str, Any],
+    claims: Mapping[str, Mapping[str, Any]],
+    labels: Mapping[str, str],
+) -> str:
+    if leg.get("travel_mode") != "rail":
+        return ""
+    availability_claim = None
+    for claim_id in leg.get("claim_ids") or ():
+        claim = claims.get(claim_id)
+        if claim is not None and claim.get("field_path") == "/availability":
+            availability_claim = claim
+            break
+    if availability_claim is None or not isinstance(availability_claim.get("value"), list):
+        return ""
+    seats = []
+    for item in availability_claim["value"]:
+        if not isinstance(item, Mapping):
+            continue
+        seat_name = item.get("seat_name")
+        available = item.get("available")
+        if not isinstance(seat_name, str) or not seat_name.strip() or not isinstance(available, bool):
+            continue
+        seats.append("%s %s" % (seat_name, labels["seat_available"] if available else labels["seat_unavailable"]))
+    if not seats:
+        return ""
+    separator = "：" if labels["locale"] == "zh-CN" else ": "
+    return "<p>%s%s%s</p>" % (text(labels["seats"]), separator, text(" · ".join(seats)))
 
 
 def _lodging_section(
@@ -594,17 +625,19 @@ def _render_day_slots(
         state = {"scheduled": "selected", "tentative": "alternative", "skipped": "skipped", "unknown": "unknown"}[slot["status"]]
         leg = transport_legs.get(slot["ref_id"]) if transport_legs and slot["ref_id"] else None
         station_line = _rail_station_line(leg, labels) if leg else ""
+        seat_line = _rail_seat_line(leg, claims, labels) if leg else ""
         slots.append(
             '<li class="timeline-item" data-slot-id="%s" data-ref-id="%s" data-slot-kind="%s" data-slot-status="%s" '
             'data-start-at="%s" data-end-at="%s">'
             '<span class="slot-time"><time datetime="%s">%s</time>–<time datetime="%s">%s</time></span>'
-            '<h3>%s</h3><div class="badge-row"><span class="status-badge" data-kind="%s">%s</span>%s%s</div>%s%s</li>' % (
+            '<h3>%s</h3><div class="badge-row"><span class="status-badge" data-kind="%s">%s</span>%s%s</div>%s%s%s</li>' % (
                 attr(slot["slot_id"]), attr(slot["ref_id"] or ""), attr(slot["kind"]), attr(slot["status"]),
                 attr(slot["start_at"]), attr(slot["end_at"]),
                 attr(slot["start_at"]), _clock(slot["start_at"]), attr(slot["end_at"]), _clock(slot["end_at"]),
                 text(slot["title"]), attr(slot["kind"]), text(_enum_label(labels, "kind", slot["kind"])),
                 _selection_badge(state, labels), lock,
                 station_line,
+                seat_line,
                 _claim_links(slot["claim_ids"], claims, labels, anchored=anchored_claims),
             )
         )
