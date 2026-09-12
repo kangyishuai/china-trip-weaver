@@ -38,7 +38,7 @@ validate_html(trip.html, validated_trip) -> report
 
 Trip 与 Journey 的铁路腿仅在 12306 `booking_url` 深链的 `fs`/`ts` 两端都包含三位大写站码时显示到发站名；站名来源于该深链，不是 `transportLeg` schema 字段，缺码时不显示也不推测。
 
-铁路腿仅从自身 `claim_ids` 指向的第一条 `/availability` claim 显示各座位等级的「有/无」状态；没有该 claim 时不显示座位行，且页面不显示 claim 中的分座席票价。
+铁路腿仅从自身 `claim_ids` 指向的第一条 `/availability` claim 显示各座位等级的状态：原始值 `*` 显示「未开售」，`候补` 显示「候补」，其余按 `available` 显示「有/无」；没有该 claim 时不显示座位行，且页面不显示 claim 中的分座席票价。
 
 每个展示的时间、价格、车次、开放状态、路线时长必须能从 embedded Trip 精确定位；模板不得引入经验数字。
 

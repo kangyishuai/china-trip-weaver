@@ -268,6 +268,7 @@ def _labels(locale: str) -> Mapping[str, str]:
             "generated": "Generated", "mode": "Data mode", "truth": "Truth and limits", "request": "Trip request",
             "transport": "Transport", "lodging": "Lodging", "days": "Daily itinerary",
             "stations": "Stations", "seats": "Seats", "seat_available": "available", "seat_unavailable": "unavailable",
+            "seat_presale": "not on sale yet", "seat_waitlist": "waitlist",
             "locations": "Location overview", "unknowns": "Alternatives and unknowns",
             "evidence": "Evidence", "health": "Data-source status", "none": "None provided",
             "readonly": "Read-only planning only", "source": "Open source", "price_unknown": "Price unknown",
@@ -292,6 +293,7 @@ def _labels(locale: str) -> Mapping[str, str]:
         "skip": "跳到行程正文", "travelers": "人数", "revision": "修订", "generated": "生成于", "mode": "数据口径",
         "truth": "真实性与边界", "request": "行程需求", "transport": "交通摘要",
         "stations": "车站", "seats": "座位", "seat_available": "有", "seat_unavailable": "无",
+        "seat_presale": "未开售", "seat_waitlist": "候补",
         "lodging": "住宿摘要", "days": "逐日行程", "locations": "位置概览",
         "unknowns": "备选与未知项", "evidence": "证据", "health": "数据源状态",
         "none": "无 / 未提供", "readonly": "仅提供只读规划", "source": "查看来源",
@@ -572,10 +574,17 @@ def _rail_seat_line(
         if not isinstance(item, Mapping):
             continue
         seat_name = item.get("seat_name")
+        availability = item.get("availability")
         available = item.get("available")
         if not isinstance(seat_name, str) or not seat_name.strip() or not isinstance(available, bool):
             continue
-        seats.append("%s %s" % (seat_name, labels["seat_available"] if available else labels["seat_unavailable"]))
+        if availability == "*":
+            availability_label = labels["seat_presale"]
+        elif availability == "候补":
+            availability_label = labels["seat_waitlist"]
+        else:
+            availability_label = labels["seat_available"] if available else labels["seat_unavailable"]
+        seats.append("%s %s" % (seat_name, availability_label))
     if not seats:
         return ""
     separator = "：" if labels["locale"] == "zh-CN" else ": "

@@ -1,3 +1,15 @@
+## 书 AK1「12306 未开售星号」（2026-09-12）：任务书既有 rail 夹具数少写 1，非阻塞
+
+任务书写「既有 15 份 rail 夹具 item_count 不变」，但 `64919f3` 的 Git tree
+实际已有 16 份 `tests/fixtures/providers/rail12306/*.json`（auth、cross_day、
+empty、malicious、no_seat、outside_presale、pipe_drift、rate_limit、station、
+station_rows、station_rows_none、success、timeout、transfer、waitlist、
+wrong_shape），不是 15。此差异在任务 2 的逐文件基线审计时发现；功能现状、
+总夹具 84、测试 673 与任务书均吻合，因此没有需要停下等待的实现分叉。
+处理：以 Git 基线的 16 份为准逐个比较 `expected.item_count`，结果 16/16 零变化；
+只新增 `presale_star`，当前 rail 夹具 17、provider 总夹具 85。请管理者裁决是否
+仅修正后续任务书口径；本分支不篡改历史夹具来迁就数字。
+
 ## 书 AD3「Journey 页位置示意」（2026-09-11，worktree `.tmp/wt-ad3` 分支 `journey-location-svg`，第十四波三份并行书之一）：两处判断，非阻塞
 
 1. 「界限」写 `tests/test_journey.py（只许新增 def test_）`，但加了必需分区后

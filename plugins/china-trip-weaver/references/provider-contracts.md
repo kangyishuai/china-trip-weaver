@@ -5,7 +5,7 @@ All providers are read-only adapters. A provider is `ready` only after its pin/f
 | Provider | Pin/fingerprint | Capability | Query deadline | Keyless behavior |
 |---|---|---|---:|---|
 | Host web | Host runtime with URL-bearing results | Dated destination research | 20s per query | Preferred keyless source; unavailable becomes explicit degradation. |
-| 12306 MCP | `12306-mcp@0.3.10`, exact 8 tools | Station/direct/interline/route-stop rail data | 15s direct; 25s interline | Public query; cache → dated 12306 deep link → unknown. |
+| 12306 MCP | `12306-mcp@0.3.10`, exact 8 tools | Station/direct/interline/route-stop rail data; seat `num="*"` means not yet on sale | 15s direct; 25s interline | Public query; cache → dated 12306 deep link → unknown. |
 | FlyAI (optional) | `@fly-ai/flyai-cli@1.0.16`, version/help/current envelope | Flight and lodging candidates/deep links | 25s | Trial only after probe; dated Fliggy link → unknown. |
 | AMap | v5 POI, v3 geocode/walk/transit/drive, v4 ride fingerprints | POI (`poi`, optional `types`/`city_limit`), nearby search (`poi_around`), geocode, route matrix | 8s POI/geocode; 12s route | No API call; cache → deep link/static estimate → unknown. |
 | VariFlight | `@variflight-ai/variflight-mcp@1.0.3`, exact 9 tools | Optional flight status/weather/comfort/price enrichment | 15s | Probe/list only; no business call. |
