@@ -2,17 +2,34 @@
 
 唯一的当前进度记录。2026-09-03 到 09-06 的逐轮任务书、实测证据、验收记录已归档，见「历史索引」。
 
-## 现状速览（2026-09-12 实测，0.18.0）
+## 现状速览（2026-09-12 实测，0.18.1）
 
-- 版本：`0.18.0`，唯一来源是
+- 版本：`0.18.1`，唯一来源是
   `plugins/china-trip-weaver/.codex-plugin/plugin.json` 与
   `src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
   位置一律引用这两处之一，历史版本只以日期提及、不写字面值。
-- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 661 tests`，`OK`，0 skipped；
+- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 667 tests`，`OK`，0 skipped；
   `scripts/scan_secrets.py` 0 命中；
   `~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src
   tests scripts` 0 行。带假 Key（`ANYSEARCH_API_KEY=... unittest`）跑全量同样
-  661 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+  667 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+- 0.18.1（第十九波，一本修正加一本页面新增）：12306 站名过滤去掉「证据门控」——
+  `tests/fixtures/mcp_stdio_server.py` 的 `ticket_payload` 按站码在自己的站表反查
+  真实站名，`_filter_direct_rows` 对确认不匹配的行一律删、全删返回零行并带
+  `station_rows_filtered:<n>` 与 `station_rows_all_filtered`（新夹具
+  `station_rows_none`，夹具 84）；`ctw rail --limit` 与 `RailBackend.limit` 默认
+  10→30。管理者实测（默认不带 --limit）：福州→武夷山 10 行全到武夷山北（删 20）、
+  武夷山→福州 9 行、泉州→厦门 30 行零删；福州→建阳 30 行全删、报 no_results 加两条
+  warning——南平市站其实在建阳区，前缀规则认不出，属已知假阴性（12306 站名不带
+  行政区），今天不修。行程页火车腿显示到发站——`render/html.py` 新增纯函数
+  `rail_station_names(booking_url)`（`fs`/`ts` 两端都带 `[A-Z]{3}` 站码才返回），
+  Trip 页交通卡片一处、Journey 页交通汇总／交通卡片／逐日时间轴／预订清单四处加
+  「车站：X → Y」，占位深链不显示；分组示例页多两行站名，README demo 与
+  journey-16d 零字节差异；07-renderer 加一句。真实行程 r3 页重渲染为
+  `福建中秋国庆16天行程-0.18.1.html`：9/26 腿四处显示「车站：福州南 → 武夷山北」，
+  validate-html errors=0，QA failures=[]，横向溢出 0。合并后对真实 journey.json
+  不指定车次重放刷新（默认 30 行）：默认路径选中 G1648 08:00→09:11 福州→武夷山北、
+  3 条 claim、errors=0，replan 产出的 Trip 页也带站名行。
 - 0.18.0（第十八波，两本都改行为）：replan 默认选车——`_select_refresh_service` 加
   `earliest_depart`（前一时段 `end_at`），无 `service_number` 时只在发车不早于它的
   候选里取最早到达，全不可行才抛 `refresh_overlap`（message 带候选数与前一时段结束
