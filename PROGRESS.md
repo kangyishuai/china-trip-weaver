@@ -6956,3 +6956,21 @@ session 单次提交），本轮任务 0＋1＋2 只提交一次，commit messag
   「refreshed service departs before the previous slot ends」，与任务书
   描述一致；基线 655 测试 OK、secrets 0、pyflakes 0，与任务书数字全部
   吻合。
+
+## 书 AH1「refresh 默认选车过滤可行性」任务 1（2026-09-12，main 直改）
+
+`tests/test_replan.py` 新增四条测试（插入在 L565 `test_refresh_
+later_arrival_shifts_subsequent_same_day_slots` 之后、suspend 测试之前），
+先红：①`test_refresh_default_selection_skips_services_departing_before_
+previous_slot`（A/B 两候选、不带 `service_number`）此刻 `ERROR`——现状选中
+到达更早的 A，撞既有 overlap 检查抛 `refresh_overlap`；②`test_refresh_
+default_selection_reports_overlap_with_all_same_day_candidates`（两候选都
+早于前一时段结束）`FAIL`——message 里没有候选数；③`test_refresh_service_
+number_ambiguous_arrival_times_without_disambiguator`（同 `service_number`
+两行、到达 09:15/09:30、无 `arrive_at`）`FAIL`——`ReplanError not raised`，
+现状 `matches[0]` 静默选中一行；④`test_refresh_service_number_arrive_at_
+disambiguates_and_copies_only_that_rows_claims`（同③但事件带
+`arrive_at="09:30"`）`FAIL`——选中的仍是 09:15 那行。L447/L545/L565 三条
+既有测试原样绿（`tests.test_replan`：`Ran 39 tests`、`FAILED (failures=3,
+errors=1)`，四个失败/报错正是新增的①②③④）。
+

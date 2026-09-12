@@ -582,6 +582,150 @@ class ReplanTests(unittest.TestCase):
                 (shifted["start_at"], shifted["end_at"]),
             )
 
+    def test_refresh_default_selection_skips_services_departing_before_previous_slot(self):
+        base = load(ROOT / "demo/trip.json")
+        service_a = _refresh_service(
+            leg_id="leg-rail-live-a", service_number="A1",
+            depart_at="2026-10-18T14:30:00+08:00", arrive_at="2026-10-18T18:30:00+08:00",
+            claim_ids=["claim-a-depart", "claim-a-price"],
+        )
+        service_b = _refresh_service(
+            leg_id="leg-rail-live-b", service_number="B1",
+            depart_at="2026-10-18T16:00:00+08:00", arrive_at="2026-10-18T19:00:00+08:00",
+            duration_minutes=180,
+            price={
+                "amount": 210, "currency": "CNY", "price_type": "live", "unit": "per_person",
+                "includes_taxes": True, "queried_at": "2026-09-10T00:00:00+08:00", "claim_id": "claim-b-price",
+            },
+            claim_ids=["claim-b-depart", "claim-b-price"],
+        )
+        rail_result = _refresh_rail_result(
+            legs=[service_a, service_b],
+            claims=(
+                _refresh_claims("leg-rail-live-a", "claim-a-depart", "claim-a-price")
+                + _refresh_claims("leg-rail-live-b", "claim-b-depart", "claim-b-price")
+            ),
+        )
+        result = replan_trip(
+            base,
+            _refresh_event(subject_ref="leg-rail-fallback-e67d77f564f5", service_number=None),
+            base_revision=base["revision"]["number"], user_locked_refs=[],
+            clock=FixedClock.from_iso("2026-10-15T12:00:00+08:00"), rail_result=rail_result,
+        )
+        self.assertEqual("provider_change", result.patch["trigger"])
+        report = validate_trip(result.trip)
+        self.assertEqual(0, len(report.errors), [issue.render() for issue in report.errors])
+        leg = next(
+            item for item in result.trip["transport_legs"]
+            if item["leg_id"] == "leg-rail-fallback-e67d77f564f5"
+        )
+        self.assertEqual("B1", leg["service_number"])
+        self.assertEqual("2026-10-18T16:00:00+08:00", leg["depart_at"])
+
+    def test_refresh_default_selection_reports_overlap_with_all_same_day_candidates(self):
+        base = load(ROOT / "demo/trip.json")
+        service_a = _refresh_service(
+            leg_id="leg-rail-live-a", service_number="A1",
+            depart_at="2026-10-18T14:00:00+08:00", arrive_at="2026-10-18T15:00:00+08:00",
+            claim_ids=["claim-a-depart", "claim-a-price"],
+        )
+        service_b = _refresh_service(
+            leg_id="leg-rail-live-b", service_number="B1",
+            depart_at="2026-10-18T15:00:00+08:00", arrive_at="2026-10-18T15:30:00+08:00",
+            claim_ids=["claim-b-depart", "claim-b-price"],
+        )
+        rail_result = _refresh_rail_result(
+            legs=[service_a, service_b],
+            claims=(
+                _refresh_claims("leg-rail-live-a", "claim-a-depart", "claim-a-price")
+                + _refresh_claims("leg-rail-live-b", "claim-b-depart", "claim-b-price")
+            ),
+        )
+        with self.assertRaises(ReplanError) as raised:
+            replan_trip(
+                base,
+                _refresh_event(subject_ref="leg-rail-fallback-e67d77f564f5", service_number=None),
+                base_revision=base["revision"]["number"], user_locked_refs=[],
+                clock=FixedClock.from_iso("2026-10-15T12:00:00+08:00"), rail_result=rail_result,
+            )
+        self.assertEqual("refresh_overlap", raised.exception.code)
+        message = str(raised.exception)
+        self.assertIn("2", message)
+        self.assertIn("2026-10-18T16:00:00+08:00", message)
+
+    def test_refresh_service_number_ambiguous_arrival_times_without_disambiguator(self):
+        base = load(ROOT / "demo/trip.json")
+        service_early = _refresh_service(
+            leg_id="leg-rail-live-g1902-a", service_number="G1902",
+            depart_at="2026-10-16T07:50:00+08:00", arrive_at="2026-10-16T09:15:00+08:00",
+            claim_ids=["claim-g1902a-depart", "claim-g1902a-price"],
+        )
+        service_late = _refresh_service(
+            leg_id="leg-rail-live-g1902-b", service_number="G1902",
+            depart_at="2026-10-16T07:50:00+08:00", arrive_at="2026-10-16T09:30:00+08:00",
+            claim_ids=["claim-g1902b-depart", "claim-g1902b-price"],
+        )
+        rail_result = _refresh_rail_result(
+            legs=[service_early, service_late],
+            claims=(
+                _refresh_claims("leg-rail-live-g1902-a", "claim-g1902a-depart", "claim-g1902a-price")
+                + _refresh_claims("leg-rail-live-g1902-b", "claim-g1902b-depart", "claim-g1902b-price")
+            ),
+        )
+        with self.assertRaises(ReplanError) as raised:
+            replan_trip(
+                base, _refresh_event(service_number="G1902"),
+                base_revision=base["revision"]["number"], user_locked_refs=[],
+                clock=FixedClock.from_iso("2026-10-15T12:00:00+08:00"), rail_result=rail_result,
+            )
+        self.assertEqual("refresh_service_ambiguous", raised.exception.code)
+        message = str(raised.exception)
+        self.assertIn("09:15", message)
+        self.assertIn("09:30", message)
+
+    def test_refresh_service_number_arrive_at_disambiguates_and_copies_only_that_rows_claims(self):
+        base = load(ROOT / "demo/trip.json")
+        service_early = _refresh_service(
+            leg_id="leg-rail-live-g1902-a", service_number="G1902",
+            depart_at="2026-10-16T07:50:00+08:00", arrive_at="2026-10-16T09:15:00+08:00",
+            claim_ids=["claim-g1902a-depart", "claim-g1902a-price"],
+        )
+        service_late = _refresh_service(
+            leg_id="leg-rail-live-g1902-b", service_number="G1902",
+            depart_at="2026-10-16T07:50:00+08:00", arrive_at="2026-10-16T09:30:00+08:00",
+            duration_minutes=100,
+            price={
+                "amount": 128, "currency": "CNY", "price_type": "live", "unit": "per_person",
+                "includes_taxes": True, "queried_at": "2026-09-10T00:00:00+08:00", "claim_id": "claim-g1902b-price",
+            },
+            claim_ids=["claim-g1902b-depart", "claim-g1902b-price"],
+        )
+        rail_result = _refresh_rail_result(
+            legs=[service_early, service_late],
+            claims=(
+                _refresh_claims("leg-rail-live-g1902-a", "claim-g1902a-depart", "claim-g1902a-price")
+                + _refresh_claims("leg-rail-live-g1902-b", "claim-g1902b-depart", "claim-g1902b-price")
+            ),
+        )
+        result = replan_trip(
+            base, _refresh_event(service_number="G1902", arrive_at="09:30"),
+            base_revision=base["revision"]["number"], user_locked_refs=[],
+            clock=FixedClock.from_iso("2026-10-15T12:00:00+08:00"), rail_result=rail_result,
+        )
+        report = validate_trip(result.trip)
+        self.assertEqual(0, len(report.errors), [issue.render() for issue in report.errors])
+        leg = next(
+            item for item in result.trip["transport_legs"]
+            if item["leg_id"] == "leg-rail-fallback-6d95c810b44d"
+        )
+        self.assertEqual("2026-10-16T09:30:00+08:00", leg["arrive_at"])
+        self.assertEqual(["claim-g1902b-depart", "claim-g1902b-price"], leg["claim_ids"])
+        claim_ids_in_trip = {claim["claim_id"] for claim in result.trip["claims"]}
+        self.assertIn("claim-g1902b-depart", claim_ids_in_trip)
+        self.assertIn("claim-g1902b-price", claim_ids_in_trip)
+        self.assertNotIn("claim-g1902a-depart", claim_ids_in_trip)
+        self.assertNotIn("claim-g1902a-price", claim_ids_in_trip)
+
     def test_suspend_removes_leg_and_recomputes_budget_and_unknowns(self):
         """Beyond the generic run_replan_fixture checks, assert directly on the leg,
         budget_ledger, and unknowns the way test_replan_refresh_resolves_to_live_service
