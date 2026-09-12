@@ -197,6 +197,8 @@ ctw journey assemble --request REQUEST.json --trip TRIP.json [--trip TRIP.json .
 ctw journey assemble --journey JOURNEY.json --replace-trip TRIP-rN.json --base-revision N [--reason REASON] [--fixed-clock ISO] --output-json JOURNEY.json
 ```
 
+During initial assembly and `--replace-trip`, a child Trip without a `budget_ledger` has one recomputed from the facts already in that Trip before connections and Journey totals are derived; an existing ledger is left unchanged.
+
 The runtime uses no third-party Python package. Trip and Journey renderers refuse invalid input; both HTML validators block structural, CSP, remote-resource, unsafe-link, secret, fact-mapping, traceability, and transaction-action violations.
 
 `ctw replan`'s `refresh` event replaces one rail leg with a freshly queried service: run `ctw rail --output-json` first, then pass that file's path as `--rail-result`. `--rail-result` is required for a `refresh` event and rejected for every other event type. When the event omits `service_number`, the default selection only considers same-day services that depart no earlier than the previous slot's end before picking the earliest arrival, raising `refresh_overlap` (naming the candidate count and that end time) only when none qualify; an explicit `service_number` that still matches more than one same-day row with different arrival times raises `refresh_service_ambiguous` unless the event's `arrive_at` (a full ISO timestamp or a bare `HH:MM`) picks one. A `suspend` event removes a leg that stopped running (a cancelled train, a suspended ferry crossing) together with its slot, budget-ledger line, and any now-orphaned claims in one patch, swapping the slot for a `free`- or `poi`-kind `replacement_slot`; the patch `trigger` is `disruption`.

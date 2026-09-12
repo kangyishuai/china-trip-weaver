@@ -7432,3 +7432,13 @@ beeb906 -- tests | grep -E '^-\s*def test_'` 为 0 行，判断没有违反
 紧跟原缺账本容忍测试新增三条：①删中段账本后，补算账本须与 demo 原账本 `canonical_json` 相等且 Journey `known_cost_cny` 不变；②`replace_trip_in_journey` 收到无账本替换 Trip 后须补出账本并通过 `validate_journey`；③三个 Trip 全有账本时装配须与 demo 逐字节相同。
 
 红绿基线：①②合跑 `Ran 2 tests in 0.041s`，`FAILED (failures=1, errors=1)`；①在读取装配后中段 `budget_ledger` 时 `KeyError`，②断言替换后的 Trip 含该键失败。③单跑 `Ran 1 test in 0.022s ... OK`。生产代码尚未修改，符合“两红一绿”。
+
+## 书 AJ1 任务 2：实现与验收（2026-09-12）
+
+- `journey.py` 新增 `_with_missing_budget_ledgers`：有账本的 Mapping 原样传递；无账本的深拷贝后以 `_budget_ledger(request, days, transport_legs, lodgings, pois, claims)` 补算，并先剔除旧 `/budget_ledger/` unknowns 再追加返回项。调用点严格在 `ordered_trips` 排序后、住宿连接与跨段交通定价前。
+- README 中英文 `journey assemble` 段与 Skill 的 `--replace-trip` 条目均说明缺账本会从 Trip 已有事实补算、已有账本不改。原 L1810 三项实值为 `price_type="unknown"`、两端金额仍 `None`，故只需把第一行 `assertIsNone` 改为 `assertEqual("unknown", ...)`，另两行保持与规划器真实输出相符；未编造金额。
+- 三条新测试与既有装配组：`Ran 9 tests in 0.563s ... OK`；`tests.test_journey`：`Ran 86 tests in 10.368s ... OK`，覆盖 L1792/L1810 与 L1897 起替换回归。
+- 反向验证：临时注掉唯一补算调用后①② `Ran 2 tests in 0.038s`，`FAILED (failures=1, errors=1)`；原样恢复并 `touch journey.py` 后 `Ran 2 tests in 0.067s ... OK`，无临时代码残留。
+- 三套语料零差异：AD1 普通 demo 哈希 `7ea7888f.../c2d07708...`、分组 demo `8d7a6b49.../6ec3dca8...`；renderer builder 输出 9 Trip/12 HTML、Journey `7ada91c0.../13962ec3...`，各次限定 `git status` 均空。
+- 结果实测：补算账本与 demo 原账本 `canonical_json` 相等，Journey `known_cost_cny=4200`，调用者传入的中段 Trip 仍无账本（未被污染）；连接价格为 `unknown/None/None`。
+- 全量：`Ran 670 tests in 57.186s ... OK`，0 skipped；secrets `0 finding(s) across 385 file(s)`；pyflakes 零输出。删测 grep 0 行，`git diff --check` 零输出，兜底文案仍在 `journey.py` 命中 1 次。

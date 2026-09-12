@@ -1819,7 +1819,7 @@ class JourneyExtractAssembleTests(unittest.TestCase):
             trips, self.request, FixedClock.from_iso(FIXED_NOW),
         )
         transport = reassembled["segment_connections"][0]["cross_segment_transport"]
-        self.assertIsNone(transport["price_type"])
+        self.assertEqual("unknown", transport["price_type"])
         self.assertIsNone(transport["amount_min_cny"])
         self.assertIsNone(transport["amount_max_cny"])
         report = validate_journey(reassembled)

@@ -1662,6 +1662,34 @@ def extract_trip_from_journey(
     raise ValueError("Journey does not contain Trip %s" % trip_id)
 
 
+def _with_missing_budget_ledgers(
+    trips: Sequence[Mapping[str, Any]],
+) -> Tuple[Mapping[str, Any], ...]:
+    """Recompute only absent Trip ledgers from facts already in each Trip."""
+
+    completed: List[Mapping[str, Any]] = []
+    for trip in trips:
+        if "budget_ledger" in trip:
+            completed.append(trip)
+            continue
+        prepared = copy.deepcopy(dict(trip))
+        ledger, budget_unknowns = _budget_ledger(
+            prepared["request"],
+            prepared["days"],
+            prepared["transport_legs"],
+            prepared["lodgings"],
+            prepared["pois"],
+            prepared["claims"],
+        )
+        prepared["budget_ledger"] = ledger
+        prepared["unknowns"] = [
+            item for item in prepared["unknowns"]
+            if not str(item["field_path"]).startswith("/budget_ledger/")
+        ] + budget_unknowns
+        completed.append(prepared)
+    return tuple(completed)
+
+
 def assemble_journey_from_trips(
     trips: Sequence[Mapping[str, Any]],
     request: Mapping[str, Any],
@@ -1681,6 +1709,7 @@ def assemble_journey_from_trips(
         raise ValueError("Journey requires at least one complete Trip")
     normalized_request = _normalize_journey_request(request)
     ordered_trips = sorted(trips, key=lambda item: item["request"]["start_date"])
+    ordered_trips = _with_missing_budget_ledgers(ordered_trips)
     lodging_links = _assembled_lodging_links(ordered_trips)
     connections = _segment_connections(ordered_trips, lodging_links)
     return assemble_journey(
