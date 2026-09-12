@@ -10,7 +10,7 @@
   },
   "expected": {
     "affected_day": "day-1",
-    "operation_count": 31,
+    "operation_count": 33,
     "trigger": "provider_change",
     "unchanged_day_indexes": [
       1,

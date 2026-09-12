@@ -287,6 +287,14 @@ def _apply_refresh(
         if delta_minutes > 0:
             _shift_slots(trip, day_index, slot_index + 1, delta_minutes, locked_refs, operations, changed_refs)
 
+    claim_remove_indexes = sorted(
+        (index for index, claim in enumerate(trip["claims"]) if claim.get("subject_ref") == leg["leg_id"]),
+        reverse=True,
+    )
+    for index in claim_remove_indexes:
+        operations.append({"op": "remove", "path": "/claims/%d" % index})
+        trip["claims"].pop(index)
+
     for claim in rail_result.get("claims", ()):
         if claim.get("subject_ref") != selected.get("leg_id"):
             continue
@@ -541,4 +549,3 @@ def _find_transport_leg(trip: Mapping[str, Any], target_slot: Mapping[str, Any])
             if item["leg_id"] == ref_id:
                 return index, item
     raise ReplanError("suspend_not_transport", "suspend requires a transport leg")
-

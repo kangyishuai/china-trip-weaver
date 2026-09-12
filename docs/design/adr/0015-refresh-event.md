@@ -123,3 +123,14 @@ the three tests already listed above under Evidence
 (`test_replan_refresh_resolves_to_live_service`,
 `test_refresh_rejects_overlap_with_previous_slot`,
 `test_refresh_later_arrival_shifts_subsequent_same_day_slots`) pass unchanged.
+
+The refresh patch now removes every existing claim whose `subject_ref` equals
+the replaced leg's stable `leg_id` before copying the selected service's
+current claims. Each removal is emitted as a `/claims/<index>` JSON Patch
+operation in descending index order, and subsequent add paths use the shortened
+array length, so the patch remains replayable while claims belonging to every
+other leg and POI remain byte-for-byte unchanged. Repeating refresh therefore
+replaces the prior refresh's evidence instead of accumulating unreferenced
+claims. Evidence: `test_refresh_replaces_target_leg_claims_and_records_removals`,
+`test_refresh_twice_keeps_only_the_second_service_claims`, and
+`test_refresh_preserves_other_leg_and_poi_claims`.

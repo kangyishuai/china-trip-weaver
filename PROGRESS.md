@@ -7498,3 +7498,11 @@ beeb906 -- tests | grep -E '^-\s*def test_'` 为 0 行，判断没有违反
 `tests/test_replan.py` 只新增三个 `def test_`：①金样刷新后目标腿 claim id 集合须恰等于 rail_result 两条，且 patch 有两条 `/claims/` remove；②对结果用 G2002 与另两条 claim 再刷新，目标腿仍只剩第二轮两条；③其它腿与 POI 的 claim 前后 `canonical_json` 相同且 `validate_trip` 通过。
 
 改前单跑：① FAIL，多出 `claim-a69d7c41fdea2e04`/`claim-c67876a05486110b`；② FAIL，多出这两条 deep-link 与第一轮 `claim-refresh-depart`/`claim-refresh-price`；③ ok。汇总 `Ran 3 tests in 0.008s`，`FAILED (failures=2)`，准确达到“两红一绿”，生产实现未改。
+
+## 书 AK1 任务 2：实现与第 1 轮验收（2026-09-12）
+- `_apply_refresh` 在复制新 claim 前按目标旧腿 `leg_id` 找下标、倒序 pop，并逐条追加 `/claims/<i>` remove；其余逻辑未改。README 中英文、ADR-0015 末尾与 replan Skill 各同步一句；Skill quick validation 为 `Skill is valid!`。
+- 三条新测试先 `Ran 3 tests in 0.008s ... OK`；`tests.test_replan` 完整回归 `Ran 42 tests in 1.564s ... OK`，L447 起既有 refresh 测试全绿。
+- 反向验证：临时注掉清理段后①② `Ran 2 tests in 0.004s`、`FAILED (failures=2)`；逐字恢复并 `touch replan.py` 后 `Ran 2 tests in 0.003s ... OK`。
+- 实测：第一次刷新目标腿只剩两条新 claim，patch remove 为 `/claims/6`、`/claims/5`，总操作数 33，claims 可完整回放；其它 subject 的 13 条 claim `canonical_json` 相同；第二次刷新仍只剩第二轮两条。
+- `/usr/bin/python3 scripts/build_scheduler_fixtures.py` 实跑输出 `20 golden, 8 no-solution, 4 replan` 且零差异；现有生成器没有 refresh。为不手改夹具，调用同脚本的 `write_group()` 生成 `refresh.json`，最终金样唯一差异为 `operation_count 31→33`，manifest 按真实四份生成集保持不变；理由与不可兼得的验收项详见 BLOCKED。
+- 全量 `Ran 676 tests in 68.538s ... OK`，0 skipped；secrets `0 finding(s) across 385 file(s)`；pyflakes 零输出。删测 grep 与 `git diff --check` 均零输出；当前 stat 只含任务书允许文件。
