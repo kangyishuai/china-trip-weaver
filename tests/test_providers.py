@@ -114,7 +114,7 @@ class ProviderCorpusTests(unittest.TestCase):
         manifest = load(FIXTURES / "manifest.json")
         listed = {entry["path"] for entry in manifest["files"]}
         actual = {path.relative_to(FIXTURES).as_posix() for path in fixture_paths()}
-        self.assertEqual(83, manifest["fixture_count"])
+        self.assertEqual(84, manifest["fixture_count"])
         self.assertEqual(listed, actual)
         for entry in manifest["files"]:
             data = (FIXTURES / entry["path"]).read_bytes()

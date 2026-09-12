@@ -374,7 +374,7 @@ def _filter_direct_rows(
     station_candidates: Sequence[Mapping[str, Any]],
     request: ProviderRequest,
 ) -> Tuple[List[Any], Tuple[str, ...]]:
-    # get-tickets groups by city (BLOCKED.md "书 Z3" #2); an endpoint is policed only once some row confirms a match for it.
+    # get-tickets groups by city (BLOCKED.md "书 Z3" #2); reject every row whose known endpoint does not match.
     from_resolved = _resolved_endpoint_name(station_candidates, "from")
     to_resolved = _resolved_endpoint_name(station_candidates, "to")
     from_prefix = _admin_stripped(sanitize_text(request.parameters["from_name"], 80))
@@ -382,14 +382,12 @@ def _filter_direct_rows(
 
     from_flags = _endpoint_match_flags(payload, "from_station", from_resolved, from_prefix)
     to_flags = _endpoint_match_flags(payload, "to_station", to_resolved, to_prefix)
-    police_from = any(flag is True for flag in from_flags)
-    police_to = any(flag is True for flag in to_flags)
 
     kept: List[Any] = []
     dropped = 0
     for raw, from_flag, to_flag in zip(payload, from_flags, to_flags):
-        from_ok = not police_from or from_flag is not False
-        to_ok = not police_to or to_flag is not False
+        from_ok = from_flag is not False
+        to_ok = to_flag is not False
         if from_ok and to_ok:
             kept.append(raw)
         else:

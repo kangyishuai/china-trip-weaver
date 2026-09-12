@@ -133,13 +133,20 @@ def ticket_payload(arguments, service_number):
         "start_time": "16:00",
         "arrive_time": "20:00",
         "lishi": "04:00",
-        "from_station": "合成出发站",
-        "to_station": "合成到达站",
+        "from_station": station_name_for_code(from_code),
+        "to_station": station_name_for_code(to_code),
         "from_station_telecode": from_code,
         "to_station_telecode": to_code,
         "prices": [{"seat_name": "二等座", "num": "有", "price": 300}],
         "dw_flag": ["示例编组"],
     }]
+
+
+def station_name_for_code(code):
+    for station in STATIONS.values():
+        if station["station_code"] == code:
+            return station["station_name"]
+    return code
 
 
 def record_and_ignore_sigterm(signum, frame):

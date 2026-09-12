@@ -342,7 +342,7 @@ def _add_rail_parser(commands: Any) -> None:
     rail.add_argument("--from", dest="from_name", required=True)
     rail.add_argument("--to", dest="to_name", required=True)
     rail.add_argument("--train-filter-flags", default="")
-    rail.add_argument("--limit", type=int, default=10)
+    rail.add_argument("--limit", type=int, default=30)
     rail.add_argument("--deadline", type=float, default=90.0)
     rail.add_argument("--fixture", type=Path, default=None)
     rail.add_argument("--fixed-clock", default=None)

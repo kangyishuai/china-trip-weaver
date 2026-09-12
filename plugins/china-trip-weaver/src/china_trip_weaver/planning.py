@@ -70,7 +70,7 @@ class RailBackend:
     repo_root: Path
     fixture: Optional[Mapping[str, Any]] = None
     deadline_seconds: float = 90.0
-    limit: int = 10
+    limit: int = 30
 
     @classmethod
     def from_spec(cls, spec: str, repo_root: Path, deadline_seconds: float = 90.0) -> "RailBackend":

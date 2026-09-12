@@ -7343,3 +7343,28 @@ beeb906 -- tests | grep -E '^-\s*def test_'` 为 0 行，判断没有违反
 测试后只跑这两条：`Ran 2 tests in 0.066s`，`FAILED (failures=2)`；全删测试
 为 `AssertionError: 0 != 2`，子进程深链测试为「北京示例站」未出现在
 `合成出发站,BEX`。两条都在预期旧行为上真实转红，生产实现尚未改动。
+
+## 书 AI1 任务 2：实现与验收（2026-09-12）
+
+- `mcp_stdio_server.py` 新增 code→name 查表，`ticket_payload` 两端改用真实
+  站名，未知码原样返回；`_filter_direct_rows` 删除 `police_from/to`，已知
+  不匹配一律丢弃、缺站名的 `None` 仍放行；CLI 与 `RailBackend` 默认均改 30。
+- 两份 README 改为默认取 30 并同步 84 份夹具。`test_providers.py` 的既有
+  夹具总数断言机械同步 83→84：任务书现状特地点名该行、又要求 84 与全量绿，
+  属新增夹具的必要计数同步；没有删除或改写任何既有 `def test_`。
+- 相关四模块：`tests.test_providers tests.test_rail_station_fallback
+  tests.test_mcp_stdio tests.test_keyless_e2e` → `Ran 192 tests in 10.423s`，`OK`。
+- 原 8 项子进程用例单独复跑 → `Ran 8 tests in 0.428s`，`OK`；基线 15 份
+  rail 夹具对 `c19461b` 的 name-status 只有新增 `station_rows_none.json`。
+- 反向验证：临时恢复门控后 `station_rows_none` → `0 != 2`、`FAILED
+  (failures=1)`；逐字还原并 `touch` 后两条新测试 → `Ran 2 tests in
+  0.052s`，`OK`；`police_from|police_to` 搜索零命中。
+- 六套语料：两个 AD1 demo 哈希保持 `7ea7888f.../c2d07708...` 与
+  `8d7a6b49.../97e09648...`；plan/provider/renderer/scheduler 四生成器分别
+  输出 3 组计划、84 provider、9 Trip+12 HTML、20/8/4，所有生成目标零 diff。
+- 实网不传 `--limit` 的福州→武夷山：`legs=10`、唯一到站武夷山北/WBS、
+  `warnings=['station_rows_filtered:20']`。
+- 全量：`Ran 664 tests in 48.184s`，`OK`，0 skipped；secrets
+  `0 finding(s) across 385 file(s)`；pyflakes 零输出。
+- 范围门禁：`git diff c19461b -- tests | grep -E '^-\s*def test_'` 零输出；
+  `git diff c19461b --stat` 只列任务书白名单文件，render/demo/CI/版本号零改动。
