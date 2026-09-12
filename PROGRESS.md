@@ -7416,3 +7416,13 @@ beeb906 -- tests | grep -E '^-\s*def test_'` 为 0 行，判断没有违反
 最终门禁：`discover -s tests` 为 `Ran 664 tests in 46.075s ... OK`，0 skipped；secrets `0 finding(s) across 384 file(s)`；pyflakes 0 行。两套 CLI 校验为 `HTML VALID ... errors=0` / `JOURNEY HTML VALID ... errors=0`。浏览器命令 `qa_renderer_browser.py demo/grouped-departures/trip.html --output .tmp/qa --viewports 375x812` 返回 `failures=[]`、`horizontalOverflow=0`、`sectionCount=12`、`handshakeAttempts=1`。
 
 范围门禁：`git diff c19461b -- tests | grep -E '^-\s*def test_'` 0 行；最终 diff 只含任务界限允许文件。实现与任务书裁定一致，无替代设计、无待裁决项。
+
+## 书 AJ1「Journey 装配时补算缺失的 Trip 账本」任务 0（2026-09-12，main@50c3d92）
+
+1. 目标：只给缺少 `budget_ledger` 键的子 Trip 用 planning `_budget_ledger` 现算；已有账本逐字节不变，Journey 正确加总已有费用。
+2. 顺序：任务 0 基线与缺账本复现并提交 → 任务 1 三条先红测试并提交 → 任务 2 单点实现、三处文档、反向验证与全验收并提交 → 推送查 CI。
+3. 最大风险：连接定价先读右侧 Trip 账本，补算必须发生在排序后、lodging/connection 推导前，且不得污染传入的无账本 Trip。
+4. 最大风险：补算前必须剔除旧 `/budget_ledger/` unknowns；已有账本 Trip 不能深拷贝或重算，以守住 demo 逐字节往返。
+5. 基线：指定 9 项 Journey 测试 `Ran 9 tests ... OK`；全量 `Ran 667 tests in 49.539s ... OK`，0 skipped；secrets 0，pyflakes 零输出。
+6. 现状复现：原 Journey `known_cost_cny=4200`、中段原账本为 `1400`；删中段账本后装配为 `2800`，对应 item reason=`Trip does not contain a budget ledger`，与任务书吻合。
+7. 设计按任务书已拍板落点执行；当前无待裁决项。
