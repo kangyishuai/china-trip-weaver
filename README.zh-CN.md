@@ -145,6 +145,8 @@ plugins/china-trip-weaver/scripts/ctw journey validate-html demo/journey-16d/jou
 
 车站名解析本身最多走四层，从不替用户猜站：先精确站名，再城市代表站，再该城市 12306 收录的全部车站；三层都为空时，把城市名的行政区后缀（市／县／区等）剥掉重试一次。歧义结果仍需要距离信号且高德可用时，先按 `city_limit=true` 做同城 POI 搜索，再用 `city_limit=false` 的全国搜索、并把匹配点限制在城市中心 80 公里以内，补上一个实际位于邻近行政区、但站名逐字相同的车站。若 12306 侧四层查询仍全部为空且已配置高德 Key，还有最后一次尽力而为的调用会用高德的 `poi_around` 能力在该地点中心 50 公里内搜索真实火车站，并逐一与 12306 自己的车站表核对后才当作带距离的候选提供；结果会带上 `station_nearby_fallback` 这条 warning，12306 不认识的站名会被丢弃，绝不会被猜测出来。
 
+12306 的 `get-tickets` 按自己的城市分组返回结果，即使站名已经解析成功，仍可能混入到发站其实属于同城另一个车站的直达行。每一行只有在 `from_station`／`to_station` 与解析出的候选站名相符（没有站点解析信息时，退回到「以请求地名去掉末尾市／县／区后的词开头」）才会保留；不相符的行会被丢弃并计入 `station_rows_filtered:<n>` 这条 warning，全部被丢弃时还会再加一条 `station_rows_all_filtered`、走既有的无结果路径。`get-interline-tickets` 返回的中转行不受这条过滤影响。因为过滤发生在 12306 自身的条数上限之后，`ctw rail` 返回的车次可能少于 `--limit` 要求的数量，可以把 `--limit` 调大（最多 30）来补偿。
+
 ## 不配任何 Key 也能跑
 
 无 Key 运行时，从启动环境里移除服务商变量，并确认本地凭据文件不存在。使用 `--mobility off --lodging off --aviation off`；铁路仍是公开的实网查询，也可以设为 `off`。静态估算和深链都会被明确标记。
@@ -207,7 +209,7 @@ ctw journey assemble --journey JOURNEY.json --replace-trip TRIP-rN.json --base-r
 /usr/bin/python3 scripts/scan_secrets.py --credential-values --git-history
 ```
 
-装了 Codex 的本机不应出现任何跳过；没装 Codex 的 CI runner 会跳过三项 Codex 依赖测试。测试覆盖冻结的 Trip Schema、Journey 拆分与连续性、候选校验、凭据与进程／家目录隔离、精确值与抓取数据门禁、证据／坐标、带高德／FlyAI／飞常准合同形状的 82 个一眼可辨合成服务商夹具、20 个排程 golden、8 个无解用例、4 个局部重排 golden、Trip/Journey 渲染器对抗用例与离线浏览器视口、Skill 与打包元数据，以及确定性和实网两条集成路径。
+装了 Codex 的本机不应出现任何跳过；没装 Codex 的 CI runner 会跳过三项 Codex 依赖测试。测试覆盖冻结的 Trip Schema、Journey 拆分与连续性、候选校验、凭据与进程／家目录隔离、精确值与抓取数据门禁、证据／坐标、带高德／FlyAI／飞常准合同形状的 83 个一眼可辨合成服务商夹具、20 个排程 golden、8 个无解用例、4 个局部重排 golden、Trip/Journey 渲染器对抗用例与离线浏览器视口、Skill 与打包元数据，以及确定性和实网两条集成路径。
 
 ## 文档导航
 

@@ -249,8 +249,12 @@
       "sha256": "9b8d5c7cf7c83baeb2e5fbfe59b19f3dafaa43b21d29a28f007001aa972381ab"
     },
     {
+      "path": "rail12306/station_rows.json",
+      "sha256": "09c290ef66bbb2f01dc7bc9afa47ddb2c121a80ecb73a7b0fc3d56ed77b5f78d"
+    },
+    {
       "path": "rail12306/success.json",
-      "sha256": "b0075c6f78b6f255dc7bc50391d3112030e47cbec147d4d33b1e378a3902a1e2"
+      "sha256": "f7219e69523e85dad3db69439841e6f7e2c2aa297b446e5003e9ce0b5a349f08"
     },
     {
       "path": "rail12306/timeout.json",
@@ -329,7 +333,7 @@
       "sha256": "46fd6e92dfa195da7d89386332f94ba20a9279229c78bec2ec1eaf2296321f2e"
     }
   ],
-  "fixture_count": 82,
+  "fixture_count": 83,
   "generated_by": "scripts/build_provider_fixtures.py",
   "manifest_version": 1
 }

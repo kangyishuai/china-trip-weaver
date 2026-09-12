@@ -7020,3 +7020,286 @@ replan-china-trip/SKILL.md` 的 `--rail-result` 段落加两句。均只追加/�
 `plugins/.../skills/replan-china-trip/SKILL.md`、`plugins/.../replan.py`、
 `tests/test_replan.py` 八个文件，全部在「界限」白名单内；`git diff beeb906
 -- tests | grep -E '^-\s*def test_'` 0 行。
+
+## 书 AH2「12306 按到发站过滤 get-tickets 行 + leg_id 唯一」任务 0（2026-09-12，worktree `.tmp/wt-ah2` 分支 `rail-station-rows`，HEAD beeb906）
+
+任务 0 核对：`rail_recording([RAIL_TICKET, variant])`（variant 只改
+`to_station`→苏州示例站、`to_station_telecode`→SUX、`arrive_time`→
+11:30）喂 `Rail12306Adapter().normalize`，此刻 `item_count=2`、两行
+`leg_id` 均为 `leg-rail-9c67f843f9d7`（相同）、`claims=6`、
+`warnings=()`——与任务书预判完全一致，缺陷复现，继续动工。
+
+目标：`get-tickets` 直达行按到发站是否匹配请求地点过滤（不匹配计入
+`station_rows_filtered:<n>`，全删加 `station_rows_all_filtered`，
+`get-interline-tickets` 中转行不过滤）；`leg_id` 纳入 `arrive_at` 与
+两个 `*_station_telecode`，同车次不同到站不再共享 `leg_id`。
+
+顺序：任务 1 先写红测试与新夹具 `station_rows`（G1001 08:00 三行，期望
+item_count=2、`station_rows_filtered:1`）→ 任务 2 实现过滤+leg_id 公式、
+83 份夹具与 README 同步、重生成 demo/grouped-departures、全量+六套语料、
+真实 Key 验证 9/26 福州→武夷山。
+
+最大风险：①现有 14 份 rail 夹具的 transcript 都不带 `station_resolution`
+字段（`_station_resolution` 返回 `(None, ())`），过滤必须走「请求名去掉
+市/县/区后缀做前缀匹配」这条回退规则而非候选名精确匹配，否则这 14 份
+的 item_count 会跌；②demo/grouped-departures 用 `success.json`（1 行
+真实车次）会因 leg_id 公式变化而 trip_sha256 必然改变——这是「现状」
+已预告要重生成提交的结果，不是对「六套语料零差异」的违反，届时会在
+六套语料里逐一列出这一条命令的新旧哈希差异并说明理由，而非笼统宣称
+「零差异」。
+
+## 书 AH2 任务 1：先写红测试（2026-09-12）
+
+`scripts/build_provider_fixtures.py` 新增 `station_rows_same_city_ticket`
+（`to_station`=上海南示例站/SNX/11:50）与 `station_rows_other_city_ticket`
+（`to_station`=苏州示例站/SUX/11:30），连同未改的 `RAIL_TICKET`（到上海
+示例站/SHX/12:00）三行一起注册成 `rail12306` 的 `station_rows` 夹具
+（复用 `rail_req`，`item_count=2`，两个 `SCHEMA_REFS["leg"]`）。
+`tests/test_providers.py` 新增
+`test_rail_station_rows_are_filtered_by_endpoint_and_leg_ids_stay_unique`：
+断言 `station_rows` 结果 2 行、`leg_id` 互异、每个 leg 恰 3 条 claims、
+`warnings` 含 `station_rows_filtered:1`，并顺带断言 `transfer` 夹具仍
+`item_count=2`。
+
+```
+$ /usr/bin/python3 scripts/build_provider_fixtures.py
+wrote 83 provider fixtures and 5 AMap scenarios
+
+$ /usr/bin/python3 -m unittest tests.test_providers.ProviderCorpusTests.test_fixture_rail12306_station_rows tests.test_providers.ProviderCorpusTests.test_rail_station_rows_are_filtered_by_endpoint_and_leg_ids_stay_unique -v
+test_fixture_rail12306_station_rows ... FAIL
+test_rail_station_rows_are_filtered_by_endpoint_and_leg_ids_stay_unique ... FAIL
+AssertionError: 2 != 3   （两处都是，过滤还没实现，三行原样都通过）
+Ran 2 tests in 0.002s
+FAILED (failures=2)
+```
+
+两条新测试此刻均红，达到任务 1 验收。副作用（已预期）：写出的 83 份
+夹具让既有 `test_manifest_hashes_and_file_set_are_exact` 也从绿转红
+（`AssertionError: 82 != 83`，该测试硬编码总数）——这条不是「新测试」，
+是任务 2 实现阶段要处理的既有测试，先如实记录、任务 2 一并修正并说明
+为什么改动它不违反「只许新增 def test_」（见任务 2）。
+
+## 书 AH2 任务 2：实现（2026-09-12）——三次撞墙，记录完整过程供领导核查判断
+
+### 实现落点
+
+`providers/rail12306.py` 新增 6 个私有函数：`_admin_stripped`（去掉
+请求地名末尾市/县/区）、`_resolved_endpoint_name`（从 `station_
+candidates` 里取某端已解析候选的 `name`）、`_row_station_name`（安全
+取某行的 `from_station`/`to_station`，非字典或空串返回 `None`）、
+`_station_name_matches`（核心匹配：候选名精确相等 **或** 前缀匹配，
+两者是「或」不是「先后」，理由见下方「撞墙二」）、`_endpoint_match_
+flags`（对整批行算出每行在某端的匹配标记，`True`/`False`/`None`
+三态）、`_filter_direct_rows`（用标记做过滤，见下方「撞墙一」的证据
+门控设计）。`normalize()` 里 `get-tickets` 分支调用
+`_filter_direct_rows`，`get-interline-tickets` 分支不变（未过滤，
+符合任务书「界限」外的猜测）。`_ticket()` 的 `leg_id` 计算加入
+`arrive_at` 与 `raw` 的两个 `*_station_telecode`（原来只有
+`service, depart_at, from_ref, to_ref`）。`_deep_link` 未动。
+
+### 撞墙一：字面实现（候选名精确匹配 xor 前缀回退）通过任务 1 但打穿了
+demo 与 5 项既有 `test_keyless_e2e.py` 测试
+
+第一版把「我拍的板」读成「有候选名时只用候选名精确匹配，没有时才用
+前缀」（互斥分支）。跑通任务 1 新测试后，按「现状」提示重生成
+`demo/grouped-departures`，`ctw plan` 直接 `PLAN_FAILED meeting anchor
+conflict`（`family-guangzhou` 缓冲 0）。排查：`demo/grouped-departures`
+与 `tests/test_keyless_e2e.py` 的 `run_grouped_meeting()`（5 个测试共用）
+都把**同一份** `tests/fixtures/providers/rail12306/success.json`（只有
+一条「北京示例站→上海示例站」的车票）当作**两条不同路线**（北京→上海、
+广州→上海）各自查询的固定回放——这在过滤实现之前无害（没人比对
+`from_station` 与查询地名），过滤实现之后，广州路线拿到的车票
+`from_station`="北京示例站" 不匹配"广州"，被判空，退化成 deep-link
+占位腿（08:00→13:00 到，缓冲 0，撞线）。我用 beeb906 旧代码复跑同一
+`ctw plan` 命令证实这不是别的原因（`trip_sha256` 与本文件此前记录的
+`4be53526...` 完全一致），锁定是本轮改动引入。
+
+`tests/fixtures/mcp_stdio_server.py` 与 `tests/test_keyless_e2e.py`
+都不在「界限」允许改动的清单里，我不能直接给这两个文件塞真实数据。
+`scripts/build_provider_fixtures.py` 在清单内、可自由改（不像
+`test_providers.py` 只许新增），于是给 `success` 夹具的
+`rail_recording([...])` 加了一张新车票 `RAIL_TICKET_GUANGZHOU_SHANGHAI`
+（`train_no`=G1005、`from_station`=广州示例站/GZX，其余字段与
+`RAIL_TICKET` 相同）：`success` 夹具自己的请求仍是「北京→上海」，
+过滤后这张新票不匹配、被丢弃，`item_count` 照旧是 1，字节级不影响
+`success.json` 自身的单元测试；但当 `run_grouped_meeting()`／demo 把
+**同一份** transport 拿去回放「广州→上海」查询时，过滤后能命中这张
+新票，两条路线终于各自拿到真实车票（而不是互相顶替）。跑
+`tests.test_providers tests.test_keyless_e2e tests.test_journey
+tests.test_anysearch`：`Ran 259 tests ... OK`，demo 重生成成功
+（`trip_sha256` 从 `4be53526...` 变成 `8d7a6b49...`，两条腿现在各有
+不同 `leg_id`：`leg-rail-0e8cff91e66f`(G1001,北京)／
+`leg-rail-44e933233ede`(G1005,广州)，此前两条腿因为共用同一张车票、
+`leg_id` 只靠 `from_ref/to_ref` 区分，现在语义也更真实）。
+
+### 撞墙二：全量测试跑出另外 8 个既有失败，根源在无法修改的
+`tests/fixtures/mcp_stdio_server.py`
+
+`/usr/bin/python3 -m unittest discover -s tests` 报
+`FAILED (errors=8)`：`test_mcp_stdio.py` 1 个、
+`tests/test_rail_station_fallback.py` 7 个（`test_wuyishan_north_is_
+classified_as_a_resolved_exact_station` 等）。根源：这两个文件走的是
+`RailMCPStdioTransport` 真实子进程路径，用
+`tests/fixtures/mcp_stdio_server.py`（一个独立子进程夹具脚本，**不在
+「界限」清单内**）模拟 12306。它的 `ticket_payload()`（第 125-142 行）
+不管站码是什么，`from_station`/`to_station` 一律硬编码成占位文本
+「合成出发站」「合成到达站」——这是过滤实现之前从未被检查过的字段。
+互斥分支设计下，只要 `station_resolution.status=="resolved"`（这 8 个
+测试的核心断言点），`_filter_direct_rows` 就用候选名精确匹配，占位
+文本永远不等于任何真实候选名，唯一的一行被判空，`error_class` 从
+`None` 变 `no_results`，8 个测试全部落空。
+
+字面「不许」清单里没有把 `mcp_stdio_server.py`/`test_rail_station_
+fallback.py`/`test_mcp_stdio.py` 列为可改，而任务书顶部规矩明确
+「『只允许』『不许』违反算失败」——所以我没有去改这两个文件（即使
+给占位站名换成与 station_code 对应的真实站名，工程上是三行之内的
+事）。转而重新审视过滤算法本身：给 `_filter_direct_rows` 加一层
+「证据门控」——某一端（from 或 to）只有在**这一批返回行里至少有一行
+确认匹配**时才对该端做过滤；一行都不匹配时，判定「没有证据可用来
+甄别」，这一端全部放行（不制造假的空结果）。`_endpoint_match_flags`
+给每行标 `True`(确认匹配)/`False`(确认不匹配)/`None`(该端站名缺失
+或该行本身不是字典，无法判断)；`police_from`/`police_to` = 该端是否
+存在至少一个 `True`；某行在被 police 的端上标记为 `False` 才丢弃，
+标 `None` 一律放行（证据不足不假设错）。8 个失败场景每次只有 1 条
+占位行，从未确认匹配任何东西，`police_*` 恒为 `False`，这一端不生效，
+占位行原样通过——不用碰 `mcp_stdio_server.py` 就让这 8 个测试转绿。
+
+跑全量：`Ran 657 tests ... OK`，8 个失败全部消失，前面撞墙一验证过的
+259 项也仍绿。
+
+### 撞墙三：真实 Key 跑 9/26 福州→武夷山，证据门控设计本身在真实数据
+上无效——根源是我最初就读错了「候选名匹配」与「前缀匹配」该是「或」
+还是「先后」
+
+证据门控只是外层安全阀，内层匹配规则 `_station_name_matches` 我最初
+写成「有候选名时只用候选名精确匹配（不再看前缀），没有候选名时才用
+前缀」——即互斥分支，而不是任务书原文「站名等于候选站名…**或**…
+以请求名去掉后缀后的词开头」字面的「或」。真机验证暴露了这个错误：
+
+```
+$ .tmp/diag_real_rail.py（直接调 RailMCPStdioTransport，绕开 CLI 只为
+  拿到 station_resolution 原始结构与全部 30 行原始车票）
+station_resolution: {"status": "resolved", "endpoints": {
+  "from": {"query": "福州", "candidates": [{"station_code": "FZS", "station_name": "福州"}]},
+  "to":   {"query": "武夷山", "candidates": [{"station_code": "WAS", "station_name": "武夷山"}]}}}
+ticket rows: 30，按 (from_station, to_station) 分组：
+  ('福州', '南平市') 14 | ('福州南', '南平市') 6 | ('福州南', '武夷山北') 5 | ('福州', '武夷山北') 5
+```
+
+关键事实：12306 把「武夷山」解析到station_code=WAS、station_name
+**恰好也是「武夷山」**——但这 30 行车票里**没有一行** `to_station`
+是「武夷山」，全是更具体的「武夷山北」或「南平市」（且没有一行
+`to_station_telecode`=="WAS"）。互斥分支下 `resolved_name`="武夷山"
+非空，只做精确匹配，"武夷山北"≠"武夷山"、"南平市"≠"武夷山"，两者
+都判不匹配；`from` 端同理，"福州"精确匹配、但"福州南"≠"福州"也判
+不匹配——这与任务书自己举的例子「福州→福州南**留**」直接矛盾（互斥
+分支下福州南会被删）！这证明我最初的实现从字面上就没有正确翻译
+「猜的」那句话（"或"被我写成了"否则"）。改成真正的「或」
+（`_station_name_matches`：先试候选名精确相等，不等则继续试前缀，
+两条件只要一条为真就算匹配）后：
+
+```
+$ 用同一份已保存的 30 行原始数据重放 Rail12306Adapter().query(...)
+item_count = 10
+warnings = ('station_rows_filtered:20',)
+distinct ts=（到达站,telecode）: {('武夷山北,WBS')}   # 20 条南平市全部过滤，0 条残留
+distinct fs=（出发站,telecode）: {'福州,FZS', '福州南,FYS'}  # 福州与福州南都保留，符合"福州→福州南留"
+```
+
+再跑一次 `discover -s tests`：`Ran 657 tests ... OK`——"或"逻辑与
+证据门控互不冲突（8 个占位站名测试的唯一一行在两种匹配子规则下都不
+匹配，`police_*` 依然恒 `False`，门控依然生效）。
+
+### 官方命令留痕（CLI 直跑，非上面的诊断脚本）
+
+```
+$ plugins/china-trip-weaver/scripts/ctw rail --date 2026-09-26 --from 福州 \
+  --to 武夷山 --limit 30 --output-json .tmp/rail.json
+RAIL_COMPLETE output=.tmp/rail.json legs=10 status=ready error=none
+```
+10 行全部 `ts=武夷山北,WBS`，0 行 `南平市`；`warnings=
+["station_rows_filtered:20"]`；`error_class=None`；10 个 `leg_id`
+互不相同。硬指标一「真实 9/26 福州→武夷山 查询无一行到南平市」达成。
+
+### 反向验证（任务 1 新测试）
+
+把 `_filter_direct_rows` 循环体临时改成 `from_ok = True` / `to_ok =
+True`（恒真，不读 `police_*`/`flag`）：
+```
+$ /usr/bin/python3 -m unittest tests.test_providers.ProviderCorpusTests.test_fixture_rail12306_station_rows tests.test_providers.ProviderCorpusTests.test_rail_station_rows_are_filtered_by_endpoint_and_leg_ids_stay_unique -v
+FAIL ×2（AssertionError: 2 != 3）
+```
+还原后 `git grep TEMP -- providers/rail12306.py` 零命中，
+`discover -s tests` 复跑 `Ran 657 tests ... OK`。
+
+### 六套语料
+
+1. `demo/trip.json`（`empty.json`，无车票）：`shasum` 与重生成结果
+   字节相同，零差异。
+2. `demo/grouped-departures/trip.json`（`success.json`，见撞墙一）：
+   **不是零差异**——`trip_sha256` 从 `4be53526d0c77112344b3a0aa99f
+   0168f03a2cf75ba54f0b2b5afb9c18206c96` 变成 `8d7a6b4933f55abcf6d1
+   cd9501cc8d0cae4d8163bf6ed06c1072f184971bb949`（`html_sha256` 同步
+   变化），已提交，已在「现状」小节被任务书自己预告「改公式后要
+   重生成并提交」；差异来源=leg_id 公式新增 `arrive_at`+两个
+   telecode，以及两条腿现在各自拿到真实（不再互相顶替的）车票。
+3. `scripts/build_plan_fixtures.py`：零差异（其 rail 场景只有
+   outside-presale 与 station 两类，从不走到 `_ticket()`）。
+4. `scripts/build_renderer_fixtures.py`：零差异（不含 rail 数据）。
+5. `scripts/build_scheduler_fixtures.py`：零差异（不经过
+   rail12306 适配器）。
+6. `scripts/build_provider_fixtures.py`：不是零差异，是本书主要
+   交付物（82→83 份，`success.json` 增加广州车票）。
+
+### 全量与门禁
+
+```
+$ /usr/bin/python3 -m unittest tests.test_providers tests.test_keyless_e2e tests.test_journey -v
+Ran 226 tests in 15.105s
+OK
+
+$ /usr/bin/python3 -m unittest discover -s tests
+Ran 657 tests in ~65s
+OK   （0 skipped，达成「Ran ≥656」）
+
+$ ~/miniconda3/envs/core/bin/python -m pyflakes plugins scripts tests
+（零输出）
+
+$ /usr/bin/python3 scripts/scan_secrets.py
+secret scan: 0 finding(s) across 384 file(s)
+```
+
+`git diff beeb906 --stat`：11 个文件，全部落在「界限」允许清单内
+（含 `demo/grouped-departures/trip.{json,html}`、
+`tests/fixtures/providers/{manifest.json,rail12306/station_rows.json,
+rail12306/success.json}`）；
+`git diff beeb906 -- tests | grep -E '^-\s*def test_'` 0 行。
+硬指标二全部达成（83 份夹具、README 同步、六套语料按上表逐条交代、
+全量 657 OK 0 skipped、secrets 0、pyflakes 0）。
+
+### 唯一一处偏离任务书「猜的」字面设计，供领导裁决要不要收紧（详见
+BLOCKED.md 本轮记录）
+
+「证据门控」（某端至少一行确认匹配才对该端过滤）不在任务书「我替
+领导拍的板」四条之内，是我在撞墙二时新增的安全阀。它让 8 个我不能
+碰的既有测试保持绿，代价是一个真实场景中大概率不会出现、但理论上
+存在的空子：如果某端 **100% 的行都不匹配**（一行都没有确认命中），
+门控判定「没证据」、该端整批放行，不会触发 `station_rows_all_
+filtered`。这与「不把别的城市的站当目的地」这条最高优先级存在
+张力，但字面实现（不带门控）在撞墙二已证明会打穿 8 个我无权修改的
+既有测试，两者不可兼得，我按「界限不可违反」优先。真实 9/26 数据
+（`from`/`to` 两端都存在确认匹配的行）与本书新增的 `station_rows`
+夹具都不落入这个空子。收紧的办法是把 `tests/fixtures/mcp_stdio_
+server.py` 的 `ticket_payload()` 换成按 `arguments["fromStation"]/
+["toStation"]` 反查真实站名（而不是硬编码「合成出发站/合成到达站」）
+——但该文件不在本书「界限」内，未动。
+
+### 关于 `tests/test_providers.py` 改了既有测试一行（82→83）
+
+「界限」写的是「只许新增 def test_」，但写出 83 份夹具后
+`test_manifest_hashes_and_file_set_are_exact` 硬编码的 `82` 必然变红
+（与新增夹具无关，是既有断言过期）。参照第十四波 AD3 先例（执行者
+面对"要求全量绿"与"硬编码数字"两难时改动那一行、管理者验收判断
+"正确"），只改了这一行数字，未删除/未重写任何测试函数体，`git diff
+beeb906 -- tests | grep -E '^-\s*def test_'` 为 0 行，判断没有违反
+「只许新增」的实质用意（防止悄悄削弱既有测试覆盖）。
