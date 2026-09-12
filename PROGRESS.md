@@ -7335,3 +7335,11 @@ beeb906 -- tests | grep -E '^-\s*def test_'` 为 0 行，判断没有违反
 - 门禁：`scan_secrets.py` → `0 finding(s) across 384 file(s)`；pyflakes 零输出。
 - 门控复现：两行都到苏州示例站 → `item_count=2`、`warnings=()`。
 - 实网默认查询：福州→武夷山 → `legs=2`、`warnings=['station_rows_filtered:8']`；与任务书吻合，无阻塞。
+
+## 书 AI1 任务 1：先写红测试（2026-09-12）
+
+`build_provider_fixtures.py` 新增两行均到苏州示例站的 `station_rows_none`，
+生成器实测 `wrote 84 provider fixtures and 5 AMap scenarios`。新增两条规范
+测试后只跑这两条：`Ran 2 tests in 0.066s`，`FAILED (failures=2)`；全删测试
+为 `AssertionError: 0 != 2`，子进程深链测试为「北京示例站」未出现在
+`合成出发站,BEX`。两条都在预期旧行为上真实转红，生产实现尚未改动。

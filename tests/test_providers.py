@@ -205,6 +205,13 @@ class ProviderCorpusTests(unittest.TestCase):
         transfer = run_fixture_value(FIXTURES / "rail12306" / "transfer.json")
         self.assertEqual(2, len(transfer.normalized_items))
 
+    def test_rail_station_rows_all_filtered_are_observable(self):
+        result = run_fixture_value(FIXTURES / "rail12306" / "station_rows_none.json")
+        self.assertEqual(0, len(result.normalized_items))
+        self.assertEqual("no_results", result.error_class)
+        self.assertIn("station_rows_filtered:2", result.warnings)
+        self.assertIn("station_rows_all_filtered", result.warnings)
+
     def test_timeout_exhaustion_pins_the_exact_retry_reason_text(self):
         fixture = load(FIXTURES / "amap" / "timeout.json")
         adapter = ADAPTERS[fixture["provider"]]()

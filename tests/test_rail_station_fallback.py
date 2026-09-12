@@ -302,6 +302,15 @@ class RailStationFallbackTests(unittest.TestCase):
             self._calls(diagnostics),
         )
 
+    def test_ticket_deep_link_uses_station_names_resolved_by_the_subprocess_fixture(self):
+        from urllib.parse import parse_qs, urlparse
+
+        result, _ = self._query("normal", "北京", "上海")
+        self.assertIsNone(result.error_class)
+        query = parse_qs(urlparse(result.normalized_items[0]["booking_url"]).query)
+        self.assertIn("北京示例站", query["fs"][0])
+        self.assertIn("上海示例站", query["ts"][0])
+
     def test_three_empty_station_layers_are_no_results_with_ready_provider_health(self):
         # Every layer is empty for both endpoints, so the fourth (nearby-station)
         # layer would otherwise try too; keep this test offline and

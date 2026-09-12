@@ -712,6 +712,9 @@ def build() -> List[Dict[str, Any]]:
     station_rows_other_city_ticket.update({
         "to_station": "苏州示例站", "to_station_telecode": "SUX", "arrive_time": "11:30",
     })
+    station_rows_none_first = copy.deepcopy(station_rows_other_city_ticket)
+    station_rows_none_second = copy.deepcopy(station_rows_other_city_ticket)
+    station_rows_none_second.update({"arrive_time": "11:40"})
     rail_common = {"source": RAIL_SOURCE, "captured_at": RAIL_CAPTURED_AT}
     fixtures.extend([
         fixture("rail12306", "success", rail_req, response(rail_recording([RAIL_TICKET, RAIL_TICKET_GUANGZHOU_SHANGHAI])), item_count=1, schema_refs=[SCHEMA_REFS["leg"]], **rail_common),
@@ -731,6 +734,7 @@ def build() -> List[Dict[str, Any]]:
         fixture("rail12306", "transfer", rail_req, response(rail_recording(RAIL_INTERLINE, tool_name="get-interline-tickets")), item_count=2, schema_refs=[SCHEMA_REFS["leg"], SCHEMA_REFS["leg"]], **rail_common),
         fixture("rail12306", "cross_day", rail_req, response(rail_recording([cross_day_ticket])), item_count=1, schema_refs=[SCHEMA_REFS["leg"]], **rail_common),
         fixture("rail12306", "station_rows", rail_req, response(rail_recording([RAIL_TICKET, station_rows_same_city_ticket, station_rows_other_city_ticket])), item_count=2, schema_refs=[SCHEMA_REFS["leg"], SCHEMA_REFS["leg"]], **rail_common),
+        fixture("rail12306", "station_rows_none", rail_req, response(rail_recording([station_rows_none_first, station_rows_none_second])), error_class="no_results", **rail_common),
         fixture("rail12306", "pipe_drift", rail_req, response(rail_recording([], result=mcp_text_result("train|missing|columns"))), health="contract_mismatch", error_class="contract_mismatch", **rail_common),
         fixture("rail12306", "outside_presale", outside_req, response(rail_recording([], date="2026-10-16", result=outside_result)), health="degraded", error_class="no_results", **rail_common),
     ])
