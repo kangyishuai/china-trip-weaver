@@ -324,6 +324,36 @@ class RendererTests(unittest.TestCase):
                 actual = {(item.code, item.message) for item in report.errors}
                 self.assertEqual(expected, actual)
 
+    def test_coded_12306_rail_deep_link_renders_station_names_and_validates(self):
+        trip = load(VALID / "multicity-static.json")
+        leg = trip["transport_legs"][0]
+        leg["provider"] = "12306-mcp"
+        leg["booking_url"] = (
+            "https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc"
+            "&fs=北京示例站,BEX&ts=上海示例站,SHX&date=2026-11-01"
+        )
+
+        rendered = render_trip(trip)
+        report = validate_html(rendered, trip)
+
+        self.assertEqual(1, rendered.count("车站：北京示例站 → 上海示例站"))
+        self.assertTrue(report.ok, [item.render() for item in report.errors])
+
+    def test_uncoded_rail_deep_link_does_not_render_station_names(self):
+        from china_trip_weaver.render.html import rail_station_names
+
+        trip = load(VALID / "multicity-static.json")
+        leg = trip["transport_legs"][0]
+        leg["booking_url"] = (
+            "https://kyfw.12306.cn/otn/leftTicket/init?linktypeid=dc"
+            "&fs=北京&ts=上海&date=2026-11-01"
+        )
+
+        rendered = render_trip(trip)
+
+        self.assertIsNone(rail_station_names(leg["booking_url"]))
+        self.assertNotIn("车站：", rendered)
+
 
 def _make_trip_test(path: Path):
     def test(self):

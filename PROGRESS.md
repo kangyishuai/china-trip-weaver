@@ -7336,3 +7336,9 @@ beeb906 -- tests | grep -E '^-\s*def test_'` 为 0 行，判断没有违反
 6. 最大风险：Journey 同一腿有四个渲染入口，尤其逐日 slot 只持有 `ref_id`，必须用 leg 索引且不能误显示占位 URL。
 7. 最大风险：HTML 已转义的链接不能拿来解析；应在渲染前对原始 `booking_url` 用标准 query parser，并严格验证两端 `[A-Z]{3}`。
 8. 现状代码核对：12306 `_deep_link` 写 `站名,站码`；planning `_deep_link_leg` 只写城市名，符合任务书；当前无待裁决项。
+
+## 书 AI2 任务 1：先写红测试（2026-09-12）
+
+`tests/test_renderer.py` 只新增两个 `def test_`：带 `fs=北京示例站,BEX&ts=上海示例站,SHX` 的 12306-mcp 铁路腿要求 Trip 页面恰有一行站名且 `validate_html` 为绿；无站码的 `fs=北京&ts=上海` 要求 `rail_station_names` 返回 `None` 且页面无「车站：」。`tests/test_journey.py` 只新增一个 `def test_`：同一带站码腿要求 Journey 全页恰有四行，交通汇总/卡片所在 `transport-overview` 两行、`day-timeline` 一行、`booking-checklist` 一行，且 `validate_journey_html` 为绿。
+
+红测实测：`test_coded_12306_rail_deep_link_renders_station_names_and_validates` FAIL（`AssertionError: 1 != 0`）；`test_uncoded_rail_deep_link_does_not_render_station_names` ERROR（`ImportError: cannot import name 'rail_station_names'`）；`test_coded_12306_rail_deep_link_renders_stations_in_all_journey_views` FAIL（`AssertionError: 4 != 0`）。汇总：`Ran 3 tests in 0.405s`，`FAILED (failures=2, errors=1)`；三条均红。
