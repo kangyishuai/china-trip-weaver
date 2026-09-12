@@ -393,6 +393,34 @@ class RendererTests(unittest.TestCase):
         self.assertNotIn("无座 CNY 300", rendered)
         self.assertTrue(report.ok, [item.render() for item in report.errors])
 
+    def test_rail_presale_and_waitlist_availability_render_distinct_labels(self):
+        trip = load(VALID / "multicity-static.json")
+        leg = trip["transport_legs"][0]
+        leg["provider"] = "12306-mcp"
+        claim = copy.deepcopy(trip["claims"][0])
+        claim.update({
+            "claim_id": "claim-rail-presale-availability",
+            "subject_ref": leg["leg_id"],
+            "field_path": "/availability",
+            "value": [
+                {"seat_name": "商务座", "availability": "*", "available": False, "price": 1000},
+                {"seat_name": "一等座", "availability": "候补", "available": False, "price": 500},
+                {"seat_name": "二等座", "availability": "有", "available": True, "price": 300},
+                {"seat_name": "无座", "availability": "无", "available": False, "price": 300},
+            ],
+            "status": "verified",
+            "confidence": 0.95,
+            "mode": "live",
+        })
+        trip["claims"].append(claim)
+        leg["claim_ids"].append(claim["claim_id"])
+
+        rendered = render_trip(trip)
+        report = validate_html(rendered, trip)
+
+        self.assertIn("座位：商务座 未开售 · 一等座 候补 · 二等座 有 · 无座 无", rendered)
+        self.assertTrue(report.ok, [item.render() for item in report.errors])
+
     def test_leg_without_availability_claim_does_not_render_seats(self):
         from china_trip_weaver.render.html import _rail_seat_line
 

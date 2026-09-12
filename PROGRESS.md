@@ -13,6 +13,12 @@
 7. 合成复现：四档 `('*', True)`，腿价 300；真实 9/26 福州→武夷山：10 腿 ready，首 claim 四档原文均 `*` 且均 True，首腿价 128.5。
 8. 当前无待裁决项；严格只改任务书白名单，不碰 main、replan、版本、CI，不运行本地插件安装脚本。
 
+## 书 AK1 任务 1：先写红测试（2026-09-12）
+
+- `scripts/build_provider_fixtures.py` 新增 `presale_star`：`RAIL_TICKET` 四档 `num` 均为 `*`；脚本实跑输出 `wrote 85 provider fixtures and 5 AMap scenarios`，manifest、两份 README 与夹具总数断言同步为 85。
+- Provider 新测试要求 1 条腿、四档 `availability="*"` 且 `available=false`、腿价仍为 300；Trip 新测试要求完整三态座位行并通过 `validate_html`；Journey 文件末尾新测试要求同一完整座位行与「未开售」各出现四次并通过校验。
+- 三条精准测试实跑 `Ran 3 tests in 0.072s`，`FAILED (failures=3)`：Provider 因四档仍为 True 红；Trip 实际为「商务座 无 · 一等座 无 · 二等座 有 · 无座 无」红；Journey 期望座位行 4 次、实际 0 次红。三条均由待实现行为导致。
+
 ## 现状速览（2026-09-12 实测，0.19.0）
 
 - 版本：`0.19.0`，唯一来源是

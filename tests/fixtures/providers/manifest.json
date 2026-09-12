@@ -241,6 +241,10 @@
       "sha256": "a0f97c951d3ee4612ec00dff24a4dbf1407161070ef182347f1eb75a50c20968"
     },
     {
+      "path": "rail12306/presale_star.json",
+      "sha256": "5a077bae7bb56e53f514f1c69e152347a9b1fc983f0b4925b7efa877de553f6c"
+    },
+    {
       "path": "rail12306/rate_limit.json",
       "sha256": "b405fd633525f0f03f706b1ec3670e2b769b4f82f53acc07e437561159ca89ba"
     },
@@ -337,7 +341,7 @@
       "sha256": "46fd6e92dfa195da7d89386332f94ba20a9279229c78bec2ec1eaf2296321f2e"
     }
   ],
-  "fixture_count": 84,
+  "fixture_count": 85,
   "generated_by": "scripts/build_provider_fixtures.py",
   "manifest_version": 1
 }

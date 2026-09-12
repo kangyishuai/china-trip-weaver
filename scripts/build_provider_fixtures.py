@@ -698,6 +698,9 @@ def build() -> List[Dict[str, Any]]:
     waitlist_ticket = copy.deepcopy(RAIL_TICKET)
     for seat in waitlist_ticket["prices"]:
         seat["num"] = "候补"
+    presale_star_ticket = copy.deepcopy(RAIL_TICKET)
+    for seat in presale_star_ticket["prices"]:
+        seat["num"] = "*"
     cross_day_ticket = copy.deepcopy(RAIL_TICKET)
     cross_day_ticket.update({
         "train_no": "SYNTHETIC-G1004", "start_train_code": "G1004",
@@ -731,6 +734,7 @@ def build() -> List[Dict[str, Any]]:
         fixture("rail12306", "station", station_req, response(rail_station_recording()), item_count=1, schema_refs=[SCHEMA_REFS["place"]], **rail_common),
         fixture("rail12306", "no_seat", rail_req, response(rail_recording([no_seat_ticket])), item_count=1, schema_refs=[SCHEMA_REFS["leg"]], **rail_common),
         fixture("rail12306", "waitlist", rail_req, response(rail_recording([waitlist_ticket])), item_count=1, schema_refs=[SCHEMA_REFS["leg"]], **rail_common),
+        fixture("rail12306", "presale_star", rail_req, response(rail_recording([presale_star_ticket])), item_count=1, schema_refs=[SCHEMA_REFS["leg"]], **rail_common),
         fixture("rail12306", "transfer", rail_req, response(rail_recording(RAIL_INTERLINE, tool_name="get-interline-tickets")), item_count=2, schema_refs=[SCHEMA_REFS["leg"], SCHEMA_REFS["leg"]], **rail_common),
         fixture("rail12306", "cross_day", rail_req, response(rail_recording([cross_day_ticket])), item_count=1, schema_refs=[SCHEMA_REFS["leg"]], **rail_common),
         fixture("rail12306", "station_rows", rail_req, response(rail_recording([RAIL_TICKET, station_rows_same_city_ticket, station_rows_other_city_ticket])), item_count=2, schema_refs=[SCHEMA_REFS["leg"], SCHEMA_REFS["leg"]], **rail_common),

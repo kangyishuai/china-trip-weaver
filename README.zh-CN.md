@@ -211,7 +211,7 @@ ctw journey assemble --journey JOURNEY.json --replace-trip TRIP-rN.json --base-r
 /usr/bin/python3 scripts/scan_secrets.py --credential-values --git-history
 ```
 
-装了 Codex 的本机不应出现任何跳过；没装 Codex 的 CI runner 会跳过三项 Codex 依赖测试。测试覆盖冻结的 Trip Schema、Journey 拆分与连续性、候选校验、凭据与进程／家目录隔离、精确值与抓取数据门禁、证据／坐标、带高德／FlyAI／飞常准合同形状的 84 个一眼可辨合成服务商夹具、20 个排程 golden、8 个无解用例、4 个局部重排 golden、Trip/Journey 渲染器对抗用例与离线浏览器视口、Skill 与打包元数据，以及确定性和实网两条集成路径。
+装了 Codex 的本机不应出现任何跳过；没装 Codex 的 CI runner 会跳过三项 Codex 依赖测试。测试覆盖冻结的 Trip Schema、Journey 拆分与连续性、候选校验、凭据与进程／家目录隔离、精确值与抓取数据门禁、证据／坐标、带高德／FlyAI／飞常准合同形状的 85 个一眼可辨合成服务商夹具、20 个排程 golden、8 个无解用例、4 个局部重排 golden、Trip/Journey 渲染器对抗用例与离线浏览器视口、Skill 与打包元数据，以及确定性和实网两条集成路径。
 
 ## 文档导航
 
