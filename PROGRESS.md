@@ -7325,3 +7325,13 @@ server.py` 的 `ticket_payload()` 换成按 `arguments["fromStation"]/
 "正确"），只改了这一行数字，未删除/未重写任何测试函数体，`git diff
 beeb906 -- tests | grep -E '^-\s*def test_'` 为 0 行，判断没有违反
 「只许新增」的实质用意（防止悄悄削弱既有测试覆盖）。
+
+## 书 AI1「去掉 12306 证据门控、默认取 30 行」任务 0（2026-09-12，main 直改）
+- 目标：夹具按站码回真实站名；直达行确认不匹配一律删除，全删可观察；默认取 30 行。
+- 顺序：任务 0 核对并提交 → 任务 1 只写红测试并提交 → 任务 2 实现、反向验证、全验收并提交。
+- 最大风险：去门控会让硬编码合成站名的 8 项子进程场景全空，必须先修夹具服务器反查站名。
+- 静态核对：`main@c19461b`、工作树干净；门控、默认 10、夹具 83 与任务书逐项吻合。
+- 基线：`/usr/bin/python3 -m unittest discover -s tests` → `Ran 661 tests in 44.385s`，`OK`，0 skipped。
+- 门禁：`scan_secrets.py` → `0 finding(s) across 384 file(s)`；pyflakes 零输出。
+- 门控复现：两行都到苏州示例站 → `item_count=2`、`warnings=()`。
+- 实网默认查询：福州→武夷山 → `legs=2`、`warnings=['station_rows_filtered:8']`；与任务书吻合，无阻塞。
