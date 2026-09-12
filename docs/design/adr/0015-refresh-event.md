@@ -134,3 +134,20 @@ replaces the prior refresh's evidence instead of accumulating unreferenced
 claims. Evidence: `test_refresh_replaces_target_leg_claims_and_records_removals`,
 `test_refresh_twice_keeps_only_the_second_service_claims`, and
 `test_refresh_preserves_other_leg_and_poi_claims`.
+
+## Amendment (2026-09-12): departure-time disambiguation
+
+12306 can return more than one row for the same service number when a train
+stops at two stations in the requested origin city. Those rows can share an
+arrival time while differing only in `depart_at`, so arrival time alone cannot
+identify the intended boarding station. A refresh event with an explicit
+`service_number` may now supply `depart_at`, `arrive_at`, or both. Each accepts
+either a full ISO timestamp or a bare `HH:MM`; `depart_at` filters first and
+`arrive_at` filters that result, so both values must match when both are given.
+
+One remaining row is selected. Otherwise `refresh_service_ambiguous` lists
+the remaining candidates, sorted by `(depart_at, arrive_at)`, as
+`<depart_at>→<arrive_at>` pairs. If a supplied time removes every row, the
+same error starts with `no row matches depart_at=… arrive_at=…; ` and lists
+the original candidates. The default path used when `service_number` is
+omitted is unchanged.

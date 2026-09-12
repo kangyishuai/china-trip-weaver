@@ -7574,3 +7574,11 @@ beeb906 -- tests | grep -E '^-\s*def test_'` 为 0 行，判断没有违反
 `tests/test_replan.py` 只新增三个 `def test_`：同到 09:30 时歧义文案须含 07:50 与 08:12；`depart_at=07:50` 须选中该行、只复制其两条 claim 且通过 `validate_trip`；`depart_at=07:55` 零命中须保留 `refresh_service_ambiguous` 并含 `no row matches`。
 
 改前实测 `Ran 3 tests in 0.007s`，`FAILED (failures=2, errors=1)`：第一条缺 `07:50`，第二条抛现有歧义异常，第三条缺 `no row matches`；三条全部为红，生产代码未改。
+
+## 书 AL1 任务 2：实现与验收（2026-09-12）
+
+- `_disambiguate_service_matches` 保留单行与同到发时刻重复行的既有早退；其余多行先按 `depart_at`、再按 `arrive_at` 求交，复用改名后的 `_matches_time`，唯一行即选中。歧义候选按 `(depart_at, arrive_at)` 排序并显示「出发→到达」；挑行键零命中时加 `no row matches depart_at=… arrive_at=…; ` 前缀。
+- README 中英文、replan Skill 的 refresh 段均加入 `depart_at`；ADR-0015 末尾追加 Amendment，说明两键格式、过滤顺序、错误文案和默认路径不变。五项关键测试（新三项 + 既有两项）`Ran 5 tests in 0.025s ... OK`；`tests.test_replan` 为 `Ran 45 tests in 3.179s ... OK`。
+- 反向验证：临时注掉 `depart_at` 过滤后②报 `refresh_service_ambiguous`、③缺 `no row matches`，`Ran 2 tests in 0.005s`、`FAILED (failures=1, errors=1)`；逐字还原并 `touch replan.py` 后两项 `Ran 2 tests in 0.013s ... OK`，临时标记零命中。
+- 全量 `Ran 683 tests in 80.236s ... OK`，0 skipped；secrets `0 finding(s) across 386 file(s)`；pyflakes 零输出。四份文档 `depart_at` 计数为 README 1、README.zh-CN 1、ADR 8、Skill 1；删测 grep 0，`git diff --check` 零输出，范围只含任务书白名单文件。
+- 实现采用任务书拍板方案，无替代设计或待裁决项；默认选车、`_apply_refresh`、schema、夹具、CI、版本号均未改。

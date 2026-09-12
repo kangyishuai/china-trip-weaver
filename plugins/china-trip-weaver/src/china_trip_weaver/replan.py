@@ -385,23 +385,37 @@ def _disambiguate_service_matches(
     distinct = {(item.get("depart_at"), item.get("arrive_at")) for item in matches}
     if len(distinct) == 1:
         return matches[0]
+    selected = matches
+    requested_depart_at = event.get("depart_at")
+    if requested_depart_at:
+        selected = [
+            item for item in selected if _matches_time(item.get("depart_at"), str(requested_depart_at))
+        ]
     requested_arrive_at = event.get("arrive_at")
     if requested_arrive_at:
         selected = [
-            item for item in matches if _matches_arrive_at(item.get("arrive_at"), str(requested_arrive_at))
+            item for item in selected if _matches_time(item.get("arrive_at"), str(requested_arrive_at))
         ]
-        if len(selected) == 1:
-            return selected[0]
-    arrive_ats = ", ".join(str(item.get("arrive_at")) for item in matches)
+    if len(selected) == 1:
+        return selected[0]
+    candidates = selected if selected else matches
+    times = ", ".join(
+        "%s→%s" % (item.get("depart_at"), item.get("arrive_at"))
+        for item in sorted(candidates, key=lambda item: (str(item.get("depart_at")), str(item.get("arrive_at"))))
+    )
+    no_match = ""
+    if not selected and (requested_depart_at or requested_arrive_at):
+        no_match = "no row matches depart_at=%s arrive_at=%s; " % (
+            requested_depart_at, requested_arrive_at,
+        )
     raise ReplanError(
         "refresh_service_ambiguous",
-        "multiple rail services match the requested service_number with different arrival times: "
-        + arrive_ats,
+        no_match + "multiple rail services match the requested service_number: " + times,
     )
 
 
-def _matches_arrive_at(item_arrive_at: Any, requested: str) -> bool:
-    item_value = str(item_arrive_at)
+def _matches_time(item_value: Any, requested: str) -> bool:
+    item_value = str(item_value)
     if item_value == requested:
         return True
     if len(requested) == 5 and requested[2] == ":":

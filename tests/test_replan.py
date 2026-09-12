@@ -800,6 +800,12 @@ class ReplanTests(unittest.TestCase):
         service_fuzhou_south = _refresh_service(
             leg_id="leg-rail-live-g1902-fuzhou-south", service_number="G1902",
             depart_at="2026-10-16T07:50:00+08:00", arrive_at="2026-10-16T09:30:00+08:00",
+            duration_minutes=100,
+            price={
+                "amount": 553, "currency": "CNY", "price_type": "live", "unit": "per_person",
+                "includes_taxes": True, "queried_at": "2026-09-10T00:00:00+08:00",
+                "claim_id": "claim-g1902-south-price",
+            },
             claim_ids=["claim-g1902-south-depart", "claim-g1902-south-price"],
         )
         service_fuzhou = _refresh_service(
@@ -824,6 +830,12 @@ class ReplanTests(unittest.TestCase):
         service_fuzhou_south = _refresh_service(
             leg_id="leg-rail-live-g1902-fuzhou-south", service_number="G1902",
             depart_at="2026-10-16T07:50:00+08:00", arrive_at="2026-10-16T09:30:00+08:00",
+            duration_minutes=100,
+            price={
+                "amount": 553, "currency": "CNY", "price_type": "live", "unit": "per_person",
+                "includes_taxes": True, "queried_at": "2026-09-10T00:00:00+08:00",
+                "claim_id": "claim-g1902-south-price",
+            },
             claim_ids=["claim-g1902-south-depart", "claim-g1902-south-price"],
         )
         service_fuzhou = _refresh_service(

@@ -1779,3 +1779,7 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 `64919f3` 的实际生成链与任务书“猜的”描述不一致。`scripts/build_scheduler_fixtures.py:340` 的 `build_replans()` 只返回 closure、weather、delay、user-delete 四份；全文件没有 `refresh` 字样。提交历史也显示 `refresh.json` 是 `c208ba0` 后来单独新增，生成脚本从未改过。实跑任务书原命令只输出 `wrote 20 golden, 8 no-solution, 4 replan fixtures`，`git status --short -- tests/fixtures` 零输出；现有 `tests/test_scheduler.py:352` 又硬断言 manifest 的 replan count 恰为 4，而本书界限不允许改生成脚本或该测试。因此无法让原命令同时生成 refresh 并令 manifest 改动。执行者未改脚本、未手改夹具，而是调用该脚本现成的 `write_group()` 生成器函数重写 refresh；最终夹具唯一差异仍是任务书要求的 `operation_count 31→33`，manifest 保持不变。
 
 另一条字面冲突：任务书一面要求“既有金样只改操作数”，一面要求 `git grep -c 'remove' -- tests/fixtures/scheduler/replan/refresh.json` 非 0。该夹具只保存 base/event/rail_result 与 `expected.operation_count`，从不保存实际 patch operations；把 31 改成 33 后文件内仍不可能出现字符串 `remove`。要让 grep 非 0，必须额外给夹具添加当前测试和生成器都不认识的字段，直接违反“只改操作数”；或永久修改生成器/manifest/test_scheduler，又越过白名单。按让步顺序保留了更高优先级的“金样只改操作数”和全量绿，故该 grep 实际仍为 0，等待裁决后另书处理。
+
+## 书 AL1「refresh 事件加 depart_at 消歧」（2026-09-12）：无
+
+任务 0/1/2 均按任务书裁定完成，没有新增待裁决项。
