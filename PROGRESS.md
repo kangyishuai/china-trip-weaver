@@ -12,6 +12,11 @@
 6. 基线全量 `Ran 680 tests in 84.955s ... OK`、0 skipped；secrets 0/386；pyflakes 0 行；CLI 与动态循环均覆盖现有 7 份。
 7. 7 份 SHA-256 已在任务 0 命令输出留存；当前无待裁决项，严格只改任务书白名单文件。
 
+## 书「scheduler replan 七份金样纳管」任务 1：先写红测试（2026-09-12）
+
+- `tests/test_scheduler.py` 新增 `test_manifest_covers_every_replan_fixture`，精确比较 manifest 的 `replan/` 路径集合与磁盘上全部 replan JSON 路径集合。
+- 精准运行：`Ran 1 test in 0.002s`，`FAILED (failures=1)`；差集恰为 `replan/refresh.json`、`replan/suspend.json`、`replan/suspend-first-leg.json`，证明测试因待实现的 manifest 覆盖缺口而红。
+
 ## 书 AK1「12306 未开售星号」开工理解（2026-09-12，≤10 行）
 
 1. 目标：`num="*"` 的席别必须 `available=false`，页面显示「未开售」；`候补` 显示「候补」，其余「有／无」不变。

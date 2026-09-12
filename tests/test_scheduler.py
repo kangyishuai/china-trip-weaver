@@ -358,6 +358,18 @@ class SchedulerCorpusTests(unittest.TestCase):
             tags.update(load(path)["tags"])
         self.assertTrue({"1-day", "2-day", "cross-city", "moving-day", "opening-window", "budget", "walking-limit", "unreachable", "tie", "candidate>8"}.issubset(tags))
 
+    def test_manifest_covers_every_replan_fixture(self):
+        manifest = load(FIXTURES / "manifest.json")
+        manifest_paths = {
+            entry["path"] for entry in manifest["files"]
+            if entry["path"].startswith("replan/")
+        }
+        fixture_paths = {
+            "replan/" + path.name
+            for path in (FIXTURES / "replan").glob("*.json")
+        }
+        self.assertEqual(fixture_paths, manifest_paths)
+
     def test_determinism_twenty_runs(self):
         fixture = load(GOLDEN / "candidate-prune-threshold.json")
         outputs = [canonical_json(LightScheduler().schedule_plan(fixture["days"])) for _ in range(20)]
