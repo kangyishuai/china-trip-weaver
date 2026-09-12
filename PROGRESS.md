@@ -2,17 +2,39 @@
 
 唯一的当前进度记录。2026-09-03 到 09-06 的逐轮任务书、实测证据、验收记录已归档，见「历史索引」。
 
-## 现状速览（2026-09-12 实测，0.17.1）
+## 现状速览（2026-09-12 实测，0.18.0）
 
-- 版本：`0.17.1`，唯一来源是
+- 版本：`0.18.0`，唯一来源是
   `plugins/china-trip-weaver/.codex-plugin/plugin.json` 与
   `src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
   位置一律引用这两处之一，历史版本只以日期提及、不写字面值。
-- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 655 tests`，`OK`，0 skipped；
+- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 661 tests`，`OK`，0 skipped；
   `scripts/scan_secrets.py` 0 命中；
   `~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src
   tests scripts` 0 行。带假 Key（`ANYSEARCH_API_KEY=... unittest`）跑全量同样
-  655 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+  661 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+- 0.18.0（第十八波，两本都改行为）：replan 默认选车——`_select_refresh_service` 加
+  `earliest_depart`（前一时段 `end_at`），无 `service_number` 时只在发车不早于它的
+  候选里取最早到达，全不可行才抛 `refresh_overlap`（message 带候选数与前一时段结束
+  时间）；有 `service_number` 命中多行且到达时间不同时抛新码
+  `refresh_service_ambiguous`，事件可带 `arrive_at`（完整 ISO 或 `HH:MM`）挑一行；
+  ADR-0015 末尾加 Amendment，README/SKILL 各加一句。12306 直达行按到发站过滤——
+  `_filter_direct_rows`：站名等于解析候选名或以请求名去掉市/县/区后开头才保留（两
+  条件取「或」；执行者第一版写成互斥，被真实数据推翻：12306 把武夷山解析到站名恰为
+  「武夷山」的 WAS，30 行里没有一行到站叫武夷山，全是武夷山北/南平市），删行计入
+  `station_rows_filtered:<n>`；执行者为保住 `mcp_stdio_server.py` 站名占位的 8 项
+  子进程测试加了「证据门控」（某端至少一行确认匹配才过滤），留下全不匹配时不删的洞
+  （第十九波去掉）；`leg_id` 纳入 `arrive_at` 与两个站码；`success.json` 加一张广州
+  示例站车票，因为分组示例与 5 项 e2e 用同一份夹具回放两条路线；夹具 83；
+  demo/grouped-departures 两个 leg_id 变。管理者合并后实测：`ctw rail --limit 30`
+  福州→武夷山 10 行全到武夷山北（删 20）、武夷山→福州 9 行全从武夷山北/武夷山出发
+  （删 21）、泉州→厦门 30 行零删；对真实 journey.json 不指定车次重放刷新，默认路径
+  自动选中 G1648 08:00→09:11 福州→武夷山北、3 条 claim、errors=0（此前 10 趟撞
+  9 趟）；会合 17:30 副本实网重规划的 north 9/26 腿变成 G1648 07:40→09:11 福州南→
+  武夷山北（此前是到南平市站的 G2374），两条汇合航班与 80/62/18/7 不变。验收教训：
+  `/usr/bin/python3` 是苹果自带的 3.9，字节码缓存在 `~/Library/Caches/com.apple.python/`
+  而非 `__pycache__`，反向验证把 `>=` 改 `<=` 再还原时文件大小与秒级 mtime 都没变，
+  缓存里留下改坏的版本，单跑 `tests.test_replan` 红了一轮；以后还原后 `touch` 源文件。
 - 0.17.1（第十七波，一本改行为加一次真实行程实战）：VariFlight 票价一次调用覆盖整条
   路线——`_build_price_request` 改传 `subject_refs_by_service`（与 search 同构），
   `_live_price` 对返回行里落在表中的每个 `flightno` 各产一条 `/price` claim（仍取
