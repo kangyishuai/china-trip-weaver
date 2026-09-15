@@ -2,6 +2,122 @@
 
 唯一的当前进度记录：现状速览（0.8.0 起每个版本一条）加最近一波的执行者记录。2026-09-03 到 09-06 与 2026-09-08 到 09-12 的逐轮任务书、实测证据、验收记录已归档，见「历史索引」。
 
+## 书 Z3d「9/26 与 9/29 高铁腿实网刷新」（2026-09-15，第二十五波四份并行书之一，只做实网刷新这一份）
+
+**任务 0 核对**（15:15 实网查询，主检出 `main`，HEAD 与上一条健康审计一致）：
+
+- `ctw rail --date 2026-09-26 --from 福州南 --to 武夷山北 --limit 30`：5 条腿，G1902 07:50→09:30 仍在，
+  15:15:33 查询结果已开售——二等座「有」、无座「有」（均 128.5 元），商务座/一等座「无」。现状文件
+  `trip-north-r2.json` 的 `leg-fuzhou-wuyi` 只有 2 条 live claim（`/depart_at`、`/price`）加 1 条人工
+  锁定 claim，没有 `/availability` claim，本次刷新要把余票数据补上。
+- `ctw rail --date 2026-09-29 --from 武夷山北 --to 福州 --limit 30`：8 条腿（`station_rows_filtered:22`，
+  被过滤的是南平市站，符合预期），15:15:55 查询 31 个席别全部 `*`（未开售）。到达站混着「福州」
+  （FZS）与「福州南」（FYS）两种；核对 `trip-north-r2.json` 当日 9/29 之后的日程（午餐、福建博物院、
+  西湖公园、五一广场／三坊七巷片区入住）全部在福州市区，且占位腿原深链是 `ts=福州`（非福州南），
+  判定目的站应为「福州」（FZS）不是「福州南」。到福州（FZS）的行里最早到达的是 D2325
+  08:24→10:11（二等座/一等座/无座三档价格 128.5/80/80，全 `*`），与领导 14:31 观察到的「最早
+  D2325」一致；选它既满足「到正确站」死规矩，到达时间（10:11）也早于原占位腿的到达（11:10），
+  后续午餐（11:30 起）等时段不需要顺移。
+- 全量测试 `/usr/bin/python3 -m unittest discover -s tests`：`Ran 685 tests in 98.995s ... OK`，
+  0 skipped（机器负载导致的正常耗时波动，见「验收教训」）。仓库状态确认健康，可以动工。
+
+**理解的目标／顺序／最大风险**（≤10 行）：目标是用 12306 实网数据替换两条腿的占位/空余票数据，只新增
+产物文件，不动仓库代码与既有产物。顺序按任务书 0→1→2→3：先刷已开售的 9/26（数据更完整，能先暴露
+流程问题），再刷未开售的 9/29（选车更容易选错站），最后合并出 journey 与页面。最大风险有二：一是
+9/26 的 `leg-fuzhou-wuyi` 当前 `locked:true`（人工确认已购），`replan` 会因「锁定项无显式解锁」报
+`locked_ref`，需要显式传 `--locked-ref leg-fuzhou-wuyi`——这不违反「不许编造车次」的规矩，因为车次号
+和时刻不变，只是补齐余票数据,且刷新逻辑本身会保留 `locked` 字段；二是 9/29 到福州的行里「福州」与
+「福州南」站混在同一次查询结果里，必须显式指定 `service_number` 锁定正确站，不能依赖默认「最早到达」
+逻辑（本例中两者恰好重合，但不能假设每次都重合）。
+
+**任务 1 完成（9/26 `leg-fuzhou-wuyi` 刷新）**：
+
+- 修正任务 0 里的一个错误预判：`--locked-ref` 不是解锁开关，是**追加**锁定——`_locked_refs()`
+  （`replan.py:143-155`）只读 Trip JSON 自身两处 `locked` 字段（transport_legs 与对应 day/slot 各一
+  处，`leg-fuzhou-wuyi`／`north-2-rail` 当时都是 `true`），CLI 没有任何参数能把已经是 `true` 的
+  `locked` 项在这一次调用里临时解锁；直接跑 `ctw replan --locked-ref leg-fuzhou-wuyi ...` 两次都报
+  `REPLAN_FAILED locked_ref`。处理：新建一份只把这两处 `locked` 改成 `false` 的工作副本
+  `trip-north-r2-unlocked-for-refresh.json`（不覆盖 `trip-north-r2.json`），用它作 `--trip` 才跑通，
+  产出 `trip-north-r3-intermediate.json/html`（revision 3，errors=0，但 leg 与 slot 的 `locked` 都被
+  `_apply_refresh`（`replan.py:262-263`，字段级原样拷贝旧 leg 的 `locked`）连带置成 `false`）。车票
+  已购这个事实没有变，只是本地临时解锁以便刷新余票，刷新完成后手工把 `trip-north-r3-intermediate.json`
+  的这两处 `locked` 改回 `true`，另存为最终产物 `trip-north-r3.json`；`ctw validate`/`ctw render`/
+  `ctw validate-html` 三条命令对最终版全部重跑一遍，`VALID`／`errors=0`／`errors=0`，不是「改了校验
+  就一定过」。
+- 副作用：`_apply_refresh` 会无条件删掉旧 leg 的全部 claim 再补新的（`replan.py:290-296`），人工确认
+  claim `claim-g1902-user-booked`（`provider:"user-confirmed"`，记录「用户已确认购买」）随之被删除；
+  没有手工重建它——重建等于编造一条「用户今天又确认了一次」的假记录，而 leg 自身的
+  `service_number:"G1902"` 加恢复后的 `locked:true` 已经完整表达「已购锁定」这个事实，此处只是如实
+  记录这条 claim 消失了。
+- 余票数据：leg 的 3 条 claim 全部换成 2026-09-15 15:15:33 查询的实时结果——rail-result 原始行
+  `{"service_number":"G1902","depart_at":"07:50","arrive_at":"09:30","price":128.5}` 加
+  availability `[{"商务座","无"},{"一等座","无"},{"二等座","有",128.5},{"无座","有",128.5}]`；最终
+  trip 里 `leg-fuzhou-wuyi` 逐字段对应：`service_number:"G1902"`、`depart_at:"2026-09-26T07:50:00+08:00"`、
+  `arrive_at:"2026-09-26T09:30:00+08:00"`、`price.amount:128.5`，页面「交通摘要」渲染为「座位：商务座
+  无 · 一等座 无 · 二等座 有 · 无座 有」。
+- claim 计数（与任务书预期不同，如实记录）：刷新前该腿 3 条 claim，全部在 `claim_ids` 里被引用，
+  **0 条游离**；刷新后仍是 3 条、0 条游离——这条腿本来就没有游离 claim，缺的是 `/availability` 这个
+  字段本身（此前刷新时票还没开售，查不到余票），这次刷新是补空白字段而不是清理游离项。trip 全局
+  `claims` 总数刷新前后都是 26（3 条出、3 条进，净不变）。
+
+**任务 2 完成（9/29 `leg-wuyi-fuzhou` 刷新）**：这条腿与其 slot（`north-5-rail`）本来就是
+`locked:false`，不需要任务 1 那套解锁手续，直接以 `trip-north-r3.json`（revision 3）为 `--trip`、
+`--base-revision 3` 跑通，产出 `trip-north-r4.json/html`（revision 4，errors=0）。
+
+- 选车：8 条候选里到「福州」（FZS，非福州南 FYS）的最早一班是 D2325 08:24→10:11，与任务 0 的判断
+  一致；事件文件只带 `service_number:"D2325"` 就唯一命中（这趟车在 rail-result 里只有到福州 FZS 一
+  行，不像 G1902 那样需要再靠 `depart_at` 消歧）。最终 leg 的 `booking_url` 落地
+  `ts=%E7%A6%8F%E5%B7%9E%2CFZS`（福州,FZS），不是福州南、更不是南平市站，满足选车死规矩。
+- 余票数据：rail-result 原始行 `{"service_number":"D2325","depart_at":"08:24","arrive_at":"10:11",
+  "price":80}`，availability 三档（一等座 128.5／二等座 80／无座 80）**全部 `*`**；最终 trip 里
+  `leg-wuyi-fuzhou` 逐字段对应：`service_number:"D2325"`、`depart_at:"2026-09-29T08:24:00+08:00"`、
+  `arrive_at:"2026-09-29T10:11:00+08:00"`、`price.amount:80`，页面渲染「车站：武夷山北 → 福州 座位：
+  一等座 未开售 · 二等座 未开席 · 无座 未开售」——如实记录：**刷新时这趟车尚未开售**，车次号和时刻是
+  真的，余票是空的。
+- claim 计数：刷新前该腿 2 条 claim（排程窗口 hypothesis + 价格 unknown，均被引用，0 游离）；刷新后
+  3 条（depart_at／price／availability，均 live/verified，均被引用，0 游离）。trip 全局 `claims`
+  总数 26 → 27（2 条出、3 条进，净 +1，新增的是此前完全没有的余票字段）。
+- 观察但未处理（记入 BLOCKED.md）：`_apply_refresh` 只更新 slot 的 `start_at`/`end_at`/`claim_ids`，
+  不碰 `title` 文字，`north-5-rail` 这一 slot 的标题仍停留在旧占位文案「武夷山→福州高铁（当前为排程
+  窗口）」，与已经写入的真实 D2325 数据不一致；页面「交通摘要」区块本身文字正确（因为那部分是从
+  leg 字段直接渲染，不读 slot 标题），只有逐日时间轴那一行标题文字滞后。未改——这是渲染器行为，
+  「不许为了让流程跑通而改仓库代码」，如实记录待管理者裁决。
+
+**任务 3 完成（装配 journey-r5.json 与新页面）**：`ctw journey assemble --journey journey-r4.json
+--replace-trip trip-north-r4.json --base-revision 4 --reason "..." --output-json journey-r5.json`
+→ `JOURNEY_ASSEMBLE_COMPLETE trips=3 days=16 errors=0`；`ctw journey render journey-r5.json --output
+福建中秋国庆16天行程-r5.html` → `errors=0`；`ctw journey validate-html 福建中秋国庆16天行程-r5.html
+journey-r5.json` → `JOURNEY HTML VALID ... errors=0`；`ctw journey validate journey-r5.json` →
+`JOURNEY VALID ... trips=3`。四条命令全部一次通过，未触碰任何校验器代码。
+
+两条腿「rail-result 原始行」与「最终 trip/journey 里那条腿」逐字段对照：
+
+| 字段 | 9/26 rail-result 原始行 | 9/26 最终 leg（`leg-fuzhou-wuyi`） | 9/29 rail-result 原始行 | 9/29 最终 leg（`leg-wuyi-fuzhou`） |
+|---|---|---|---|---|
+| service_number | G1902 | G1902 ✓ | D2325 | D2325 ✓ |
+| depart_at | 2026-09-26T07:50 | 2026-09-26T07:50 ✓ | 2026-09-29T08:24 | 2026-09-29T08:24 ✓ |
+| arrive_at | 2026-09-26T09:30 | 2026-09-26T09:30 ✓ | 2026-09-29T10:11 | 2026-09-29T10:11 ✓ |
+| price.amount（二等座） | 128.5 | 128.5 ✓ | 80 | 80 ✓ |
+| 到达站（booking_url ts） | 武夷山北,WBS | 同左 ✓ | 福州,FZS（非福州南） | 同左 ✓ |
+| availability | 商务座/一等座 无，二等座/无座 有 | claim 原文照搬 ✓ | 三档全部 `*`（未开售） | claim 原文照搬 ✓ |
+
+页面上两处可见文本（`福建中秋国庆16天行程-r5.html`，「跨城交通」区块）：
+
+- 9/26：「铁路 · G1902 · 福州 → 武夷山 · 2026-09-26 07:50 车站：福州南 → 武夷山北 座位：商务座
+  无 · 一等座 无 · 二等座 有 · 无座 有」
+- 9/29：「铁路 · D2325 · 武夷山 → 福州 · 2026-09-29 08:24 车站：武夷山北 → 福州 座位：一等座
+  未开售 · 二等座 未开售 · 无座 未开售」
+
+**交付前自查**：`git diff -- plugins tests scripts docs demo .github README.md` 输出为空；
+`git status --short` 只有 `PROGRESS.md`、`BLOCKED.md` 两行（本节写入前）；仓库代码一个字节未改。
+真实行程目录只新增文件，未覆盖任何既有产物：新增 `rail-2026-09-26-fuzhounan-wuyishanbei.json`、
+`rail-2026-09-29-wuyishanbei-fuzhou.json`、`event-refresh-2026-09-26-g1902.json`、
+`event-refresh-2026-09-29-d2325.json`、`trip-north-r2-unlocked-for-refresh.json`、
+`trip-north-r3-intermediate.json/html`、`trip-north-r3.json/html`、`trip-north-r4.json/html`、
+`journey-r5.json`、`福建中秋国庆16天行程-r5.html`；`journey.json`/`journey-r2.json`/`journey-r4.json`/
+`trip-north-r2.json` 与既有全部 `.html` 均未写入（只读）。任务 0-3 一轮内全部完成，未触发 5 轮上限。
+`BLOCKED.md` 本轮新增一条非阻塞观察（slot 标题不随刷新更新），无待裁决的硬阻塞项。
+
 ## 2026-09-15 健康审计（第二十四波，进行中——诊断，不改代码）
 
 **任务 0 核对**：五条基线命令逐一亲手重跑，四条逐字吻合（685 测试 OK 49.7s、pyflakes 0 行、
