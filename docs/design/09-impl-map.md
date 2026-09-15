@@ -63,6 +63,7 @@ scripts/
 ├── build_provider_fixtures.py
 ├── build_renderer_fixtures.py
 ├── build_scheduler_fixtures.py
+├── measure_coverage.py
 ├── qa_renderer_browser.py
 └── scan_secrets.py
 

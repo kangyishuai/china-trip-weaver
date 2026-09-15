@@ -1888,3 +1888,16 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 未改动：该行不在任务书授权的「7 处」清单内，任务书「界限」写明「顺手活一律不许做...写进 BLOCKED.md 待裁决」，且改法有两种（把该行也标「中英混合」，或维持现状留给未来 ADR 补齐语言统一再改），哪种更合适需要领导判断，不是可以直接照抄前一处改法的一行改动。
 
 供裁决：是否需要另开一本书把 `docs/design/adr/` 行的标注也订正为准确表述（例如「中英混合（0001–0008 中文、0009–0019 英文）」），或维持现状不改、只在此记录以免以后再被当作「对照组」引用。
+## check-infrastructure 任务 1：新增 `scripts/measure_coverage.py` 与既有 `test_design_docs.py` 硬编码计数冲突（2026-09-15，非阻塞，记录待裁决）
+
+任务书要求在 `scripts/` 下新建覆盖率脚本（名字自定），但 `tests/test_design_docs.py::test_runtime_modules_and_scripts_are_named_in_impl_map` 用 `(ROOT/"scripts").glob("*.py")`（非递归、只看 `scripts/` 直属文件）统计脚本数，硬编码 `assertEqual(48, len(files))`，并要求每个文件名都以子串形式出现在 `docs/design/09-impl-map.md` 全文里。新增 `measure_coverage.py` 后文件数变成 49（第一条断言先失败，`AssertionError: 48 != 49`），且文件名不在 impl-map 文本里（第二条断言也会失败，只是先跑不到）。
+
+这不是覆盖率脚本本身的缺陷，是一个被任务书明确授权的新文件带来的结构性副作用；修法需要同时改 `tests/test_design_docs.py`（既有测试，任务书「防作弊点名」明令不许改）和 `docs/design/09-impl-map.md`（任务书硬指标要求 `git diff main -- ... docs ...` 为空，不许碰），两侧都不在本书的界限内。
+
+已排除的取巧做法：把新脚本放进 `scripts/` 的子目录（如 `scripts/coverage/measure_coverage.py`）能让非递归 glob 数不到它，从而绕开这条断言——但那样会让"每个脚本文件都必须在 impl-map 里有据可查"这条检查的本意落空（真实情况是这个脚本确实没有被文档收录），属于绕过报警器而非解决问题，与本轮任务的整体目的（让报警器真的响）相悖，故未采用；脚本按最自然的方式扁平放在 `scripts/` 下，让这个测试如实报红。
+
+给合并时的精确修复点（两行改动，30 秒可做完）：
+1. [tests/test_design_docs.py:20](tests/test_design_docs.py:20) 的 `self.assertEqual(48, len(files))` 改成 `49`。
+2. [docs/design/09-impl-map.md:66](docs/design/09-impl-map.md:66) 前后，按字母序在 `build_scheduler_fixtures.py` 和 `qa_renderer_browser.py` 两行之间插入 `├── measure_coverage.py`。
+
+已验证：把 `scripts/measure_coverage.py` 临时整体移出 `scripts/`（不是复制，是移动，避免两份文件同时被 glob 到）单独重跑全量，`test_design_docs` 恢复绿，其余全部一并绿，证明这条红只来自这一个、且仅这一个原因；移回后恢复交付状态。全过程见 PROGRESS.md 任务 1 小节。

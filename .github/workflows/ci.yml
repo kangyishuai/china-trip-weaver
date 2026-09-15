@@ -31,3 +31,8 @@ jobs:
 
       - name: Scan for secrets
         run: python scripts/scan_secrets.py
+
+      - name: Run pyflakes
+        run: |
+          pip install pyflakes==3.4.0
+          python -m pyflakes $(git ls-files '*.py')
