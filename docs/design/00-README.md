@@ -38,6 +38,7 @@
 | [`ADR-0006`](adr/0006-single-deterministic-renderer.md) | v1 单一、确定性、zero-remote-script HTML renderer |
 | [`ADR-0007`](adr/0007-claim-level-evidence.md) | claim 级 evidence、typed price、health/mode |
 | [`ADR-0008`](adr/0008-read-only-transaction-boundary.md) | 永久止步查询/比较/HTTPS deep link，不做交易 |
+| [`ADR-0020`](adr/0020-locked-service-assumption.md) | 「已购锁定车次」表达缺口：推荐加结构化锁定字段，报错定位为独立可做的低成本项，不隔离自由文本 |
 
 8 份均含 Status/Context/Decision/Consequences/Evidence。若阶段三 benchmark 或官方规范改变决定，新增/替代 ADR，不静默改实现常量。
 

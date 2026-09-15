@@ -13,6 +13,41 @@
    武夷山北站」是此前某次人工编辑直接写死的，本来就不依赖 `_apply_refresh` 生成。需要设计判断：
    `_apply_refresh` 该不该按新 leg 的 `service_number`/两端站名自动重写标题，还是保留「标题由人工
    维护」的现状、只要求执行者刷新后手动同步——本轮未改仓库代码，未处理。
+## 2026-09-15「E003 已购锁定表达缺口」ADR（worktree `.tmp/wt-adr` 分支 `e003-locked-service-adr`）：任务 0 命令名对不上 + 一处既有文档漂移，均判断非阻塞
+
+（本条追加于文件顶部：任务书任务 0 明确要求「复现不出来就停，证据写
+`BLOCKED.md` 最上面」，与「界限」小节字面的「末尾追加」冲突；本文件既有约定
+本就是新的在最上面，按「说的与文件实际结构一致」处理，插入顶部。）
+
+1. **任务 0 字面指令跑不出 E003，已用等价正确命令复现，供裁决是否认可**：
+   任务书写「贴出... 跑 `ctw journey validate-html` ... 确实报 E003 的输出」。
+   实测：`.tmp/e003-repro/journey-doctored.html`（`demo/journey-16d/journey.html`
+   拷贝，`<body>` 后插入一句含「G1902」的可见文本）对
+   `demo/journey-16d/journey.json` 跑 `ctw journey validate-html`，输出
+   `JOURNEY HTML VALID ... errors=0`——不报错。查明原因：
+   `render/validate_journey_html.py` 全文件没有 `TRAIN_FACT_RE`/E003
+   （`git grep -n "E003\|TRAIN_FACT_RE" -- .../validate_journey_html.py`
+   零命中），它只有一套独立的 `JH0xx` 校验，从未检查可见文本里的车次号是否
+   在 Trip 里。真正触发 E003 的是 `plan_trip` 内部调用的 Trip 级
+   `render/validate_html.py`（经 `ctw validate-html` 暴露）。改用它复现：
+   `ctw journey extract` 从同一份 `journey.json` 抽出一个 Trip、`ctw render`
+   渲染、doctor 出同款含「G1902」的 `<p>`、`ctw validate-html` 校验，得到
+   `E003 rendered train fact is absent from Trip: G1902`——与真实故障逐字
+   一致。判断：任务 0 的真实目的（核实护栏行为）已达成，是任务书命令名写错
+   （把 Trip 级校验器和 Journey 级校验器搞混），不是护栏本身行为存疑，未
+   停工；完整命令与两段输出见
+   `docs/design/adr/0020-locked-service-assumption.md` 的「Task 0」小节。
+2. **`docs/design/00-README.md` 的 ADR 表格自 ADR-0009 起已经 11 个版本没跟上**：
+   `docs/design/adr/` 目录下 19 个既有 ADR 文件（0001-0019），但
+   `00-README.md` 第 29 行起的表格只列到 `ADR-0008`，末尾一句「8 份均含
+   Status/Context/Decision/Consequences/Evidence」也只描述这 8 份。这是本轮
+   任务之外发现的既有文档漂移，不是本轮造成的。任务书「界限」只允许「表格
+   末尾加一行」，按字面只加了 `ADR-0020` 一行，未回填 0009-0019 的缺失行、
+   未改「8 份」这句已经过期的计数文字（改了就不是「加一行」，是改文档，
+   顺手活不许做）。供领导裁决是否需要专门一本书回填这张表。
+3. 本轮全程零代码/测试/schema 改动，`git diff main -- plugins tests scripts
+   .github demo README.md` 为空；`.tmp/e003-repro/` 全程只在本 worktree
+   使用、被根 `.gitignore`（`.tmp/*`）挡住，不出现在 `git status`。
 
 ## 2026-09-15 健康审计「HEALTH-2026-09-15」：诊断任务，按规矩不许顺手改，候选后续任务清单
 
