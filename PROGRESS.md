@@ -578,9 +578,9 @@ assumptions「G1902车票已购并锁定……」这条自由文本人工备注�
 `git diff -- plugins tests scripts docs demo .github` 为空，`git status --short` 只有 PROGRESS.md、
 BLOCKED.md 两个文件（会话开始前遗留的游离 `.coverage` 已清理）。
 
-## 现状速览（2026-09-15 实测，0.22.0）
+## 现状速览（2026-09-15 实测，0.22.1）
 
-- 版本：`0.22.0`，唯一来源是
+- 版本：`0.22.1`，唯一来源是
   `plugins/china-trip-weaver/.codex-plugin/plugin.json` 与
   `src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
   代码与文档一律引用这两处之一；只有本节的逐版本条目和 git tag 以版本号作索引。
@@ -591,7 +591,18 @@ BLOCKED.md 两个文件（会话开始前遗留的游离 `.coverage` 已清理�
   699 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。0.21.0 记过的
   「环境变量注入会让 `test_credentials` 红一项」已在 0.22.0 修好：那个文件现在于 `setUp`
   里按 `FILE_ALLOWLIST` 剥掉凭据环境变量，四个 Key 全设与一个不设两种跑法结果相同。
-- 覆盖率：`scripts/measure_coverage.py` 实测 10698 语句、miss 1210、**89%**。
+- 覆盖率：`scripts/measure_coverage.py` 实测 10706 语句、miss 1210、**89%**。
+- 0.22.1（第二十七波，纯重构，对外行为零变化）：「按车次号从当天的车里挑出唯一一趟」
+  原本有两份实现——`replan.py` 一份，0.22.0 落地锁定车次时又在 `planning.py` 照搬了一份，
+  改了消歧规则只改一处就会悄悄跑偏且无人知晓。现在只剩一份：新叶子模块
+  `rail_selection.py`（62 行）提供 `select_service`，返回三字段的 `ServiceSelection`
+  （`row` / `same_service` / `time_matched`）——之所以不把结果坍缩成一个候选列表，是为了让
+  `replan` 在歧义时仍能原样重建自己那条列出候选发车/到达时刻的错误消息，不必改文案。
+  两个调用点各自的失败表达保持不变（`replan` 抛 `ReplanError`，`planning` 返回三元组），
+  四处错误码与消息逐字未动。`planning.py` 2907 → 2901、`replan.py` 566 → 549。
+  验证方式：测试一行未改（699 项原样全绿，唯一的 `tests/` 改动是新模块带来的 `.py`
+  计数 49 → 50），并故意破坏共用函数确认 `replan` 与 `planning` 两侧的既有测试都会变红
+  ——只有一侧红就说明另一侧没真正走共用函数。
 - 0.22.0（第二十五、二十六波，ADR-0020 落地）：「某趟车已经买好票、不许改」从一句没人
   读得懂的自由文本变成规划器认得的结构化事实。`#/$defs/request` 新增可选的
   `locked_rail_services`（`service_number` + `travel_date` 必填，`depart_time` 选填，
