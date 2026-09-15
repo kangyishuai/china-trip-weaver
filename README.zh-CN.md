@@ -130,6 +130,8 @@ plugins/china-trip-weaver/scripts/ctw validate-html demo/trip.html demo/trip.jso
 
 [`demo/grouped-departures/`](demo/grouped-departures/) 下的分组出发示例让两组合成旅客分别从北京、广州前往上海会合点。提交的 Trip 保持严格的分组 request 形状，并可见地展示各组出发地、3 人总数、分组归属交通腿，以及分组/全团交通价格。
 
+[`demo/multicity-5d/`](demo/multicity-5d/) 下的多城市示例让两名旅客从北京出发，依次经停上海、杭州、苏州三个目的地。提交的 Trip 交通腿严格按换乘顺序单向排列，不含回到北京的返程腿，且每天都精确对应一段覆盖当天、且限定在当前目的地的住宿。
+
 第五组示例位于 [`demo/journey-16d/`](demo/journey-16d/)：一份完全合成的上海→杭州→苏州 16 天 Journey，拆成三个完整 Trip。它的已提交文件由 `scripts/build_renderer_fixtures.py` 独占写入；该生成器固定使用 `2026-09-05T09:00:00+08:00`，有意不同于其余四组 demo 使用的 `2026-09-04T00:00:00+08:00`，不要单独手工重跑第五组。用 `/usr/bin/python3 scripts/build_renderer_fixtures.py` 可重复生成，再运行：
 
 ```bash
@@ -217,7 +219,7 @@ ctw journey assemble --journey JOURNEY.json --replace-trip TRIP-rN.json --base-r
 
 | 位置 | 语言 | 内容 |
 |---|---|---|
-| [`docs/design/`](docs/design/00-README.md) | 英文 | 架构设计与决策记录，是实现的权威依据 |
+| [`docs/design/`](docs/design/00-README.md) | 中文 | 架构设计与决策记录，是实现的权威依据 |
 | [`docs/design/adr/`](docs/design/adr/) | 英文 | 编号的架构决策记录；与之冲突的改动要新增 ADR 取代，而不是悄悄改实现 |
 | [`docs/research/`](docs/research/00-README.md) | 中文 | 立项前对 11 个参考项目和 Codex 官方规范的调研与证据 |
 | [`docs/manual-acceptance.zh-CN.md`](docs/manual-acceptance.zh-CN.md) | 中文 | 在 Codex 桌面版用自然语言做人工验收的清单 |

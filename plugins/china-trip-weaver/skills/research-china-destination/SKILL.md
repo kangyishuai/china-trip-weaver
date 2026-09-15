@@ -45,6 +45,6 @@ scripts/ctw candidates fix-names candidates.json --trip trip-or-journey.json --a
 scripts/ctw validate-candidates candidates.json
 ```
 
-`fix-names` binds feedback to candidate entities by the reason's `ref_id`, never by a Trip or Journey array index. It changes only uniquely determined names. Items with equally close alternatives, conflicting Journey feedback, an unchanged normalized name, or malformed/unmatched feedback remain unchanged and are printed for manual review.
+`fix-names` binds feedback to candidate entities by the reason's `ref_id`, never by a Trip or Journey array index. It changes only uniquely determined names, and a name that already matches its confirmed suggestion is resolved automatically with no manual review needed. Items with equally close alternatives, conflicting Journey feedback, or malformed/unmatched feedback remain unchanged and are printed for manual review.
 
 Use `../../schema/candidates.schema.json` as the contract, read `../../references/provider-contracts.md` for the shared search ladder, and read `../../references/candidates.example.json` when an example is needed.

@@ -131,6 +131,8 @@ The one-day round trip under [`demo/guangzhou-shenzhen/`](demo/guangzhou-shenzhe
 
 The grouped-departure example under [`demo/grouped-departures/`](demo/grouped-departures/) sends two synthetic traveler groups from Beijing and Guangzhou to a Shanghai meeting anchor. Its checked-in Trip keeps the strict grouped request shape and visibly shows each origin, the three-person total, group-owned transport legs, and per-group/whole-party transport pricing.
 
+The multi-city example under [`demo/multicity-5d/`](demo/multicity-5d/) sends two travelers from Beijing through three destinations in order — Shanghai, then Hangzhou, then Suzhou. Its checked-in Trip keeps transport legs one-way and ordered by transfer with no return leg back to Beijing, and each day maps to exactly one covering lodging stay in its own destination.
+
 The fifth example under [`demo/journey-16d/`](demo/journey-16d/) is a fully synthetic 16-day Shanghai → Hangzhou → Suzhou Journey split into three complete Trips. Its checked-in files are owned exclusively by `scripts/build_renderer_fixtures.py`, whose fixed clock `2026-09-05T09:00:00+08:00` intentionally differs from the `2026-09-04T00:00:00+08:00` clock used by the other four demos; do not hand-run the fifth demo separately. Regenerate it with `/usr/bin/python3 scripts/build_renderer_fixtures.py`, then validate both artifacts with:
 
 ```bash

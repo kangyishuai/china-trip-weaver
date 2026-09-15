@@ -24,4 +24,6 @@ scripts/ctw lodging --city 上海 --check-in YYYY-MM-DD --check-out YYYY-MM-DD \
   --cancellation-preference "free cancellation" --output-json lodging.json
 ```
 
-The parent consumes live inventory with `scripts/ctw plan --request request.json --candidates candidates.json --rail <mode> --lodging live --output-json trip.json --output-html trip.html`. Use `--keyless-trial` only for an explicit trial comparison. See `../../references/candidates.example.json` for the static candidate-file shape.
+Add `--keyless-trial` to the `ctw lodging` command above only for an explicit trial comparison; `ctw plan` has no such flag.
+
+The parent consumes live inventory with `scripts/ctw plan --request request.json --candidates candidates.json --rail <mode> --lodging live --output-json trip.json --output-html trip.html`. See `../../references/candidates.example.json` for the static candidate-file shape.
