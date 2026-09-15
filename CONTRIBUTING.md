@@ -22,9 +22,14 @@ globally.
 ```bash
 python3 -m unittest discover -s tests -v
 python3 scripts/scan_secrets.py
+python3 -m pyflakes $(git ls-files '*.py')
 ```
 
-The suite must end with `OK` and zero failures. Three tests depend on a local
+The suite must end with `OK` and zero failures. CI runs these same three steps
+on Python 3.9 and 3.13. Coverage is not part of CI and not a merge gate; measure
+it on demand with `python3 scripts/measure_coverage.py`, which builds a
+throwaway virtualenv, tracks subprocesses, and refuses to print a percentage
+unless the run actually exercised the whole suite. Three tests depend on a local
 Codex install (the bundled Skill and plugin validators, and the Skill parser
 smoke through `scripts/install_local_plugin.sh --skill-smoke`); they skip when
 Codex is not installed on the machine and must pass when it is.

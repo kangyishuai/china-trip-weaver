@@ -220,7 +220,7 @@ ctw journey assemble --journey JOURNEY.json --replace-trip TRIP-rN.json --base-r
 | 位置 | 语言 | 内容 |
 |---|---|---|
 | [`docs/design/`](docs/design/00-README.md) | 中文 | 架构设计与决策记录，是实现的权威依据 |
-| [`docs/design/adr/`](docs/design/adr/) | 英文 | 编号的架构决策记录；与之冲突的改动要新增 ADR 取代，而不是悄悄改实现 |
+| [`docs/design/adr/`](docs/design/adr/) | 中英混合 | 编号的架构决策记录（ADR-0001–0008 中文，0009 起英文）；与之冲突的改动要新增 ADR 取代，而不是悄悄改实现 |
 | [`docs/research/`](docs/research/00-README.md) | 中文 | 立项前对 11 个参考项目和 Codex 官方规范的调研与证据 |
 | [`docs/manual-acceptance.zh-CN.md`](docs/manual-acceptance.zh-CN.md) | 中文 | 在 Codex 桌面版用自然语言做人工验收的清单 |
 | [`BLOCKED.md`](BLOCKED.md) | 英文 | 仍未决的问题与演示／夹具合成数据边界 |

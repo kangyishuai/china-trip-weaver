@@ -38,9 +38,20 @@
 | [`ADR-0006`](adr/0006-single-deterministic-renderer.md) | v1 单一、确定性、zero-remote-script HTML renderer |
 | [`ADR-0007`](adr/0007-claim-level-evidence.md) | claim 级 evidence、typed price、health/mode |
 | [`ADR-0008`](adr/0008-read-only-transaction-boundary.md) | 永久止步查询/比较/HTTPS deep link，不做交易 |
+| [`ADR-0009`](adr/0009-rename-rail-air-skills.md) | 铁路与航空 Skill 更名，避免与旧同名插件混淆 |
+| [`ADR-0010`](adr/0010-candidate-file-planning-and-live-rail.md) | 以候选文件驱动规划，铁路走实时边界（12306 固定版本 MCP） |
+| [`ADR-0011`](adr/0011-live-amap-flyai-variflight-boundaries.md) | AMap、FlyAI、VariFlight 三家实时调用的边界与降级档位 |
+| [`ADR-0012`](adr/0012-open-source-under-mit.md) | 本项目自有代码以 MIT 开源 |
+| [`ADR-0013`](adr/0013-stay-off-the-public-marketplace.md) | 不上公开市场；FlyAI 只作可选增强 |
+| [`ADR-0014`](adr/0014-remove-ortools-bridge.md) | 移除从未接线的 OR-Tools 桥；轻量排程是唯一引擎 |
+| [`ADR-0015`](adr/0015-refresh-event.md) | `ctw replan --rail-result` 把 refresh 事件接到实时铁路查询 |
+| [`ADR-0016`](adr/0016-rental-car-and-ferry.md) | 租车与轮渡作为一等交通腿 |
+| [`ADR-0017`](adr/0017-transport-candidates.md) | 租车/轮渡腿的来源，以及暂缓做候选生产者 |
+| [`ADR-0018`](adr/0018-map-and-images.md) | 手机页不放交互地图与图片，改用离线位置示意 |
+| [`ADR-0019`](adr/0019-second-price-source.md) | 逐价格类别判断是否值得加第二价源 |
 | [`ADR-0020`](adr/0020-locked-service-assumption.md) | 「已购锁定车次」表达缺口：推荐加结构化锁定字段，报错定位为独立可做的低成本项，不隔离自由文本 |
 
-8 份均含 Status/Context/Decision/Consequences/Evidence。若阶段三 benchmark 或官方规范改变决定，新增/替代 ADR，不静默改实现常量。
+20 份均含 Status/Context/Decision/Consequences/Evidence。若阶段三 benchmark 或官方规范改变决定，新增/替代 ADR，不静默改实现常量。
 
 ## 3. 阶段三施工硬顺序
 

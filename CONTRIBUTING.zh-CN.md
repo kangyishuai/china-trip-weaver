@@ -16,9 +16,10 @@
 ```bash
 python3 -m unittest discover -s tests -v
 python3 scripts/scan_secrets.py
+python3 -m pyflakes $(git ls-files '*.py')
 ```
 
-测试必须以 `OK` 结束、零失败。有三项测试依赖本机的 Codex（自带的 Skill 与插件校验器，以及经 `scripts/install_local_plugin.sh --skill-smoke` 跑的 Skill 解析 smoke）：机器上没装 Codex 时它们跳过，装了就必须通过。
+测试必须以 `OK` 结束、零失败。CI 在 Python 3.9 与 3.13 上跑的正是这三步。覆盖率不进 CI、也不是合并门槛，需要时用 `python3 scripts/measure_coverage.py` 单独量：它会建一个一次性虚拟环境、追踪子进程，并在这一轮没真正跑满整个套件时拒绝给出百分比。有三项测试依赖本机的 Codex（自带的 Skill 与插件校验器，以及经 `scripts/install_local_plugin.sh --skill-smoke` 跑的 Skill 解析 smoke）：机器上没装 Codex 时它们跳过，装了就必须通过。
 
 ## 一个改动需要带上什么
 
