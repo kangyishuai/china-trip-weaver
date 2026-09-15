@@ -2,6 +2,57 @@
 
 唯一的当前进度记录：现状速览（0.8.0 起每个版本一条）加最近一波的执行者记录。2026-09-03 到 09-06 与 2026-09-08 到 09-12 的逐轮任务书、实测证据、验收记录已归档，见「历史索引」。
 
+## 2026-09-15「E003 已购锁定表达缺口」ADR（第二十五波之一，worktree `.tmp/wt-adr` 分支 `e003-locked-service-adr`，四份并行书中的第③份，只出结论不改代码）
+
+（本条追加于文件顶部而非任务书「界限」字面写的「末尾追加」：本文件与
+`BLOCKED.md` 的实际既有约定都是新的在最上面——本条正上方就是同日期的健康审计
+条目——任务 0 又明确要求相关证据「写 BLOCKED.md 最上面」，按「说的与文件实际
+结构一致」优先处理，两处都改为顶部插入，供管理者合并时核对。）
+
+**任务 0（离线复现 E003）**：任务书字面指令（跑 `ctw journey validate-html`）
+复现不出来——`render/validate_journey_html.py` 整份文件没有任何
+`TRAIN_FACT_RE`/E003 检查（`git grep` 零命中），它是与 Trip 级 `validate_html.py`
+完全独立的一套 `JH0xx` 校验。改用 `plan_trip` 内部真正调用的 Trip 级
+`ctw validate-html` 复现成功，输出与真实故障逐字一致（`E003 rendered train
+fact is absent from Trip: G1902`）。判断记入 `BLOCKED.md` 顶部，供裁决是否
+认可「命令名对不上，但护栏真实行为已验证」这类处理方式；未因此停工，因为
+任务 0 的真正目的——核实护栏真实行为——已经用可复跑的命令完整达成。完整命令
+与输出见 `docs/design/adr/0020-locked-service-assumption.md` 的 Context 一节。
+
+**理解的目标／顺序／最大风险（≤10 行）**：目标是给管理者一份能直接拍板的
+ADR，回答「已购锁定」这类既成事实该怎么表达，而不是顺手把 E003 的报错改好——
+任务书三次强调「零代码改动」。顺序按任务书给定的 0→1→2：先离线坐实护栏的真实
+触发路径（结果发现任务书点的命令是错的，必须先修正理解才能谈后续判断，这也是
+为什么任务 0 必须最先做）；再把 A/加字段、B/改报错、C/隔离文本三条路都查到能
+互相比较的深度，额外补了一条零代码的 D/沿用既有 refresh 机制作对照；最后写
+ADR。最大风险是「查得全」压过「证据真」——本轮刻意把每条判断都钉死在具体
+`git grep`/文件:行号/亲自跑出的命令输出上，而不是转述任务书自己给的「已知
+事实」；次大风险是 00-README.md 的 ADR 表格自 ADR-0009 起已经 11 个版本没跟上
+（只列到 0008），这是任务书之外发现的既有文档漂移，按「顺手活不许做」原则只
+加了 ADR-0020 一行、不回填历史行，记入 BLOCKED.md。
+
+**任务 1/2（三路径评估 + 写 ADR）已完成**：结论与逐条证据见
+[`docs/design/adr/0020-locked-service-assumption.md`](docs/design/adr/0020-locked-service-assumption.md)（Status: Proposed）。
+6 条结论提要：① 任务 0 需要用 Trip 级 `ctw validate-html` 而非任务书写的
+`ctw journey validate-html` 才能复现；② Direction A（结构化锁定字段）可行，
+20 golden/8 no-solution 夹具经核实是完全不相关的 day-scheduler 子系统、不受
+影响，`_resolve_rail` 可复用 `replan.py` 里已经写好并测过的
+`_select_refresh_service`/`_disambiguate_service_matches`/`_matches_time`；
+③ Direction B（只改报错）比任务书设想的更便宜——`_check_rendered_facts` 已经
+拿到完整 `trip`，`assumptions`/`constraints` 是仅有两处会被渲染成可见文本的
+自由字段，无需新增跨层传参；④ Direction C（隔离自由文本）不建议，恰在风险
+最高处摘掉护栏，工程上也做不到解析器与浏览器口径一致；⑤ 补充的 Direction D
+（零代码，沿用 `ctw replan --event refresh`）已在真实的 G1902 这条腿跑通过
+（`fujian-2026-09-25-to-10-10/event-g1902-booked.json`），但只治当次产物、
+不治 `request.json` 本身，每次从零重新 `journey plan` 会再撞同一个 E003；
+⑥ 推荐 A 定长期方向、B 独立先做、C 不采纳、D 写作临时工作流。
+`docs/design/00-README.md` 第 29 行「## 2. ADR」表格已加 ADR-0020 一行。
+
+**收尾核对**：`git diff main -- plugins tests scripts .github demo README.md`
+为空；`.tmp/e003-repro/` 全程只在本 worktree 内、被根 `.gitignore`
+（`.tmp/*`）挡住，`git status --short` 不显示它。全量测试结果见下方本轮末尾
+的独立记录。
+
 ## 2026-09-15 健康审计（第二十四波，进行中——诊断，不改代码）
 
 **任务 0 核对**：五条基线命令逐一亲手重跑，四条逐字吻合（685 测试 OK 49.7s、pyflakes 0 行、
