@@ -20,6 +20,7 @@ sys.path.insert(0, str(SRC))
 
 from china_trip_weaver import __version__
 from china_trip_weaver.credentials import (
+    FILE_ALLOWLIST,
     SECRET_NAMES,
     provider_credential_status,
     provider_environment,
@@ -39,6 +40,16 @@ def assignment(name: str, value: str) -> str:
 
 
 class CredentialTests(unittest.TestCase):
+    def setUp(self):
+        # cli_main() below leaves environ unset, so resolve_credentials() falls back to
+        # the real os.environ; strip credential names so a developer's exported key
+        # can't leak into these assertions.
+        patcher = mock.patch.dict(os.environ, {}, clear=False)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        for name in FILE_ALLOWLIST:
+            os.environ.pop(name, None)
+
     def make_file(self, directory: Path, text: str, mode: int = 0o600) -> Path:
         path = directory / "secrets.input"
         path.write_text(text, encoding="utf-8")

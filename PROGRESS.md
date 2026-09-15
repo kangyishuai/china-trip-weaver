@@ -2,6 +2,98 @@
 
 唯一的当前进度记录：现状速览（0.8.0 起每个版本一条）加最近一波的执行者记录。2026-09-03 到 09-06 与 2026-09-08 到 09-12 的逐轮任务书、实测证据、验收记录已归档，见「历史索引」。
 
+## 书「E003 报错定位 + test_credentials 环境隔离」（2026-09-15，第二十六波，main 直改，承接 ADR-0020）
+
+**任务 0 核对**（main HEAD `1858e68`）：全量 `Ran 690 tests in 55.723s ... OK` 零跳过；`scan_secrets.py`
+`0 finding(s) across 391 file(s)`；pyflakes 三目标合计 0 行。三条与任务书基线逐字吻合。
+`VARIFLIGHT_API_KEY=fake /usr/bin/python3 -m unittest discover -s tests -p test_credentials.py` 结果
+`FAILED (failures=1)`，唯一失败正是 `test_doctor_reports_statuses_and_rejects_unsafe_file_without_values`
+（`'missing' != 'configured'`）——与任务书预判逐字一致。核对通过，动工。
+
+**理解的目标／顺序／最大风险**（≤10 行）：目标一是让 E003 报错在能找到来源时指出车次号来自
+`request.assumptions`/`constraints` 哪一条，找不到时保留原文案；目标二是让 `test_credentials.py` 的
+断言不再受真实环境变量摆布。顺序按任务书 1→2→3。最大风险有二：一是任务 1 「改文案后同步改 :309
+断言」的字面要求与「找不到来源时退回现在这种措辞」的字面要求可能冲突（若新 case 恰好落在「找不到」
+分支，:309 就不需要变）——处理方式是让实现忠实于后者（ADR-0020 Direction B 原文本就写明 fallback
+是 "today's generic message"），用实测结果说话而非强行改字面不需要改的断言，判断依据见下面任务 1
+小节；二是任务 2 只许改测试文件、不许碰 `credentials.py` 解析逻辑，需要先确认 `cli_main`/
+`resolve_credentials` 到底从哪里读真实 `os.environ`，再选一种只在测试边界打补丁的隔离手段。
+
+**任务 1 完成**：`validate_html.py` 新增私有函数 `_cite_train_fact_source(trip, token)`（在
+`_check_rendered_facts` 之前），依次在 `trip["request"]["assumptions"]`/`["constraints"]` 里找含该
+车次号的条目，命中则返回 `request.<field>[<index>]: "<片段，超 60 字符截断>"`；E003 消息命中时追加
+` (found in %s)`，未命中时完全保留原文案 `rendered train fact is absent from Trip: %s`（不是新增分
+支的默认值，是刻意选择——ADR-0020 Direction B 原文写 "falling back to today's generic message when
+the token isn't in either"，这就是本轮要实现的设计本身，不是自创）。
+
+- 测试：`build_renderer_fixtures.py` 的 `build_trip_mutations()` 新增
+  `train-fact-sourced-from-assumptions` case（把 `weekend-live.json` 的 `assumptions[0]` 换成含
+  「G1902」的句子，`outcome` 新引入 `reject-html`，`codes: ["E003"]`）；重跑脚本后
+  `tests/fixtures/renderer/trip/` 从 9 份变 10 份，`manifest.json` 自动重算。`run_trip_mutation`
+  （`tests/test_renderer.py`）加一个 `reject-html` 分支（trip 校验通过、渲染成功，但 `validate_html`
+  不 ok 且 codes 命中预期，不检查具体文案）——这是新增分支，不改动 `reject-trip` 与默认成功分支的
+  既有逻辑。新增专门断言精确文案的 `test_e003_names_the_assumptions_entry_a_stray_train_fact_came_from`，
+  断言 `E003` 的完整消息是 `rendered train fact is absent from Trip: G1902 (found in
+  request.assumptions[0]: "G1902车票已购并锁定：9月26日07:50出发")`。`test_renderer_fixture_manifest`
+  的 `{"trip": 9}` 改成 `{"trip": 10}`。
+- **:309 行旧断言未改，已用实测代替猜测**：`test_html_adversarial_fixtures_report_exact_error_messages`
+  里的 `invented-train-price-facts`（G1001）case 走的是 HTML 字符串替换（`run_html_mutation`），从不
+  改动 `trip["request"]`；`weekend-live.json` 的 `assumptions` 是 `["每天 09:00 后开始活动"]`、
+  `constraints` 是 `[]`，均不含「G1001」，所以这个 case 100% 落在「找不到来源」分支，消息必然与改动
+  前逐字相同。加完新 case 后单独重跑该测试确认仍 `ok`（未改一个字符即通过），证明 :309 的字面值本来
+  就不需要变——任务书那句「你改文案就必须同步改它」是条件句（若变了就要同步），不是「必须让它变」的
+  指令；PROGRESS.md 既有先例（书 W3、书「拆 plan_trip」等）对任务书数字/表述与实测不符时的处理方式
+  是「以实测为准、记录判断依据」，此处同样处理。
+- 反向验证：临时把 `source = _cite_train_fact_source(trip, token)` 注释掉、改成 `source = None`，
+  重跑 `test_e003_names_the_assumptions_entry_a_stray_train_fact_came_from`：`FAILED (failures=1)`，
+  `AssertionError` 显示期望的 `(found in request.assumptions[0]: ...)` 文案缺失、只剩裸车次号——证明
+  新测试真实覆盖了回查来源这段代码，而非空断言。同一条命令下
+  `test_trip_adversarial_train_fact_sourced_from_assumptions`（只测 outcome+codes，不测文案）保持
+  `ok`，符合预期（它本来就不该受文案变化影响）。还原代码（`touch` 文件避开 mtime 级字节码缓存，按
+  「验收教训」记录的先例）后两条测试均转回 `ok`。
+- `git diff --stat -- plugins/china-trip-weaver/src/china_trip_weaver` 只有一行
+  `render/validate_html.py | 18 +++++++++++++++++-`；pyflakes 三目标合计 0 行；全量
+  `Ran 692 tests in 41.907s ... OK` 零跳过（690 + 本轮新增 2：自动发现的
+  `test_trip_adversarial_train_fact_sourced_from_assumptions` ＋ 手写的
+  `test_e003_names_the_assumptions_entry_a_stray_train_fact_came_from`）。
+
+**任务 2 完成**：查明 `os.environ` 泄漏的唯一入口——`credentials.resolve_credentials(environ=None,
+...)` 在 `environ is None` 时回退读真实 `os.environ`（`credentials.py:128`），而
+`test_doctor_reports_statuses_and_rejects_unsafe_file_without_values` 等测试调用
+`cli_main(["doctor"], credential_path=path)` 时不传 `environ`，这条路径最终落到
+`_cmd_doctor` → `resolve_credentials(credential_path=credential_path)`，同样未传 `environ`，因而
+回退读宿主机真实环境。测试文件里其余对 `resolve_credentials`/`provider_environment` 的调用全部显式
+传了字典（`resolve_credentials({...}, path)`、`provider_environment(p, result, {"PATH": "/bin"})`
+等），不受影响，不需要动。
+
+- 手段：`tests/test_credentials.py` 新增 `import` `credentials.py` 既有的 `FILE_ALLOWLIST`
+  常量（`SECRET_NAMES + NON_SECRET_NAMES` 共 6 个变量名，覆盖 4 个 provider key 加
+  `X_VARIFLIGHT_KEY`/`VARIFLIGHT_API_URL` 两个兼容/非密钥名，比任务书验收命令列出的 4 个更全）；
+  `CredentialTests` 类加 `setUp`：`mock.patch.dict(os.environ, {}, clear=False)` 打开一个会在测试
+  结束时（含失败/异常）自动整体还原 `os.environ` 的补丁，再在补丁生效期间把 `FILE_ALLOWLIST` 里的
+  6 个变量名从 `os.environ` 逐一 `pop`。不改 `credentials.py` 一个字节，只在测试自己的边界上操作。
+- 验收：`VARIFLIGHT_API_KEY=fake AMAP_API_KEY=fake FLYAI_API_KEY=fake ANYSEARCH_API_KEY=fake
+  /usr/bin/python3 -m unittest discover -s tests` → `Ran 692 tests in 43.104s ... OK`；不带任何这些
+  变量（`env -u` 显式清掉全部 6 个真实名字）跑同一条全量命令 → `Ran 692 tests in 42.851s ... OK`，
+  两次结果逐字一致。额外多做一步核实：任务书验收命令里的 `AMAP_API_KEY` 其实不是真实变量名（真实是
+  `AMAP_WEBSERVICE_KEY`），单靠这条命令不足以证明隔离对全部 6 个真实名字生效，于是又单独用全部 6 个
+  真实 `FILE_ALLOWLIST` 名字（含 `AMAP_WEBSERVICE_KEY`/`X_VARIFLIGHT_KEY`/`VARIFLIGHT_API_URL`）注入
+  假值单跑 `test_credentials.py`：`Ran 18 tests ... OK`，18 项全绿，证明隔离确实覆盖了全部相关变量
+  名，不是恰好没撞上。pyflakes 三目标合计 0 行。
+
+**任务 3 完成**：`docs/design/adr/0020-locked-service-assumption.md` 的 `Status` 由 `Proposed` 改成
+`Accepted`；`## Decision` 标题下方新增一段「2026-09-15 裁决」，逐字记四条：B 本轮实施；A 认可为长期
+方向、下一波单独立项（"锁定车次查无此车"的失败语义仍待设计，不在本轮范围）；C 不采纳；D 作为落地前
+的临时工作流（`ctw replan --event refresh` 一直可用）。
+
+- 核实 `docs/design/07-renderer.md:134` 是否因任务 1 失真：任务书给的行号本身有出入——实测第 134
+  行是 E005（`claim/unknown/provider-health 必要 section 缺失`），E003 那一条在第 133 行（`- E003：
+  任一 day/slot/entity ID 未恰好渲染一次；或 UI 出现 Trip 中不存在的时间/价格/service number。`），
+  与 PROGRESS.md 既有先例（书 W3 的 :156 标注）同一类行号笔误。内容本身未失真：这句描述的是「什么
+  情况触发 E003」（结构计数不一致，或出现 Trip 里没有的时间/价格/车次号），任务 1 只是给已经触发的
+  E003 消息追加一段可选的来源说明后缀，没有改变触发条件本身，这句话改动前后都成立。判断：不阻塞，
+  未改 `docs/design/07-renderer.md` 一个字节。
+
 ## 书 Z3d「9/26 与 9/29 高铁腿实网刷新」（2026-09-15，第二十五波四份并行书之一，只做实网刷新这一份）
 
 **任务 0 核对**（15:15 实网查询，主检出 `main`，HEAD 与上一条健康审计一致）：

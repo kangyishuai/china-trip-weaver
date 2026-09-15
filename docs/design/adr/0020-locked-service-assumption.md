@@ -1,6 +1,6 @@
 # ADR-0020: How should an already-booked/locked transport service be expressed before initial planning?
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-15
 
 ## Context
@@ -249,6 +249,12 @@ every time. It is a correct today-workaround, not a durable substitute for
 Direction A.
 
 ## Decision
+
+**2026-09-15 裁决：** Direction B 本轮实施（see the follow-up task book that shipped it: the E003
+message now cites which `request.assumptions`/`constraints` entry a stray train fact came from when
+it can find one). Direction A 认可为长期方向，下一波单独立项（其"锁定车次当天查无此车怎么办"这一失
+败语义仍待设计，不在本轮范围）。Direction C 不采纳。Direction D 作为落地前的临时工作流（`ctw replan
+--event refresh` 一直可用，写进后续操作指南）。
 
 **结论提要（≤6 条，每条见上文 Context/Directions 的行号与命令）：**
 

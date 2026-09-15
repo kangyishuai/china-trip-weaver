@@ -1,7 +1,7 @@
 {
   "counts": {
     "html": 12,
-    "trip": 9
+    "trip": 10
   },
   "files": [
     {
@@ -83,6 +83,10 @@
     {
       "path": "trip/rtl-emoji-long.json",
       "sha256": "37f382fd8eb980c6a5393e234f9325016594514b78ede10db70a1d620cc484ce"
+    },
+    {
+      "path": "trip/train-fact-sourced-from-assumptions.json",
+      "sha256": "60fd9b402265e6edcfabca4d87522fdb768d5759e8837bc19c5cc3d6d8a40341"
     },
     {
       "path": "trip/url-credentials.json",

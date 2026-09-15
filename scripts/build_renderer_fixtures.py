@@ -60,6 +60,12 @@ def build_trip_mutations() -> List[Mapping[str, Any]]:
         trip_fixture("url-credentials", [{"path": "/pois/0/deep_links/0", "value": "https://user:pass@example.invalid/path"}], "reject-trip", ["S_FORMAT"]),
         trip_fixture("duplicate-day-id", [{"path": "/days/1/day_id", "value": "day-1"}], "reject-trip", ["V_DUPLICATE_ID"]),
         trip_fixture("fake-secret", [{"path": "/request/pasted_notes", "value_parts": ["gh", "p_", "000000000000000000000000000000"]}], "reject-trip", ["V_SECRET"]),
+        trip_fixture(
+            "train-fact-sourced-from-assumptions",
+            [{"path": "/request/assumptions/0", "value": "G1902车票已购并锁定：9月26日07:50出发"}],
+            "reject-html",
+            ["E003"],
+        ),
     ]
 
 

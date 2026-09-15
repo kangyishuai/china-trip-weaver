@@ -72,6 +72,11 @@ def run_trip_mutation(testcase: unittest.TestCase, path: Path):
     testcase.assertTrue(trip_report.ok, [item.render() for item in trip_report.errors])
     rendered = render_trip(trip)
     html_report = validate_html(rendered, trip)
+    if expected["outcome"] == "reject-html":
+        testcase.assertFalse(html_report.ok)
+        codes = {item.code for item in html_report.errors}
+        testcase.assertTrue(set(expected["codes"]).issubset(codes), (expected["codes"], codes))
+        return
     testcase.assertTrue(html_report.ok, [item.render() for item in html_report.errors])
     testcase.assertNotIn("</script><script>", rendered)
 
@@ -155,7 +160,7 @@ class RendererTests(unittest.TestCase):
 
     def test_renderer_fixture_manifest(self):
         manifest = load(FIXTURES / "manifest.json")
-        self.assertEqual({"trip": 9, "html": 12}, manifest["counts"])
+        self.assertEqual({"trip": 10, "html": 12}, manifest["counts"])
         for entry in manifest["files"]:
             data = (FIXTURES / entry["path"]).read_bytes()
             self.assertEqual(entry["sha256"], hashlib.sha256(data).hexdigest(), entry["path"])
@@ -323,6 +328,21 @@ class RendererTests(unittest.TestCase):
                 report = validate_html(mutated, trip)
                 actual = {(item.code, item.message) for item in report.errors}
                 self.assertEqual(expected, actual)
+
+    def test_e003_names_the_assumptions_entry_a_stray_train_fact_came_from(self):
+        fixture = load(TRIP_MUTATIONS / "train-fact-sourced-from-assumptions.json")
+        trip = mutate_trip(fixture)
+        rendered = render_trip(trip)
+        report = validate_html(rendered, trip)
+        messages = {(item.code, item.message) for item in report.errors}
+        self.assertEqual(
+            {(
+                "E003",
+                "rendered train fact is absent from Trip: G1902"
+                ' (found in request.assumptions[0]: "G1902车票已购并锁定：9月26日07:50出发")',
+            )},
+            messages,
+        )
 
     def test_coded_12306_rail_deep_link_renders_station_names_and_validates(self):
         trip = load(VALID / "multicity-static.json")

@@ -209,6 +209,16 @@ def _check_trip_data_script(parser: AuditParser, trip: Mapping[str, Any], add: C
     return trip_scripts
 
 
+def _cite_train_fact_source(trip: Mapping[str, Any], token: str) -> Optional[str]:
+    request = trip.get("request") or {}
+    for field in ("assumptions", "constraints"):
+        for index, text in enumerate(request.get(field) or ()):
+            if token in text:
+                snippet = text if len(text) <= 60 else text[:57] + "..."
+                return "request.%s[%d]: \"%s\"" % (field, index, snippet)
+    return None
+
+
 def _check_rendered_facts(parser: AuditParser, trip: Mapping[str, Any], add: Callable[[str, str], None]) -> List[Tuple[str, Mapping[str, str]]]:
     expected_days = Counter(day["day_id"] for day in trip["days"])
     expected_slots = {slot["slot_id"]: slot for day in trip["days"] for slot in day["slots"]}
@@ -272,7 +282,12 @@ def _check_rendered_facts(parser: AuditParser, trip: Mapping[str, Any], add: Cal
     known_services = {leg["service_number"] for leg in trip["transport_legs"] if leg["service_number"]}
     unexpected_services = sorted(set(TRAIN_FACT_RE.findall(user_fact_text)) - known_services)
     if unexpected_services:
-        add("E003", "rendered train fact is absent from Trip: %s" % unexpected_services[0])
+        token = unexpected_services[0]
+        source = _cite_train_fact_source(trip, token)
+        if source:
+            add("E003", "rendered train fact is absent from Trip: %s (found in %s)" % (token, source))
+        else:
+            add("E003", "rendered train fact is absent from Trip: %s" % token)
     known_prices = {
         _number(item["price"]["amount"])
         for group in ("transport_legs", "lodgings", "pois")
