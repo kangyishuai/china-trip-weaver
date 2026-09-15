@@ -1968,3 +1968,5 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 2. [docs/design/09-impl-map.md:66](docs/design/09-impl-map.md:66) 前后，按字母序在 `build_scheduler_fixtures.py` 和 `qa_renderer_browser.py` 两行之间插入 `├── measure_coverage.py`。
 
 已验证：把 `scripts/measure_coverage.py` 临时整体移出 `scripts/`（不是复制，是移动，避免两份文件同时被 glob 到）单独重跑全量，`test_design_docs` 恢复绿，其余全部一并绿，证明这条红只来自这一个、且仅这一个原因；移回后恢复交付状态。全过程见 PROGRESS.md 任务 1 小节。
+
+管理者裁决（2026-09-15）：确认这是任务书自身「授权新建 scripts/ 文件」与「不许改现有测试/docs」两条要求之间的内在矛盾，执行者如实报红、不取巧的处置正确；已按执行者给出的精确两行修复解开（`tests/test_design_docs.py` 计数 48→49，`docs/design/09-impl-map.md` 补登 `measure_coverage.py`），随执行者分支一并提交。收尾实测 `Ran 690 tests ... OK`、`scripts/measure_coverage.py` 直接跑通出具报告（TOTAL 89%）；已关闭。
