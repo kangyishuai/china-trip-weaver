@@ -280,17 +280,38 @@ assumptions「G1902车票已购并锁定……」这条自由文本人工备注�
 `git diff -- plugins tests scripts docs demo .github` 为空，`git status --short` 只有 PROGRESS.md、
 BLOCKED.md 两个文件（会话开始前遗留的游离 `.coverage` 已清理）。
 
-## 现状速览（2026-09-12 实测，0.20.1）
+## 现状速览（2026-09-15 实测，0.21.0）
 
-- 版本：`0.20.1`，唯一来源是
+- 版本：`0.21.0`，唯一来源是
   `plugins/china-trip-weaver/.codex-plugin/plugin.json` 与
   `src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
   代码与文档一律引用这两处之一；只有本节的逐版本条目和 git tag 以版本号作索引。
-- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 685 tests`，`OK`，0 skipped；
+- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 690 tests`，`OK`，0 skipped；
   `scripts/scan_secrets.py` 0 命中；
   `~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src
   tests scripts` 0 行。带假 Key（`ANYSEARCH_API_KEY=... unittest`）跑全量同样
-  685 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。
+  690 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。已知边界：
+  `VARIFLIGHT_API_KEY` 若以**环境变量**注入，`test_credentials` 会红一项——那条测试
+  隔离了 credentials 文件却没隔离环境变量，而凭据解析是环境变量优先；0.20.1 上实测
+  同样红，非本版引入。
+- 0.21.0（第二十四波，四份并行：文档订正、检查基建、ADR、实网刷新）：健康审计查出的
+  文档漂移七处改对——`references/provider-contracts.md` 的 12306 超时由不存在的
+  「15s direct; 25s interline」改为真实的统一 `90s`、AnySearch 由 `10s` 改为
+  `15s`、12306 与 AMap 两行删掉与文档自身「R1 disabled」矛盾的「cache →」一档；
+  两份 README 补上从未被提及的 `demo/multicity-5d/`、`README.zh-CN.md` 把
+  `docs/design/` 的语言由「英文」订正为「中文」；`search-china-lodging/SKILL.md`
+  写明 `--keyless-trial` 只属于 `lodging`/`air`、`research-china-destination/SKILL.md`
+  把 `exact_original_confirmed` 的处置由「manual review」订正为自动。新增
+  `scripts/measure_coverage.py`：从系统解释器建一次性 venv、按 coverage.py 的
+  子进程配方测量（套件有 82 处 `subprocess` 调真实 `ctw`），并在出具百分比前
+  断言这一轮真的跑满了整个套件——健康审计里那个「可信却错误的 62%」正是这种
+  残缺测量的产物（成因是共用解释器的 site-packages 里有第三方包自带的顶层
+  `tests` 包，遮蔽了本仓库的 `tests/`）。CI 补 pyflakes 一步；`.coverage*` 进
+  `.gitignore`。新增 `tests/test_rail_cli.py` 5 项，端到端覆盖此前零覆盖的
+  `ctw rail`（`cli.py:_cmd_rail`），测试数 685 → 690，覆盖率 88% → 89%。
+  新增 ADR-0020，为「某趟车已购并锁定」这类既成事实在初次规划中无处表达的
+  缺口给出四个方向与推荐（Status: Proposed，待裁决）。真实 16 天行程的两条
+  高铁腿同日实网刷新，产物按约定留在仓库外。
 - 0.20.1（第二十三波，纯文档加一条测试）：`docs/design/` 四份现役设计文档追平
   0.16.0–0.20.0 的代码——04-providers §4.2 补 12306 直达行按到发站过滤
   （`_filter_direct_rows`、`station_rows_filtered:<n>`／`station_rows_all_filtered`）、
