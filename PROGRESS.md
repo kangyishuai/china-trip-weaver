@@ -596,3 +596,35 @@ journey.py:1712:    ordered_trips = _with_missing_budget_ledgers(ordered_trips)
 - 14 个验收名的 `git grep -c -- <名> -- docs/design/0\*.md` 全部 exit 0：04 中 `_filter_direct_rows=2`、`station_rows_filtered=1`、`getFlightPriceByCities=1`、`PRICE_CONFLICT_MIN_DELTA=1`、`_live_error_class=1`、`CITY_IATA=1`；06 中 `_validate_meeting_anchor=1`、`MEETING_BUFFER_INSUFFICIENT=1`、`refresh_overlap=1`、`refresh_service_ambiguous=1`、`depart_at=2`；09 中 `_with_missing_budget_ledgers=1`、`anysearch_http.py=2`、`qa_renderer_browser.py=1`。
 - 完整验收第 1 轮：`Ran 685 tests in 59.507s ... OK`，0 skipped；secret scan `0 finding(s) across 387 file(s)`；pyflakes exit 0、诊断 0 行；`git grep -l -- '/Users/' -- docs/design` exit 1、输出为空；`git diff --check` exit 0。
 - 范围检查：`git diff 2983165 --name-only` 只列 `PROGRESS.md`、四份目标设计文档和 `tests/test_design_docs.py`；运行时 42 + scripts 6 = 48；新测试文件恰一个 `def test_`。当前无待裁决项。
+
+## check-infrastructure（第二十五波四份并行书之一②检查基建，2026-09-15，worktree `.tmp/wt-infra`，分支 `check-infrastructure`）
+
+**任务 0 核对**：HEAD `5a7b071`（含 09-15 健康审计记录）分出。三项基线逐字吻合：全量 `/usr/bin/python3 -m unittest discover -s tests` → `Ran 685 tests`、`OK`、0 skipped（152.5s，机器负载偏高不影响判断）；pyflakes 全仓（`plugins/china-trip-weaver/src tests scripts`）0 行；污染探针 `~/miniconda3/envs/core/bin/python -c "import tests; print(tests.__file__)"` 打出该环境 site-packages 里的路径而非仓库路径，确认任务书所述的命名空间包遮蔽问题属实。
+
+**理解的目标／顺序／最大风险**：目标是把「没人会发现坏了」的三处报警器补齐并证明它们真会响，不是把已经绿的东西再刷绿一遍。顺序按任务书：先做任务 1（覆盖率脚本，最难），任务 2/3 与它互不依赖，之后并行推进。最大风险有二：覆盖率脚本必须能识别「跑不满」而非只看退出码；任务 3 的反向验证要求只在副本上改坏返回值、不碰仓库本体、不改 `_cmd_rail`。这两个风险在实际执行中都命中过一次真实教训，见任务 1/3 小节。
+
+**任务 3 完成（`ctw rail` 端到端测试）**：新增 `tests/test_rail_cli.py`，5 个 `def test_`，走真实 CLI 子进程（`subprocess.run([str(CTW), "rail", ...])`，`CTW` 写法照抄 `tests/test_journey.py:61`），覆盖 `_cmd_rail`（`cli.py` 约 1190-1274 行）此前端到端零覆盖的全部退出码路径：`success.json`（exit 0，`item_count=1`，8 个输出字段齐全）、`empty.json`（exit 2，`error_class=no_results`）、`wrong_shape.json`（exit 1，`error_class=contract_mismatch`，证实 `Rail12306Adapter.query()` 内部已吞掉这类错误、不会让 `_cmd_rail` 走到未捕获异常分支）、`transfer.json`（exit 0，双腿结构）、指向不存在文件的 `--fixture`（exit 1，`RAIL_FAILED`，走 CLI 自身的 `OSError` 兜底分支）。5 项断言均先用真实子进程探测出实际退出码与字段，未凭空猜测。
+
+反向验证：复制整份 `plugins/china-trip-weaver` 到 `.tmp/` 下的一次性副本，把副本 `cli.py` 里 `_cmd_rail` 成功分支的 `return 0` 改成 `return 3`（仓库本体全程未动一个字节）；用一个只在 `.tmp/` 下运行的驱动脚本把测试模块的 `CTW` 常量临时指向副本的 `ctw` 可执行文件重跑：5 项里精确 2 项（success、transfer，均依赖这一行）变红，另 3 项（empty、wrong_shape、missing-file，不依赖这一行）保持绿——证明测试确实在断言这个返回值，不是巧合。改回真实仓库路径重跑，5/5 绿。
+
+**任务 2 完成（CI 补 pyflakes）**：`.github/workflows/ci.yml` 在 `Scan for secrets` 之后加一步 `Run pyflakes`：`pip install pyflakes==3.4.0`（与本机唯一已验证过的版本一致）后 `python -m pyflakes $(git ls-files '*.py')`。用 `git ls-files '*.py'`（75 个文件）而非历史上手动跑的 `plugins/china-trip-weaver/src tests scripts` 三目录范围，因为任务书明确点名前者；两者之差只有一个文件（`docs/design/schema/check_schema.py`），实测该文件本身 pyflakes 也是 0 行，扩大范围不会让 CI 意外变红。
+
+反向验证：在 worktree 里给 `geo.py` 顶部临时插入一行未用导入，用 CI 里那条完整命令本地跑一次，得到该行的 `imported but unused` 报错、exit 1；`git checkout --` 还原并 `touch` 该文件后重跑，exit 0、零输出。
+
+**任务 1 完成（覆盖率量法固化），含两处真实教训**：新增 `scripts/measure_coverage.py`，一条命令跑完：`/usr/bin/python3 -m venv` 建一次性隔离环境（固定用系统解释器，不提供任何在正常路径下切到别的解释器的开口）→ 装 `coverage`/`pyyaml` → 用官方 `sitecustomize.py` + `COVERAGE_PROCESS_START` 配方给子进程挂钩（测试里约 80 处 `subprocess.run` 直接调用真实 `ctw`，不挂这个钩子 `cli.py` 只能测到主进程自己直接 import 的部分）→ 全量跑 `unittest discover -s tests -v` → `coverage combine` → `coverage report --include="plugins/china-trip-weaver/src/*"`。落地前先用一条会经真实子进程调用 `ctw rail` 的用例单独探测过子进程追踪机制确实生效（仅那一条用例就能让 `cli.py` 测出 33%），才敢跑全量。
+
+死规矩按要求实现：`assert_full_run()` 在打印任何覆盖率数字之前，同时检查「总数 ≥685」「报告 OK」「0 skipped」「磁盘上每一个 `tests/test_*.py` 文件都在这次跑的结果里至少出现过一次」，四条任一不满足就非零退出并点名具体是哪几个模块——不满足就不出报告，不猜、不放宽。已把 `.coverage*` 加进 `.gitignore`。
+
+教训一（自己犯的 bug，当场发现当场改）：第一版用正则判断某模块是否跑过时要求形如 `tests.test_x` 的限定名前缀；实测对比 `discover -v` 与 `-m unittest tests.test_x -v` 两种调用方式的逐行输出后发现，`discover -s tests` 因为 `tests/` 没有 `__init__.py`（纯命名空间包），`-t` 缺省等于 `-s`，逐条结果统一只打裸模块名 `test_x`，从不带 `tests.` 前缀——按原正则会把全部 23 个测试文件都误判成「没跑过」，即使它们全部正常通过。改成同时接受裸名与限定名两种格式、按需补前缀后再比对，问题消失。
+
+教训二（真实环境噪声，不是本脚本的缺陷）：第一次全量跑（389.8s，系统负载偏高）出现 3 个 FlyAI/VariFlight「live」用例因固定的极短 `deadline_ms`（100/1000/2000ms）超时失败——这几个用例会另起一个真实子进程充当假 MCP 服务端，`deadline_ms` 本就卡得很紧，子进程覆盖率追踪给每次子进程调用多付出的解释器启动开销偶尔会顶到这个上限。之后独立重跑三次（158.8s、204.6s，以及下方反向验证里污染解释器那次的 87.2s）均未再复现，确认是瞬时负载抖动，不是子进程覆盖率追踪方法论本身的系统性问题；`assert_full_run()` 按设计对这类抖动同样会正确拒绝出具报告，不会把偶发失败悄悄含混过去。
+
+真实结果（把脚本临时整体移出 `scripts/` 做隔离验证时测得，原因见下方「已知冲突」）：`Ran 690 tests ... OK`、0 skipped，23 个测试模块全部确认跑过；`cli.py` 955 语句、miss 175、**82%**（比任务书基线 78% 高 32 行，恰好等于任务 3 新测试让 `_cmd_rail` 新增覆盖的行数）；总体 10642 语句、miss 1211、**89%**（比基线 88% 同样高 32 行，与 `cli.py` 的增量逐行对应，两者互相印证不是巧合）。
+
+反向验证：`scripts/measure_coverage.py --force-interpreter` 指向被污染的解释器（跳过隔离与安装，直接裸跑该解释器，全程未写入其 site-packages 一个字节）→ `only 457 tests ran (need >= 685)`、精确点名 `tests.test_amap_live`、`tests.test_candidates`、`tests.test_journey`、`tests.test_keyless_e2e` 四个模块、退出码 1——与任务书记录的历史现象（452/685、同样这四个模块）精确吻合（457 = 452 + 本轮任务 3 新增且不受这个问题影响的 5 项）；捕获到的 traceback 里 `ModuleNotFoundError: No module named 'tests.test_providers'` 直接印证命名空间包遮蔽的真实机制。恢复默认调用方式重跑，得到上面「真实结果」一段的数字。
+
+**已知冲突（写入 BLOCKED.md，非本书可解）**：新增的 `scripts/measure_coverage.py` 让 `tests/test_design_docs.py::test_runtime_modules_and_scripts_are_named_in_impl_map` 的硬编码计数从 48 变 49（该测试非递归枚举 `scripts/*.py`），且新文件名不在 `docs/design/09-impl-map.md` 里——两处修复点都在本书白名单之外（不许改现有测试、不许碰 docs/design），如实让这一项保持失败，未采用「塞进子目录绕开 glob」的取巧办法（那会让「每个脚本都要有文档」这条检查名存实亡，属绕过报警器而非解决问题）。因此：**交付状态下，不加任何参数跑 `scripts/measure_coverage.py` 会因这一个、且仅这一个原因正确拒绝出具覆盖率报告**——这是脚本按设计正常工作，不是它的缺陷；上面「真实结果」段的数字来自把脚本临时整体移出 `scripts/`（而非复制，避免两份文件同时被计数）单独验证，验证完毕已移回，`git status --short -- scripts` 确认只有这一个新文件、别无遗留。精确的两行修复点见 BLOCKED.md。
+
+**全量最终校验**：`git diff main -- plugins README.md README.zh-CN.md docs demo` 为空；改动只有四处，均在白名单内：新增 `scripts/measure_coverage.py`、新增 `tests/test_rail_cli.py`、修改 `.github/workflows/ci.yml`、修改 `.gitignore`。
+
+**管理者验收收尾（2026-09-15）**：上面那条「已知冲突」是任务书自身的内在矛盾——它既授权在 `scripts/` 下新建 `.py`，又禁止改现有测试、且要求测试数不许降，而 `test_design_docs.py` 把「运行时模块 + 脚本」的总数写死为 48，三条无法同时成立。执行者拒绝取巧、如实报红并给出精确修复点是正确处置。验收时由管理者解开：`tests/test_design_docs.py` 的计数 48 改 49，`docs/design/09-impl-map.md` 的 `scripts/` 树按字母序登记 `measure_coverage.py`（后者才是项目既有纪律——每个脚本都要在实现映射里有据可查）。收尾后实测：全量 `Ran 690 tests ... OK`；`scripts/measure_coverage.py` 直接跑通并出具报告，TOTAL 10642 语句 miss 1211 = **89%**（比健康审计基线 88% 高 1 点，来自新增的 5 项 `ctw rail` 端到端测试覆盖了原本零覆盖的 `_cmd_rail`）；CI 新增的 pyflakes 命令本地原样跑 exit 0；把 `RAIL_COMPLETE` 改成 `RAIL_DONE` 后 `test_rail_cli.py` 立刻变红、还原后复绿，确认新测试不是空转。
