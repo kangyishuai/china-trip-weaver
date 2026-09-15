@@ -28,6 +28,8 @@
 
 `request` 的目的城市、日期、人数是硬输入；软偏好缺省必须进入 `assumptions[]`。城市周末可令 `origin=null`；跨城场景必须由语义校验器要求 origin。日期跨度的产品限制（1–7 天）同时由 Schema `days.maxItems=7` 和 request/day 对齐校验保证。
 
+`request.locked_rail_services`（可选，`#/$defs/lockedRailService` 数组）表达旅行者已购买并锁定、规划器不许另选的具体车次：`service_number` 与 `travel_date` 必填，`depart_time`（`HH:MM`）可选，仅用于在同一天同一车次号命中多行时消歧（典型如同城两站，例如「福州南站」与「福州站」）。它是纯增量字段，不进 `request` 的 `"required"`，旧 request 一字不改继续有效。选车顺序、查不到时的占位腿与理由文案见 [第 06 篇 §3.3](06-pipeline.md#33-candidate-generation-与去重) 与 [ADR-0020](adr/0020-locked-service-assumption.md)。
+
 每个 `slot` 有完整 ISO 8601 `start_at/end_at`、`kind`、引用实体 `ref_id`、`locked` 和 claim IDs。Schema 验证形状；阶段三语义校验器还必须断言：
 
 1. 同一天 slots 按开始时间排序且不重叠，`end_at > start_at`。

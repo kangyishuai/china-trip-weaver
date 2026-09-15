@@ -343,3 +343,45 @@ If Direction D is adopted as interim guidance only:
   constraint); Direction A's design has not been validated against a live
   12306 response shape beyond what `replan.py`'s existing, already-live-
   tested code already assumes.
+
+## Implementation record — Direction A shipped (2026-09-15)
+
+`#/$defs/request` gained an optional `locked_rail_services` array
+(`trip.schema.json`'s new `lockedRailService` def): `service_number` and
+`travel_date` are required, `depart_time` (`HH:MM`) is optional and only
+needed to disambiguate a `service_number` that resolves to more than one
+same-day row — the same-city two-station clash this ADR's Context section
+describes for G1902 (福州南站 07:50 vs. 福州站 08:12, both arriving 09:30).
+`schema_version` stayed `"1.0.0"` and the new field was not added to
+`request`'s `"required"` list, so every existing `request` document remains
+valid unchanged.
+
+`_resolve_rail` (`planning.py`) now checks, per route, whether any locked
+entry shares that route's `travel_date` before falling back to the
+pre-existing earliest-arrival `min(...)`; a match is applied via the new
+`_locked_rail_candidate` helper, which mirrors `_select_refresh_service`'s
+service-number filter plus `depart_at` disambiguation (as this ADR's
+Direction A section anticipated) reimplemented locally rather than shared
+across modules, since `replan.py` already imports from `planning.py` and
+the reverse would have created a cycle. A leg selected this way is marked
+`"locked": true` in the output Trip.
+
+The failure semantics flagged as open above are now settled by a 2026-09-15
+leadership ruling: **a locked service absent from, or not uniquely
+resolvable within, the day's live results never aborts the Trip.** It falls
+back to the existing `_deep_link_leg` placeholder-leg path, and the
+resulting `unknowns`/`runtime_warnings` name the specific locked
+`service_number` and date (`locked_service_not_found` /
+`locked_service_ambiguous`), so a reader can tell "no train exists that day"
+apart from "your locked train specifically wasn't found" — never a silently
+substituted, unlocked service standing in for the one the traveler actually
+booked.
+
+The locked-service entry is scoped by `travel_date` alone rather than an
+explicit city-pair key, resolving the first open question above: a
+`RouteSpec`'s own 12306 query is already scoped to its city pair, so its
+candidates cannot contain another route's service by coincidence in
+practice; `_locked_rail_candidate` additionally tries every same-date lock
+against a route's own candidates (not just the first), so two locked legs
+that happen to share one calendar date on two different routes still each
+resolve correctly without needing an explicit endpoint field on the entry.

@@ -47,6 +47,7 @@ INTAKE
 ### 3.3 Candidate generation 与去重
 
 - Rail：station resolution → direct → 必要时 bounded interline；Flight：dated exact identity；Lodging：area → property/deep link；POI：官方/内容候选 → AMap resolve。
+- Rail 选车顺序：`_resolve_rail` 对每条 route 的当天候选先看 `request.locked_rail_services` 有没有指向它（按 `travel_date` 匹配，同日多条锁定项各自去匹配该 route 自己的候选，不靠额外的起讫字段）；命中就取该 `service_number`（多行时用 `depart_time` 消歧），命中的腿标记 `locked: true`；未命中任何锁定项的 route 维持原逻辑，取当天到达最早的候选。锁定车次当天查不到或无法唯一确定时，**不**退而取到达最早的候选顶替，改用既有的 `_deep_link_leg` 深链占位腿，并在 `unknowns`/`runtime_warnings` 写明具体缺失的车次与日期（`locked_service_not_found`/`locked_service_ambiguous`），整趟 Trip 仍照常产出。[依据：ADR-0020](adr/0020-locked-service-assumption.md)
 - 去重 key：交通使用 provider service identity + endpoints + local date/time；lodging 使用 provider ID 或标准化 name/address；POI 使用 provider ID，缺 ID 才用 normalized name + city + 100m 邻近。
 - 去重只合并 identity，不合并冲突事实；每个值保留自己的 claims。
 - 每日最多把 12 个 POI 送入 matrix；超过时按 hard-required → evidence confidence → user-interest score → geographic prefilter 确定性裁剪，并列 excluded reasons。此上限是**实现假设**，待 benchmark 调整。

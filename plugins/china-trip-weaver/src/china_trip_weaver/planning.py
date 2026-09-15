@@ -179,7 +179,7 @@ def _plan_resolve_candidates(
         business_calls,
         rail_warnings,
     ) = _resolve_rail(
-        routes, clock, rail_backend
+        routes, clock, rail_backend, normalized_request.get("locked_rail_services") or (),
     )
     claims.extend(rail_claims)
     active_flyai = flyai_backend or FlyAIBackend.from_spec("off", rail_backend.repo_root)
@@ -1333,6 +1333,7 @@ def _resolve_rail(
     routes: Sequence[RouteSpec],
     clock: Clock,
     backend: RailBackend,
+    locked_rail_services: Sequence[Mapping[str, Any]] = (),
 ) -> Tuple[
     List[Mapping[str, Any]],
     List[Mapping[str, Any]],
@@ -1348,6 +1349,9 @@ def _resolve_rail(
     errors: List[str] = []
     runtime_warnings: List[str] = []
     live_count = 0
+    locks_by_date: Dict[str, List[Mapping[str, Any]]] = {}
+    for lock in locked_rail_services:
+        locks_by_date.setdefault(lock["travel_date"], []).append(lock)
 
     for route in routes:
         result = backend.query(route, clock)
@@ -1360,24 +1364,30 @@ def _resolve_rail(
             ))
         selected: Optional[Mapping[str, Any]] = None
         selected_claims: Sequence[Mapping[str, Any]] = ()
+        same_date_locks = locks_by_date.get(route.travel_date, ())
+        candidates: List[Mapping[str, Any]] = []
         if result is not None and result.normalized_items:
             candidates = [
                 item for item in result.normalized_items
                 if isinstance(item.get("depart_at"), str) and item["depart_at"][:10] == route.travel_date
             ]
-            if candidates:
-                selected = min(
-                    candidates,
-                    key=(lambda item: (item["depart_at"], item["arrive_at"])) if route.return_leg
-                    else (lambda item: (item["arrive_at"], item["depart_at"])),
-                )
-                selected_ids = set(selected["claim_ids"])
-                selected_claims = [claim for claim in result.claims if claim["claim_id"] in selected_ids]
-                if len(selected_claims) != len(selected_ids):
-                    selected = None
-                    errors.append("selected rail leg has incomplete claims")
+        locked_row, locked_service_names, locked_failure = _locked_rail_candidate(candidates, same_date_locks)
+        if candidates and locked_failure is None:
+            selected = locked_row if locked_row is not None else min(
+                candidates,
+                key=(lambda item: (item["depart_at"], item["arrive_at"])) if route.return_leg
+                else (lambda item: (item["arrive_at"], item["depart_at"])),
+            )
+            selected_ids = set(selected["claim_ids"])
+            selected_claims = [claim for claim in result.claims if claim["claim_id"] in selected_ids]
+            if len(selected_claims) != len(selected_ids):
+                selected = None
+                errors.append("selected rail leg has incomplete claims")
         if selected is not None:
-            legs.append(_leg_for_route(selected, route))
+            built_leg = dict(_leg_for_route(selected, route))
+            if locked_row is not None:
+                built_leg["locked"] = True
+            legs.append(built_leg)
             claims.extend(copy.deepcopy(list(selected_claims)))
             live_count += 1
             if selected.get("price", {}).get("amount") is None:
@@ -1396,10 +1406,23 @@ def _resolve_rail(
         leg_index = len(legs)
         legs.append(_leg_for_route(fallback, route))
         claims.extend(fallback_claims)
+        if locked_failure is not None:
+            service_number_reason = (
+                "locked service %s was not found for %s; "
+                "the actual dated service must be selected on 12306"
+                % (locked_service_names, route.travel_date)
+                if locked_failure == "not_found" else
+                "locked service(s) %s could not be uniquely matched for %s "
+                "(provide depart_time to disambiguate same-city stations); "
+                "the actual dated service must be selected on 12306"
+                % (locked_service_names, route.travel_date)
+            )
+        else:
+            service_number_reason = "actual dated service must be selected on 12306"
         unknowns.extend((
             {
                 "field_path": "/transport_legs/%d/service_number" % leg_index,
-                "reason": "actual dated service must be selected on 12306",
+                "reason": service_number_reason,
                 "provider": "12306-mcp",
                 "claim_id": fallback_claims[0]["claim_id"],
             },
@@ -1410,7 +1433,15 @@ def _resolve_rail(
                 "claim_id": fallback_claims[1]["claim_id"],
             },
         ))
-        if result is not None:
+        if locked_failure is not None:
+            cause_template = (
+                "locked_service_not_found:%s:service=%s;date=%s" if locked_failure == "not_found"
+                else "locked_service_ambiguous:%s:service=%s;date=%s"
+            )
+            runtime_warnings.append(
+                cause_template % (fallback["leg_id"], locked_service_names, route.travel_date)
+            )
+        elif result is not None:
             runtime_warnings.append(
                 "%s:%s:route=%s->%s;date=%s" % (
                     _rail_runtime_cause(result),
@@ -1439,6 +1470,59 @@ def _resolve_rail(
             "dated deep-link fallback used: " + ", ".join(sorted(set(errors))),
         )
     return legs, claims, unknowns, health, tuple(calls), tuple(runtime_warnings)
+
+
+def _locked_rail_candidate(
+    candidates: Sequence[Mapping[str, Any]],
+    same_date_locks: Sequence[Mapping[str, Any]],
+) -> Tuple[Optional[Mapping[str, Any]], Optional[str], Optional[str]]:
+    """Match locked_rail_services entries sharing this route's travel_date
+    against its already dated candidates (mirrors replan._select_refresh_service's
+    service_number filter + depart_at disambiguation, applied per-route so a
+    locked entry can never leak into the wrong route).
+
+    Returns (selected, service_names, failure):
+    - no lock shares this date: (None, None, None); callers keep the existing
+      earliest-arrival default.
+    - exactly one lock resolves to exactly one dated row: (row, its
+      service_number, None).
+    - a lock's service_number is present but still resolves to more than one
+      row (same-city two-station clash the caller did not provide, or could
+      not resolve, depart_time for), or more than one lock resolves against
+      these candidates: (None, "<comma-joined service numbers>", "ambiguous").
+    - the only lock for this date has no matching row at all: (None, its
+      service_number, "not_found").
+    """
+    if not same_date_locks:
+        return None, None, None
+    resolved: List[Tuple[str, Mapping[str, Any]]] = []
+    present_but_ambiguous: List[str] = []
+    for lock in same_date_locks:
+        service_number = lock["service_number"]
+        rows = [item for item in candidates if item.get("service_number") == service_number]
+        if not rows:
+            continue
+        if len({(item.get("depart_at"), item.get("arrive_at")) for item in rows}) != 1:
+            depart_time = lock.get("depart_time")
+            if depart_time:
+                rows = [item for item in rows if _rail_depart_time_matches(item.get("depart_at"), depart_time)]
+            if len(rows) != 1:
+                present_but_ambiguous.append(service_number)
+                continue
+        resolved.append((service_number, rows[0]))
+    if len(resolved) == 1 and not present_but_ambiguous:
+        service_number, row = resolved[0]
+        return row, service_number, None
+    if resolved or present_but_ambiguous:
+        names = ",".join([number for number, _ in resolved] + present_but_ambiguous)
+        return None, names, "ambiguous"
+    if len(same_date_locks) == 1:
+        return None, same_date_locks[0]["service_number"], "not_found"
+    return None, None, None
+
+
+def _rail_depart_time_matches(depart_at: Any, depart_time: str) -> bool:
+    return isinstance(depart_at, str) and depart_at[11:16] == depart_time
 
 
 def _rail_runtime_cause(result: AdapterResult) -> str:

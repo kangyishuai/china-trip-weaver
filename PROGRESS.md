@@ -2,6 +2,120 @@
 
 唯一的当前进度记录：现状速览（0.8.0 起每个版本一条）加最近一波的执行者记录。2026-09-03 到 09-06 与 2026-09-08 到 09-12 的逐轮任务书、实测证据、验收记录已归档，见「历史索引」。
 
+## 书「已锁定车次进 schema + 规划器认它（Direction A 落地）」（2026-09-15，第二十七波，main 直改，承接 ADR-0020）
+
+**任务 0 核对**（main HEAD `b78a322`）：全量 `/usr/bin/python3 -m unittest discover -s tests` →
+`Ran 692 tests in 93.433s ... OK` 零跳过；`scan_secrets.py` → `secret scan: 0 finding(s) across 392
+file(s)`；pyflakes 对 `plugins/china-trip-weaver/src tests scripts` 三目标合计 0 行。三条与任务书基线
+逐字吻合。`#/$defs/request`（`trip.schema.json:381-478`）确认 `additionalProperties:false`、`required`
+（:384-395）不含任何新字段；`_resolve_rail`（`planning.py:1332` 起）确认选车是裸 `min(candidates,
+key=...)`（:1369-1373），无任何「指定车次」概念；`replan.py:_select_refresh_service`（:349 起）+
+`_disambiguate_service_matches`/`_matches_time` 确认已写好且有测试；`test_contracts.py:83-84` 确认
+schema 示例夹具数写死 `3`/`4`。核对通过，动工。
+
+**理解的目标／顺序／最大风险**（≤10 行）：目标是让 request 能表达「这些车次已买好票」，规划器选车时优
+先认它，查不到就退占位腿并写明原因，绝不悄悄换车。顺序按任务书 1→2→3→4。最大风险有三：一是「一条锁
+定项必须唯一确定一条腿」这条硬约束在「多条锁定项共享同一天」时不能靠日期本身判断，需要让每条锁定项去
+匹配某条 route 自己已经按起讫城市查询到的候选行（route 的 12306 查询本身已经把候选限定在那对城市），
+而不是引入额外的起讫字段——用实测验证过这个假设成立；二是 `_apply_runtime_unknown_reasons`
+（`planning.py:1207` 起）会用 `runtime_warnings` 里匹配到的原始字符串整个覆盖 `unknowns[].reason`（不
+是取子串拼接），所以「原因文案」的真正落点是 `runtime_warnings` 的格式串本身，不是 `unknowns.extend`
+里手写的英文句子——已用 `plan_trip` 实测确认最终渲染文本；三是 `locked_rail_services` 要经过
+Journey 的分段/原子切分（`journey.py:_segment_request` 等）才能到达每个子 Trip 的 `_resolve_rail`
+调用，已核实 `_segment_request` 用 `copy.deepcopy(dict(source))` 整体复制未知字段，不会丢。
+
+**任务 1 完成**：`trip.schema.json` 新增 `$defs/lockedRailService`（`service_number`/`travel_date` 必
+填，`depart_time` 可选、`HH:MM` 格式，与 `clockWindow` 同款正则）；`#/$defs/request.properties` 新增
+`locked_rail_services`（数组，纯增量，不进 `required`）。跑全量：`Ran 692 tests ... OK` 零跳过（此时
+尚未加新测试），`test_contracts.py` 20 项全绿（含两处夹具数断言，未改一字因为没新增夹具文件）。
+
+**任务 2 完成**：`_resolve_rail`（`planning.py`）新增可选形参 `locked_rail_services`，调用方
+`_plan_resolve_candidates` 传 `normalized_request.get("locked_rail_services") or ()`。新增
+`_locked_rail_candidate(candidates, same_date_locks)`：对每条 route 的当天候选（已按 `route.travel_date`
+过滤），逐个尝试匹配共享该日期的锁定项——单一命中且唯一行则直接返回该行；命中但同车次号多行时先看
+是否所有候选实为同一 (depart_at, arrive_at)（同一行的等价表示），否则用 `depart_time` 缩窄，仍非唯一
+判「ambiguous」；同日锁定项本身零候选命中判「not_found」（唯一一条锁定项时）；两个以上锁定项各自零命
+中或多命中则统一判「ambiguous」。命中的腿在 `_leg_for_route` 之外补一行 `built_leg["locked"] = True`，
+不再取默认到达最早（裸 `min`）。锁定失败（`not_found`/`ambiguous`）时**不回退到默认选车**，直接走既有
+`_deep_link_leg` 占位腿路径，`runtime_warnings` 追加 `locked_service_not_found:<leg_id>:service=<车次
+号(逗号可能多个)>;date=<日期>` 或 `locked_service_ambiguous:...`（两个格式串在源码里都是完整字面量，
+供 `git grep` 命中）；这条字符串经既有 `_apply_runtime_unknown_reasons` 机制原样覆盖进
+`/transport_legs/N/service_number` 与 `/transport_legs/N/price/amount` 两条 `unknowns[].reason`（实测
+确认，见任务 3 情形②证据）。`replan.py` 未改一个字节——复用的是「同一套匹配算法」（service_number 过
+滤 → 单行捷径 → 等价行捷径 → depart_time 消歧 → 仍非唯一判 ambiguous），在 `planning.py` 内独立实现，
+不建跨模块共享函数：`replan.py` 已 `from .planning import _budget_ledger`，反向 import 会成环，任务书
+「仅当」的措辞本就把这个方向定为可选而非强制。
+
+**任务 3 完成**：新建 `tests/test_locked_rail_services.py`（7 项测试）。四种情形 + 两项补充：
+
+1. `test_locked_service_is_selected_even_when_not_earliest_arrival`：候选里 G1901 07:00→08:50 到达最
+   早，锁定 G1902（`depart_time:"07:50"`，同城两站消歧）后选中的仍是 G1902 07:50→09:30，且
+   `leg["locked"] is True`；`validate_trip` 零错误。
+2. `test_locked_service_not_found_falls_back_to_placeholder_leg_with_a_specific_reason`：锁定当天查无
+   的 G9999，产出占位腿（`service_number:null`、`provider:"12306-deep-link"`、`locked:false`），
+   `unknowns` 的 `/transport_legs/0/service_number` 原因文案含 `locked_service_not_found`、`G9999`、
+   日期三者。占位腿与原因文字实测输出：
+   ```
+   {"leg_id": "leg-rail-fallback-e12b5ddd6ac5", "travel_mode": "rail", "data_mode": "static",
+    "from_ref": "city-fuzhou", "to_ref": "city-wuyishan", "depart_at": "2026-09-20T08:00:00+08:00",
+    "arrive_at": "2026-09-20T13:00:00+08:00", "duration_minutes": 300, "provider": "12306-deep-link",
+    "service_number": null, "price": {"amount": null, ...}, "locked": false, ...}
+   /transport_legs/0/service_number -> locked_service_not_found:leg-rail-fallback-e12b5ddd6ac5:service=G9999;date=2026-09-20
+   /transport_legs/0/price/amount   -> locked_service_not_found:leg-rail-fallback-e12b5ddd6ac5:service=G9999;date=2026-09-20
+   ```
+3. `test_locked_service_same_city_two_stations_disambiguated_by_depart_time`：G1902 当天两行（福州南
+   站 07:50、福州站 08:12，均到 09:30），锁定项带 `depart_time:"08:12"` 精确选中第二行。
+4. `test_locked_service_rendered_in_assumptions_no_longer_trips_e003`：先复现真实 bug——`assumptions`
+   写「G1902车票已购并锁定：9月20日07:50出发」但不锁定，默认选中 G1901，`plan_trip` 内部
+   `_plan_validate_and_render` 抛 `ValueError: HTML validation failed: E003 rendered train fact is
+   absent from Trip: G1902 (found in request.assumptions[0]: ...)`（与 26 波「E003 报错定位」书新增
+   的来源引用文案逐字一致）；同一条 assumptions 加上锁定 G1902 后 `plan_trip` 正常返回，
+   `validate_html(result.html, result.trip).ok is True`。
+5.（补充）`test_locked_service_ambiguous_without_depart_time_falls_back_to_a_placeholder`：同款两站
+   冲突但不给 `depart_time`，验证「ambiguous」分支同样退占位腿而不瞎猜。
+6.（补充，直接单测 `_locked_rail_candidate`）`test_multiple_same_date_locks_each_resolve_against_their_own_route_candidates`：
+   两条锁定项共享同一天（G1902 与并不存在的 D9999），只有 G1902 在候选里命中，验证「同日多条锁定项各
+   自去匹配自己 route 的候选」这条设计（理解的目标／风险一）的正确性，不会被无关的另一条锁定项拖累
+   判成 ambiguous。
+
+反向验证：把 `_resolve_rail` 里 `selected = locked_row if locked_row is not None else min(...)` 临时
+改回纯 `min(...)`（不看锁定），重跑整份新测试文件：
+```
+FAIL: test_locked_service_is_selected_even_when_not_earliest_arrival
+AssertionError: 'G1902' != 'G1901'
+FAIL: test_locked_service_same_city_two_stations_disambiguated_by_depart_time
+AssertionError: 'G1902' != 'G1901'
+ERROR: test_locked_service_rendered_in_assumptions_no_longer_trips_e003
+ValueError: HTML validation failed: E003 rendered train fact is absent from Trip: G1902 (found in
+request.assumptions[0]: "G1902车票已购并锁定：9月20日07:50出发")
+Ran 7 tests in 0.287s
+FAILED (failures=2, errors=1)
+```
+三项测试转红，证明测试确实覆盖了「优先选锁定车次」这段逻辑而非空断言。`touch` 源文件避开 Apple 系统
+Python 3.9 的秒级字节码缓存（「验收教训」既有先例）后还原代码，重跑同一命令转回 `Ran 7 tests ... OK`。
+
+**任务 4 完成**：`docs/design/03-trip-model.md` §2 补一段 `locked_rail_services` 字段说明（字段要求、
+`depart_time` 用途、纯增量、指向 06-pipeline §3.3 与 ADR-0020）。`docs/design/06-pipeline.md` §3.3
+新增一条选车顺序说明（先锁定后到达最早、同日多条锁定项各自匹配自己 route 候选、查不到/无法唯一确定
+时的占位腿与 `unknowns`/`runtime_warnings` 措辞）。`docs/design/adr/0020-locked-service-assumption.md`
+末尾追加「Implementation record — Direction A shipped」小节：记录 schema 字段落地方式、`_resolve_rail`
+的实现路径、领导 2026-09-15 裁决的失败语义（退占位腿、不整趟失败）、以及「按 travel_date 而非显式起
+讫字段定位路由」这一设计选择如何解决 ADR 原文「Still unresolved」第一条。文案里的每个字面串（
+`locked_rail_services`、`lockedRailService`、`_locked_rail_candidate`、`_deep_link_leg`、
+`locked_service_not_found`、`locked_service_ambiguous`、`"locked"] = True`）逐一 `git grep` 确认命中
+源码（`locked_service_not_found`/`locked_service_ambiguous` 原本是靠 `%s` 拼出来的、grep 不到完整字
+面量，已把 `_resolve_rail` 里那处拼接改成两个完整字面量的三元表达式，行为不变，使其可被逐字 grep 到）。
+
+**最终验证**：全量 `/usr/bin/python3 -m unittest discover -s tests` → `Ran 699 tests in 108.502s ...
+OK` 零跳过（692 + 新增 7）；`scan_secrets.py` → `0 finding(s) across 393 file(s)`；pyflakes 三目标合
+计 0 行；`git status --short -- demo tests/fixtures` 空输出；`git diff --stat -- plugins/china-trip-weaver/src`
+只有一行 `planning.py | 112 ++++++++++++++++++---`（未碰 `replan.py`）；
+`git grep -n '"schema_version": {"const": "1.0.0"}' -- plugins/china-trip-weaver/schema/trip.schema.json`
+命中且值未改；`request.required` 列表（Python 脚本核对）不含 `locked_rail_services`。全程未升版本号、
+未跑 `install_local_plugin.sh`，按任务书「我替领导拍的板」执行。
+
+未遇到需要裁决的阻塞项，`BLOCKED.md` 本轮记「无」。
+
 ## 书「E003 报错定位 + test_credentials 环境隔离」（2026-09-15，第二十六波，main 直改，承接 ADR-0020）
 
 **任务 0 核对**（main HEAD `1858e68`）：全量 `Ran 690 tests in 55.723s ... OK` 零跳过；`scan_secrets.py`
