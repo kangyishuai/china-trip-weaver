@@ -43,6 +43,7 @@ plugins/china-trip-weaver/src/china_trip_weaver/
 │   ├── rail12306.py
 │   ├── variflight.py
 │   └── variflight_mcp.py
+├── rail_selection.py
 ├── render/
 │   ├── __init__.py
 │   ├── html.py

@@ -1,3 +1,17 @@
+## 书「统一 replan/planning 的按车次号挑车逻辑」（2026-09-15，第二十八波）：无
+
+全程未遇到需要领导裁决、拿不准怎么办的分叉。「我替领导拍的板」三条（共用函数放新模块
+`rail_selection.py`、失败表达方式不共用、不升版本号不跑安装脚本）均已按字面执行。唯一需要自行设计判
+断（非裁决分叉，供核对）的一点：共享函数的返回形状——用三字段 `ServiceSelection(row, same_service,
+time_matched)` 而不是把结果坍缩成一个「候选列表」，是为了让 `replan.py` 能在歧义时原样重建它自己的
+错误消息（列出候选发车/到达时刻、必要时加 no-row-matches 前缀），否则会丢信息、被迫改变文案。判断依
+据与完整实现记在 `PROGRESS.md` 本书「理解的目标／顺序／最大风险」与任务 1 小节。
+
+另有一项观察，非阻塞，因改动该文件不在本轮白名单内：`docs/design/06-pipeline.md:160` 提到
+`_disambiguate_service_matches` 这个函数名，本轮该顶层函数已被拆掉（逻辑并入
+`rail_selection.select_service` 与新增的 `replan._select_refresh_service_by_number`），那一行描述的
+行为仍然成立，但函数名指针已经过时，留给下一份能碰 `docs/design/06-pipeline.md` 的任务书顺手改掉。
+
 ## 书「已锁定车次进 schema + 规划器认它（Direction A 落地）」（2026-09-15，第二十七波）：无
 
 全程未遇到需要领导裁决、拿不准怎么办的分叉。「我替领导拍的板」三条（查不到时退占位腿并标明、字段名与

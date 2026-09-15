@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 from .clock import Clock, isoformat_seconds
 from .contracts import PatchResult, canonical_json
 from .planning import _budget_ledger
+from .rail_selection import select_service
 from .validate_trip import MODE_RANK
 
 
@@ -358,12 +359,7 @@ def _select_refresh_service(
     ]
     service_number = event.get("service_number")
     if service_number:
-        matches = [item for item in same_day if item.get("service_number") == service_number]
-        if not matches:
-            raise ReplanError(
-                "refresh_service_not_found", "no rail service matches the requested service_number",
-            )
-        return _disambiguate_service_matches(event, matches)
+        return _select_refresh_service_by_number(event, same_day, service_number)
     if not same_day:
         raise ReplanError("refresh_no_service", "no rail service is available for the requested date")
     feasible = same_day
@@ -377,34 +373,30 @@ def _select_refresh_service(
     return min(feasible, key=lambda item: (item["arrive_at"], item["depart_at"]))
 
 
-def _disambiguate_service_matches(
-    event: Mapping[str, Any], matches: List[Mapping[str, Any]],
+def _select_refresh_service_by_number(
+    event: Mapping[str, Any], same_day: List[Mapping[str, Any]], service_number: Any,
 ) -> Mapping[str, Any]:
-    if len(matches) == 1:
-        return matches[0]
-    distinct = {(item.get("depart_at"), item.get("arrive_at")) for item in matches}
-    if len(distinct) == 1:
-        return matches[0]
-    selected = matches
     requested_depart_at = event.get("depart_at")
-    if requested_depart_at:
-        selected = [
-            item for item in selected if _matches_time(item.get("depart_at"), str(requested_depart_at))
-        ]
     requested_arrive_at = event.get("arrive_at")
-    if requested_arrive_at:
-        selected = [
-            item for item in selected if _matches_time(item.get("arrive_at"), str(requested_arrive_at))
-        ]
-    if len(selected) == 1:
-        return selected[0]
-    candidates = selected if selected else matches
+    match = select_service(
+        same_day,
+        service_number,
+        str(requested_depart_at) if requested_depart_at else None,
+        str(requested_arrive_at) if requested_arrive_at else None,
+    )
+    if match.row is not None:
+        return match.row
+    if not match.same_service:
+        raise ReplanError(
+            "refresh_service_not_found", "no rail service matches the requested service_number",
+        )
+    candidates = match.time_matched if match.time_matched else match.same_service
     times = ", ".join(
         "%s→%s" % (item.get("depart_at"), item.get("arrive_at"))
         for item in sorted(candidates, key=lambda item: (str(item.get("depart_at")), str(item.get("arrive_at"))))
     )
     no_match = ""
-    if not selected and (requested_depart_at or requested_arrive_at):
+    if not match.time_matched and (requested_depart_at or requested_arrive_at):
         no_match = "no row matches depart_at=%s arrive_at=%s; " % (
             requested_depart_at, requested_arrive_at,
         )
@@ -412,15 +404,6 @@ def _disambiguate_service_matches(
         "refresh_service_ambiguous",
         no_match + "multiple rail services match the requested service_number: " + times,
     )
-
-
-def _matches_time(item_value: Any, requested: str) -> bool:
-    item_value = str(item_value)
-    if item_value == requested:
-        return True
-    if len(requested) == 5 and requested[2] == ":":
-        return item_value[11:16] == requested
-    return False
 
 
 def _recompute_rail_health(trip: Dict[str, Any], operations: List[Dict[str, Any]], now: str) -> None:

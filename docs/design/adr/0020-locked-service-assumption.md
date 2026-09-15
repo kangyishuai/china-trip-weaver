@@ -385,3 +385,19 @@ practice; `_locked_rail_candidate` additionally tries every same-date lock
 against a route's own candidates (not just the first), so two locked legs
 that happen to share one calendar date on two different routes still each
 resolve correctly without needing an explicit endpoint field on the entry.
+
+## Update — shared helper extracted (2026-09-15)
+
+The "reimplemented locally rather than shared across modules" choice recorded
+above was revisited the same day. `_locked_rail_candidate`'s per-lock
+service-number filter and depart-time disambiguation, and
+`_select_refresh_service`'s equivalent branch, were both rewritten to call a
+new `rail_selection.select_service(candidates, service_number,
+requested_depart_at=None, requested_arrive_at=None)`. This is a third leaf
+module neither `planning.py` nor `replan.py` needs to import from each
+other for, so it avoids the import-cycle concern this ADR raised without
+either module depending on the other. Each call site keeps its own failure
+shape unchanged — `replan.py` still raises `ReplanError` and builds its
+"multiple rail services match..." message text locally, `planning.py` still
+returns the `(selected, service_names, failure)` triple — since that
+contract was module-specific, not part of the duplicated matching logic.

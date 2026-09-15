@@ -23,6 +23,7 @@ from .pipeline import PipelineRun
 from .providers.base import ProviderContext, ReplayTransport, stable_id
 from .providers.mcp_stdio import RailMCPStdioTransport
 from .providers.rail12306 import Rail12306Adapter
+from .rail_selection import select_service
 from .render import render_trip, validate_html
 from .scheduler.light import LightScheduler, PaceProfile, pace_profile
 from .validate_trip import SchemaSubsetValidator, load_schema, validate_trip
@@ -1477,9 +1478,10 @@ def _locked_rail_candidate(
     same_date_locks: Sequence[Mapping[str, Any]],
 ) -> Tuple[Optional[Mapping[str, Any]], Optional[str], Optional[str]]:
     """Match locked_rail_services entries sharing this route's travel_date
-    against its already dated candidates (mirrors replan._select_refresh_service's
-    service_number filter + depart_at disambiguation, applied per-route so a
-    locked entry can never leak into the wrong route).
+    against its already dated candidates, applied per-route so a locked
+    entry can never leak into the wrong route. Per-lock service_number
+    filtering and depart_at disambiguation is shared with
+    replan._select_refresh_service_by_number via rail_selection.select_service.
 
     Returns (selected, service_names, failure):
     - no lock shares this date: (None, None, None); callers keep the existing
@@ -1499,17 +1501,13 @@ def _locked_rail_candidate(
     present_but_ambiguous: List[str] = []
     for lock in same_date_locks:
         service_number = lock["service_number"]
-        rows = [item for item in candidates if item.get("service_number") == service_number]
-        if not rows:
+        match = select_service(candidates, service_number, lock.get("depart_time"))
+        if not match.same_service:
             continue
-        if len({(item.get("depart_at"), item.get("arrive_at")) for item in rows}) != 1:
-            depart_time = lock.get("depart_time")
-            if depart_time:
-                rows = [item for item in rows if _rail_depart_time_matches(item.get("depart_at"), depart_time)]
-            if len(rows) != 1:
-                present_but_ambiguous.append(service_number)
-                continue
-        resolved.append((service_number, rows[0]))
+        if match.row is None:
+            present_but_ambiguous.append(service_number)
+            continue
+        resolved.append((service_number, match.row))
     if len(resolved) == 1 and not present_but_ambiguous:
         service_number, row = resolved[0]
         return row, service_number, None
@@ -1519,10 +1517,6 @@ def _locked_rail_candidate(
     if len(same_date_locks) == 1:
         return None, same_date_locks[0]["service_number"], "not_found"
     return None, None, None
-
-
-def _rail_depart_time_matches(depart_at: Any, depart_time: str) -> bool:
-    return isinstance(depart_at, str) and depart_at[11:16] == depart_time
 
 
 def _rail_runtime_cause(result: AdapterResult) -> str:

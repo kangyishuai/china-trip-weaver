@@ -2,6 +2,98 @@
 
 唯一的当前进度记录：现状速览（0.8.0 起每个版本一条）加最近一波的执行者记录。2026-09-03 到 09-06 与 2026-09-08 到 09-12 的逐轮任务书、实测证据、验收记录已归档，见「历史索引」。
 
+## 书「统一 replan/planning 的按车次号挑车逻辑」（2026-09-15，第二十八波，main 直改，承接 ADR-0020）
+
+**任务 0 核对**（main HEAD `63e87bd`，即 0.22.0 发布提交）：全量 `/usr/bin/python3 -m unittest discover
+-s tests` → `Ran 699 tests in 42.612s ... OK` 零跳过；`scan_secrets.py` → `secret scan: 0 finding(s)
+across 393 file(s)`；`pyflakes`（miniconda base env，非 `/usr/bin/python3`——系统 Python 没装这个包）对
+三目标合计 0 行。三条与任务书基线逐字吻合。两份逻辑的位置与差异逐行核对无误。时间比较等价性额外验证：
+`trip.schema.json:392` 的 `depart_time` pattern 是 `^([01][0-9]|2[0-3]):[0-5][0-9]$`（锚定，只能是
+`HH:MM`），且仓库里没有任何请求 schema 校验器在运行期对 `request` 做校验（`git grep` 未找到
+`resolved_request_schema` 之类的调用，只有 `candidates`/`journey` 走 `SchemaSubsetValidator`）——但
+`_locked_rail_candidate` 的唯一调用路径（`_resolve_rail` 内部）与测试夹具（`test_locked_rail_services.py`
+全部 `depart_time` 取值）都只喂 `HH:MM`，所以把 `_rail_depart_time_matches` 统一到 `_matches_time` 对
+这条实际路径无行为变化；任务书这一结论核实通过，动工。
+
+**理解的目标／顺序／最大风险**（≤10 行）：目标是把「给定当天候选行 + 一个车次号 + 可选时间提示 → 唯一
+命中／未命中／仍歧义」这段被 `replan.py` 和 `planning.py` 各自实现一遍的算法抽成一个函数，两边只改内部
+实现、对外错误码与文案一字不变。顺序按任务书 0→1→2→3。最大风险有三：一是歧义时 `replan` 要拼出「列出
+候选时刻＋可能的 no-row-matches 前缀」这段消息文本，若共享函数把「消歧后候选」坍缩成一个值就会丢信息
+——解法是返回 `(row, same_service, time_matched)` 三元组，`same_service` 空即 not_found、`row` 非空即
+唯一命中、否则仍歧义且 `time_matched` 就是 replan 原来的 `selected` 变量，据此在 replan 侧原样重建消息；
+二是两处调用的失败表达方式不同（异常 vs 三元组)，必须让共享函数本身不做任何抛异常或返回失败码的决定，
+只做纯粹的行选择，失败语义完全留给调用方；三是反向验证必须让共享函数返回明显错误的行（恒取最后一行）
+后跑全量，若只有一侧测试变红就说明抽取是假的——这条已按要求执行，见任务 2。
+
+**任务 1 完成**：新建 `plugins/china-trip-weaver/src/china_trip_weaver/rail_selection.py`（62 行，独立
+叶子模块，不被 `planning.py`/`replan.py` 中任何一个反向依赖，避免 `replan.py` 已有的
+`from .planning import _budget_ledger` 单向依赖变成环）。核心函数
+`select_service(candidates, service_number, requested_depart_at=None, requested_arrive_at=None) ->
+ServiceSelection`，`ServiceSelection` 是三字段 NamedTuple：`row`（唯一命中的行或 None）、
+`same_service`（按车次号过滤到的全部行，空即该车次当天根本没跑）、`time_matched`（用时间提示缩窄后仍
+歧义时的候选行，提示未命中任何行时为空）。`replan.py` 的 `_select_refresh_service` 里
+`if service_number:` 分支改调新增的 `_select_refresh_service_by_number`（原地保留 `ReplanError`/文案
+拼接，只是数据来源换成 `select_service` 的返回值），删除原 `_disambiguate_service_matches` 与
+`_matches_time`（后者原样搬进 `rail_selection.py`，字节级不变）。`planning.py` 的
+`_locked_rail_candidate` 每次循环改调 `select_service(candidates, service_number,
+lock.get("depart_time"))`，删除 `_rail_depart_time_matches`；函数签名、三元组返回形状、docstring 里的
+四种结果分类完全未动，只更新了文档字符串里「mirrors replan...」一句改成如实的「shared via
+rail_selection.select_service」。`git grep --untracked`（新文件未 add，普通 `git grep` 看不到，按
+CLAUDE.md 用 git grep 而非 grep -r 的要求改用这个开关）自证：全仓 `get("service_number") ==
+service_number` 这个过滤式只剩 `rail_selection.py` 一处，`_matches_time` 只在该文件定义+调用，
+`_rail_depart_time_matches` 全仓零命中，`select_service(` 恰好两处调用（`planning.py:1504`、
+`replan.py:381`）+ 一处定义。行数：`planning.py` 2907→2901（-6），`replan.py` 566→549（-17），两者均
+下降，达成任务 1 完成标准。
+
+**任务 2 完成**：`/usr/bin/python3 -m unittest discover -s tests` → `Ran 699 tests in ~41s ... OK` 零跳
+过（与任务 0 基线条数一致，未增未减）；`scan_secrets.py` 仍 0 finding；`pyflakes` 仍 0 行。三组对照单
+跑输出：
+```
+① replan 车次号查无此车 —— test_refresh_requested_service_number_not_found_fails ... ok
+② replan 多行且给了时间仍分不开 —— test_refresh_service_number_same_arrival_reports_each_departure ... ok
+   （event 给了 arrive_at=09:30，两行 arrive_at 都是 09:30，过滤后仍剩两行；断言 message 含 "07:50"
+   与 "08:12" 两个候选发车时刻，对应 refresh_service_ambiguous 的原样列表文案）
+③ planning 锁定车次查无此车 —— test_locked_service_not_found_falls_back_to_placeholder_leg_with_a_specific_reason ... ok
+   planning 锁定车次歧义 —— test_locked_service_ambiguous_without_depart_time_falls_back_to_a_placeholder ... ok
+```
+反向验证：把 `select_service` 临时改成「只要 candidates 非空就恒取最后一行、标记为唯一命中」（任务书
+建议的破坏方式），跑全量：
+```
+FAIL/ERROR 合计 9 项，Ran 699 tests ... FAILED (failures=9)
+- test_locked_rail_services.py 侧 4 项：test_multiple_same_date_locks_each_resolve_against_their_own_route_candidates、
+  test_locked_service_ambiguous_without_depart_time_falls_back_to_a_placeholder、
+  test_locked_service_is_selected_even_when_not_earliest_arrival、
+  test_locked_service_not_found_falls_back_to_placeholder_leg_with_a_specific_reason
+- test_replan.py 侧 5 项：test_refresh_requested_service_number_not_found_fails、
+  test_refresh_service_number_ambiguous_arrival_times_without_disambiguator、
+  test_refresh_service_number_depart_at_disambiguates_and_copies_only_that_rows_claims、
+  test_refresh_service_number_depart_at_without_matching_row_is_ambiguous、
+  test_refresh_service_number_same_arrival_reports_each_departure
+```
+两侧均有失败，证明两个调用点都真的走了共享函数。`touch rail_selection.py` 还原代码后（规避「验收教训」
+记录的 Apple 系统 Python 3.9 秒级字节码缓存陷阱）重跑同一命令，转回 `Ran 699 tests ... OK`。
+`git diff -- tests` 只有 `test_design_docs.py` 那一行计数（`49`→`50`），其余为空，贴出：
+```
+-        self.assertEqual(49, len(files))
++        self.assertEqual(50, len(files))
+```
+
+**任务 3 完成**：`docs/design/09-impl-map.md` §0 实际目录树按字母序在 `providers/` 目录块之后、`render/`
+之前插入 `├── rail_selection.py`（`planning.py`/`keyless.py`/`mobility.py` 等同级新模块也只登记在这棵树
+里、没有再进 §3/§4/§5 的职责表格，此文件延续这个既有惯例，没有另加表格行）。`tests/test_design_docs.py`
+唯一改动行计数 `49`→`50`。`docs/design/adr/0020-locked-service-assumption.md` 追加一段「## Update —
+shared helper extracted (2026-09-15)」，说明 Direction A 落地时该 ADR 原文写的「reimplemented locally
+rather than shared across modules, since replan.py already imports from planning.py and the reverse
+would have created a cycle」这一决定本轮被推翻：引入第三方叶子模块后两边都不需要互相 import，环的顾虑
+不复存在；未改写原「Implementation record」段落（保留历史真实性），只追加新段说明后续变化。
+
+**观察，非阻塞**（未处理，因改动该文件不在本轮白名单内）：`docs/design/06-pipeline.md:160` 那一行提到
+`_disambiguate_service_matches` 这个函数名作为 refresh 事件消歧逻辑的代码指针，本轮里这个顶层函数已被
+拆掉（逻辑并入 `rail_selection.select_service` + `replan._select_refresh_service_by_number`），该行文字
+描述的行为仍然成立但函数名指针已经过时。`docs/design/adr/0020-locked-service-assumption.md` 在白名单内
+已经处理（见任务 3）；`06-pipeline.md` 不在白名单，未动，留给下一份可以碰 `docs/design/06-pipeline.md`
+的任务书顺手改掉这一处函数名引用。
+
 ## 书「已锁定车次进 schema + 规划器认它（Direction A 落地）」（2026-09-15，第二十七波，main 直改，承接 ADR-0020）
 
 **任务 0 核对**（main HEAD `b78a322`）：全量 `/usr/bin/python3 -m unittest discover -s tests` →
