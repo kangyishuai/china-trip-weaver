@@ -486,20 +486,32 @@ assumptions「G1902车票已购并锁定……」这条自由文本人工备注�
 `git diff -- plugins tests scripts docs demo .github` 为空，`git status --short` 只有 PROGRESS.md、
 BLOCKED.md 两个文件（会话开始前遗留的游离 `.coverage` 已清理）。
 
-## 现状速览（2026-09-15 实测，0.21.0）
+## 现状速览（2026-09-15 实测，0.22.0）
 
-- 版本：`0.21.0`，唯一来源是
+- 版本：`0.22.0`，唯一来源是
   `plugins/china-trip-weaver/.codex-plugin/plugin.json` 与
   `src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
   代码与文档一律引用这两处之一；只有本节的逐版本条目和 git tag 以版本号作索引。
-- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 690 tests`，`OK`，0 skipped；
+- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 699 tests`，`OK`，0 skipped；
   `scripts/scan_secrets.py` 0 命中；
   `~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src
   tests scripts` 0 行。带假 Key（`ANYSEARCH_API_KEY=... unittest`）跑全量同样
-  690 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。已知边界：
-  `VARIFLIGHT_API_KEY` 若以**环境变量**注入，`test_credentials` 会红一项——那条测试
-  隔离了 credentials 文件却没隔离环境变量，而凭据解析是环境变量优先；0.20.1 上实测
-  同样红，非本版引入。
+  699 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。0.21.0 记过的
+  「环境变量注入会让 `test_credentials` 红一项」已在 0.22.0 修好：那个文件现在于 `setUp`
+  里按 `FILE_ALLOWLIST` 剥掉凭据环境变量，四个 Key 全设与一个不设两种跑法结果相同。
+- 覆盖率：`scripts/measure_coverage.py` 实测 10698 语句、miss 1210、**89%**。
+- 0.22.0（第二十五、二十六波，ADR-0020 落地）：「某趟车已经买好票、不许改」从一句没人
+  读得懂的自由文本变成规划器认得的结构化事实。`#/$defs/request` 新增可选的
+  `locked_rail_services`（`service_number` + `travel_date` 必填，`depart_time` 选填，
+  专治同一趟车在同城两站各返回一行——真实世界里 G1902 就在福州南 07:50 与福州 08:12
+  各有一行、到达同为 09:30，只看到达时间分不开）；`schema_version` 仍是 `1.0.0`、新字段
+  不进 `required`，旧 request 一字不改继续有效。`planning.py:_resolve_rail` 选车前先认
+  锁定项，命中就用它、不再取到达最早那趟。**查不到时按裁决退回既有的深链占位腿并点名**：
+  `unknowns`/`runtime_warnings` 区分 `locked_service_not_found` 与
+  `locked_service_ambiguous`，整趟行程照常产出，既不整趟失败也不悄悄换一趟车冒充。
+  同一波还把 E003 从「只报车次号」改成能指回病因——报错现在会说出这个车次号来自
+  `request.assumptions` 或 `constraints` 的第几条、原文是什么，找不到来源时退回原措辞、
+  绝不静默。`test_credentials` 补上环境变量隔离。测试 690 → 699。
 - 0.21.0（第二十四波，四份并行：文档订正、检查基建、ADR、实网刷新）：健康审计查出的
   文档漂移七处改对——`references/provider-contracts.md` 的 12306 超时由不存在的
   「15s direct; 25s interline」改为真实的统一 `90s`、AnySearch 由 `10s` 改为
