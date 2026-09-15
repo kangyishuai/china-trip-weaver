@@ -1,3 +1,72 @@
+## 2026-09-15 健康审计「HEALTH-2026-09-15」：诊断任务，按规矩不许顺手改，候选后续任务清单
+
+本轮是纯诊断任务（`../HEALTH-2026-09-15.md`），目标是给领导一份排好序的问题清单，不是修好的代码。
+任务书「界限」明确列出一批「最诱人的顺手活」不许做，本轮实际遇到了其中几类，逐条记在这里待裁决；
+另附诊断过程中发现、但本轮无权处理的具体缺口，供下一波任务书直接取用。完整证据见
+`../HEALTH-2026-09-15.md`，此处只留结论+定位，不重复证据。
+
+### 顺手活（任务书明令不许做，按字面遵守，未改一个字节）
+
+1. **`plugins/china-trip-weaver/references/provider-contracts.md` 三处数字/表述错误**：12306
+   「15s direct; 25s interline」的分列在代码里不存在（真实统一默认 90s，`cli.py:217/251/346`）；
+   AnySearch「10s」应为 15.0s（`cli.py:358` `research --deadline` 默认值）或 6000ms（`ctw doctor` 探针，
+   `cli.py:1719`）；表格第 8/10 行的「cache →」与文档自己第 26-30 行「R1 disabled ... falls straight
+   from R0 to R2」自相矛盾。三处都是文档笔误性质的一行改动，不改代码语义。
+2. **README.md/README.zh-CN.md 两处**：均称「the fifth example」/「其余四组 demo」但从未提到
+   `demo/multicity-5d/`（已跟踪、`ctw validate` 通过，只是没被两份 README 提及或链接）；
+   README.zh-CN.md:220 把 `docs/design/` 标成「英文」，实际是中文（`docs/design/00-README.md` 开头即
+   `# ChinaTripWeaver 阶段二设计索引`），与紧邻一行的 `docs/design/adr/`（真英文，标注正确）对比即见
+   矛盾。
+3. **两处 SKILL.md 表述会误导**：`search-china-lodging/SKILL.md:27` 在 `ctw plan` 示例命令后紧接一句
+   「Use `--keyless-trial` only for...」，但 `--keyless-trial` 只注册在 `lodging`/`air` 子命令上
+   （`cli.py:386,397`），`ctw plan` 没有这个 flag，按字面顺序读容易以为能加在 `ctw plan` 后面；
+   `research-china-destination/SKILL.md:48` 说「unchanged normalized name」的情况会「printed for
+   manual review」，但 `candidates.py:658-659` 的 `exact_original_confirmed` 分支实际标记为
+   `automatic`（`cli.py:561` 打印 `CANDIDATE_NAME_AUTO`），不是 manual。
+4. **CI 加 pyflakes 步骤 / 给 3 项 Codex 依赖测试补文档说明**：`.github/workflows/ci.yml` 全文只有
+   unittest + scan_secrets 两步，pyflakes 从未进 CI；`tests/test_packaging.py:133`、
+   `tests/test_skills.py:134,141` 三项测试用 `codex_executable() is None` 门控 `skipTest`，GitHub
+   `ubuntu-latest` 从不装 Codex，故这三项在 CI 上每次都静默跳过（不是变红，是从不被验证）。两者都是
+   「给 CI 加一步」性质的改动，任务书明令不许。
+5. `git gc`、跑 `install_local_plugin.sh`（非 --check）：本轮未做，按令未做。
+
+### 候选后续任务（本轮发现、非「顺手活」范畴，需要设计判断或较大改动，供下一波任务书取用）
+
+6. **初次规划（`journey plan`）不认「已购并锁定」类自由文本约束，实网探针撞上了它**：真实
+   `fujian-2026-09-25-to-10-10/request.json` 的 `assumptions[6]` 写着「G1902车票已购并锁定：9月26日
+   07:50福州南站出发……」，这是人工记录的既成事实，但 `journey plan`（区别于 `replan`/`refresh` 事件
+   的显式 `service_number` 挑行机制）没有任何结构化字段把「这趟车已经锁定」当约束喂给
+   `_resolve_rail` 之类的活选逻辑；当自由文本被逐字渲染进页面、而当次实时选中的服务与文本不符时，
+   `render/validate_html.py` 的反幻觉校验器 `E003`（第 273-275 行 `TRAIN_FACT_RE` 扫描可见文本）正确
+   地整体拒绝渲染，2026-09-15 15:xx 实网探针（`.tmp/health/journey-live-probe.stderr.ndjson`）即撞上
+   `JOURNEY_PLAN_FAILED HTML validation failed: E003 rendered train fact is absent from Trip: G1902`。
+   这不是算错结果（护栏生效、没有产出误导页面），但失败信息没有指回 `request.json` 第 125 行这个真
+   正病因，普通用户会看不懂。需要领导裁决方向：给 `request.json`/`candidates.json` 加一个结构化的
+   「已锁定服务」字段（类似 replan 的 `service_number` pin），还是仅改进 E003 报错文案指出具体是哪条
+   assumptions 文本命中了车次号模式。
+7. **`cli.py` 的 `_cmd_rail`（`ctw rail` 独立子命令，85 行，L1190-1274）端到端零测试**：用子进程级
+   coverage 追踪（见 `../HEALTH-2026-09-15.md` 方法论）确认，即使把子进程执行计入，这个函数体仍然
+   几乎整体不被任何测试路径执行——全仓没有一处测试以 `[CTW, "rail", ...]` 形式调用这个子命令
+   （`git grep -n '"rail"' -- tests/*.py` 命中的全是 `travel_mode`/`capability` 字符串，不是子命令
+   调用）。建议补一个走 `--fixture` 的端到端子进程测试。
+8. **覆盖率测量方法论本身值得沉淀**：本机唯一装了 `coverage` 的解释器是用户的全局 conda `core`
+   环境，该环境被一个不相关的第三方包污染了 `tests` 顶层命名空间，导致 4 个测试模块加载失败
+   （`ModuleNotFoundError: No module named 'tests.test_providers'` 等），历史上测出的「62%」正是在
+   这个残缺环境下量出来的假象。本轮用一次性隔离 venv（装 `coverage`+`pyyaml`，不碰 conda `core` 环境
+   一个文件）+ `COVERAGE_PROCESS_START` 子进程追踪，测出真实数字：总体 88%（10642 行缺 1243）、
+   `cli.py` 78%（此前子进程未追踪时只有 48%，被低估 30 个百分点）。建议把这个方法论写成
+   `scripts/` 下的一个可复用脚本（不在本轮「界限」允许改动范围内，未做），否则下一次量覆盖率大概率
+   又在同一个被污染的环境上重复同样的假象。
+
+### 好消息（非待裁决项，供领导确认审计确实查过而非只挑错）
+
+只读承诺（永不下单/登录/支付/退改）在 12306/VariFlight 侧由 `mcp_stdio.py:347`
+`EXPECTED_12306_TOOLS`/`variflight_mcp.py:101-102` `EXPECTED_TOOLS` 精确工具名指纹守护，本轮亲自反向
+验证：把工具调用名从 `"get-tickets"` 改成模拟预订类的 `"book-tickets"`（只改 `.tmp/health/` 下的整份
+源码副本，仓库本体全程零改动），`tests/test_mcp_stdio.py` 立即由绿转红
+（`AssertionError: 'contract_mismatch' is not None`），证明这条护栏是真实生效的代码机制，不是纯靠
+约定。`scan_secrets.py`、pyflakes 两项检查也各自做了同样的副本级反向验证，均证实为真实报警器。
+
 ## 书 AL2「scheduler replan 七份金样纳管」（2026-09-12）：无
 
 ## 书 AK1「12306 未开售星号」（2026-09-12）：任务书既有 rail 夹具数少写 1，非阻塞

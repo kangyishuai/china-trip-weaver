@@ -2,6 +2,118 @@
 
 唯一的当前进度记录：现状速览（0.8.0 起每个版本一条）加最近一波的执行者记录。2026-09-03 到 09-06 与 2026-09-08 到 09-12 的逐轮任务书、实测证据、验收记录已归档，见「历史索引」。
 
+## 2026-09-15 健康审计（第二十四波，进行中——诊断，不改代码）
+
+**任务 0 核对**：五条基线命令逐一亲手重跑，四条逐字吻合（685 测试 OK 49.7s、pyflakes 0 行、
+install_local_plugin.sh --check 0.20.1 一致、ci.yml 确实只有两步）。两处不完全吻合但均判定不
+阻塞：① `scan_secrets.py` 报 389 file(s) 而非 388——查源码 `repository_files()` 用
+`git ls-files --cached --others --exclude-standard` 同时统计未跟踪但未被 .gitignore 挡住的文件，
+本机会话开始前已有一个游离的未跟踪 `.coverage`（不在 .gitignore 里，且不是我产生的）正好补上这
+1 个文件差；实质结论「0 finding」两次都成立。② 任务书「TODO/FIXME 全仓仅 2 处」，
+`git grep -n "TODO\|FIXME"` 实测 3 处命中，但逐条读发现 3 处全部是「提及 TODO 概念的说明文字」或
+「检查不存在 `[TODO:` 占位符的测试断言」，真正意义上「留给自己以后处理的代码待办」是 0 处——判断
+任务书这个数字是次要背景色、不影响任何硬指标，不停工。
+
+**理解的目标／顺序／最大风险**（≤10 行）：目标是诊断不是修复，交付一份排好序的问题清单给领导定
+下一波，而不是把绿灯变得更绿。顺序按任务书给定的 1→2→3→4，因为任务 1（绿灯审计）判断后面结论
+还信不信得过，必须最先做。最大风险是「查得全」压过「证据真」——尤其任务 2 文档核对量极大（README
+×2、SKILL.md ×9、provider-contracts.md），已拆成并行子代理各自用 git grep 逐条核证，但最终结论要
+我亲自抽查过citation 才能写进报告，不能直接转述子代理原话。次大风险是实网抽查（任务 3）会消耗真
+实 Key 额度且只许跑一次，需等任务 1/2 的本地检查全部完成、确认没有会污染真实行程目录的意外副作用
+后再执行。
+
+**任务 1 进展**：
+1. 覆盖率真因已查清并已解决（非「查不出来」分支）：本机唯一装了 coverage 的解释器是
+   一个跨项目共用的本机 conda 环境的解释器（不是本项目专用，
+   不是本项目专用），其 site-packages 里有一个与本项目无关的一个与本项目无关的第三方包
+   自带了一个真正的 `tests/__init__.py`（落在该环境的 site-packages 根下），
+   在 Python 的 import 优先级里，正规包会盖过 PEP 420 命名空间包，导致该解释器下 `import
+   tests.test_providers` 永远解析到那个第三方包的 `tests/` 而不是仓库自己的 `tests/`——这与
+   Python 版本无关（用 `/usr/bin/python3` 3.9 或该 conda 环境的 3.12 裸测试均可复现同一结论：
+   干净解释器都能跑满 685，只要 site-packages 里没有同名 `tests` 包）。证据：`python -c "import
+   tests; print(tests.__file__)"` 在该 conda 环境下打出 site-packages 里的路径；`pip show -f` 反查
+   `importlib.metadata` 确认属主。解决：在 一个会话专用的临时目录（会话专用
+   临时目录，不在仓库、不进 git、不装进用户任何持久环境）用 `/usr/bin/python3 -m venv` 建一个干净
+   venv，只装 `coverage`+`pyyaml`（后者是 685 项里一条测试要 shell 出去调 Codex 自带
+   validator 脚本、该脚本本身 import yaml，与本仓库源码无关），在其中跑
+   `coverage run -m unittest discover -s tests` 得到 **685 tests OK**，`coverage report
+   --include="plugins/china-trip-weaver/src/*"` 得到 **总体 85%（10640 行、缺 1614 行）**，
+   `cli.py` 单独 **48%**——与 CLAUDE.md 记的历史基线「总体 84%，cli.py 47%（子进程未追踪）」
+   几乎完全吻合（相差 1 个百分点，落在版本间正常代码变动范围）。结论：此前「62%」纯粹是
+   452/685 残缺跑法的测量伪影，不代表真实覆盖率下降；真实覆盖率与历史基线一致，84% 基线本身
+   没有失真。
+2. 本机会红、CI 不会红的检查清单（逐条核对 `.github/workflows/ci.yml` 全文只有 unittest+
+   scan_secrets 两步后得出）：① `pyflakes` 全仓 0 行——CI 从未跑过 pyflakes，任何 PR 引入未用
+   导入/未定义名不会让 CI 变红；② `scripts/install_local_plugin.sh --check`——结构性地不能在
+   CI 跑（GitHub runner 没有 Codex 二进制），非缺陷但是真实盲区；③
+   `tests/test_packaging.py:133`、`tests/test_skills.py:134,141` 三个测试用
+   `codex_executable() is None` 门控 `skipTest`，GitHub `ubuntu-latest` 从不装 Codex，故这
+   3 项测试在 CI 上**每次都跳过**，「Codex 打包的 skill/plugin 校验器认为这份插件合格」这件事
+   完全不在 CI 的把关范围内，只在装了 Codex 的本机才是真的验证过——这与 PROGRESS.md 已归档的
+   「2026-09-05~08 CI 连红一周没人发现」是同一类型的盲区,只是这次没有变红，是静默跳过。
+3. 三项反向验证，均在副本/隔离环境上做，`git status --short -- plugins tests scripts docs
+   demo .github` 全程为空（证据见下），仓库本体零改动：
+   - `scan_secrets.py`：复制 `cli.py` 到 `.tmp/health/reverse-verify/cli_copy.py`，干净时
+     `0 finding(s)`；追加一行 一行 GitHub token 形状的假字符串 后
+     `1 finding(s)`（`credential prefix`）、exit 1；再追加
+     一行 `AMAP_WEBSERVICE_KEY` 赋值形状的假字符串 后 `2 finding(s)`（另加
+     `secret variable assignment`）；还原回干净副本后 `0 finding(s)`、exit 0。真实报警器。（合并时由管理者改写：原记录直接贴了两个凭据形状的字面串，会让 `scan_secrets.py` 在仓库自己的 PROGRESS 上报 2 处命中、CI 必红；写反向验证记录时只描述形状，不要贴字面串。）
+   - `pyflakes`：复制 `geo.py`，干净 exit 0；注入一行未用 `import json as
+     _unused_injected_import` 后立即报 `imported but unused`、exit 1；还原后 exit 0。真实报警器。
+   - **项目最重要的安全承诺**（只读、永不下单）的反向验证：12306 侧用
+     `mcp_stdio.py:347 EXPECTED_12306_TOOLS` 精确元组指纹 + `mcp_stdio.py:392` 硬编码调用名
+     `"get-tickets"` 兜底。复制整个 `china_trip_weaver` 包到
+     `.tmp/health/reverse-verify/src_copy/`，写一个小驱动脚本用 `sys.modules` 预热让
+     `tests/test_mcp_stdio.py`（未改动的真实测试文件）从副本而非仓库本体加载
+     `china_trip_weaver`（用 `assert copy_path in china_trip_weaver.__file__` 自证生效）；副本
+     未改时 6/6 绿；把副本里 `client.call_tool("get-tickets", ...)` 改成
+     `client.call_tool("book-tickets", ...)`（模拟"如果代码试图调用一个像预订的工具名"）后，
+     `test_transport_runs_station_then_ticket_and_adapter_emits_live_leg` 立即红：
+     `AssertionError: 'contract_mismatch' is not None`。证明「只调用只读接口」这条护栏是真实生效
+     的代码机制（工具名指纹允许列表），不是纯靠约定。
+   - 承诺侧的一个真实旁路（非该反向验证项，是任务 2 顺带查到、记在此处备用）：
+     `credentials.py:resolve_credentials()` 对每个凭据名先查 `os.environ`，只有环境变量未设置
+     时才落到 `credentials.env` 文件；`git grep -n "resolve_credentials(" --
+     plugins/china-trip-weaver/src` 确认 cli.py/mcp_stdio.py 等全部生产调用点都用默认
+     `environ=None`（即读真实 `os.environ`），意味着如果用户 shell 里恰好设了同名环境变量，会
+     不经过该文件、直接生效——`provider_environment()`（credentials.py:145）则相反，是好的隔离
+     设计，只把安全白名单变量+目标 provider 自己的凭据传给子进程，不透传整个父进程环境。判断是否
+     真与文档承诺冲突，需等 README/provider-contracts.md 并行审计子代理的结果。
+
+**任务 2 完成**：4 个并行子代理（README×2、provider-contracts.md、SKILL.md×9 分两组）全部回来，
+逐条抽查引用（git grep 重跑确认行号与文本）后采信。confirmed discrepancies：
+provider-contracts.md 3 处（12306 15s/25s 分列不存在、AnySearch 10s 应为 15s/6000ms、「cache→」与
+文档自身矛盾）；README ×2 处（未提及 `demo/multicity-5d`、ZH 版把中文的 `docs/design/` 标成英文）；
+SKILL.md ×2 处（`search-china-lodging` 的 `--keyless-trial` 位置引起误解、
+`research-china-destination` 的 `exact_original_confirmed` 分支实际是 automatic 不是 manual）。凭据
+「环境变量优先于文件」核实为 README 已准确记载的行为，不是隐藏旁路（README.md:42／
+README.zh-CN.md:42 明确写在先）。全部 7 处文档问题按「顺手活」不许改，记入 BLOCKED.md。
+
+**任务 3 完成**：结构债——AST 逐函数量长度，`planning.py` 最长 `_resolve_rail`（110 行非任务书说的
+120，差异不影响结论）、`journey.py` 最长 `validate_journey`（103 行）；抽查 `_resolve_rail` 全文，
+判断长度来自业务分支顺序步骤、非重复逻辑，未发现拆分的具体证据，如实报告调查深度（未逐一通读
+journey.py/cli.py 其余长函数）。cli.py 子进程覆盖率追踪额外发现：`_cmd_rail`（85 行独立子命令）
+即使算上子进程也几乎零覆盖，全仓没有测试以 `[CTW,"rail",...]` 形式调用它。实网抽查按约定只跑一次：
+`ctw journey plan --rail live --mobility live --lodging live --aviation auto` 用真实
+`fujian-2026-09-25-to-10-10/{request,candidates}.json`，输出到 `.tmp/health/`。探针确实打到真服务商
+（FlyAI×1、VariFlight×6、AMap geocode/poi/route 数十次，见
+`.tmp/health/journey-live-probe.stderr.ndjson`），但最终 `JOURNEY_PLAN_FAILED HTML validation
+failed: E003 rendered train fact is absent from Trip: G1902`——定位到 `request.json` 第 125 条
+assumptions「G1902车票已购并锁定……」这条自由文本人工备注，`journey plan`（区别于 replan/refresh 的
+显式 service_number 机制）没有结构化字段能把它当约束喂给活选逻辑，实时选中的车次与文本不符时
+`render/validate_html.py:272-275` 的反幻觉校验器 E003 正确整体拒绝渲染。安全网生效、非算错结果，但
+报错未指回真正病因。未产出 Trip/输出 JSON，故 `provider_health` 三段完整性无法核实，如实记录为未
+验证而非「查过没问题」。已消耗本轮唯一一次实网额度，不重跑。
+
+**任务 4 完成**：`../HEALTH-2026-09-15.md` 已写就，10 条结论（≤12 条上限内）按「值不值得下一波做」
+排序，每条附严重度、可复跑证据命令、工作量估计、建议动作；末尾候选清单 7 行。`BLOCKED.md` 已记录
+7 处「顺手活」文档问题 + 2 项候选后续任务（E003 表达缺口、覆盖率方法论沉淀）+ 2 项正面结论
+（只读护栏、scan_secrets/pyflakes 均反向验证为真）。
+
+**本轮健康审计结束**，一轮内完成全部任务 0-4，未触发「6 轮」上限。交付前核对：
+`git diff -- plugins tests scripts docs demo .github` 为空，`git status --short` 只有 PROGRESS.md、
+BLOCKED.md 两个文件（会话开始前遗留的游离 `.coverage` 已清理）。
+
 ## 现状速览（2026-09-12 实测，0.20.1）
 
 - 版本：`0.20.1`，唯一来源是
