@@ -1,0 +1,90 @@
+{
+  "captured_at": "2026-09-04T00:00:00+08:00",
+  "case": "weather_ambiguous",
+  "contains_personal_data": false,
+  "credential_state": "configured",
+  "expected": {
+    "error_class": "no_results",
+    "health_status": "ready",
+    "item_count": 0,
+    "sanitized": false,
+    "schema_refs": [],
+    "transport_calls": 1
+  },
+  "fixture_version": 1,
+  "provider": "amap",
+  "provider_version": "web-service-v5-v3-route",
+  "redacted": false,
+  "request": {
+    "as_of": "2026-10-16",
+    "cache_policy": "bypass",
+    "capability": "weather",
+    "deadline_ms": 1000,
+    "parameters": {
+      "city": "示例区"
+    },
+    "request_id": "fixture-request",
+    "trace": {
+      "stage": "provider-fixture"
+    }
+  },
+  "source": "locally generated synthetic AMap-shaped response; contains no captured provider data; failure case is a labeled synthetic mutation",
+  "transport": {
+    "body": {
+      "api": "weather-v3",
+      "count": "2",
+      "forecasts": [
+        {
+          "adcode": "990100",
+          "casts": [
+            {
+              "date": "2026-09-04",
+              "daypower": "1-3",
+              "daytemp": "31",
+              "daytemp_float": "31.0",
+              "dayweather": "晴",
+              "daywind": "北",
+              "nightpower": "1-3",
+              "nighttemp": "24",
+              "nighttemp_float": "24.0",
+              "nightweather": "晴",
+              "nightwind": "北",
+              "week": "5"
+            }
+          ],
+          "city": "示例区(甲)",
+          "province": "示例省",
+          "reporttime": "2026-09-04 08:00:00"
+        },
+        {
+          "adcode": "990200",
+          "casts": [
+            {
+              "date": "2026-09-04",
+              "daypower": "1-3",
+              "daytemp": "30",
+              "daytemp_float": "30.0",
+              "dayweather": "晴",
+              "daywind": "北",
+              "nightpower": "1-3",
+              "nighttemp": "23",
+              "nighttemp_float": "23.0",
+              "nightweather": "晴",
+              "nightwind": "北",
+              "week": "5"
+            }
+          ],
+          "city": "示例区(乙)",
+          "province": "示例省",
+          "reporttime": "2026-09-04 08:00:00"
+        }
+      ],
+      "info": "OK",
+      "infocode": "10000",
+      "status": "1"
+    },
+    "headers": {},
+    "kind": "response",
+    "status_code": 200
+  }
+}

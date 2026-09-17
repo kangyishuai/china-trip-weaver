@@ -15,7 +15,7 @@ from .base import BaseAdapter, ContractMismatch, Normalization, ProviderFailure,
 class AMapAdapter(BaseAdapter):
     provider = "amap"
     provider_version = "web-service-v5-v3-route"
-    capabilities = ("poi", "geocode", "route", "poi_around")
+    capabilities = ("poi", "geocode", "route", "poi_around", "weather")
     required_secret_names = ("AMAP_WEBSERVICE_KEY",)
     allow_keyless = False
 
@@ -40,6 +40,8 @@ class AMapAdapter(BaseAdapter):
             return self._geocodes(body, request, clock)
         if api in ("route-walking-v3", "route-transit-v3", "route-driving-v3", "route-riding-v4"):
             return self._route(body, request, clock)
+        if api == "weather-v3":
+            return self._weather(body, request, clock)
         raise ContractMismatch("AMap endpoint fingerprint mismatch")
 
     def _pois(self, body: Mapping[str, Any], request: ProviderRequest, clock: Clock) -> Normalization:
@@ -176,6 +178,55 @@ class AMapAdapter(BaseAdapter):
             "locked": False,
         },), (duration_claim, distance_claim))
 
+    def _weather(self, body: Mapping[str, Any], request: ProviderRequest, clock: Clock) -> Normalization:
+        forecasts = body.get("forecasts")
+        if not isinstance(forecasts, list):
+            raise ContractMismatch("AMap weather forecasts shape drifted")
+        if len(forecasts) > 1:
+            return Normalization((), (), warnings=("weather_ambiguous:%d" % len(forecasts),))
+        if not forecasts:
+            raise ProviderFailure("no_results", "AMap weather forecast is empty")
+        forecast = forecasts[0]
+        if not isinstance(forecast, dict):
+            raise ContractMismatch("AMap weather forecast entry is not an object")
+        casts = forecast.get("casts")
+        if not isinstance(casts, list):
+            raise ContractMismatch("AMap weather casts shape drifted")
+        if not casts:
+            raise ProviderFailure("no_results", "AMap weather forecast has no casts")
+        adcode = sanitize_text(forecast["adcode"], 20)
+        if len(adcode) != 6 or not adcode.isdigit():
+            raise ContractMismatch("AMap weather adcode is not a 6-digit code")
+        city = sanitize_text(forecast["city"], 80)
+        if not city:
+            raise ContractMismatch("AMap weather city is empty")
+        reported_at = _weather_reported_at(forecast["reporttime"])
+        subject_ref = sanitize_text(request.parameters.get("subject_ref", ""), 80) or ("weather-" + adcode)
+        source_url = "https://restapi.amap.com/v3/weather/weatherInfo"
+        claims: List[Mapping[str, Any]] = []
+        for index, cast in enumerate(casts):
+            if not isinstance(cast, dict):
+                raise ContractMismatch("AMap weather cast entry is not an object")
+            value = {
+                "forecast_date": _weather_date(cast["date"]),
+                "adcode": adcode,
+                "city": city,
+                "day_text": sanitize_text(cast["dayweather"], 40),
+                "night_text": sanitize_text(cast["nightweather"], 40),
+                "temp_high_c": _weather_temp(cast["daytemp"]),
+                "temp_low_c": _weather_temp(cast["nighttemp"]),
+                "wind_day": _weather_wind(cast["daywind"], cast["daypower"]),
+                "wind_night": _weather_wind(cast["nightwind"], cast["nightpower"]),
+                "reported_at": reported_at,
+            }
+            claims.append(make_claim(
+                subject_ref=subject_ref, field_path="/weather", value=value,
+                source_url=source_url, provider=self.provider,
+                status="verified", confidence=0.7, mode="live", clock=clock,
+                json_path="/forecasts/0/casts/%d" % index,
+            ))
+        return Normalization((), tuple(claims))
+
 
 def _location(value: Any) -> Point:
     if not isinstance(value, str) or value.count(",") != 1:
@@ -260,6 +311,40 @@ def _sanitize_json_value(value: Any, *, depth: int) -> Any:
             raise ContractMismatch("AMap business list is too large")
         return [_sanitize_json_value(item, depth=depth) for item in value]
     raise ContractMismatch("AMap business field contains an unsupported value")
+
+
+def _weather_date(value: Any) -> str:
+    text = sanitize_text(value, 20)
+    if len(text) != 10 or text[4] != "-" or text[7] != "-":
+        raise ContractMismatch("AMap weather date is not YYYY-MM-DD")
+    return text
+
+
+def _weather_temp(value: Any) -> int:
+    text = sanitize_text(value, 10)
+    try:
+        return int(text)
+    except ValueError as exc:
+        raise ContractMismatch("AMap weather temperature is not an integer") from exc
+
+
+def _weather_wind(direction: Any, power: Any) -> str:
+    direction_text = sanitize_text(direction, 20)
+    power_text = sanitize_text(power, 20)
+    if not direction_text or not power_text:
+        raise ContractMismatch("AMap weather wind fields are missing")
+    return direction_text + power_text + "级"
+
+
+def _weather_reported_at(value: Any) -> str:
+    text = sanitize_text(value, 40)
+    if (
+        len(text) != 19
+        or text[4] != "-" or text[7] != "-"
+        or text[10] != " " or text[13] != ":" or text[16] != ":"
+    ):
+        raise ContractMismatch("AMap weather reporttime shape drifted")
+    return text.replace(" ", "T") + "+08:00"
 
 
 def _route_source(travel_mode: str) -> str:

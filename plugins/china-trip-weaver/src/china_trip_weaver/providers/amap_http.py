@@ -402,6 +402,23 @@ def _request_contract(request: ProviderRequest) -> Tuple[str, Dict[str, Any], st
             },
             "around-v5",
         )
+    if request.capability == "weather":
+        adcode = values.get("adcode")
+        city_name = values.get("city")
+        has_adcode = isinstance(adcode, str) and bool(adcode.strip())
+        has_city = isinstance(city_name, str) and bool(city_name.strip())
+        if has_adcode == has_city:
+            raise ContractMismatch("AMap weather requires exactly one of adcode or city")
+        query_value = adcode.strip() if has_adcode else city_name.strip()
+        return (
+            AMAP_ORIGIN + "/v3/weather/weatherInfo",
+            {
+                "city": query_value,
+                "extensions": "all",
+                "output": "JSON",
+            },
+            "weather-v3",
+        )
     if request.capability != "route":
         raise ContractMismatch("unsupported AMap capability")
 

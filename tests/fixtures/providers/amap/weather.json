@@ -1,0 +1,110 @@
+{
+  "captured_at": "2026-09-04T00:00:00+08:00",
+  "case": "weather",
+  "contains_personal_data": false,
+  "credential_state": "configured",
+  "expected": {
+    "error_class": null,
+    "health_status": "ready",
+    "item_count": 0,
+    "sanitized": false,
+    "schema_refs": [],
+    "transport_calls": 1
+  },
+  "fixture_version": 1,
+  "provider": "amap",
+  "provider_version": "web-service-v5-v3-route",
+  "redacted": false,
+  "request": {
+    "as_of": "2026-10-16",
+    "cache_policy": "bypass",
+    "capability": "weather",
+    "deadline_ms": 1000,
+    "parameters": {
+      "adcode": "990100"
+    },
+    "request_id": "fixture-request",
+    "trace": {
+      "stage": "provider-fixture"
+    }
+  },
+  "source": "locally generated synthetic AMap-shaped response; contains no captured provider data",
+  "transport": {
+    "body": {
+      "api": "weather-v3",
+      "count": "1",
+      "forecasts": [
+        {
+          "adcode": "990100",
+          "casts": [
+            {
+              "date": "2026-09-04",
+              "daypower": "1-3",
+              "daytemp": "31",
+              "daytemp_float": "31.0",
+              "dayweather": "晴",
+              "daywind": "北",
+              "nightpower": "1-3",
+              "nighttemp": "24",
+              "nighttemp_float": "24.0",
+              "nightweather": "多云",
+              "nightwind": "北",
+              "week": "5"
+            },
+            {
+              "date": "2026-09-05",
+              "daypower": "1-3",
+              "daytemp": "30",
+              "daytemp_float": "30.0",
+              "dayweather": "多云",
+              "daywind": "东南",
+              "nightpower": "1-3",
+              "nighttemp": "23",
+              "nighttemp_float": "23.0",
+              "nightweather": "阴",
+              "nightwind": "东南",
+              "week": "6"
+            },
+            {
+              "date": "2026-09-06",
+              "daypower": "3-4",
+              "daytemp": "27",
+              "daytemp_float": "27.0",
+              "dayweather": "小雨",
+              "daywind": "东",
+              "nightpower": "3-4",
+              "nighttemp": "22",
+              "nighttemp_float": "22.0",
+              "nightweather": "小雨",
+              "nightwind": "东",
+              "week": "7"
+            },
+            {
+              "date": "2026-09-07",
+              "daypower": "4-5",
+              "daytemp": "29",
+              "daytemp_float": "29.0",
+              "dayweather": "雷阵雨",
+              "daywind": "南",
+              "nightpower": "4-5",
+              "nighttemp": "23",
+              "nighttemp_float": "23.0",
+              "nightweather": "多云",
+              "nightwind": "南",
+              "week": "1"
+            }
+          ],
+          "city": "示例市",
+          "province": "示例省",
+          "reporttime": "2026-09-04 08:00:00"
+        }
+      ],
+      "info": "OK",
+      "infocode": "10000",
+      "status": "1"
+    },
+    "headers": {},
+    "kind": "response",
+    "status_code": 200
+  }
+}

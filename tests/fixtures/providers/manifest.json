@@ -77,6 +77,18 @@
       "sha256": "9201b5af2d1ebfbcaac6d6f7faf5b0ccc0acae04b58ebd75d391570308f0248b"
     },
     {
+      "path": "amap/weather.json",
+      "sha256": "ab88eba2fe15247f8362e84b2547f2e6ab963f38d2cbcaf40cd36c7a335c099f"
+    },
+    {
+      "path": "amap/weather_ambiguous.json",
+      "sha256": "bf081f1a12ef8440512a527af9a941b5cdd0bfb435d4ca1a9666516a6bd5cc6c"
+    },
+    {
+      "path": "amap/weather_empty.json",
+      "sha256": "1278248268f99d6ac50d68b6fa084f1a59c8cebfa54092703fe3c0e60296039c"
+    },
+    {
       "path": "amap/wrong_shape.json",
       "sha256": "fd270ef0d5f55b336eeea8f7fb61bd71da75823959f8a008091b71b1b9d915e0"
     },
@@ -341,7 +353,7 @@
       "sha256": "46fd6e92dfa195da7d89386332f94ba20a9279229c78bec2ec1eaf2296321f2e"
     }
   ],
-  "fixture_count": 85,
+  "fixture_count": 88,
   "generated_by": "scripts/build_provider_fixtures.py",
   "manifest_version": 1
 }

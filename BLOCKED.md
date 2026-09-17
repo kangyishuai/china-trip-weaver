@@ -2059,3 +2059,14 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
    - `closure`/`weather` 事件不像本书新增的 `refresh` 一样自动生成/重写标题——这两类事件走
      `replacement_slot`（调用方直接提供完整替换 slot，含 `title`），本身就没有「默认标题该怎么拼」
      的空白，是否值得同样支持事件级覆盖校验（例如空白 `title` 报错）未评估，按任务书要求不做。
+## 书 AN1「高德天气能力」（2026-09-17，worktree `.tmp/wt-an1` 分支 `amap-weather`）：界限外顺手活按任务书裁定未做，另有一处覆盖缺口记录待裁决
+
+任务书「界限」一节明确点名三项顺手活「记 BLOCKED 不做」——geocode 保留 adcode、VariFlight 机场天气、doctor 探针——均未动，仅在此记录合规：
+
+1. **geocode 保留 adcode**：`amap.py::_geocodes` 目前不把 provider 返回的 `adcode` 透传进 `places` 条目；本轮 `weather` 能力自己独立解析 `forecast["adcode"]`，不依赖 geocode 侧改动，故两者互不阻塞，但 geocode 侧仍未做。
+2. **VariFlight 机场天气**：`variflight.py` 早已有独立的 `weather` capability（机场天气，`vari_body("weather", ...)`，见 `scripts/build_provider_fixtures.py` 里 `variflight/weather.json`），与本轮新增的 `amap` 的 `weather`（城市天气）是两个不同 provider 下同名但语义不同的能力，未做任何整合或去重；下一波若要把两者合并成统一的「天气」概念，需要先决定谁是主数据源。
+3. **doctor 探针**：`cli.py::_probe_amap` 仍固定查 POI（"北京"/"天安门"），未加 `weather` 分支；`ctw doctor` 目前查不出高德天气能力是否配置正确。`cli.py` 本身也在本波「本波不碰」名单内，改它需要另开书。
+
+**新发现、未在任务书列出范围内、记录待裁决的一项**：`amap_http.py::_request_contract` 的 `weather` 分支（`adcode`/`city` 二选一、拼 `/v3/weather/weatherInfo` 请求参数）没有被任何自动化测试覆盖——`tests/fixtures/providers/*.json` 夹具全部经 `ReplayTransport` 回放，从不真正调用 `_request_contract`；唯一能验证这条分支形状是否正确的既有测试文件是 `tests/test_amap_live.py`（`09-impl-map.md` 里"4 capability 请求 shape ... fixtures 全过"说的就是它覆盖 geocode/poi/poi_around/route 四种），但该文件不在本书「界限」授权可改列表内。本轮改用实网抽查代替：用真实 Key 分别查「福州」（`city=福州`）与「鼓楼区」（`city=鼓楼区`）验证了 `_request_contract` 拼参数、发请求、`AMapAdapter` 归一化的完整链路都成立（福州 4 条 claim、鼓楼区因 4 个同名行政区触发 `weather_ambiguous:4` 判 no_results，见 PROGRESS.md 任务 1 证据），但这只是一次性人工验证，不是回归门禁——以后如果有人改坏 `_request_contract` 的 `weather` 分支（比如参数名拼错、`adcode`/`city` 校验逻辑改坏），全量测试不会变红，只有下次真的连真实 AMap 发请求才会发现。
+
+供裁决：是否要另开一本小书，把 `tests/test_amap_live.py` 加入某一波的「界限」授权名单，给 `weather` 分支补一个不依赖真实网络（用注入的 fake opener）的请求形状单测，使其获得跟 geocode/poi/poi_around/route 同等的回归保护。
