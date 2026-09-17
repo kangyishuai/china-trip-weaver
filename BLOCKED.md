@@ -1995,9 +1995,11 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 2. **顺手活按任务书指定不做，记录供下一份任务书取用**：
    - `user_delete` 删除时段后，同一 day 内后续 `transport_leg` 的路径重编号缺口——`_apply_suspend`
      已有 `_reindex_transport_leg_unknowns` 处理非末尾腿删除后的 `unknowns` 路径重排（见
-     `docs/design/06-pipeline.md` §7.2 suspend 行），但 `user_delete` 分支（`replan.py` 里
-     `event_type == "user_delete"` 的 `pop(slot_index)`）没有对应的重编号逻辑；未探究是否存在真实
-     触发路径，仅按任务书要求记录、未改代码。
+     `docs/design/06-pipeline.md` §7.2 suspend 行），但 `user_delete` 分支（`replan.py:74-77`，
+     `event_type == "user_delete"` 时只 `pop(slot_index)`）没有对应的重编号逻辑。已读代码确认
+     `user_delete` 本身只弹出 `days[].slots[]` 里的一项，从不触碰 `transport_legs` 数组，所以任务
+     书点名的这个缺口是否有真实触发路径（例如某个 slot 同时是被删的对象又恰好在编号上影响到
+     `transport_legs` 的 `unknowns` 路径）未进一步探究，仅按任务书要求记录、未改代码。
    - `closure`/`weather` 事件不像本书新增的 `refresh` 一样自动生成/重写标题——这两类事件走
      `replacement_slot`（调用方直接提供完整替换 slot，含 `title`），本身就没有「默认标题该怎么拼」
      的空白，是否值得同样支持事件级覆盖校验（例如空白 `title` 报错）未评估，按任务书要求不做。
