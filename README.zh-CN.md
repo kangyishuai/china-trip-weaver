@@ -191,6 +191,7 @@ ctw mobility --candidates CANDIDATES.json --modes transit,walking --output-json 
 ctw lodging --city CITY --check-in YYYY-MM-DD --check-out YYYY-MM-DD --output-json lodging.json
 ctw air --origin CITY --destination CITY --date YYYY-MM-DD --output-json air.json
 ctw weather (--city CITY [--city CITY ...] | --adcode CODE [--adcode CODE ...] | --journey JOURNEY.json | --trip TRIP.json) [--output-json weather.json]
+ctw dining (--journey JOURNEY.json | --trip TRIP.json) [--radius METERS] [--limit N] [--cuisine TEXT] [--avoid WORD [--avoid WORD ...]] [--fixture FIXTURE.json --fixed-clock ISO] --output-json dining.json
 ctw replan --trip TRIP.json --event EVENT.json --base-revision N --output-json TRIP-rN.json --output-html TRIP-rN.html [--rail-result RAIL.json]
 ctw render TRIP.json --output TRIP.html
 ctw validate-html TRIP.html TRIP.json
@@ -202,6 +203,7 @@ ctw journey extract --journey JOURNEY.json --trip-id TRIP_ID --output-json TRIP.
 ctw journey assemble --request REQUEST.json --trip TRIP.json [--trip TRIP.json ...] [--expected-segment-days N] [--fixed-clock ISO] --output-json JOURNEY.json
 ctw journey assemble --journey JOURNEY.json --replace-trip TRIP-rN.json --base-revision N [--reason REASON] [--fixed-clock ISO] --output-json JOURNEY.json
 ctw journey weather --journey JOURNEY.json --weather-result WEATHER.json --base-revision N [--reason REASON] [--fixed-clock ISO] --output-json JOURNEY.json
+ctw journey dining --journey JOURNEY.json --dining-result DINING.json --base-revision N [--reason REASON] [--fixed-clock ISO] --output-json JOURNEY.json
 ```
 
 首次装配和 `--replace-trip` 时，缺少 `budget_ledger` 的子 Trip 会先根据该 Trip 已有事实现算账本，再推导连接与 Journey 总额；已有账本保持不变。
@@ -211,6 +213,8 @@ ctw journey weather --journey JOURNEY.json --weather-result WEATHER.json --base-
 `ctw weather` 查询高德对城市、行政区码，或某份 Journey/Trip 文件里每一天的天气预报，四选一：`--city`（可重复，会拆分「福州／平潭」这类复合名）、`--adcode`（可重复）、`--journey`、`--trip`。高德只返回「今天起 4 天」的预报；Journey/Trip 里超出这个窗口的日期会标为 `out_of_window` 并给出可查日期，绝不编造预报。查不到或有歧义的地点会标为 `no_forecast` 并给出原因，不会被静默丢弃。
 
 `ctw journey weather` 把 `ctw weather --output-json` 的结果折回既有 Journey，分两步：先跑 `ctw weather --journey JOURNEY.json --output-json WEATHER.json`，再跑 `ctw journey weather --journey JOURNEY.json --weather-result WEATHER.json --base-revision N --output-json JOURNEY.json`。`forecasts[]` 每行现在都带一个 `query` 键（实际查询用的名字）；折回按「日期相同，且 `query` 等于该天 `city` 经 `split_city_names` 拆出的第一段」把行匹配到天。`forecast` 行写入 `day.weather`；`no_forecast` 行把它置空并记一条 `weather_no_results` unknown；`out_of_window` 行或没有匹配行的天不动。没有任何一天被改——包括把同一个结果再折一次——命令打印 `JOURNEY_WEATHER_NOOP`、退出码 2、什么都不写；否则把全部被改的子 Trip 一次折完，Journey 的 revision 只加一（不论同时有几个子 Trip 被改），命令打印 `JOURNEY_WEATHER_COMPLETE`、退出码 0，把新版本写进 `--output-json`。`--base-revision` 与文件当前版本不符会报 `revision_conflict`、退出码 1。`--journey` 传入的文件本身永远不会被改写。
+
+`ctw dining` 为 Trip 或 Journey 里每个午/晚餐时段写一条附近餐饮参考：圆心是同一天里最近一个有坐标的时段——先向前找，再向后找；以该点为中心做一次高德 `poi_around` 搜索（`sortrule=weight`，高德自身的综合排序），半径取 `--radius`（缺省 1500 米），按高德返回顺序保留最多 `--limit`（缺省 3）家有评分的餐厅，跳过没有 `rating`，或名字／`tag`／`keytag`／`rectag` 命中任一 `--avoid` 词（可重复）的候选；`--cuisine` 会替换缺省关键词「餐厅」。当天找不到锚点时段时记 `dining: null` 并加一条 `dining_no_anchor` unknown。JSON 模式下打印 `DINING_COMPLETE`，至少一个时段拿到参考时退出码 0，全部为空时退出码 2。`ctw journey dining` 用与 `ctw journey weather` 相同的两步把结果折回既有 Journey：先跑 `ctw dining --journey JOURNEY.json --output-json DINING.json`，再跑 `ctw journey dining --journey JOURNEY.json --dining-result DINING.json --base-revision N --output-json JOURNEY.json`；每个被改的子 Trip 各写一条 `trigger=dining` 的 patch，不论改了几个子 Trip，Journey 的 revision 只加一；成功时打印 `JOURNEY_DINING_COMPLETE`，退出码 0；没有变化时打印 `JOURNEY_DINING_NOOP`，退出码 2，不写文件；`--base-revision` 过期会报 `revision_conflict`，退出码 1；`--journey` 传入的文件本身永远不会被改写。
 
 `ctw replan` 的 `refresh` 事件用新查到的车次原地换掉一条火车腿：先跑 `ctw rail --output-json`，再把输出文件路径传给 `--rail-result`。`refresh` 事件必须带 `--rail-result`，其余事件类型一律拒绝。刷新会先删除 `subject_ref` 等于被替换腿的全部旧 claim，再追加本次车次的 claim，因此重复刷新不会累积过期证据。事件不带 `service_number` 时，默认选车只在发车不早于前一时段结束的候选里取到达最早的一班，全部不可行才报 `refresh_overlap`（message 带候选数与前一时段结束时间）；带 `service_number` 却命中多行时会报 `refresh_service_ambiguous`，除非事件的 `arrive_at` 或 `depart_at`（均可为完整 ISO 时间戳或 `HH:MM`）能唯一挑出一行。`suspend` 事件在同一个 patch 里删掉停运的腿（列车停运、轮渡停航）及其时段、budget_ledger 条目与随之孤儿化的 claim，用 `kind` 为 `free` 或 `poi` 的 `replacement_slot` 换掉原时段；patch 的 `trigger` 是 `disruption`。刷新后时段 `title` 默认重写为「起点 → 终点 铁路 车次号」，事件可用非空 `title` 覆盖，空白则报 `refresh_title`。
 

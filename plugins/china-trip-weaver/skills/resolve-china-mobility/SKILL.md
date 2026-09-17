@@ -18,6 +18,7 @@ Resolve only the candidate endpoints supplied by the parent Skill.
 - Do not substitute host search or AnySearch for an unavailable AMap capability. Keep mobility degradation separate from the destination-search rung recorded by `$research-china-destination`.
 - A city, district, or adcode's current AMap forecast is available separately through `ctw weather`; it only covers today-plus-3-days and reports `out_of_window` rather than guessing further out. This command is informational only — it does not attach weather to a Trip or Journey and is not part of the candidate-resolution matrix below.
 - A `ctw weather --output-json` result can be folded back into an existing Journey with `ctw journey weather`: it matches each `forecasts[]` row to a day by date and `query`, writes `day.weather` (or a `weather_no_results` unknown), and advances the Journey's revision by exactly one no matter how many child Trips changed. A run that changes no day exits 2 and writes nothing; this command never modifies the `--journey` input file.
+- A meal slot's AMap-ranked nearby-dining reference is available the same way through `ctw dining`, anchored on the nearest same-day slot with known coordinates (searching backward then forward) within a 1500 m default radius, keeping up to 3 rated venues in AMap's own `sortrule=weight` order; `ctw journey dining` folds its result back into an existing Journey exactly like `ctw journey weather` — a `trigger=dining` patch per changed child Trip, revision advanced by exactly one, `JOURNEY_DINING_NOOP` exit 2 when nothing changes, and the `--journey` input never modified.
 
 Inspect a bounded live matrix directly or return its normalized cells to the parent. When AMap is unavailable, `ctw plan` builds only labeled static estimates. Files for one trip live together under `plans/<name>/` in the project root that invoked this plugin:
 
@@ -28,6 +29,8 @@ scripts/ctw plan --request plans/<name>/request.json --candidates plans/<name>/c
 scripts/ctw validate plans/<name>/trip.json
 scripts/ctw weather --city "城市" --output-json plans/<name>/weather.json
 scripts/ctw journey weather --journey plans/<name>/journey.json --weather-result plans/<name>/weather.json --base-revision 1 --output-json plans/<name>/journey-r2.json
+scripts/ctw dining --journey plans/<name>/journey.json --output-json plans/<name>/dining.json
+scripts/ctw journey dining --journey plans/<name>/journey.json --dining-result plans/<name>/dining.json --base-revision 1 --output-json plans/<name>/journey-r2.json
 ```
 
 Never turn an AMap fixture response into live output outside an explicit offline fixture test.

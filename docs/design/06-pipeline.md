@@ -136,6 +136,17 @@ FlyAI 候选解析并经 VariFlight 增强后，`_validate_meeting_anchor` 才�
 - **成功时**：`day["weather"]` 写入 AMap 预报的 10 个字段、`weather.advice_for` 算出的 `advice`，以及一条 `subject_ref` 改写为该 `day_id`（而非 AMap 默认的地点 subject）的新 claim 的 `claim_id`；这条 claim 一并追加进 Trip 的 `claims`。
 - **健康行**：只要这次运行实际发起过至少一次天气查询，`provider_health` 里 `provider=amap` 的合并健康行就在 `capabilities` 追加 `weather`，并在 `reason` 末尾追加 `; weather=<查询次数> queried, <unknown 天数> unknown`；一次查询都没发起时（mobility 为 `off`，或每天都在可查窗口之外）健康行不受影响。每次实际查询还会在 `business_calls` 里记一条 `weather@<地点键>:date=<查询当日日期>`。
 
+### 5.6 餐饮参考
+
+`plan_trip` 紧跟 `_plan_weather` 之后调用 `_plan_dining`，为每个午/晚餐时段补一条附近餐饮参考或一条带原因的 unknown；同样不占独立 checkpoint，运行在既有 `SCHEDULED` 与 `VALIDATED` 之间。
+
+- **触发条件**：只在 `active_mobility.mode == "live"` 时运行，复用同一份 AMap transport 与调用预算；mobility 为 `off` 时完全不调用，每个时段既不加 `dining` 键也不加 unknown，旧产物字节不变。
+- **时段判定**：`dining.meal_type_for`/`dining.meal_slots` 把 `kind=meal`，或 `kind` 为 `free`/`rest` 且标题含「午餐」「晚餐」的时段识别为一次用餐；其余 kind 永不算用餐。
+- **锚点**：`dining.anchor_for` 在同一天先向前再向后找最近一个有坐标的 `poi`/`checkin`/`checkout`/`rest`/`lodging` 时段作圆心，`meal` 自己的占位 POI 永不当锚点；同一个坐标在一次 `plan_trip` 内只查一次 AMap。
+- **查询与选取**：以锚点为圆心，用 `dining.query_parameters` 拼出的参数对 AMap `poi_around` 发起一次综合排序（`sortrule=weight`）搜索，半径 1.5 km，`types=050100|050200|050400`；`dining.select_options` 按 AMap 原序保留前 3 家有评分、且名称/`tag`/`keytag`/`rectag` 不命中 `request.dining_preferences.avoid` 的候选，`request.dining_preferences.cuisine` 覆盖缺省关键词「餐厅」。
+- **无锚点**：当天没有可用锚点时段时，该时段的 `slot.dining` 记为 `null`，并加一条 `field_path` 指向该时段、原因为 `dining_no_anchor` 的 unknown。
+- **健康行**：只要这次运行实际发起过至少一次 `poi_around` 查询，`provider_health` 里 `provider=amap` 的合并健康行就在 `capabilities` 追加 `poi_around`，并在 `reason` 末尾追加 `; dining=<查询次数> queried, <unknown 时段数> unknown`；一次查询都没发起时健康行不受影响。
+
 ## 6. P5：发布前语义校验
 
 依次运行；前一层 FAIL 仍可汇总后续独立错误，但最终不可渲染：
@@ -210,6 +221,15 @@ user_locked_refs[], optional allowed_changes[], now
 - **patch 形状**：有变化的天在一个 patch 里按固定顺序生成 operations——先删旧 `/unknowns/<i>`，再删旧 `/claims/<i>`（按原 `day.weather.claim_id` 定位），然后对每天 `add` 或 `replace` `/days/<i>/weather`（`no_forecast` 顺带 `add` 一条 `/unknowns/<i>`），再 `add` 新 claim，最后按需 `add`/`replace` 一条 `provider=amap` 的 `/provider_health/<i>`；patch 的 `trigger` 固定为 `weather`，`reverify_claim_ids` 恒为空。`forecast` 行必须能在 `result["claims"]` 里找到 `value` 与该行 `forecast` 逐键相等的一条，找不到抛 `weather_fold_claim_missing`；返回前用 `validate_trip`/`validate_journey` 复核，不过就抛错，折回从不产出无效 Trip/Journey。
 - **健康行**：只要本次至少一天变化，Trip 的 `provider_health` 里 `provider=amap` 的那一行 `capabilities` 补上 `weather`（若缺）、`status`/`mode` 不是 `ready`/(`live`或`cached`) 时强制改为 `ready`/`live`、`reason` 末尾追加 `"; weather=<变化天数> days folded (<queried_at>)"`；这一行原本不存在时新建一条。
 - **多 Trip 一次重组**：`fold_weather_into_journey` 把每个被改的子 Trip 交给 `journey.py` 的 `replace_trips_in_journey` 一次重组，不论有几个子 Trip 同时变化，Journey 的 revision 只加一（不会因为逐个替换而链式跳号）；重组后的 `revision.created_by` 固定改回 `"system"`。命令成功时打印 `JOURNEY_WEATHER_COMPLETE`，退出码 0。折回过程只读既有的 `contracts`/`validate_trip`/`journey`/`planning`/`replan`/`weather` 模块，不发起新的 provider 调用。
+
+### 7.7 餐饮折回
+
+`dining_fold.py` 把独立发起的 `ctw dining --output-json` 查询结果折回一个已存在的 Trip 或 Journey，是与 §7.6 天气折回同构、同样独立于 §7.1–7.5 局部重排合同的另一条 patch 生成路径：它不经过 `base_trip + event + locks` 的影响分析，只比对查询结果与 Trip 当前的 `slot.dining`。
+
+- **触发**：调用方拿到 `ctw dining --output-json` 的结果信封后，对单个 Trip 调 `fold_dining_into_trip`；对整个 Journey 调 `fold_dining_into_journey`（内部逐 Trip 调用前者）。命令 `ctw journey dining` 驱动后者对一份 Journey 文件工作，用法是先 `ctw dining --journey J --output-json W.json`，再 `ctw journey dining --journey J --dining-result W.json --base-revision N --output-json OUT`；`base_revision` 不等于 Journey 当前 revision 时抛 `revision_conflict`，退出码 1，`--journey` 原文件永不写回。
+- **匹配与覆盖判定**：逐时段比对查询结果里的候选与该时段当前的 `slot.dining`；结果与当前值相同（含两者都判定为无候选锚点）时算无变化。折同一个结果两次，第二次每个时段都落进「无变化」分支，函数返回 `None`；命令行层面对应 `JOURNEY_DINING_NOOP`，退出码 2，不写 `--output-json`。
+- **patch 形状**：有变化的时段在一个 patch 里对 `/days/<i>/slots/<j>/dining` 做 `add`/`replace`（并按需增删对应 `unknowns`/`claims`），patch 的 `trigger` 固定为 `dining`，`reverify_claim_ids` 恒为空；返回前用 `validate_trip`/`validate_journey` 复核，不过就抛错，折回从不产出无效 Trip/Journey。
+- **多 Trip 一次重组**：`fold_dining_into_journey` 把每个被改的子 Trip 交给 `journey.py` 的 `replace_trips_in_journey` 一次重组，不论有几个子 Trip 同时变化，Journey 的 revision 只加一。命令成功时打印 `JOURNEY_DINING_COMPLETE`，退出码 0。折回过程同样只读既有模块，不发起新的 provider 调用。
 
 ## 8. Pipeline 可恢复性与确定性
 
