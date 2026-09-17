@@ -1721,20 +1721,20 @@ def assemble_journey_from_trips(
     )
 
 
-def replace_trip_in_journey(
+def replace_trips_in_journey(
     journey: Mapping[str, Any],
-    trip: Mapping[str, Any],
+    trips: Sequence[Mapping[str, Any]],
     base_revision: int,
     clock: Clock,
     reason: Optional[str] = None,
+    created_by: str = "user",
 ) -> Mapping[str, Any]:
-    """Swap one embedded Trip for an updated copy and recompute the Journey.
+    """Swap several embedded Trips for updated copies in one reassembly and revision bump.
 
-    Identity (origin/travelers or traveler_groups/meeting_anchor), budget_cny,
-    and expected_segment_days all come from the Journey being replaced into,
-    never from the replacement Trip; a resulting journey_id that differs from
-    the original is a structural error, since only the caller can decide
-    whether a Trip that changes the Journey's identity was intended.
+    Same identity/base_revision contract as `replace_trip_in_journey`, generalized so
+    that replacing more than one Trip still advances `revision.number` by exactly one:
+    every replacement is folded into a single `assemble_journey_from_trips` call instead
+    of reassembling once per Trip.
     """
 
     current_revision = int(journey["revision"]["number"])
@@ -1743,12 +1743,15 @@ def replace_trip_in_journey(
             "revision_conflict: Journey is at revision %d, not %d"
             % (current_revision, base_revision)
         )
-    trip_id = trip["trip_id"]
-    if not any(item["trip_id"] == trip_id for item in journey["trips"]):
-        raise ValueError("trip_not_found: Journey does not contain Trip %s" % trip_id)
+    replacements = {trip["trip_id"]: trip for trip in trips}
+    for trip_id in replacements:
+        if not any(item["trip_id"] == trip_id for item in journey["trips"]):
+            raise ValueError("trip_not_found: Journey does not contain Trip %s" % trip_id)
 
     replaced_trips = [
-        copy.deepcopy(dict(trip)) if item["trip_id"] == trip_id else copy.deepcopy(dict(item))
+        copy.deepcopy(dict(replacements[item["trip_id"]]))
+        if item["trip_id"] in replacements
+        else copy.deepcopy(dict(item))
         for item in journey["trips"]
     ]
     synthetic_request = _journey_identity_request(journey)
@@ -1768,11 +1771,30 @@ def replace_trip_in_journey(
         "number": current_revision + 1,
         "parent_revision": current_revision,
         "created_at": now,
-        "reason": reason or trip["revision"]["reason"],
-        "created_by": "user",
+        "reason": reason or trips[0]["revision"]["reason"],
+        "created_by": created_by,
     }
     result["generated_at"] = now
     return result
+
+
+def replace_trip_in_journey(
+    journey: Mapping[str, Any],
+    trip: Mapping[str, Any],
+    base_revision: int,
+    clock: Clock,
+    reason: Optional[str] = None,
+) -> Mapping[str, Any]:
+    """Swap one embedded Trip for an updated copy and recompute the Journey.
+
+    Identity (origin/travelers or traveler_groups/meeting_anchor), budget_cny,
+    and expected_segment_days all come from the Journey being replaced into,
+    never from the replacement Trip; a resulting journey_id that differs from
+    the original is a structural error, since only the caller can decide
+    whether a Trip that changes the Journey's identity was intended.
+    """
+
+    return replace_trips_in_journey(journey, [trip], base_revision, clock, reason=reason)
 
 
 def _journey_identity_request(journey: Mapping[str, Any]) -> Dict[str, Any]:

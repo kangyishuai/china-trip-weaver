@@ -1189,3 +1189,93 @@ git diff main --stat -- plugins/china-trip-weaver/src/china_trip_weaver/{replan,
 ```
 
 `git diff main --stat` 总览：5 个文件——新建 `weather_fold.py`（331 行）与 `tests/test_weather_fold.py`（245 行，6 例）、`tests/test_design_docs.py`（51→52，+1/-1）、`docs/design/09-impl-map.md`（+4，登记新模块）、`PROGRESS.md`（本节）。BLOCKED.md 记了「无裁决分叉」一条（唯一的自行设计判断——不用 `planning._weather_cast_claim` 按日期匹配——已在任务 0 核对记录说明原因，按任务书规则属「建议可走更好的路」，不算裁决分叉）。只提交并推送 `weather-fold` 分支，未合并。
+
+## AN8b 任务 0 核对记录（2026-09-17，worktree `.tmp/wt-an8b`，分支 `journey-weather`）
+
+- 基线核对：750 测试绿、`git grep -n -E "_cmd_journey_weather|replace_trips_in_journey" -- plugins tests` 0 命中。
+- 复现测试：`test_weather_fold.py` 新增 `test_fold_across_two_trips_bumps_journey_revision_once`（demo/journey-16d 折 10-05 上海+10-06 杭州），现状红：`journey_result["revision"]["number"]` 实测 3，断言要求 2——与 AN8 管理者裁决记录的缺陷逐字吻合。
+- 目标：①`journey.py` 加 `replace_trips_in_journey`（多 Trip 一次 `assemble_journey_from_trips`、revision 只加一），`replace_trip_in_journey` 退化为传单元素列表调它；②`_weather_row`/`--output-json` 信封行加 `query`=`target["display"]`；③新增 `ctw journey weather` 命令把预报折回现役 Journey，NOOP/失败分支按任务书退出码。
+- 顺序：任务 1（先让上面的红测试转绿，`tests.test_journey` 逐字不动）→ 任务 2（`_cmd_journey_weather` 四条验收）→ 任务 3（真实行程只读演练，两条命令都须退出 2、不写文件、sha 不变）。
+- 最大风险：`fold_weather_into_journey` 现在对每个被改 Trip 各调一次 `replace_trip_in_journey` 再手改 `created_by`；重构要收集全部变更 Trip 后一次性调 `replace_trips_in_journey(..., created_by="system")`，同时不能改到 `tests.test_journey` 覆盖的 `replace_trip_in_journey` 单 Trip 逐字行为。次要风险：CLI 要让 `revision_conflict`/`weather_fold_claim_missing` 原样冒泡到 stderr，不能被吞或改写措辞。
+
+### 任务 1 完成：`replace_trips_in_journey` + `query`
+
+`journey.py` 新增 `replace_trips_in_journey(journey, trips, base_revision, clock, reason=None, created_by="user")`：按 `journey["trips"]` 原序把落在 `{trip_id: trip}` 替换表里的条目换成新 Trip、其余深拷贝原样保留，一次 `assemble_journey_from_trips` 重组、身份校验、`revision.number` 只加一（`current_revision + 1`，不随 `len(trips)` 增长）；`replace_trip_in_journey` 退化为 `return replace_trips_in_journey(journey, [trip], base_revision, clock, reason=reason)`，`created_by` 仍固定 `"user"`，逐字行为不变。`weather_fold.py::fold_weather_into_journey` 改成先收集全部 `fold_weather_into_trip` 返回非 None 的 Trip，再一次性调 `replace_trips_in_journey(journey, changed_trips, current_revision, clock, reason=reason, created_by="system")`，删掉了原来「逐 Trip 调用 + 事后 `dict(working)` 打补丁 `created_by`」的写法；import 改成 `replace_trips_in_journey`（不再需要 `replace_trip_in_journey`）。`cli.py::_weather_row` 加必填关键字参数 `query`，8 处调用点全部传 `query=target["display"]`（AMap 解析后的 `city` 字段可能是「福州市」这类行政区全名，`query` 固定是用户原始输入「福州」），`--output-json` 的 `forecasts[]` 逐行带 `query`；文本输出 `_format_weather_row` 未改。
+
+```
+/usr/bin/python3 -m unittest tests.test_weather_fold tests.test_weather_cli tests.test_journey -v
+Ran 110 tests in 12.1s
+OK   # 7 (weather_fold) + 13 (weather_cli，含新增 test_output_json_forecast_rows_carry_the_query_display_name) + 90 (journey，逐字未改)
+```
+
+反向验证（按任务书指定的两处，两处都在改动后立即复原并 `touch` 源文件，避开 CPython 3.9 秒级字节码缓存）：
+
+1. `replace_trips_in_journey` 的 `"number": current_revision + 1` 改成 `current_revision + len(trips)`：单跑任务 0 的 `test_fold_across_two_trips_bumps_journey_revision_once` → `AssertionError: 3 != 2`（两个 Trip 被改，`+len(trips)`=+2，revision 变 3）——红；`touch journey.py` 还原后同一测试 `ok`——绿。
+2. `--output-json` 的 `forecasts[]` 字典推导式删掉 `"query": row["query"]` 一行：单跑新增的 `test_output_json_forecast_rows_carry_the_query_display_name` → `KeyError: 'query'`——红；`touch cli.py` 还原后 `ok`——绿。
+
+非阻塞设计判断，供核对：`replace_trips_in_journey` 在 `reason` 为 `None` 时的默认值取 `trips[0]["revision"]["reason"]`（原单 Trip 版本是 `trip["revision"]["reason"]`，只是把「唯一那个 Trip」换成「列表第一个 Trip」，因为任务书「拍的板」只给了函数签名 `reason=None` 未定义多 Trip 时的默认取法）；`fold_weather_into_journey` 传入的 `changed_trips` 顺序即 `journey["trips"]` 的原序（只保留发生变化的那些），所以「第一个」总是被改动的 Trip 里日期最早的那个，语义上与单 Trip 版本一致。
+
+### 任务 2 完成：`ctw journey weather` 命令
+
+`cli.py` 新增子解析器 `journey_commands.add_parser("weather", ...)`（`--journey`/`--weather-result`/`--base-revision`/`--output-json` 必填，`--reason`/`--fixed-clock` 选填）、`_cmd_journey` 分派新增 `if args.journey_command == "weather": return _cmd_journey_weather(args)`（放在 `assemble` 分支之后、兜底 `_cmd_journey_plan` 之前，避免落进那个兜底）、新函数 `_cmd_journey_weather`：校验 `--weather-result` 必须同时有 `forecasts`/`claims` 两个键（否则显式 `ValueError`，不依赖 `fold_weather_into_trip` 的 `.get(..., ())` 默认值悄悄放过）；调用 `fold_weather_into_journey`；`None` 时打印 `JOURNEY_WEATHER_NOOP journey=%s revision=%d`（用传入的 `--base-revision`，因为没有变化时 Journey 就停在这个版本）并退出 2、不写 `--output-json`；成功时按「拍的板」用「折之前每个 Trip 的 revision」与「折之后每个 Trip 的 revision」逐 `trip_id` 比对算出 `trips_changed`，`write_canonical_json` 写 `OUT`，打印 `JOURNEY_WEATHER_COMPLETE json=%s revision=%d trips_changed=%d journey_sha256=%s` 并退出 0；`(OSError, UnicodeError, ValueError, json.JSONDecodeError)` 统一捕获打印 `JOURNEY_WEATHER_FAILED %s` 到 stderr 退出 1（`revision_conflict`/`journey_identity_changed`/`weather_fold_claim_missing`/信封校验错误原样冒泡，未改写措辞）。新建 `tests/test_journey_weather_cli.py`（子进程，四例对应任务书①–④）：
+
+```
+/usr/bin/python3 -m unittest tests.test_journey_weather_cli -v
+test_all_out_of_window_envelope_is_a_noop_and_writes_nothing ... ok        # ②
+test_claim_value_mismatch_fails_with_weather_fold_claim_missing ... ok     # ④
+test_fold_into_demo_journey_produces_valid_journey_and_html ... ok        # ①
+test_wrong_base_revision_fails_with_revision_conflict ... ok              # ③
+Ran 4 tests in 0.68s
+OK
+```
+
+①对 demo/journey-16d 折合成信封（10-01、10-02，两条 claim 用 `evidence.make_claim` 手造，值与 forecast 逐键相同）：`JOURNEY_WEATHER_COMPLETE ... revision=2 ...`，输出 `revision.number=2`、`parent_revision=1`、`created_by="system"`；随后 `ctw journey validate` 退出 0、`ctw journey render` 退出 0、`ctw journey validate-html` 打印含 `errors=0` 退出 0。额外手工验证 `trips_changed` 计数口径（demo 折上海 10-01+杭州 10-06，两个 Trip 各改一天）：`JOURNEY_WEATHER_COMPLETE json=... revision=2 trips_changed=2 ...`——与任务 0 那条测试要求的「revision 只加一、两个 Trip 各变一次」一致。
+
+### 任务 3 完成：真实行程只读演练
+
+```
+R=../../../fujian-2026-09-25-to-10-10
+shasum -a 256 "$R/journey.json"
+80792d6018b440f9eb54332b0d6a983cf8c77ab0e385be25abffa3fce65e4a33  (revision.number=9，演练前手工核对)
+
+plugins/china-trip-weaver/scripts/ctw weather --journey "$R/journey.json" --output-json .tmp/w-real.json
+WEATHER_COMPLETE output=.tmp/w-real.json forecasts=0 rows=22
+EXIT=2   # 9/25 起真实行程全部 22 天，今天 9/17 距最早一天还有 8 天，高德只给「当天+3 天」视野，全部 out_of_window；22 行逐行核对含 query 键，全部等于对应 day 原始 city（如「福州」，不是 AMap 解析名）
+
+plugins/china-trip-weaver/scripts/ctw journey weather --journey "$R/journey.json" --weather-result .tmp/w-real.json --base-revision 9 --output-json .tmp/drill.json
+JOURNEY_WEATHER_NOOP journey=../../../fujian-2026-09-25-to-10-10/journey.json revision=9
+EXIT=2
+ls .tmp/drill.json   # No such file or directory
+shasum -a 256 "$R/journey.json"
+80792d6018b440f9eb54332b0d6a983cf8c77ab0e385be25abffa3fce65e4a33  (演练后逐字不变)
+```
+
+演练前后额外用 `ls -la "$R/journey.json"` 与目录 mtime 双重核对：`journey.json` 本身 mtime 演练前后都是 `Sep 17 18:01`（未被两条命令写过），`$R` 目录 mtime 全程停在 `Sep 17 18:09`（早于本次会话开始时间，两条命令都没有在目录下新建/删除任何文件）；两条命令的 `--output-json`/`--weather-result` 全部落在本 worktree 自己的 `.tmp/` 下，未 `cd` 进 `$R`、未对它 `git add`（`$R` 本身也不在任何 git 仓库内，`git status` 报 `not a git repository`，与工作区 CLAUDE.md 记录一致）。
+
+### 收尾门禁
+
+```
+/usr/bin/python3 -m unittest discover -s tests
+Ran 756 tests in ~47-67s   # 750 基线 + 1(任务0复现) + 1(query新测试) + 4(journey_weather_cli)
+OK   # 0 skipped
+
+~/miniconda3/envs/core/bin/python -m pyflakes $(git ls-files '*.py')   # 0 行
+/usr/bin/python3 scripts/scan_secrets.py
+secret scan: 0 finding(s) across 406 file(s)
+git status --short -- demo   # 空
+```
+
+约束 pathspec（完成条件 2）：
+
+```
+git diff main --name-only
+PROGRESS.md
+plugins/china-trip-weaver/src/china_trip_weaver/cli.py
+plugins/china-trip-weaver/src/china_trip_weaver/journey.py
+plugins/china-trip-weaver/src/china_trip_weaver/weather_fold.py
+tests/test_weather_cli.py
+tests/test_weather_fold.py
+# 加新建 tests/test_journey_weather_cli.py（git status ?? 列出）——以上 7 个文件全部落在「界限」白名单内，未新建 src 下 .py
+```
+
+`tests/test_journey.py` 全程未打开过 Edit/Write，`git diff main -- tests/test_journey.py` 输出为空，逐字未改；该文件覆盖的 90 项测试本节任务 1 已单独跑绿。BLOCKED.md 本书记了「无裁决分叉，一处非阻塞设计判断供核对」一条（`replace_trips_in_journey` 的 `reason` 默认值取法，详见任务 1 小节）。只提交并推送 `journey-weather` 分支，未合并、未碰 CI 配置。

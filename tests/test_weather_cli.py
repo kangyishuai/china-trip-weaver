@@ -163,10 +163,25 @@ class WeatherCommandTests(unittest.TestCase):
         self.assertEqual(4, len(data["forecasts"]))
         for entry in data["forecasts"]:
             self.assertEqual(
-                {"date", "city", "adcode", "forecast", "advice", "status"}, set(entry.keys()),
+                {"date", "city", "adcode", "query", "forecast", "advice", "status"}, set(entry.keys()),
             )
             self.assertEqual("forecast", entry["status"])
             self.assertEqual("990100", entry["adcode"])
+
+    def test_output_json_forecast_rows_carry_the_query_display_name(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
+            output = Path(temporary) / "weather.json"
+            result = run_weather(
+                "--fixture", str(AMAP_FIXTURES / "weather.json"),
+                "--fixed-clock", "2026-09-04T00:00:00+08:00",
+                "--city", "示例市",
+                "--output-json", str(output),
+            )
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            data = load(output)
+        self.assertEqual(4, len(data["forecasts"]))
+        for entry in data["forecasts"]:
+            self.assertEqual("示例市", entry["query"])
 
     def test_city_and_trip_targets_are_mutually_exclusive(self):
         result = run_weather("--city", "福州", "--trip", str(WEEKEND_TRIP))

@@ -303,6 +303,24 @@ def _add_journey_parser(commands: Any) -> None:
         help="replace-Trip mode: reason recorded on the new Journey revision; "
         "defaults to the replacement Trip's own latest revision reason",
     )
+    journey_weather = journey_commands.add_parser(
+        "weather", help="fold a `ctw weather --output-json` envelope into every Trip of a Journey",
+    )
+    journey_weather.add_argument("--journey", type=Path, required=True)
+    journey_weather.add_argument(
+        "--weather-result", type=Path, required=True, dest="weather_result",
+        help="path to a `ctw weather --output-json` result",
+    )
+    journey_weather.add_argument(
+        "--base-revision", type=int, required=True, dest="base_revision",
+        help="the Journey revision number this fold was built against",
+    )
+    journey_weather.add_argument("--output-json", type=Path, required=True)
+    journey_weather.add_argument(
+        "--reason", default=None,
+        help="reason recorded on the new Journey revision; defaults to the weather fold's own reason",
+    )
+    journey_weather.add_argument("--fixed-clock", default=None)
 
 
 def _add_replan_parser(commands: Any) -> None:
@@ -752,6 +770,8 @@ def _cmd_journey(args: argparse.Namespace, progress: "_NDJSONProgress") -> int:
         return _cmd_journey_extract(args)
     if args.journey_command == "assemble":
         return _cmd_journey_assemble(args)
+    if args.journey_command == "weather":
+        return _cmd_journey_weather(args)
     return _cmd_journey_plan(args, progress)
 
 
@@ -907,6 +927,49 @@ def _cmd_journey_assemble(args: argparse.Namespace) -> int:
         return 0
     except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
         print("JOURNEY_ASSEMBLE_FAILED %s" % exc, file=sys.stderr)
+        return 1
+
+
+def _cmd_journey_weather(args: argparse.Namespace) -> int:
+    import hashlib
+
+    from .clock import FixedClock, SystemClock
+    from .weather_fold import fold_weather_into_journey
+
+    try:
+        clock = FixedClock.from_iso(args.fixed_clock) if args.fixed_clock else SystemClock()
+        journey_value = read_json(args.journey)
+        weather_result = read_json(args.weather_result)
+        if "forecasts" not in weather_result or "claims" not in weather_result:
+            raise ValueError(
+                "--weather-result must be a `ctw weather --output-json` envelope "
+                "with forecasts and claims"
+            )
+        updated = fold_weather_into_journey(
+            journey_value, weather_result, args.base_revision, clock, reason=args.reason,
+        )
+        if updated is None:
+            print("JOURNEY_WEATHER_NOOP journey=%s revision=%d" % (args.journey, args.base_revision))
+            return 2
+        before_revisions = {item["trip_id"]: item["revision"]["number"] for item in journey_value["trips"]}
+        trips_changed = sum(
+            1 for item in updated["trips"]
+            if before_revisions.get(item["trip_id"]) != item["revision"]["number"]
+        )
+        args.output_json.parent.mkdir(parents=True, exist_ok=True)
+        write_canonical_json(args.output_json, updated)
+        print(
+            "JOURNEY_WEATHER_COMPLETE json=%s revision=%d trips_changed=%d journey_sha256=%s"
+            % (
+                args.output_json,
+                updated["revision"]["number"],
+                trips_changed,
+                hashlib.sha256(canonical_json(updated).encode("utf-8")).hexdigest(),
+            )
+        )
+        return 0
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        print("JOURNEY_WEATHER_FAILED %s" % exc, file=sys.stderr)
         return 1
 
 
@@ -1332,11 +1395,11 @@ def _weather_needs_query(target: Mapping[str, Any], today: Any, horizon: Any) ->
 
 
 def _weather_row(
-    date: Any, city: str, adcode: Optional[str], *, status: str,
+    date: Any, city: str, adcode: Optional[str], *, query: str, status: str,
     forecast: Optional[Mapping[str, Any]] = None, advice: Any = None, note: Optional[str] = None,
 ) -> Dict[str, Any]:
     return {
-        "date": date, "city": city, "adcode": adcode, "forecast": forecast,
+        "date": date, "city": city, "adcode": adcode, "query": query, "forecast": forecast,
         "advice": list(advice or ()), "status": status, "note": note,
     }
 
@@ -1460,15 +1523,21 @@ def _cmd_weather(args: argparse.Namespace, progress: "_NDJSONProgress") -> int:
         for target in raw_targets:
             if target["date"] is not None and target["date"] > horizon:
                 rows.append(_weather_row(
-                    target["date"], target["display"], None, status="out_of_window",
+                    target["date"], target["display"], None, query=target["display"], status="out_of_window",
                     note=weather_helpers.forecast_available_on(target["date"]).isoformat(),
                 ))
                 continue
             if target["date"] is not None and target["date"] < today:
-                rows.append(_weather_row(target["date"], target["display"], None, status="no_forecast", note="日期已过"))
+                rows.append(_weather_row(
+                    target["date"], target["display"], None, query=target["display"],
+                    status="no_forecast", note="日期已过",
+                ))
                 continue
             if credential_missing:
-                rows.append(_weather_row(target["date"], target["display"], None, status="no_forecast", note="凭据缺失"))
+                rows.append(_weather_row(
+                    target["date"], target["display"], None, query=target["display"],
+                    status="no_forecast", note="凭据缺失",
+                ))
                 continue
             result = query_results[(target["kind"], target["display"])]
             all_claims.extend(result.claims)
@@ -1476,7 +1545,10 @@ def _cmd_weather(args: argparse.Namespace, progress: "_NDJSONProgress") -> int:
             if not result.claims:
                 ambiguous = any(warning.startswith("weather_ambiguous") for warning in result.warnings)
                 note = "多个同名地点" if ambiguous else "无结果"
-                rows.append(_weather_row(target["date"], target["display"], None, status="no_forecast", note=note))
+                rows.append(_weather_row(
+                    target["date"], target["display"], None, query=target["display"],
+                    status="no_forecast", note=note,
+                ))
                 if result.error_class not in (None, "no_results"):
                     hard_error = True
                 continue
@@ -1490,13 +1562,14 @@ def _cmd_weather(args: argparse.Namespace, progress: "_NDJSONProgress") -> int:
                     if stale:
                         rows.append(_weather_row(
                             row_date, value.get("city", target["display"]), value.get("adcode"),
-                            status="out_of_window",
+                            query=target["display"], status="out_of_window",
                             note=weather_helpers.forecast_available_on(row_date).isoformat(),
                         ))
                     else:
                         rows.append(_weather_row(
                             row_date, value.get("city", target["display"]), value.get("adcode"),
-                            status="forecast", forecast=value, advice=weather_helpers.advice_for(value),
+                            query=target["display"], status="forecast",
+                            forecast=value, advice=weather_helpers.advice_for(value),
                         ))
             else:
                 match = next(
@@ -1505,13 +1578,15 @@ def _cmd_weather(args: argparse.Namespace, progress: "_NDJSONProgress") -> int:
                 )
                 if match is None:
                     rows.append(_weather_row(
-                        target["date"], target["display"], None, status="no_forecast", note="预报未覆盖该日期",
+                        target["date"], target["display"], None, query=target["display"],
+                        status="no_forecast", note="预报未覆盖该日期",
                     ))
                 else:
                     value = match["value"]
                     rows.append(_weather_row(
                         target["date"], value.get("city", target["display"]), value.get("adcode"),
-                        status="forecast", forecast=value, advice=weather_helpers.advice_for(value),
+                        query=target["display"], status="forecast",
+                        forecast=value, advice=weather_helpers.advice_for(value),
                     ))
 
         forecast_count = sum(1 for row in rows if row["status"] == "forecast")
@@ -1543,6 +1618,7 @@ def _cmd_weather(args: argparse.Namespace, progress: "_NDJSONProgress") -> int:
                         "date": row["date"].isoformat() if row["date"] else None,
                         "city": row["city"],
                         "adcode": row["adcode"],
+                        "query": row["query"],
                         "forecast": row["forecast"],
                         "advice": row["advice"],
                         "status": row["status"],
