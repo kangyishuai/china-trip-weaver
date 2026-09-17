@@ -186,6 +186,7 @@ ctw research --city CITY --query TEXT [--max-results N] --output-json research.j
 ctw mobility --candidates CANDIDATES.json --modes transit,walking --output-json mobility.json
 ctw lodging --city CITY --check-in YYYY-MM-DD --check-out YYYY-MM-DD --output-json lodging.json
 ctw air --origin CITY --destination CITY --date YYYY-MM-DD --output-json air.json
+ctw weather (--city CITY [--city CITY ...] | --adcode CODE [--adcode CODE ...] | --journey JOURNEY.json | --trip TRIP.json) [--output-json weather.json]
 ctw replan --trip TRIP.json --event EVENT.json --base-revision N --output-json TRIP-rN.json --output-html TRIP-rN.html [--rail-result RAIL.json]
 ctw render TRIP.json --output TRIP.html
 ctw validate-html TRIP.html TRIP.json
@@ -201,6 +202,8 @@ ctw journey assemble --journey JOURNEY.json --replace-trip TRIP-rN.json --base-r
 首次装配和 `--replace-trip` 时，缺少 `budget_ledger` 的子 Trip 会先根据该 Trip 已有事实现算账本，再推导连接与 Journey 总额；已有账本保持不变。
 
 运行时不使用任何第三方 Python 包。Trip 与 Journey renderer 都会拒绝无效输入；两套 HTML validator 都会拦截结构、CSP、远程资源、危险链接、密钥、事实映射、追溯缺口和交易动作等违规。
+
+`ctw weather` 查询高德对城市、行政区码，或某份 Journey/Trip 文件里每一天的天气预报，四选一：`--city`（可重复，会拆分「福州／平潭」这类复合名）、`--adcode`（可重复）、`--journey`、`--trip`。高德只返回「今天起 4 天」的预报；Journey/Trip 里超出这个窗口的日期会标为 `out_of_window` 并给出可查日期，绝不编造预报。查不到或有歧义的地点会标为 `no_forecast` 并给出原因，不会被静默丢弃。
 
 `ctw replan` 的 `refresh` 事件用新查到的车次原地换掉一条火车腿：先跑 `ctw rail --output-json`，再把输出文件路径传给 `--rail-result`。`refresh` 事件必须带 `--rail-result`，其余事件类型一律拒绝。刷新会先删除 `subject_ref` 等于被替换腿的全部旧 claim，再追加本次车次的 claim，因此重复刷新不会累积过期证据。事件不带 `service_number` 时，默认选车只在发车不早于前一时段结束的候选里取到达最早的一班，全部不可行才报 `refresh_overlap`（message 带候选数与前一时段结束时间）；带 `service_number` 却命中多行时会报 `refresh_service_ambiguous`，除非事件的 `arrive_at` 或 `depart_at`（均可为完整 ISO 时间戳或 `HH:MM`）能唯一挑出一行。`suspend` 事件在同一个 patch 里删掉停运的腿（列车停运、轮渡停航）及其时段、budget_ledger 条目与随之孤儿化的 claim，用 `kind` 为 `free` 或 `poi` 的 `replacement_slot` 换掉原时段；patch 的 `trigger` 是 `disruption`。
 

@@ -179,7 +179,7 @@ tests/
 | 模块 | 一行职责 | 依赖 | 设计对应 | 完成定义 |
 |---|---|---|---|---|
 | `__init__.py` | 公开 package/version 常量 | stdlib | ADR-0002 | `0.1.0` 与 manifest 单源测试一致 |
-| `cli.py` | `doctor/plan/replan/render/validate` 参数与 JSON I/O | pipeline/validators | §02、§06 | argv 无 secrets；每命令 help/exit/golden tests |
+| `cli.py` | `doctor/plan/replan/render/validate/weather`（新增 `_cmd_weather`）参数与 JSON I/O | pipeline/validators | §02、§06 | argv 无 secrets；每命令 help/exit/golden tests |
 | `contracts.py` | 构造/序列化 Trip、AdapterResult、matrix/patch plain data | stdlib dataclasses/json | §03；[决策 4](../research/04-design-insights.md#4-采用一个版本化-itineraryjson-是所有层的唯一事实源) | Python 3.9；canonical JSON；schema examples round-trip |
 | `validate_trip.py` | 无第三方依赖的 release-critical shape/语义校验 | contracts/geo | §03.8、§06.6 | 与 JSON Schema fixtures/invalid cases一致；cross-ref/time/mode/patch gates 完整 |
 | `errors.py` | 稳定 error/health taxonomy | stdlib | §04.1.2 | 每 class 映射、retry flag、public message 有 tests |

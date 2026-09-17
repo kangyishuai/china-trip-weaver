@@ -2107,3 +2107,13 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 期间 `journey.json` 被外部并发进程改写（另一个与「住宿已订」相关的会话/进程，非本书任何命令所为），
 本书自己从未写过 `journey.json`/`journey-r*.json`/`福建中秋国庆16天行程*.html`，`candidates.json`（本书
 只读）mtime 也确认未变。
+## 书 AN6「`ctw weather` 命令」（2026-09-17，第三十波，worktree `.tmp/wt-an6` 分支 `weather-cli`）：闭合书 AN1 的一项缺口，一处非阻塞设计判断供核对，三项顺手活维持不做
+
+1. **闭合书 AN1（2026-09-17）记录的缺口**：`amap_http._request_contract` 的 `weather` 分支此前只靠实网抽查、没有自动化回归测试；管理者裁决已写明「并入第三十波 `ctw weather` 命令书（AN6）的任务清单」。本书 `tests/test_weather_cli.py::WeatherRequestContractTests` 三项（`adcode` 形状、`city` 形状、二选一校验）已交付，全量与单跑均绿，该缺口视为闭合，未改 `test_amap_live.py`（管理者原话已明确不需要）。
+
+2. **非阻塞设计判断，供核对**（详细推导见 PROGRESS.md「AN6」任务 1 段）：任务书「拍的板」对 `--city`/`--adcode` 模式（没有显式目标日期）的「日期晚于今天+3 → out_of_window」规则，逐行套用既有 `weather.forecast_available_on` 公式只会得到「1 条 forecast + 3 条 out_of_window」，凑不出验收文字「`--fixed-clock 2026-09-01` 时 4 天全 out_of_window」。这不是我读错这个已被 `tests/test_weather.py` 钉住的公式（`forecast_available_on(2026-09-04)=2026-09-01`，`today=2026-09-01` 时 09-04 确实已进入可查窗口，理应显示 forecast，不该判 out_of_window）。最终改用「整批」判断：对比 `today` 与本批返回里最早的 `forecast_date`，`today` 早于它就整批标记 out_of_window（每行「可查日期」提示仍用该行自己的日期 −3 天），否则整批按真实值显示。这条规则只在「回放夹具 + `--fixed-clock` 早于夹具数据」的测试场景下才会触发，真实直连查询里 AMap 恒返回以当天为首日的数据，不会走到这条支路；已用任务书给的两个夹具+时钟组合验证 1:1 吻合验收文字，并做了反向验证（改大窗口阈值到 3650 天后两项断言按预期变红，还原后变绿）。未发现需要裁决的真实二义性，此处只是把非显然的推导过程留痕，供以后维护这段逻辑的人核对起点。
+
+3. **顺手活按任务书裁定不做**：
+   - `cli.py::_probe_amap` 未加 `weather` 分支，`ctw doctor` 仍查不出高德天气能力是否配置正确——与书 AN1 记录的同一项未做事项重复，非新发现。
+   - 把预报写进 `journey.json`（day.weather 由规划器主动填充）——按任务书标注属于 AN7（规划器天气接线）范围，本书未碰 `planning.py`/`journey.py`。
+   - 用 `/provider_identity` claim 里的 `adcode`（跳过按城市名二次消歧）——同样标注属于 AN7 范围，本书 `--city`/`--adcode` 模式两种查询路径都直接转发用户输入，不做基于既有 `provider_identity` claim 的预解析。
