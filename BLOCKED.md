@@ -2150,3 +2150,13 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 无。全程没有遇到拿不准、需要管理者裁决的真实二义性。本书只改文档，写的是「拍的板」规定的目标态（`replace_trips_in_journey`、`_cmd_journey_weather`、`forecasts[].query` 等 AN8b 尚未合并的名字），核对方式是把另外 7 个已在 main 落地的标识符逐一 `git grep -n -- plugins tests` 确认真实存在（`fold_weather_into_journey`/`weather_fold_claim_missing`/`revision_conflict`/`split_city_names`/`weather_no_results`/`JH006`/`_plan_weather`，均命中，见 PROGRESS.md 本书任务 0/任务 2 记录），本书拍的板里的新名字则逐字比对文案与任务书原文。合并时仍需管理者对照 AN8b 实际落地的代码核验这些目标态名字与签名是否一致。
 
 管理者裁决（2026-09-17，验收时补记）：全部认可。合并后逐个 `git grep` 核对：`--weather-result`、`JOURNEY_WEATHER_NOOP`、`JOURNEY_WEATHER_COMPLETE`、`replace_trips_in_journey`、`_cmd_journey_weather`、`query`、`weather_fold_claim_missing`、`weather_no_results`、`JH006`、`_plan_weather`、`split_city_names` 在 AN8b 合入后的代码里全部命中；06 §7.6 的覆盖判定、op 顺序、健康行文案对着 weather_fold.py 逐条读过一致；README 两份用法行逐字相同；新增行无本机路径、无版本号字面值。已关闭。
+
+## 书「AP2：附近餐饮参考渲染与校验」（2026-09-17，第三十三波，worktree `.tmp/wt-ap2` 分支 `slot-dining-render`）：无裁决分叉，三处非阻塞判断供核对
+
+全程未遇到需要领导裁决、拿不准怎么办的分叉。「我替领导拍的板」三段（schema 形状、渲染模板、E007/JH007 校验规则）均已按字面执行，以下三处是必要的技术性收窄或白名单内的机械后果，非产品语义裁决，记录供核对：
+
+1. **白名单缺口，未越界解决**：`_render_day_slots` 被 Trip 页与 Journey 页共用，但两页的 `labels` 来自各自独立的字面量字典（`render/html.py::_labels` 与 `render/journey_html.py::_journey_labels`，后者不在本书白名单）。若照抄天气行的做法把新标签塞进 `_labels()` 的返回值，Journey 页调用共用渲染函数时会因 `_journey_labels` 缺键而 `KeyError` 崩溃，且本书不能去补那个字典。改用模块级 `DINING_LABELS`（仿既有 `ENUM_LABELS`/`PROVIDER_LABELS`/`FIELD_LABELS` 的写法，只按 `labels["locale"]` 查表，不进 `labels` 本身）解决，两页都验证过零错误、零改动 `journey_html.py`。「标签进 `_labels` 双语」按精神而非字面执行。
+2. **发现一处真实碰撞并修复**：任务书给的 HTML 模板字面写 `<div class="slot-dining" data-slot-id="…">`；但 `data-slot-id` 是 `AuditParser`/`_check_rendered_facts`（E003）里已被占用的保留属性名，专门用来识别 `<li>` 时段节点并核对其 `start_at`/`end_at`/`kind`/`status`。若照抄，渲染出的 `<div>` 会被同一套通用逻辑误认成又一个「时段节点」，因为它没有那些属性而立刻触发 E003（`slot facts differ from Trip`）与计数不符。改用 `data-dining-slot` 承载同样的「指回哪个 slot」语义，避免属性名碰撞；渲染夹具复跑 `validate_html`/`validate_journey_html` 均 errors=0。
+3. **`tests/test_contracts.py` 的两个硬编码计数**：白名单写「valid/invalid 各加一份」+ 该文件「都只加」，但两者字面冲突——加了新夹具不改 `test_accepted_examples_are_unchanged_in_test_fixtures` 里的 `3`/`4`，这条测试必然由 3/4 变 4/5 而失败，且失败与任何真实缺陷无关。参照本文件与 PROGRESS.md 记录的同类先例（新增 `.py` 需同步改 `test_design_docs.py` 计数），已直接改成 `4`/`5`，视为「新增夹具」这个被明确批准的动作的机械必然结果；`git diff main -- tests/test_contracts.py` 只有这两个数字变化。
+
+另：任务书未要求、但为通过既有 E003「未在文档中出现的 CNY 事实」检查而必须做的一处联动——`_check_rendered_facts` 的 `known_prices` 集合原本只收 `transport_legs`/`lodgings`/`pois` 的 `price.amount`，现同时收 `slot.dining.options[].cost_cny`（page 里的「人均 ¥32」需要被认出是 Trip 里真实存在的价格，而不是被当成臆造事实拒收）；07-renderer.md §7.1 的 E003 条目已补一句说明，`git diff main --stat` 只多了这一处判断逻辑与一句文档。

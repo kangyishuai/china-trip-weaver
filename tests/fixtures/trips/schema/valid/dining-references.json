@@ -1,0 +1,251 @@
+{
+  "schema_version": "1.0.0",
+  "trip_id": "dining-references-demo",
+  "revision": {
+    "number": 2,
+    "parent_revision": 1,
+    "created_at": "2026-09-20T09:10:00+08:00",
+    "reason": "attach nearby-dining reference to the lunch slot",
+    "created_by": "system"
+  },
+  "mode": "live",
+  "request": {
+    "origin": null,
+    "destinations": [{"ref_id": "city-fuzhou", "name": "福州", "city": "福州"}],
+    "start_date": "2026-09-20",
+    "end_date": "2026-09-21",
+    "travelers": 2,
+    "budget_cny": 2000,
+    "interests": ["古迹", "小吃"],
+    "pace": "balanced",
+    "constraints": [],
+    "assumptions": [],
+    "dining_preferences": {"cuisine": "闽菜", "avoid": ["动物内脏"]},
+    "locale": "zh-CN",
+    "pasted_notes": null
+  },
+  "days": [
+    {
+      "day_id": "day-1",
+      "date": "2026-09-20",
+      "city": "福州",
+      "timezone": "Asia/Shanghai",
+      "slots": [
+        {
+          "slot_id": "slot-1",
+          "start_at": "2026-09-20T09:30:00+08:00",
+          "end_at": "2026-09-20T11:30:00+08:00",
+          "kind": "poi",
+          "ref_id": "poi-sanfangqixiang",
+          "title": "三坊七巷步行",
+          "locked": false,
+          "status": "scheduled",
+          "claim_ids": []
+        },
+        {
+          "slot_id": "slot-2",
+          "start_at": "2026-09-20T11:45:00+08:00",
+          "end_at": "2026-09-20T13:00:00+08:00",
+          "kind": "meal",
+          "ref_id": "poi-lunch-spot",
+          "title": "福州本地午餐",
+          "locked": false,
+          "status": "scheduled",
+          "claim_ids": [],
+          "dining": {
+            "queried_at": "2026-09-20T08:00:00+08:00",
+            "anchor_ref": "poi-sanfangqixiang",
+            "anchor_name": "三坊七巷",
+            "radius_m": 1500,
+            "search_url": "https://uri.amap.com/search?keyword=%E7%BE%8E%E9%A3%9F&radius=1500",
+            "options": [
+              {
+                "provider_poi_id": "B0FFG00001",
+                "name": "老福州拌面",
+                "cuisine": "闽菜",
+                "tag": "老字号",
+                "rating": "4.7",
+                "cost_cny": 32,
+                "distance_m": 320,
+                "opentime_today": "10:00-21:00",
+                "address": "福州市鼓楼区南后街12号",
+                "deep_links": ["https://uri.amap.com/marker?position=119.296,26.083&name=%E8%80%81%E7%A6%8F%E5%B7%9E%E6%8B%8C%E9%9D%A2&src=chinatripweaver&coordinate=gaode&callnative=0"],
+                "claim_id": "claim-dining-option-1"
+              },
+              {
+                "provider_poi_id": "B0FFG00002",
+                "name": "三坊七巷沙茶面",
+                "cuisine": null,
+                "tag": null,
+                "rating": "4.5",
+                "cost_cny": null,
+                "distance_m": 480,
+                "opentime_today": null,
+                "address": null,
+                "deep_links": ["https://uri.amap.com/marker?position=119.298,26.081&name=%E6%B2%99%E8%8C%B6%E9%9D%A2&src=chinatripweaver&coordinate=gaode&callnative=0"],
+                "claim_id": "claim-dining-option-2"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "day_id": "day-2",
+      "date": "2026-09-21",
+      "city": "福州",
+      "timezone": "Asia/Shanghai",
+      "slots": [
+        {
+          "slot_id": "slot-3",
+          "start_at": "2026-09-21T10:00:00+08:00",
+          "end_at": "2026-09-21T12:00:00+08:00",
+          "kind": "free",
+          "ref_id": null,
+          "title": "按天气选择备选活动",
+          "locked": false,
+          "status": "tentative",
+          "claim_ids": [],
+          "dining": null
+        }
+      ]
+    }
+  ],
+  "transport_legs": [],
+  "lodgings": [],
+  "pois": [
+    {
+      "poi_id": "poi-sanfangqixiang",
+      "name": "三坊七巷",
+      "city": "福州",
+      "category": "historic-district",
+      "coordinates": null,
+      "recommended_duration_minutes": 120,
+      "opening_windows": [],
+      "price": null,
+      "deep_links": [],
+      "claim_ids": []
+    },
+    {
+      "poi_id": "poi-lunch-spot",
+      "name": "福州本地午餐",
+      "city": "福州",
+      "category": "dining",
+      "coordinates": null,
+      "recommended_duration_minutes": 60,
+      "opening_windows": [],
+      "price": null,
+      "deep_links": [],
+      "claim_ids": []
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "claim-dining-option-1",
+      "subject_ref": "slot-2",
+      "field_path": "/days/0/slots/1/dining/options/0",
+      "value": "老福州拌面",
+      "source_url": "https://restapi.amap.com/v5/place/around",
+      "provider": "amap",
+      "queried_at": "2026-09-20T08:00:00+08:00",
+      "status": "verified",
+      "confidence": 0.8,
+      "mode": "live",
+      "as_of": "2026-09-20T08:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "json_path": "$.pois[0]"
+    },
+    {
+      "claim_id": "claim-dining-option-2",
+      "subject_ref": "slot-2",
+      "field_path": "/days/0/slots/1/dining/options/1",
+      "value": "三坊七巷沙茶面",
+      "source_url": "https://restapi.amap.com/v5/place/around",
+      "provider": "amap",
+      "queried_at": "2026-09-20T08:00:00+08:00",
+      "status": "verified",
+      "confidence": 0.8,
+      "mode": "live",
+      "as_of": "2026-09-20T08:00:00+08:00",
+      "raw_ref": null,
+      "response_hash": null,
+      "json_path": "$.pois[1]"
+    }
+  ],
+  "provider_health": [
+    {
+      "provider": "amap",
+      "version": "web-service-2026-09-probe",
+      "mode": "live",
+      "status": "ready",
+      "checked_at": "2026-09-20T08:00:00+08:00",
+      "capabilities": ["geocode", "poi", "route", "weather"],
+      "reason": "contract probe passed"
+    }
+  ],
+  "unknowns": [],
+  "patches": [
+    {
+      "patch_id": "patch-1-2",
+      "base_revision": 1,
+      "target_revision": 2,
+      "created_at": "2026-09-20T09:10:00+08:00",
+      "trigger": "dining",
+      "reason": "attach nearby-dining reference to the lunch slot",
+      "scope": {
+        "day_ids": ["day-1"],
+        "affected_refs": ["slot-2"],
+        "locked_refs": []
+      },
+      "operations": [
+        {
+          "op": "add",
+          "path": "/days/0/slots/1/dining",
+          "value": {
+            "queried_at": "2026-09-20T08:00:00+08:00",
+            "anchor_ref": "poi-sanfangqixiang",
+            "anchor_name": "三坊七巷",
+            "radius_m": 1500,
+            "search_url": "https://uri.amap.com/search?keyword=%E7%BE%8E%E9%A3%9F&radius=1500",
+            "options": [
+              {
+                "provider_poi_id": "B0FFG00001",
+                "name": "老福州拌面",
+                "cuisine": "闽菜",
+                "tag": "老字号",
+                "rating": "4.7",
+                "cost_cny": 32,
+                "distance_m": 320,
+                "opentime_today": "10:00-21:00",
+                "address": "福州市鼓楼区南后街12号",
+                "deep_links": ["https://uri.amap.com/marker?position=119.296,26.083&name=%E8%80%81%E7%A6%8F%E5%B7%9E%E6%8B%8C%E9%9D%A2&src=chinatripweaver&coordinate=gaode&callnative=0"],
+                "claim_id": "claim-dining-option-1"
+              },
+              {
+                "provider_poi_id": "B0FFG00002",
+                "name": "三坊七巷沙茶面",
+                "cuisine": null,
+                "tag": null,
+                "rating": "4.5",
+                "cost_cny": null,
+                "distance_m": 480,
+                "opentime_today": null,
+                "address": null,
+                "deep_links": ["https://uri.amap.com/marker?position=119.298,26.081&name=%E6%B2%99%E8%8C%B6%E9%9D%A2&src=chinatripweaver&coordinate=gaode&callnative=0"],
+                "claim_id": "claim-dining-option-2"
+              }
+            ]
+          }
+        }
+      ],
+      "reverify_claim_ids": ["claim-dining-option-1", "claim-dining-option-2"],
+      "stability": {
+        "preserved_refs": ["day-1", "day-2", "slot-1", "slot-3"],
+        "changed_refs": ["slot-2"],
+        "score": 0.95
+      }
+    }
+  ],
+  "generated_at": "2026-09-20T09:10:00+08:00"
+}

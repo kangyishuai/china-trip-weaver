@@ -177,6 +177,7 @@ def validate_html(html_text: str, trip: Mapping[str, Any]) -> HTMLValidationRepo
     visible = _check_trip_mode_badge(parser, trip, add)
     _check_dynamic_fact_coverage(parser, trip, add)
     _check_day_weather(html_text, trip, add)
+    _check_slot_dining(html_text, trip, add)
     _check_coordinates_and_schematic(parser, trip, add)
     _check_transaction_actions(parser, visible, add)
 
@@ -299,6 +300,13 @@ def _check_rendered_facts(parser: AuditParser, trip: Mapping[str, Any], add: Cal
         for group in ("transport_legs", "lodgings", "pois")
         for item in trip[group]
         if item.get("price") and item["price"]["amount"] is not None
+    }
+    known_prices |= {
+        _number(option["cost_cny"])
+        for day in trip["days"]
+        for slot in day["slots"]
+        for option in (slot.get("dining") or {}).get("options", ())
+        if option["cost_cny"] is not None
     }
     unexpected_prices = sorted(set(PRICE_FACT_RE.findall(user_fact_text)) - known_prices)
     if unexpected_prices:
@@ -451,6 +459,63 @@ def _check_weather_blocks(html_text: str, days: Sequence[Mapping[str, Any]], cod
 
 def _check_day_weather(html_text: str, trip: Mapping[str, Any], add: Callable[[str, str], None]) -> None:
     _check_weather_blocks(html_text, trip["days"], "E006", add)
+
+
+NO_DINING_TEXT = ("附近餐饮参考：暂无", "Nearby dining: none found")
+DINING_BLOCK_RE = re.compile(
+    r'<div class="slot-dining" data-dining-slot="(?P<slot_id>[^"]*)">(?P<body>.*?)</div>',
+    re.DOTALL,
+)
+DINING_OPTION_RE = re.compile(
+    r'<li class="dining-option" data-poi-id="(?P<poi_id>[^"]*)" data-rating="(?P<rating>[^"]*)" '
+    r'data-cost="(?P<cost>[^"]*)" data-distance="(?P<distance>[^"]*)">(?P<text>.*?)</li>',
+    re.DOTALL,
+)
+
+
+def _check_dining_blocks(html_text: str, days: Sequence[Mapping[str, Any]], code: str, add: Callable[[str, str], None]) -> None:
+    """Each meal/free slot's rendered dining reference (or its absence) must read back exactly what its own slot.dining says.
+
+    Shared by the Trip page (code ``E007``) and the Journey page (code ``JH007``), which render the
+    same ``slot_dining_block`` output; ``days`` is the Journey's flattened days for the latter.
+    """
+    expected_slots = [slot for day in days for slot in day["slots"] if "dining" in slot]
+    if not expected_slots:
+        return
+    blocks = list(DINING_BLOCK_RE.finditer(html_text))
+    if len(blocks) != len(expected_slots):
+        add(code, "slot-dining block count differs from source slots")
+        return
+    for slot, block in zip(expected_slots, blocks):
+        dining = slot["dining"]
+        if block.group("slot_id") != slot["slot_id"]:
+            add(code, "slot-dining slot id differs from Trip: %s" % slot["slot_id"])
+            continue
+        body = block.group("body")
+        if dining is None:
+            if not any(label in unescape(body) for label in NO_DINING_TEXT):
+                add(code, "slot-dining missing-reference text differs from Trip: %s" % slot["slot_id"])
+            continue
+        options = list(DINING_OPTION_RE.finditer(body))
+        if len(options) != len(dining["options"]):
+            add(code, "slot-dining option count differs from Trip: %s" % slot["slot_id"])
+            continue
+        for option, match in zip(dining["options"], options):
+            expected_cost = "" if option["cost_cny"] is None else _number(option["cost_cny"])
+            option_name = unescape(match.group("text")).split(" · ", 1)[0]
+            if (
+                match.group("poi_id") != option["provider_poi_id"]
+                or match.group("rating") != option["rating"]
+                or match.group("cost") != expected_cost
+                or match.group("distance") != str(option["distance_m"])
+                or option_name != option["name"]
+            ):
+                add(code, "slot-dining option facts differ from Trip: %s" % slot["slot_id"])
+                break
+
+
+def _check_slot_dining(html_text: str, trip: Mapping[str, Any], add: Callable[[str, str], None]) -> None:
+    _check_dining_blocks(html_text, trip["days"], "E007", add)
 
 
 def _check_coordinates_and_schematic(parser: AuditParser, trip: Mapping[str, Any], add: Callable[[str, str], None]) -> None:

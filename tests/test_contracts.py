@@ -80,8 +80,8 @@ class ContractTests(unittest.TestCase):
 
     def test_accepted_examples_are_unchanged_in_test_fixtures(self):
         self.assertFalse((ROOT / "docs" / "design" / "schema" / "examples").exists())
-        self.assertEqual(3, len(list(VALID.glob("*.json"))))
-        self.assertEqual(4, len(list(INVALID.glob("*.json"))))
+        self.assertEqual(4, len(list(VALID.glob("*.json"))))
+        self.assertEqual(5, len(list(INVALID.glob("*.json"))))
 
     def test_both_valid_examples_pass_schema_and_semantics(self):
         for path in sorted(VALID.glob("*.json")):
