@@ -464,7 +464,7 @@ claim』与 `mcp_stdio.py`/`rail12306.py`『既有的 12306 站点候选靠 AMap
 删掉取值校验后 `test_request_contract_rejects_unsupported_sortrule` 变红
 （`AssertionError: ContractMismatch not raised`），`cp` 还原并 `touch` 后三项复绿。
 
-checklist②③ **被真实 schema 冲突阻塞，未实现**：只改 `_pois` 加一行
+checklist②③ 里 `distance_meters` 那一条**被真实 schema 冲突阻塞，未实现**：只改 `_pois` 加一行
 `"distance_meters": int(raw["distance"]) if body.get("api") == "around-v5" else None`（未碰 schema、
 未加新夹具），跑 `tests.test_providers` 立刻 5 项从绿变红（`test_fixture_amap_around_stations`／
 `boundary_hk`／`malicious`／`pagination_page2`／`success`，`Ran 112 tests ... FAILED (failures=5)`），
@@ -475,16 +475,32 @@ property is not allowed']`。根因：`#/$defs/poi`
 `run_fixture`（[test_providers.py:84-96](tests/test_providers.py:84)）对每个 POI 类夹具的每个归一化
 项都用 `SchemaSubsetValidator.validate_fragment("#/$defs/poi", item)` 强校验，`additionalProperties`
 分支（[validate_trip.py:163-166](plugins/china-trip-weaver/src/china_trip_weaver/validate_trip.py:163)）
-逐键比对，未声明的键一律 `S_ADDITIONAL`。这不是只命中 `around_stations` 一处的偶然——本书按板要建
-的 `around_dining` 新夹具会在同一次回放里被同一条规则拦下，checklist②要求的「回放项带
-`distance_meters`」在当前 schema 下无法通过，③同理。三条硬约束互斥（板上「`_pois` 加键
-`distance_meters`」／界限「不许碰 schema」／完成条件「全部既有夹具回放结论不变、`tests.test_providers`
-与全量绿」），任何两条可同时满足，三条凑不齐。按任务书「让步顺序：旧行为字节不变 > 合同严格 >
-省事」，本书保留旧行为与全量绿、放弃②③的字面实现：**已 `git checkout` 撤销 `amap.py` 的改动**，
-**未新增** `around_dining` 夹具／`build_provider_fixtures.py` 的对应 case，`fixture_count` 停留在
-88（未改 `tests/test_providers.py` 的 `88`）。最终态：`/usr/bin/python3 -m unittest discover -s
-tests` `Ran 759 tests`（756 基线 + 3 条新 sortrule 用例）`OK` 0 skipped；`scan_secrets` 0；pyflakes
-0；`git status -- demo` 空（未碰渲染/demo 相关任何文件）。
+逐键比对，未声明的键一律 `S_ADDITIONAL`。这不是只命中 `around_stations` 一处的偶然——`around_dining`
+新夹具回放时会被同一条规则拦下。三条硬约束互斥（板上「`_pois` 加键 `distance_meters`」／界限「不许碰
+schema」／完成条件「全部既有夹具回放结论不变、`tests.test_providers` 与全量绿」），任何两条可同时满
+足，三条凑不齐。按任务书「让步顺序：旧行为字节不变 > 合同严格 > 省事」，`_pois`/`amap.py` 的改动已
+`git checkout` 撤销，`distance_meters` 键至今不存在于任何归一化项上。
+
+checklist②**除 `distance_meters` 外的部分已实现**：`distance_meters` 是否可加只取决于 schema，与夹具
+本身是否存在是两件独立的事——夹具的原始 JSON（`pois[].distance`）不经过 `#/$defs/poi` 校验，只有
+`_pois()` 归一化后的 item 才会。于是仍在界限内（只改 `build_provider_fixtures.py`／`tests/fixtures/
+providers/`（脚本重生成）／`tests/test_providers.py`（只加））补上了 `around_dining` case：新增
+`amap_dining_poi()` 助手＋6 家合成餐厅（distance 820/1240/310/1480/640/960，不按升序；4 家 business
+齐全 rating/cost/tag/keytag/rectag/opentime_today/opentime_week/business_area；1 家『示例快餐店』缺
+`rating`；1 家『示例火锅店』只给 rating/cost/tag/keytag=火锅，不进「齐全」那 4 家避免与「1 家 keytag
+为火锅」重复计数），request 用 `sortrule: "weight"`。`/usr/bin/python3 scripts/build_provider_fixtures.py`
+重生成后 `manifest.json` 的 `fixture_count` 88→89，`tests/test_providers.py:118` 的断言同步改 89。新增
+`AroundDiningFixtureTests`（3 个用例：夹具记录的请求确实用了 `sortrule=weight`；raw `distance` 不是升
+序；回放 6 项且 4 条 `/business` claim 齐全 8 键、1 条缺 `rating`、1 条 `keytag=="火锅"`），类文档字符
+串明确写明 `distance_meters` 未测、指向 BLOCKED.md。`around_stations.json`/`station_distance.py` 相对
+main 零改动（`git diff main -- 两文件` 为空）。最终态：`/usr/bin/python3 -m unittest discover -s tests`
+`Ran 763 tests`（759 + 1 条自动生成的 `test_fixture_amap_around_dining` + 3 条 `AroundDiningFixtureTests`）
+`OK` 0 skipped；`scan_secrets` 0 finding(s) across 408 file(s)；pyflakes 0；`git status -- demo` 空。
+
+checklist③（`around_stations` 带 `distance_meters=5883`、文本搜索夹具 `distance_meters` 为 None）**完全
+未实现**：它不像②那样有「不依赖 schema 的部分」可拆出来——`around_stations` 是既有夹具，这条验收唯一
+要做的事就是断言 `_pois()` 归一化后的 item 携带 `distance_meters`，而这正是被 schema 挡住的那部分代
+码，没有独立于 `distance_meters` 键存在的东西可以先测。
 
 供裁决的最小修复方向（详见 BLOCKED.md，已 `spawn_task` 提醒管理者）：给 `#/$defs/poi` 加一个**可选**
 属性 `"distance_meters": {"type": ["integer", "null"]}`（不进 `required`）。这对现有全部夹具零影响——

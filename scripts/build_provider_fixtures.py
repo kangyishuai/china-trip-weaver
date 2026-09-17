@@ -356,6 +356,28 @@ def amap_poi_body(items: Sequence[Mapping[str, Any]], page_num: int = 1) -> Mapp
     }
 
 
+def amap_dining_poi(
+    name: str,
+    identifier: str,
+    distance: str,
+    poi_type: str,
+    business: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    return {
+        "id": identifier,
+        "name": name,
+        "location": "121.005000,31.003000",
+        "pname": "上海市",
+        "cityname": "上海市",
+        "adname": "示例区",
+        "address": "示例路1号",
+        "adcode": "310000",
+        "type": poi_type,
+        "distance": distance,
+        "business": dict(business),
+    }
+
+
 def amap_route_body(api: str, duration: int, distance: int, key: str = "paths") -> Mapping[str, Any]:
     return {
         "status": "1", "info": "OK", "infocode": "10000", "count": "1", "api": api,
@@ -845,6 +867,73 @@ def build() -> List[Dict[str, Any]]:
                 }],
             }),
             item_count=1, schema_refs=[SCHEMA_REFS["poi"]], source=AMAP_SOURCE, captured_at=AMAP_CAPTURED_AT,
+        ),
+        fixture(
+            "amap", "around_dining",
+            request("poi_around", {
+                "location": "121.000000,31.000000", "keywords": "餐厅",
+                "types": "050100|050200|050400", "radius": 1500, "page_size": 10,
+                "sortrule": "weight",
+            }),
+            response({
+                "status": "1", "info": "OK", "infocode": "10000", "count": "6",
+                "api": "around-v5", "page_size": 10, "page_num": 1,
+                "pois": [
+                    amap_dining_poi(
+                        "示例川菜馆", "SYNTHETIC-AROUND-DINING-1001", "820", "餐饮服务;中餐厅;中餐厅",
+                        {
+                            "rating": "4.5", "cost": "88", "tag": "川菜;火锅",
+                            "keytag": "川菜", "rectag": "人气餐厅;必吃榜",
+                            "opentime_today": "10:00-22:00", "opentime_week": "周一至周日 10:00-22:00",
+                            "business_area": "示例商圈",
+                        },
+                    ),
+                    amap_dining_poi(
+                        "示例海鲜楼", "SYNTHETIC-AROUND-DINING-1002", "1240", "餐饮服务;海鲜酒楼;海鲜酒楼",
+                        {
+                            "rating": "4.2", "cost": "150", "tag": "粤菜;海鲜",
+                            "keytag": "海鲜", "rectag": "人气餐厅",
+                            "opentime_today": "11:00-21:30", "opentime_week": "周一至周日 11:00-21:30",
+                            "business_area": "示例商圈",
+                        },
+                    ),
+                    amap_dining_poi(
+                        "示例小吃店", "SYNTHETIC-AROUND-DINING-1003", "310", "餐饮服务;小吃快餐店;小吃快餐店",
+                        {
+                            "rating": "4.8", "cost": "35", "tag": "小吃;快餐",
+                            "keytag": "小吃", "rectag": "必吃榜",
+                            "opentime_today": "07:00-20:00", "opentime_week": "周一至周日 07:00-20:00",
+                            "business_area": "示例商圈",
+                        },
+                    ),
+                    amap_dining_poi(
+                        "示例西餐厅", "SYNTHETIC-AROUND-DINING-1004", "1480", "餐饮服务;西餐厅;西餐厅",
+                        {
+                            "rating": "4.0", "cost": "200", "tag": "西餐;牛排",
+                            "keytag": "西餐", "rectag": "情侣推荐",
+                            "opentime_today": "11:30-22:00", "opentime_week": "周一至周日 11:30-22:00",
+                            "business_area": "示例商圈",
+                        },
+                    ),
+                    amap_dining_poi(
+                        "示例快餐店", "SYNTHETIC-AROUND-DINING-1005", "640", "餐饮服务;快餐厅;快餐厅",
+                        {
+                            "cost": "30", "tag": "快餐",
+                            "keytag": "快餐", "rectag": "",
+                            "opentime_today": "09:00-21:00", "opentime_week": "周一至周日 09:00-21:00",
+                            "business_area": "示例商圈",
+                        },
+                    ),
+                    amap_dining_poi(
+                        "示例火锅店", "SYNTHETIC-AROUND-DINING-1006", "960", "餐饮服务;火锅店;火锅店",
+                        {
+                            "rating": "4.3", "cost": "108", "tag": "火锅",
+                            "keytag": "火锅",
+                        },
+                    ),
+                ],
+            }),
+            item_count=6, schema_refs=[SCHEMA_REFS["poi"]] * 6, source=AMAP_SOURCE, captured_at=AMAP_CAPTURED_AT,
         ),
     ])
 

@@ -39,23 +39,39 @@ tests.test_providers -v` 立刻 5 项从绿变红（`test_fixture_amap_around_st
 AssertionError: Lists differ: [] != ['S_ADDITIONAL /distance_meters additional property is not allowed']
 ```
 
-这不是只命中现有夹具的偶然：`additionalProperties:false` 对每个 POI 类夹具一视同仁，本书按板要建的
-`around_dining` 新夹具回放时会被同一条规则拦下，验收②③要求的「回放项带 `distance_meters`」在当前
-schema 下无法通过。三条硬约束互斥，任何两条可同时满足，三条凑不齐：①板上「`_pois` 加键
-`distance_meters`」；②界限「不许碰 schema」；③完成条件「全部既有夹具回放结论不变，
-`tests.test_providers` 与全量绿」。按任务书「让步顺序：旧行为字节不变 > 合同严格 > 省事」，本书选择
-保留①③、放弃②的字面实现——**已用 `git checkout` 撤销 `amap.py` 的改动**，**未新增**
-`around_dining` 夹具／`build_provider_fixtures.py` 对应 case，`fixture_count` 停留在 88。已完成并验
-收通过、不依赖 schema 的只有 `_request_contract` 的 `sortrule` 分支（任务 1 checklist①，含反向验
-证）。完整命令输出见 PROGRESS.md「书 AP1a」任务 1 小节。
+这不是只命中现有夹具的偶然：`additionalProperties:false` 对每个 POI 类夹具一视同仁，任何携带
+`distance_meters` 的归一化项（不论来自哪个夹具）都会撞同一条规则。按任务书「让步顺序：旧行为字节
+不变 > 合同严格 > 省事」，`_pois`/`amap.py` 的改动已用 `git checkout` 撤销，`distance_meters` 这个键
+本身至今不存在于任何归一化项上。
+
+**`distance_meters` 之外的部分已补上**：夹具的原始 JSON 内容与 `_pois()` 归一化后的 item 是两码事——
+只有后者经过 `#/$defs/poi` 强校验，前者（`pois[].distance`）不受影响。于是 `around_dining` case 已按
+板加进 `scripts/build_provider_fixtures.py`（新增 `amap_dining_poi()` 助手，6 家合成餐厅，distance
+820/1240/310/1480/640/960 不按升序，request `sortrule: "weight"`，4 家 business 齐全 8 键、1 家『示例
+快餐店』缺 `rating`、1 家『示例火锅店』只给 4 键且 `keytag` 为「火锅」，刻意不让它同时落进「齐全」那
+4 家、避免与「1 家 keytag 为火锅」重复计数），`/usr/bin/python3 scripts/build_provider_fixtures.py`
+重生成后 `manifest.json` 的 `fixture_count` 88→89，`tests/test_providers.py:118` 同步改 89。新增
+`AroundDiningFixtureTests` 三个用例覆盖「夹具记录的请求用了 `sortrule=weight`」「raw `distance` 不是
+升序」「回放 6 项、4 条 `/business` claim 齐全 8 键、1 条缺 `rating`、1 条 `keytag=='火锅'`」，类文档
+字符串写明 `distance_meters` 未测、原因指回本节。`git diff main -- around_stations.json
+station_distance.py` 仍为空。已完成并验收通过、不依赖 schema 的是：`_request_contract` 的 `sortrule`
+分支（checklist①，含反向验证）＋ `around_dining` 夹具及除 `distance_meters` 外的全部断言（checklist②
+的可拆部分）。`/usr/bin/python3 -m unittest discover -s tests` 最终 `Ran 763 tests OK` 0 skipped；
+`scan_secrets` 0 finding(s) across 408 file(s)；pyflakes 0。完整命令输出见 PROGRESS.md「书 AP1a」任务
+1 小节。
+
+checklist③（`around_stations` 带 `distance_meters=5883`、文本搜索夹具 `distance_meters` 为 None）没有
+可拆的独立部分——它就是在断言既有夹具的 `_pois()` 归一化结果携带 `distance_meters`，这正是被 schema
+挡住的那段代码，仍完全未实现。
 
 供裁决：是否授权给 `#/$defs/poi` 加一个**可选**属性 `"distance_meters": {"type": ["integer",
 "null"]}`（不进 `required`）——对现有全部夹具零影响，因为 `validate_trip.py` 的 `properties` 校验只
 在键存在于被测值里才递归
 （[validate_trip.py:167-169](plugins/china-trip-weaver/src/china_trip_weaver/validate_trip.py:167)），
 不存在的可选键不触发任何检查。若认可，需要另开一本被授权改 schema 的书（或明确豁免本书的「不许碰
-schema」）来补 checklist②③与 `around_dining` 夹具；在此之前，`_pois` 无法安全地携带
-`distance_meters`，下游 AP1b/AP2 若依赖这个键需要先等这条裁决。已用 `spawn_task` 给管理者留一条提
+schema」）来把 `distance_meters` 补进 `_pois`、把 `AroundDiningFixtureTests` 里那条被跳过的断言换成
+真断言、并补 checklist③；在此之前，`_pois` 无法安全地携带 `distance_meters`，下游 AP1b/AP2 若依赖这
+个键需要先等这条裁决。已用 `spawn_task` 给管理者留一条提
 醒，供其决定是否采纳。
 
 ---

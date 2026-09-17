@@ -115,7 +115,7 @@ class ProviderCorpusTests(unittest.TestCase):
         manifest = load(FIXTURES / "manifest.json")
         listed = {entry["path"] for entry in manifest["files"]}
         actual = {path.relative_to(FIXTURES).as_posix() for path in fixture_paths()}
-        self.assertEqual(88, manifest["fixture_count"])
+        self.assertEqual(89, manifest["fixture_count"])
         self.assertEqual(listed, actual)
         for entry in manifest["files"]:
             data = (FIXTURES / entry["path"]).read_bytes()
@@ -703,6 +703,59 @@ class PoiAroundRequestContractTests(unittest.TestCase):
             amap_http._request_contract(
                 _poi_around_request(self._base_parameters(sortrule="rating"))
             )
+
+
+class AroundDiningFixtureTests(unittest.TestCase):
+    """Extra coverage for the around_dining fixture beyond the generic replay
+    in ProviderCorpusTests (book AP1a, task 1 checklist item 2).
+
+    distance_meters on normalized items is intentionally NOT asserted here:
+    _pois() does not add that key yet. #/$defs/poi has additionalProperties
+    false and no distance_meters property, so adding the key trips schema
+    validation on 5 existing fixtures; this book's boundary forbids touching
+    schema. See BLOCKED.md ("poi_around 综合排序与 distance_meters") for the
+    full diagnosis and a proposed minimal schema fix. This class asserts
+    everything about the fixture that does not depend on that still-blocked
+    change.
+    """
+
+    FIXTURE_PATH = FIXTURES / "amap" / "around_dining.json"
+
+    def test_fixture_recorded_request_used_weight_sortrule(self):
+        fixture = load(self.FIXTURE_PATH)
+        self.assertEqual("weight", fixture["request"]["parameters"]["sortrule"])
+
+    def test_raw_distances_are_not_sorted_ascending(self):
+        fixture = load(self.FIXTURE_PATH)
+        distances = [int(poi["distance"]) for poi in fixture["transport"]["body"]["pois"]]
+        self.assertEqual(6, len(distances))
+        self.assertNotEqual(sorted(distances), distances)
+
+    def test_replay_yields_six_items_with_expected_business_variety(self):
+        fixture = load(self.FIXTURE_PATH)
+        adapter = AMapAdapter()
+        request = ProviderRequest(**fixture["request"])
+        credentials = resolve_credentials(PROVIDER_ENV["amap"], ROOT / ".tmp" / "provider-fixture-no-file")
+        transport = ReplayTransport(fixture["transport"], raw_ref=str(self.FIXTURE_PATH))
+        context = ProviderContext(
+            clock=FixedClock.from_iso(fixture["captured_at"]),
+            credentials=credentials,
+            transport=transport,
+        )
+        result = adapter.query(request, context)
+        self.assertEqual(6, len(result.normalized_items))
+        business_claims = [claim for claim in result.claims if claim["field_path"] == "/business"]
+        self.assertEqual(6, len(business_claims))
+        full_keys = {
+            "rating", "cost", "tag", "keytag", "rectag",
+            "opentime_today", "opentime_week", "business_area",
+        }
+        full_count = sum(1 for claim in business_claims if full_keys.issubset(claim["value"]))
+        self.assertEqual(4, full_count)
+        no_rating = [claim for claim in business_claims if "rating" not in claim["value"]]
+        self.assertEqual(1, len(no_rating))
+        hotpot = [claim for claim in business_claims if claim["value"].get("keytag") == "火锅"]
+        self.assertEqual(1, len(hotpot))
 
 
 for _path in fixture_paths():
