@@ -2133,3 +2133,5 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 
 无。全程没有遇到拿不准、需要管理者裁决的真实二义性。任务书「建议复用 `planning._weather_cast_claim`」这一条经核对后判定不适用（该函数只按 `forecast_date` 匹配，`ctw weather --journey` 一次查询的 `claims[]` 会混进不同城市同一天的多条记录，按日期匹配会选错城市），改成按 `value` 逐键等于该行 `forecast` 消歧；这属于任务书明确允许的「建议可走更好的路」，已在 PROGRESS.md「任务 0 核对记录」写明原因，不算裁决分叉，此处仅留一句索引供核对。
 
+管理者裁决（2026-09-17，验收时补记）：按 `value` 逐键匹配 claim 的判断认可（真实 16 天信封一次混 22 行、多城同日，按日期取第一条必错）。验收另查出一处与任务书「一次重组、revision+1」不符的行为：`fold_weather_into_journey` 逐 Trip 调 `replace_trip_in_journey`，两个 Trip 同时被改时 Journey 版本从 1 跳到 3、`parent_revision` 指向从未落盘的 2（demo/journey-16d 折 10/05+10/06 实测）。根因是本书把 journey.py 设为只读，执行者没有单次多 Trip 重组的入口，不算执行者违规；AN8b 补 `replace_trips_in_journey` 并让 `fold_weather_into_journey` 改走它。其余暗卷（真实 journey 副本折入手造 9/25 预报：只 north 变、另两段逐字节不变、页面 16 行天气 1 有 15 暂无、validate-html 0、署名含高德；二折 NOOP；claim 篡改报错不写；四个假 Key 全量 750 绿）全部通过。已关闭。
+
