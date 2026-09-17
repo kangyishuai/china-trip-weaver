@@ -282,6 +282,10 @@ def _check_rendered_facts(parser: AuditParser, trip: Mapping[str, Any], add: Cal
         if name in USER_TEXT_ATTRIBUTES and not name.startswith("data-")
     ])
     known_services = {leg["service_number"] for leg in trip["transport_legs"] if leg["service_number"]}
+    known_services |= {
+        lock["service_number"]
+        for lock in ((trip.get("request") or {}).get("locked_rail_services") or ())
+    }
     unexpected_services = sorted(set(TRAIN_FACT_RE.findall(user_fact_text)) - known_services)
     if unexpected_services:
         token = unexpected_services[0]

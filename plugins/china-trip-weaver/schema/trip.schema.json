@@ -390,6 +390,11 @@
           "description": "Departure time (HH:MM, local). Optional; only needed to disambiguate a service_number that resolves to more than one same-day row, such as two stations in the same city.",
           "type": "string",
           "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+        },
+        "arrive_time": {
+          "description": "Arrival time (HH:MM, local). Optional; only needed to disambiguate a service_number whose same-day rows share one depart_time but arrive at two different same-city stations, such as a return leg with two in-city destination stations.",
+          "type": "string",
+          "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
         }
       }
     },

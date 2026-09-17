@@ -131,7 +131,7 @@ renderer 进程不接收 provider env，Trip Schema 没有 credential 字段；�
 
 - E001：缺 doctype/charset/viewport/lang/唯一 main/h1。
 - E002：`trip-data` 缺失、超过 1 个、不能 parse，或 parse 后不与输入 canonical-equal。
-- E003：任一 day/slot/entity ID 未恰好渲染一次；或 UI 出现 Trip 中不存在的时间/价格/service number。
+- E003：任一 day/slot/entity ID 未恰好渲染一次；或 UI 出现 Trip 中不存在的时间/价格/service number——已知车次号集合同时并入 `request.locked_rail_services[].service_number`，因为结构化声明的已购车次是既成事实，即便对应腿因查不到/歧义退回占位腿也不算“不存在”；见 [第 06 篇 §3.3](06-pipeline.md#33-candidate-generation-与去重) 与 [ADR-0020](adr/0020-locked-service-assumption.md)。
 - E004：内部 ID 重复、anchor 断裂、heading 顺序错误。
 - E005：claim/unknown/provider-health 必要 section 缺失。
 - E006：`.day-weather` 行数与 `days` 数不等，或其文案（day/night 描述、高低温、每条 advice 原文）、`data-weather-date`、暂无预报文案与 Trip 的 `day.weather` 不逐字一致；Journey 页对每个子 Trip 的同一规则记作 JH006。

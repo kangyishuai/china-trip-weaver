@@ -422,3 +422,50 @@ shape unchanged — `replan.py` still raises `ReplanError` and builds its
 "multiple rail services match..." message text locally, `planning.py` still
 returns the `(selected, service_names, failure)` triple — since that
 contract was module-specific, not part of the duplicated matching logic.
+
+## Update — cross-atomic-Trip E003 false positive and arrive_time disambiguation fixed (2026-09-17)
+
+AN4 (2026-09-17) tried the real fujian 16-day `request.json` with the real
+G1902/G5023 legs expressed as `locked_rail_services` for the first time and
+found two independent gaps this ADR's shipped Direction A did not cover,
+both traced to real code and confirmed by two real `ctw journey plan` runs
+(see `BLOCKED.md`'s "AN4" entry for the full trace):
+
+1. **Cross-atomic-Trip E003 false positive.** `_check_rendered_facts`
+   (`render/validate_html.py`) built its `known_services` set from only the
+   *current* Trip's own `transport_legs`, while `journey.py`'s
+   `_segment_request` deep-copies the whole `assumptions` array —
+   unfiltered — into every atomic Trip a multi-city `journey plan` splits
+   the request into. A free-text mention of a locked service (e.g. G1902)
+   therefore tripped E003 on whichever railless atomic Trip (e.g. the single
+   day at the trip's starting city, before the day that actually travels)
+   happened to run first in `plan_journey`'s loop, aborting the entire
+   Journey before the atomic Trip that actually carries the leg was ever
+   reached — even though that leg resolved correctly once its own atomic
+   Trip's turn came.
+2. **`arrive_time` disambiguation gap.** `lockedRailService` only had
+   `depart_time`, which disambiguates the "same arrival, two departures"
+   shape (G1902: 福州南站 07:50 vs. 福州站 08:12, both arriving 09:30) this
+   ADR's Context section describes. The mirror-image shape — "same
+   departure, two arrivals" — is exactly as real: G5023 (the return leg,
+   武夷山→福州) returns two rows both departing 武夷山北站 at 10:00 but
+   arriving at two different in-city Fuzhou stations (福州站 11:13,
+   福州南站 11:32). With no `arrive_time` field to disambiguate it,
+   `_locked_rail_candidate` always reported this shape `"ambiguous"` and
+   fell back to the placeholder leg, regardless of which physical row the
+   traveler had actually booked.
+
+**Fix (AN5, `locked-service-fixes` branch):** `known_services` now unions in
+every `request.locked_rail_services[].service_number`, regardless of
+whether that Trip's own `transport_legs` happen to carry the leg — a
+structurally-declared locked service is an established fact the moment it
+is declared, not only once some atomic Trip's leg backs it up.
+`lockedRailService` gained an optional `arrive_time` (`HH:MM`, same pattern
+as `depart_time`); `_locked_rail_candidate` passes `lock.get("arrive_time")`
+through to `rail_selection.select_service`'s existing
+`requested_arrive_at` parameter (added when the helper was extracted above
+but never previously wired to a caller), and the "could not be uniquely
+matched" reason text now names both `depart_time` and `arrive_time` as the
+available disambiguators. Both fixes are additive: `schema_version` stayed
+`"1.0.0"`, and a `locked_rail_services` entry omitting `arrive_time`
+continues to behave exactly as before.

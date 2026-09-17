@@ -739,3 +739,219 @@ README。全部改动加上本节记录一次性提交并 `git push origin refre
 反向验证：分别注释掉 `validate_html.py`/`validate_journey_html.py` 里的 `_check_day_weather(...)` 调用，两个「篡改」测试（temperature mismatch → E006、tamper → JH006）各自变红（`AssertionError: 'E006'/'JH006' not found in []`），「渲染正确」的测试仍绿；还原调用后 5 项全绿。
 完成条件 2：`git diff main --stat -- plugins/china-trip-weaver/src/china_trip_weaver/{planning,journey,cli}.py plugins/china-trip-weaver/src/china_trip_weaver/providers demo README.md README.zh-CN.md` 输出为空。
 `git diff main --stat` 总览：11 个文件、+242/-2，全部落在界限允许列表内。
+
+## AN5「locked_rail_services 两点缺陷修复」（第三十波，2026-09-17，worktree `.tmp/wt-an5` 分支 `locked-service-fixes`）
+
+### 任务 0：核对与两条红测试（进行中）
+
+- worktree 建好，基线全量 `Ran 719 tests`、`OK`、0 skipped，与任务书一致。
+- BLOCKED.md「AN4」条目已核对：管理者裁决与本任务书「拍的板」逐字一致
+  （缺陷 A 并入 `known_services`；缺陷 B 加 `arrive_time` 并传入
+  `select_service` 的 `requested_arrive_at`）。
+- 两条红测试写在 `tests/test_locked_rail_services.py`（只加，未改任何既有
+  函数/类/方法）：
+  - (a) `LockedRailServiceJourneyTests.test_locked_service_mention_in_a_railless_atomic_trip_no_longer_trips_e003`：
+    新增 `journey_two_city_request`/`journey_two_city_candidates`（在
+    `locked_candidates()` 基础上加一个福州 POI + 福州/武夷山两份住宿候选，
+    因为 `_lodging_city_by_date` 的分段边界机制必须要有真实住宿链才能在
+    2 天内切出「无火车腿」与「有火车腿」两个原子 Trip——只加一份福州住宿不
+    够，任务书「候选照 `locked_candidates()` 扩一家福州住宿」这句在起止仅
+    3 个日历日的最小复现里做不到只加一份就分段成功，已按工程判断补了武夷山
+    住宿，起止日期定为 09-19～09-21（3 个日历日、2 晚）而不是字面「两天」，
+    因为若把武夷山那晚放在整个请求的绝对最后一天，会撞上
+    `_lodging_city_by_date` 的「最后一晚需要 `final_cities` 覆盖」特例，
+    与真实 AN4 案例的触发路径（`09-29` 不是 16 天全程的最后一天）不一致；
+    多留一天可以不依赖那个特例、更贴近真实缺陷的触发路径。用
+    `plugins/china-trip-weaver/src/china_trip_weaver/journey.py` 的
+    `split_journey_inputs`/`_planning_inputs_for_segment` 直接实跑核对过
+    确实切成 `[09-19 福州，无路由]` 与 `[09-20~21 武夷山，福州→武夷山
+    2026-09-20 一条路由]` 两个原子 Trip。现状实跑：`plan_journey(...)`
+    抛出 `ValueError: HTML validation failed: E003 rendered train fact is
+    absent from Trip: G1902 (found in request.assumptions[0]: "G1902车票
+    已购并锁定：9月20日07:50出发")`——与任务书预判逐字吻合。
+  - (b) `LockedRailArriveTimeTests.test_locked_service_same_city_two_stations_disambiguated_by_arrive_time`：
+    新增 `G5023_ROWS`（两行同发 10:00、到福州站 11:13／到福州南站
+    11:32，真实 9/29 武夷山→福州实测数据）与 `return_leg_request`/
+    `return_leg_candidates`（方向必须是武夷山→福州，因为
+    `_filter_direct_rows` 按到发站名过滤，用 `locked_request()` 的福州→
+    武夷山方向会把 G5023 两行全部过滤掉，现场实测踩过这个坑并已改正）。
+    现状实跑：`ValueError: request validation failed: S_ADDITIONAL
+    /locked_rail_services/0/arrive_time additional property is not
+    allowed`——schema 尚未认识 `arrive_time` 这个键，属「红」，机制是
+    schema 拒绝而不是任务书原文预判的「静默退占位腿」，但同样是
+    `plan()` 调用未捕获异常直接抛出，`unittest` 记为 ERROR，同属「红」，
+    不影响任务书「都红才动工」的判定。
+  - 额外补了 3 条任务 1／2 验收要求的测试（同样先红，随后随对应任务转
+    绿）：`LockedRailServiceTests.test_locked_service_not_found_with_assumption_mention_does_not_trip_e003`
+    （ERROR，E003 同款）、
+    `LockedRailArriveTimeTests.test_locked_service_ambiguous_same_depart_without_arrive_time_falls_back_to_a_placeholder`
+    （已经绿，不需要修复，纯粹确认「无消歧时仍退占位腿」这条现状行为不
+    被本书改动波及）、
+    `LockedRailArriveTimeTests.test_locked_service_arrive_time_pattern_is_enforced_by_schema`
+    （FAIL，`S_PATTERN` 未出现，因为当前连键都不认识，报的是
+    `S_ADDITIONAL`）。
+  - `/usr/bin/python3 -m unittest tests.test_locked_rail_services -v`：
+    `Ran 12 tests`，`FAILED (failures=1, errors=3)`——3 个 ERROR 对应
+    (a)/(b)/额外 E003 测试，1 个 FAIL 对应额外 schema pattern 测试，
+    与设计逐一对应。全量 `/usr/bin/python3 -m unittest discover -s
+    tests`：`Ran 724 tests`（719+5 新增）、`FAILED (failures=1,
+    errors=3)`，无其它连带失败。
+
+理解的目标／顺序／最大风险（≤10 行）：
+
+- 目标：`known_services` 并入 `request.locked_rail_services[].service_number`
+  消除跨原子 Trip 的 E003 假阳性；`lockedRailService` 加 `arrive_time` 并接入
+  `select_service` 消除 G5023 同发不同到的消歧缺口；真实 request 补
+  `arrive_time` 后从零 `journey plan` 出两条 `locked:true` 的腿。
+- 顺序：任务 1（缺陷 A，`validate_html.py` 一处）→ 任务 2（缺陷 B，schema +
+  `planning.py` 一处）→ 任务 3（真实行程实网复验，只跑 1 次）。
+- 最大风险：真实 request 的 9/26 段（G1902）已经能锁定成功，本书两处修复
+  只影响「跨原子 Trip 假阳性」与「9/29 段的到站消歧」，两点都已用独立探针
+  脚本实测确认成因与修法，工程不确定性低；剩余风险在任务 3 的真实 12306
+  当日库存是否与 2026-09-17 早些时候的实测一致（车次是否仍存在、时刻是否
+  变化），这属于外部数据源的自然波动，不是本书代码风险。
+
+### 任务 1（缺陷 A）完成（2026-09-17）
+
+按「拍的板」改 `render/validate_html.py::_check_rendered_facts`：`known_services`
+在原有 `{leg["service_number"] for leg in trip["transport_legs"] if
+leg["service_number"]}` 之后，再 `|=` 并入
+`{lock["service_number"] for lock in ((trip.get("request") or
+{}).get("locked_rail_services") or ())}`——只改这一处，函数其余部分逐字未动。
+
+验收：`/usr/bin/python3 -m unittest tests.test_locked_rail_services -v` →
+`Ran 12 tests`、`FAILED (failures=1, errors=1)`，仅剩缺陷 B 的两条测试红
+（(b) 与 schema pattern 测试），(a) 与「rows 无 G1902 而 assumptions 仍提它」
+两条全部转绿。武夷山段的腿：`service_number="G1902"`、`depart_at=
+"2026-09-20T07:50:00+08:00"`、`locked=True`；「未命中」场景腿是占位
+（`service_number=None`、`locked=False`），`unknowns` 含
+`locked_service_not_found:...service=G1902;date=2026-09-20`，且
+`validate_html(...).ok` 为真（不再报 E003）。全量
+`/usr/bin/python3 -m unittest discover -s tests` → `Ran 724 tests`、`OK`。
+
+反向验证：把新加的 `known_services |= {...}` 三行整体注释掉，单跑
+`tests.test_locked_rail_services.LockedRailServiceJourneyTests` →
+`FAILED (errors=1)`，报错逐字回到任务 0 记录的
+`E003 rendered train fact is absent from Trip: G1902 (found in
+request.assumptions[0]: ...)`；还原三行并 `touch
+render/validate_html.py` 后复跑
+`LockedRailServiceJourneyTests`+`LockedRailServiceTests` 共 7 项全绿。
+
+### 任务 2（缺陷 B）完成（2026-09-17）
+
+- schema：`trip.schema.json` 的 `lockedRailService` 加可选 `arrive_time`
+  （与 `depart_time` 同款 pattern `^([01][0-9]|2[0-3]):[0-5][0-9]$`，
+  description 说明用于「同发不同到」场景），未改 `required`、未改
+  `schema_version`（仍 `"1.0.0"`）。
+- `planning.py::_locked_rail_candidate`：`select_service(candidates,
+  service_number, lock.get("depart_time"))` 改为额外传第四个位置参数
+  `lock.get("arrive_time")`（`select_service` 本身早已支持
+  `requested_arrive_at`，见 ADR-0020「Update — shared helper extracted」，
+  只是此前没有调用点真正传过它）；docstring 里「depart_at
+  disambiguation」「provide depart_time to disambiguate」两处顺带同步补上
+  `arrive_at`/`arrive_time`（前者是函数自身文档，后者是「理由文案」，均在
+  白名单「只改 `_locked_rail_candidate` 与理由文案」范围内）。
+- docs 三处各加半句：`03-trip-model.md` 的 `locked_rail_services` 段补
+  `arrive_time` 的用途与正则；`06-pipeline.md` §3.3 的选车顺序那句补
+  `arrive_time` 消歧分支，并补一句「已渲染的锁定车次号...算 E003 已知事实」
+  链到 07-renderer；`adr/0020-locked-service-assumption.md` 末尾加一整节
+  「Update — cross-atomic-Trip E003 false positive and arrive_time
+  disambiguation fixed」，记录两点缺陷的成因、AN4 的发现过程与本书的修法。
+  任务书原文把 07-renderer.md 的落点写成「§7.3」，但 `git grep -n "^### 7"
+  docs/design/07-renderer.md` 核对后 E003 实际记在 §7.1「结构/一致性
+  errors」（§7.3 是「事实/降级 errors」，讲的是 mock 标注、claim 链接等不
+  相关的另一类问题）——07-renderer.md 整份文件本就在白名单内，只是任务书
+  给的节号有误，故改在 §7.1 的 E003 条目后加半句，并在 06-pipeline.md 里把
+  交叉引用锚点从写错的 `#73-...` 改为正确的 `#71-结构一致性-errors`。
+
+验收：`/usr/bin/python3 -m unittest tests.test_locked_rail_services -v` →
+`Ran 12 tests`、`OK`，全部转绿，包括 (b)（`service_number="G5023"`、
+`arrive_at="2026-09-20T11:13:00+08:00"`、`locked=True`）、「不带
+arrive_time 仍退占位腿、理由含 `locked_service_ambiguous`」、
+「`"9:5"` 被 schema 拒绝（`S_PATTERN
+/locked_rail_services/0/arrive_time string does not match the required
+pattern`）」三条。全量 `Ran 724 tests`、`OK`，0 skipped。
+
+反向验证：把 `_locked_rail_candidate` 里新加的第四个实参临时改回 `None`
+（即 `select_service(candidates, service_number, lock.get("depart_time"),
+None)`），单跑 `LockedRailArriveTimeTests` → `FAILED (failures=1)`，(b)
+断言 `'G5023' != None`（因为已消歧字段被强制清空，退回占位腿），另两条不
+依赖 arrive_time 传参的测试仍绿；还原参数并 `touch planning.py` 后复跑
+`tests.test_locked_rail_services` 共 12 项全绿。
+
+门禁：`~/miniconda3/envs/core/bin/python -m pyflakes $(git ls-files
+'*.py')` 0 行；`/usr/bin/python3 scripts/scan_secrets.py` → `0 finding(s)
+across 401 file(s)`。`git diff main --stat` 汇总 9 个文件、+449/-8，逐一核对
+均落在白名单（`render/validate_html.py` 只改 `known_services` 一处；
+`planning.py` 只改 `_locked_rail_candidate` 调用、docstring 与理由文案；
+`schema/trip.schema.json` 只加 `arrive_time`；`docs/design/03、06、07、
+adr/0020`；`tests/test_locked_rail_services.py` 只加；`PROGRESS.md`）。
+`git diff main --stat -- plugins/china-trip-weaver/src/china_trip_weaver/{journey,cli,rail_selection}.py README.md README.zh-CN.md plugins/china-trip-weaver/skills`
+为空，`journey.py`/`rail_selection.py`/`cli.py`/README/skills 全程未碰。
+
+### 任务 3：真实行程实网复验（2026-09-17 17:41–17:45，唯一一次 `journey plan` 实网额度）
+
+- `R=../../../fujian-2026-09-25-to-10-10`（工作区记录）。先
+  `cp "$R/request.json" "$R/request-2026-09-17b-pre-arrive.json"`，
+  `shasum -a 256` 两份一致（`b8a473fb...`）。给 G5023 条目加
+  `"arrive_time": "11:13"`，`diff` 只有 `129c129` 一处（新增该字段），
+  JSON 合法性用 `python3 -c "json.load(...)"` 核对通过。
+- worktree 根跑 AN4 同款命令（`--rail live --mobility live --lodging live
+  --aviation auto --progress ndjson`），输出写
+  `$R/journey-locked-check-2026-09-17b.json`，stdout+stderr 合并写
+  `$R/journey-locked-check-2026-09-17b.progress.ndjson`，只跑 1 次：
+  **`EXIT_CODE=0`**。`.progress.ndjson` 末行：
+  `JOURNEY_PLAN_COMPLETE ... trips=3 days=16 max_trip_days=6 ...
+  journey_sha256=114eafaee0511760593f7b286157c5d8cc5e5237d6fdd9936105a21ce67d61d1
+  errors=0`，随后一行 `{"command":"journey-plan","event":"completion",
+  "items":3,"status":"ok"}`。
+- 全部 rail 腿（`python3` 遍历 `trips[].transport_legs[]` 打印
+  `service_number/depart_at/arrive_at/locked`）：
+  ```
+  G1902 2026-09-26T07:50:00+08:00 -> 2026-09-26T09:30:00+08:00 locked= True
+  G5023 2026-09-29T10:00:00+08:00 -> 2026-09-29T11:13:00+08:00 locked= True
+  D6275 2026-09-30T07:17:00+08:00 -> 2026-09-30T07:45:00+08:00 locked= False
+  None 2026-10-03T08:00:00+08:00 -> 2026-10-03T13:00:00+08:00 locked= False
+  None 2026-10-06T08:00:00+08:00 -> 2026-10-06T13:00:00+08:00 locked= False
+  None 2026-10-08T08:00:00+08:00 -> 2026-10-08T13:00:00+08:00 locked= False
+  None 2026-10-09T08:00:00+08:00 -> 2026-10-09T13:00:00+08:00 locked= False
+  ```
+  两条目标腿——9/26 `G1902 07:50→09:30 locked=True`、9/29
+  `G5023 10:00→11:13 locked=True`——与完成条件逐字吻合；其余腿未声明锁定，
+  维持占位/`D6275`（南靖段，与本书无关，行为不变）不受影响。
+- `grep -c locked_service "$R/journey-locked-check-2026-09-17b.json"` → `0`；
+  对整份 JSON 序列化文本 `.count("locked_service")` 复核同样是 `0`——
+  `locked_service_not_found`/`locked_service_ambiguous` 全程未触发。
+- `ctw journey validate "$R/journey-locked-check-2026-09-17b.json"` →
+  `JOURNEY VALID ... trips=3`。
+- `ctw journey render` → `JOURNEY_RENDERED ...
+  sha256=da9e4b46032148392102a1938f458085b8dbe86c38d9e78ef5574111b72c3704
+  errors=0`；`ctw journey validate-html` →
+  `JOURNEY HTML VALID ... errors=0`。
+- 现役产物核对：本书唯一在 `$R` 下新建/修改的文件是
+  `request.json`（任务 3 授权的那一处字段）、
+  `request-2026-09-17b-pre-arrive.json`（备份）、
+  `journey-locked-check-2026-09-17b.json`/`.progress.ndjson`/`.html`
+  （本书自己的产物，文件名与现役产物无重名）；本书全程未对 `journey.json`、
+  `journey-r*.json`、`福建中秋国庆16天行程*.html` 执行任何写操作（既没有
+  `--output-json`/`--output` 指向过这些路径，也没有用 `cp`/`Write`/`Edit`
+  碰过它们）。**如实记录一个与本书无关的观察**：`journey.json` 在本书会话
+  期间被外部进程改写——`stat` 显示其 mtime 从 AN4 记录的 09-16 00:45
+  变为本次会话内的 17:36:22，sha256 从 AN4 记录的
+  `808691a6f4a03e8ac...` 变为 `d462696891d9f8caf8...`；同一时间窗口
+  （17:33–17:38）该目录下新增了 `journey-r6-lodgings-north.json`、
+  `journey-r7-lodgings-coast.json`、`journey-r8-booked-lodgings.json`、
+  `journey-r5-pre-booked-lodgings.json`、`trip-{north,coast,south}-*-
+  lodgings-intermediate.html` 及重渲染的
+  `福建中秋国庆16天行程.html`/`-易读版.html`（均为「booked lodgings」主题，
+  与本书的 locked_rail_services 修复无关）——这是工作区外部另一个并发会话
+  /进程在操作同一份真实行程数据，不是本书任何命令的产物；佐证：
+  `candidates.json`（本书只读、从未写入）mtime 仍是 09-06 19:34，
+  `request.json` mtime 是 17:41:18，恰好对应本书任务 3 唯一一次授权编辑，
+  两者均未被那个外部进程触碰。完成条件第 2 条的 `git diff main --stat`
+  范围只覆盖仓库内文件，与 `$R`（仓库外、被 `.gitignore` 挡住）无关，不受
+  此并发活动影响。
+
+**任务 3 完成条件核对**：退出码 0 ✓；两条腿 `locked:true` 且时刻吻合 ✓；
+`grep -c locked_service` 为 0 ✓；`journey validate` 通过 ✓；
+`journey render` 后 `validate-html` errors=0 ✓——全部六项逐字达成。

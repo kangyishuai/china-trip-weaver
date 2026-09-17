@@ -1414,7 +1414,7 @@ def _resolve_rail(
                 % (locked_service_names, route.travel_date)
                 if locked_failure == "not_found" else
                 "locked service(s) %s could not be uniquely matched for %s "
-                "(provide depart_time to disambiguate same-city stations); "
+                "(provide depart_time or arrive_time to disambiguate same-city stations); "
                 "the actual dated service must be selected on 12306"
                 % (locked_service_names, route.travel_date)
             )
@@ -1480,7 +1480,7 @@ def _locked_rail_candidate(
     """Match locked_rail_services entries sharing this route's travel_date
     against its already dated candidates, applied per-route so a locked
     entry can never leak into the wrong route. Per-lock service_number
-    filtering and depart_at disambiguation is shared with
+    filtering and depart_at/arrive_at disambiguation is shared with
     replan._select_refresh_service_by_number via rail_selection.select_service.
 
     Returns (selected, service_names, failure):
@@ -1490,8 +1490,9 @@ def _locked_rail_candidate(
       service_number, None).
     - a lock's service_number is present but still resolves to more than one
       row (same-city two-station clash the caller did not provide, or could
-      not resolve, depart_time for), or more than one lock resolves against
-      these candidates: (None, "<comma-joined service numbers>", "ambiguous").
+      not resolve, depart_time/arrive_time for), or more than one lock
+      resolves against these candidates: (None, "<comma-joined service
+      numbers>", "ambiguous").
     - the only lock for this date has no matching row at all: (None, its
       service_number, "not_found").
     """
@@ -1501,7 +1502,9 @@ def _locked_rail_candidate(
     present_but_ambiguous: List[str] = []
     for lock in same_date_locks:
         service_number = lock["service_number"]
-        match = select_service(candidates, service_number, lock.get("depart_time"))
+        match = select_service(
+            candidates, service_number, lock.get("depart_time"), lock.get("arrive_time"),
+        )
         if not match.same_service:
             continue
         if match.row is None:
