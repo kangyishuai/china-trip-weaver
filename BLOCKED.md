@@ -2150,3 +2150,7 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 无。全程没有遇到拿不准、需要管理者裁决的真实二义性。本书只改文档，写的是「拍的板」规定的目标态（`replace_trips_in_journey`、`_cmd_journey_weather`、`forecasts[].query` 等 AN8b 尚未合并的名字），核对方式是把另外 7 个已在 main 落地的标识符逐一 `git grep -n -- plugins tests` 确认真实存在（`fold_weather_into_journey`/`weather_fold_claim_missing`/`revision_conflict`/`split_city_names`/`weather_no_results`/`JH006`/`_plan_weather`，均命中，见 PROGRESS.md 本书任务 0/任务 2 记录），本书拍的板里的新名字则逐字比对文案与任务书原文。合并时仍需管理者对照 AN8b 实际落地的代码核验这些目标态名字与签名是否一致。
 
 管理者裁决（2026-09-17，验收时补记）：全部认可。合并后逐个 `git grep` 核对：`--weather-result`、`JOURNEY_WEATHER_NOOP`、`JOURNEY_WEATHER_COMPLETE`、`replace_trips_in_journey`、`_cmd_journey_weather`、`query`、`weather_fold_claim_missing`、`weather_no_results`、`JH006`、`_plan_weather`、`split_city_names` 在 AN8b 合入后的代码里全部命中；06 §7.6 的覆盖判定、op 顺序、健康行文案对着 weather_fold.py 逐条读过一致；README 两份用法行逐字相同；新增行无本机路径、无版本号字面值。已关闭。
+
+## 书 AP4「产物目录约定文档」（2026-09-17，第三十三波五本并行之一，worktree `.tmp/wt-ap4` 分支 `plans-dir-docs`）：无
+
+无。全程没有遇到拿不准、需要管理者裁决的真实二义性。本书只把领导已经拍板的 `plans/<可读名称>/` 目录约定写进三份 SKILL 正文与两份 README、`docs/design/02-plugin-skills.md` §4，未触碰任何 `.py`、schema、demo 或测试夹具，没有需要裁决的设计空间。详细改动与验收证据见 PROGRESS.md「书 AP4」条目。

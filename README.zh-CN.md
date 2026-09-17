@@ -82,6 +82,10 @@ CODEX_HOME=/path/to/an/isolated/codex-home \
 
 用 Codex 桌面版界面安装时：把本仓库添加为本地市场，确认 `china-travel-assistant` 已禁用，安装 China Trip Weaver Local，重启，再新建任务。两个插件不能同时启用，因为它们都暴露 `plan-china-trip`。
 
+## 行程文件放哪
+
+同一趟行程的全部文件——出行需求、`candidates.json`、生成的 `trip.json`／`journey.json`、渲染出的 `.html`，以及 `weather-<日期>.json`、`dining-<日期>.json`、`*.progress.ndjson`——统一放进「调用这个插件的项目根目录」下的 `plans/<可读名称>/`，不要散落在项目根。`<可读名称>` 用中文短语或拼音，例如 `plans/福建中秋国庆16天/`；目录不存在就先建。每次 replan 或天气／美食折回都会写出一个新的版本文件，例如 `plans/<可读名称>/journey-r<N>.json`，而不是覆盖旧版本；由用户自己把某个版本改名接替成现役版本。仓库自己的 [`demo/`](demo/) 与测试夹具不受此约定影响。
+
 ## 候选输入
 
 `candidates.json` 恰好包含 `candidates_version`、`pois`、`lodgings`、`claims` 和 `unknowns` 五个字段，不包含交通段。它的实体形状复用冻结的 Trip `$defs`，每个实体、价格和开放时段的证据引用都必须能解析到。

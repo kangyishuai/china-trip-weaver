@@ -26,24 +26,28 @@ Own the full user request. Keep one schema-valid Trip as the only source of trut
 5. Validate every Trip. For a Journey, also validate its segment connections and total ledger, then render and validate the Journey overview; invoke `$render-china-trip` only for a standalone Trip after its validation succeeds.
 6. For an existing child Trip plus a disruption/edit, invoke `$replan-china-trip` with that Trip's current revision and locks; do not invent a second Journey-specific replanner. When that Trip is a Journey's child, extract it first with `ctw journey extract` and fold the replanned result back with `ctw journey assemble --replace-trip`. If the child Trip lacks `budget_ledger`, assembly recomputes it from the Trip's existing facts; an existing ledger remains unchanged.
 
+## Where a plan lives
+
+Every file for one trip lives together under `plans/<name>/` in the project root that invoked this plugin, not scattered across that root: `request.json`/`long-request.json`, `candidates.json`, the resulting `trip.json`/`journey.json`, their rendered `.html`, and any `weather-<date>.json`, `dining-<date>.json`, or `*.progress.ndjson` for that trip. Choose `<name>` as a readable Chinese phrase or its pinyin, for example `plans/福建中秋国庆16天/`; create the directory first when it does not exist yet. Each replan or weather/dining fold writes a new revision file such as `plans/<name>/journey-r<N>.json` instead of overwriting the file it started from — the user promotes a revision to the active file by renaming it themselves. This repository's own `demo/` fixtures and test fixtures are unaffected.
+
 ## Command flow
 
 From the plugin root, run:
 
 ```bash
-scripts/ctw candidates init candidates.json
-scripts/ctw candidates add-poi candidates.json --name "..." --city "..." --category "..." --source-url "https://..."
-scripts/ctw candidates add-lodging candidates.json --name "..." --city "..." --check-in YYYY-MM-DD --check-out YYYY-MM-DD --source-url "https://..."
-scripts/ctw validate-candidates candidates.json
-scripts/ctw plan --progress ndjson --request request.json --candidates candidates.json --rail live --mobility live --lodging live --output-json trip.json --output-html trip.html
-scripts/ctw validate trip.json
-scripts/ctw validate-html trip.html trip.json
-scripts/ctw journey plan --progress ndjson --request long-request.json --candidates candidates.json --rail live --mobility live --lodging live --output-json journey.json
-scripts/ctw journey validate journey.json
-scripts/ctw journey render journey.json --output journey.html
-scripts/ctw journey validate-html journey.html journey.json
+scripts/ctw candidates init plans/<name>/candidates.json
+scripts/ctw candidates add-poi plans/<name>/candidates.json --name "..." --city "..." --category "..." --source-url "https://..."
+scripts/ctw candidates add-lodging plans/<name>/candidates.json --name "..." --city "..." --check-in YYYY-MM-DD --check-out YYYY-MM-DD --source-url "https://..."
+scripts/ctw validate-candidates plans/<name>/candidates.json
+scripts/ctw plan --progress ndjson --request plans/<name>/request.json --candidates plans/<name>/candidates.json --rail live --mobility live --lodging live --output-json plans/<name>/trip.json --output-html plans/<name>/trip.html
+scripts/ctw validate plans/<name>/trip.json
+scripts/ctw validate-html plans/<name>/trip.html plans/<name>/trip.json
+scripts/ctw journey plan --progress ndjson --request plans/<name>/long-request.json --candidates plans/<name>/candidates.json --rail live --mobility live --lodging live --output-json plans/<name>/journey.json
+scripts/ctw journey validate plans/<name>/journey.json
+scripts/ctw journey render plans/<name>/journey.json --output plans/<name>/journey.html
+scripts/ctw journey validate-html plans/<name>/journey.html plans/<name>/journey.json
 ```
 
-`--progress ndjson` writes allowlisted probe/query/degrade/retry/completion events to stderr and never includes credentials or provider response bodies; omit it when progress is not needed. Use `--rail fixture:<file> --offline-fixture --fixed-clock <ISO-8601>` only for deterministic regression runs; use `--rail off` to force dated deep-link degradation without a rail call. For a local edit/disruption, use `scripts/ctw replan --trip trip.json --event event.json --base-revision <N> --output-json trip-r<N+1>.json --output-html trip-r<N+1>.html`.
+`--progress ndjson` writes allowlisted probe/query/degrade/retry/completion events to stderr and never includes credentials or provider response bodies; omit it when progress is not needed. Use `--rail fixture:<file> --offline-fixture --fixed-clock <ISO-8601>` only for deterministic regression runs; use `--rail off` to force dated deep-link degradation without a rail call. For a local edit/disruption, use `scripts/ctw replan --trip plans/<name>/trip.json --event plans/<name>/event.json --base-revision <N> --output-json plans/<name>/trip-r<N+1>.json --output-html plans/<name>/trip-r<N+1>.html`.
 
 Read `../../references/candidates.example.json` for the candidate file shape, `../../references/provider-contracts.md` when selecting or degrading providers, and `../../references/credentials.md` when explaining local configuration.
