@@ -1,3 +1,65 @@
+## 书 AP1a「poi_around 综合排序与 distance_meters」（2026-09-17，第三十三波，worktree `.tmp/wt-ap1a` 分支 `around-sortrule`）：任务 0 数字一处不符（非阻塞）＋ distance_meters 与 schema 边界互斥（阻塞，供裁决）
+
+**任务 0 核对，一处不符，非阻塞**：任务书「现状与任务 0」给出六类基线数字，五类精确核对一致——全量
+`Ran 756 tests` OK 0 skipped；`scripts/scan_secrets.py` 0 finding(s)；
+`~/miniconda3/envs/core/bin/python -m pyflakes $(git ls-files '*.py')` 0 行；`git grep -n sortrule --
+plugins` 只有
+[amap_http.py:401](plugins/china-trip-weaver/src/china_trip_weaver/providers/amap_http.py:401)
+写死 `"sortrule": "distance"` 一处；`fixture_count` 88（[test_providers.py:117](tests/test_providers.py:117)）。
+唯有 `git grep -n distance_meters -- plugins/china-trip-weaver/src/china_trip_weaver/providers` **不是**
+0 命中：实测该目录内已有 12 处，分布在三个文件——
+[amap.py:160](plugins/china-trip-weaver/src/china_trip_weaver/providers/amap.py:160)（`_route` 方法
+的路线距离 claim，与本书要改的 `_pois` 方法无关）、`mcp_stdio.py`（6 处）、`rail12306.py`（5 处，含
+[rail12306.py:286](plugins/china-trip-weaver/src/china_trip_weaver/providers/rail12306.py:286) 起的站
+点候选排序，是既有的「12306 站点候选靠 AMap 距离消歧」功能）。任务书括注「matrix.py 的同名键是路线
+格子，无关」说明作者已知道别处存在同名键，但漏记了 `providers/` 目录内 `mcp_stdio.py`/`rail12306.py`
+这两个既有站点匹配功能的用法，误判成 0 命中。判定非阻塞：本书真正要改的 `_pois` 方法
+（[amap.py:47-113](plugins/china-trip-weaver/src/china_trip_weaver/providers/amap.py:47)）逐行读过，
+确认当时 0 处引用 `distance_meters`；任务书「界限」明确不许碰 `station_distance.py`，本书也未改
+`mcp_stdio.py`/`rail12306.py`/`_route`，三者行为不受影响。按此理解继续任务 1。
+
+**任务 1 发现的真实阻塞，供裁决**：任务书「我替领导拍的板」要求 `_pois` 归一化项直接加顶层键
+`distance_meters`，但 `#/$defs/poi` 的 JSON Schema 定义 `"additionalProperties": false`
+（[schema/trip.schema.json:735](plugins/china-trip-weaver/schema/trip.schema.json:735)）且
+`properties` 里没有 `distance_meters`（10 个 `required` 键逐一列出，无遗漏，
+[trip.schema.json:736-747](plugins/china-trip-weaver/schema/trip.schema.json:736)）。
+`tests/test_providers.py::run_fixture`
+（[test_providers.py:84-96](tests/test_providers.py:84)）对每个 POI 类夹具的每个归一化项都用
+`SchemaSubsetValidator.validate_fragment("#/$defs/poi", item)` 强校验，`additionalProperties=false`
+分支
+（[validate_trip.py:163-166](plugins/china-trip-weaver/src/china_trip_weaver/validate_trip.py:163)）
+逐键比对，未声明的键一律判 `S_ADDITIONAL`。
+
+实测复现：只改 `_pois` 加一行 `"distance_meters": int(raw["distance"]) if body.get("api") ==
+"around-v5" else None`（未碰 schema、未加新夹具），跑 `/usr/bin/python3 -m unittest
+tests.test_providers -v` 立刻 5 项从绿变红（`test_fixture_amap_around_stations`／`boundary_hk`／
+`malicious`／`pagination_page2`／`success`，`Ran 112 tests ... FAILED (failures=5)`），失败文本逐字：
+
+```
+AssertionError: Lists differ: [] != ['S_ADDITIONAL /distance_meters additional property is not allowed']
+```
+
+这不是只命中现有夹具的偶然：`additionalProperties:false` 对每个 POI 类夹具一视同仁，本书按板要建的
+`around_dining` 新夹具回放时会被同一条规则拦下，验收②③要求的「回放项带 `distance_meters`」在当前
+schema 下无法通过。三条硬约束互斥，任何两条可同时满足，三条凑不齐：①板上「`_pois` 加键
+`distance_meters`」；②界限「不许碰 schema」；③完成条件「全部既有夹具回放结论不变，
+`tests.test_providers` 与全量绿」。按任务书「让步顺序：旧行为字节不变 > 合同严格 > 省事」，本书选择
+保留①③、放弃②的字面实现——**已用 `git checkout` 撤销 `amap.py` 的改动**，**未新增**
+`around_dining` 夹具／`build_provider_fixtures.py` 对应 case，`fixture_count` 停留在 88。已完成并验
+收通过、不依赖 schema 的只有 `_request_contract` 的 `sortrule` 分支（任务 1 checklist①，含反向验
+证）。完整命令输出见 PROGRESS.md「书 AP1a」任务 1 小节。
+
+供裁决：是否授权给 `#/$defs/poi` 加一个**可选**属性 `"distance_meters": {"type": ["integer",
+"null"]}`（不进 `required`）——对现有全部夹具零影响，因为 `validate_trip.py` 的 `properties` 校验只
+在键存在于被测值里才递归
+（[validate_trip.py:167-169](plugins/china-trip-weaver/src/china_trip_weaver/validate_trip.py:167)），
+不存在的可选键不触发任何检查。若认可，需要另开一本被授权改 schema 的书（或明确豁免本书的「不许碰
+schema」）来补 checklist②③与 `around_dining` 夹具；在此之前，`_pois` 无法安全地携带
+`distance_meters`，下游 AP1b/AP2 若依赖这个键需要先等这条裁决。已用 `spawn_task` 给管理者留一条提
+醒，供其决定是否采纳。
+
+---
+
 ## 书 AN4「真实行程改结构化 locked_rail_services」（2026-09-17）：任务书验收目标不可达，两点独立真实代码缺陷，供裁决
 
 任务 1（改 request.json 加 `locked_rail_services`）已按字面完成并验收通过，不受本条影响。任务 2（从零

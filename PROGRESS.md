@@ -439,6 +439,58 @@
 - 本机 Codex 与源码的差距：以 `bash scripts/install_local_plugin.sh --check`
   实时输出为准；`ctw doctor` 的 `runtime_root` 是缓存所在目录，可随时删除。
 
+## 第三十三波执行记录（2026-09-17，五本并行，美食推荐第一波）
+
+### 书 AP1a「poi_around 综合排序与 distance_meters」（worktree `.tmp/wt-ap1a` 分支 `around-sortrule`）
+
+**任务 0 核对**：目标——给 AMap `poi_around` 请求加可选 `sortrule`（`distance`/`weight`，缺省
+`distance`，其它值报 `ContractMismatch`，按原名透传）；`_pois` 归一化项加 `distance_meters`
+（`around-v5` 取 raw `distance` 转 int，文本搜索为 `None`）；新增 `around_dining` 夹具（6 家合成餐厅）、
+`fixture_count` 88→89。顺序：先改 `amap_http.py` 的 `sortrule` 分支（独立、无下游依赖）并测试，
+再改 `amap.py::_pois` 加 `distance_meters`，跑既有夹具回放确认「旧行为字节不变」，最后加
+`around_dining` 夹具与测试。核对基线数字 5/6 项精确匹配；`git grep -n distance_meters --
+plugins/.../providers` 不是 0 命中（实测 12 处，分布在 `amap.py:160`『`_route` 方法的路线距离
+claim』与 `mcp_stdio.py`/`rail12306.py`『既有的 12306 站点候选靠 AMap 距离消歧功能』，均与本书要改
+的 `_pois` 无关），判定非阻塞，继续任务 1；证据见 BLOCKED.md。**最大风险**（核对后命中，见下）：
+`#/$defs/poi` 的 schema `additionalProperties:false` 且未声明 `distance_meters`，`_pois` 归一化项一
+旦携带该键就会被 `run_fixture` 的强校验拦下，与「不许碰 schema」互斥。
+
+**任务 1 完成情况**：checklist① 全部完成——`amap_http.py::_request_contract` 的 `poi_around` 分支
+（[amap_http.py:388-405](plugins/china-trip-weaver/src/china_trip_weaver/providers/amap_http.py:388)）
+把硬编码 `"sortrule": "distance"` 改成 `values.get("sortrule", "distance")` 并校验取值 ∈
+`{"distance", "weight"}`，否则 `ContractMismatch`；新增
+`tests.test_providers.PoiAroundRequestContractTests` 三个用例（缺省 distance／显式 weight
+透传／rating 报错），`/usr/bin/python3 -m unittest tests.test_providers -v` 112 项全绿；反向验证——
+删掉取值校验后 `test_request_contract_rejects_unsupported_sortrule` 变红
+（`AssertionError: ContractMismatch not raised`），`cp` 还原并 `touch` 后三项复绿。
+
+checklist②③ **被真实 schema 冲突阻塞，未实现**：只改 `_pois` 加一行
+`"distance_meters": int(raw["distance"]) if body.get("api") == "around-v5" else None`（未碰 schema、
+未加新夹具），跑 `tests.test_providers` 立刻 5 项从绿变红（`test_fixture_amap_around_stations`／
+`boundary_hk`／`malicious`／`pagination_page2`／`success`，`Ran 112 tests ... FAILED (failures=5)`），
+失败文本逐字：`AssertionError: Lists differ: [] != ['S_ADDITIONAL /distance_meters additional
+property is not allowed']`。根因：`#/$defs/poi`
+（[trip.schema.json:733-747](plugins/china-trip-weaver/schema/trip.schema.json:733)）
+`"additionalProperties": false` 且 10 个 `required` 键里没有 `distance_meters`；
+`run_fixture`（[test_providers.py:84-96](tests/test_providers.py:84)）对每个 POI 类夹具的每个归一化
+项都用 `SchemaSubsetValidator.validate_fragment("#/$defs/poi", item)` 强校验，`additionalProperties`
+分支（[validate_trip.py:163-166](plugins/china-trip-weaver/src/china_trip_weaver/validate_trip.py:163)）
+逐键比对，未声明的键一律 `S_ADDITIONAL`。这不是只命中 `around_stations` 一处的偶然——本书按板要建
+的 `around_dining` 新夹具会在同一次回放里被同一条规则拦下，checklist②要求的「回放项带
+`distance_meters`」在当前 schema 下无法通过，③同理。三条硬约束互斥（板上「`_pois` 加键
+`distance_meters`」／界限「不许碰 schema」／完成条件「全部既有夹具回放结论不变、`tests.test_providers`
+与全量绿」），任何两条可同时满足，三条凑不齐。按任务书「让步顺序：旧行为字节不变 > 合同严格 >
+省事」，本书保留旧行为与全量绿、放弃②③的字面实现：**已 `git checkout` 撤销 `amap.py` 的改动**，
+**未新增** `around_dining` 夹具／`build_provider_fixtures.py` 的对应 case，`fixture_count` 停留在
+88（未改 `tests/test_providers.py` 的 `88`）。最终态：`/usr/bin/python3 -m unittest discover -s
+tests` `Ran 759 tests`（756 基线 + 3 条新 sortrule 用例）`OK` 0 skipped；`scan_secrets` 0；pyflakes
+0；`git status -- demo` 空（未碰渲染/demo 相关任何文件）。
+
+供裁决的最小修复方向（详见 BLOCKED.md，已 `spawn_task` 提醒管理者）：给 `#/$defs/poi` 加一个**可选**
+属性 `"distance_meters": {"type": ["integer", "null"]}`（不进 `required`）。这对现有全部夹具零影响——
+`validate_trip.py` 的 `properties` 校验只在键存在于被测值里才递归（[validate_trip.py:167-169](plugins/china-trip-weaver/src/china_trip_weaver/validate_trip.py:167)），不存在的可选键不触发任何检查；
+`required` 列表不变意味着没有该键的旧数据也仍然合法。
+
 ## 定位失败天花板
 
 2026-09-06 用同一份真实福建 16 天行程反复重跑验证（78 个地点 = POI + 住宿）：

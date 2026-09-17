@@ -25,7 +25,8 @@ from china_trip_weaver.providers import (
     Rail12306Adapter,
     VariFlightAdapter,
 )
-from china_trip_weaver.providers.base import ProviderContext, ProviderEnvelope, ReplayTransport
+from china_trip_weaver.providers import amap_http
+from china_trip_weaver.providers.base import ContractMismatch, ProviderContext, ProviderEnvelope, ReplayTransport
 from china_trip_weaver.providers.rail12306 import EXPECTED_TOOLS as RAIL_TOOLS
 from china_trip_weaver.providers.variflight import EXPECTED_TOOLS as VARIFLIGHT_TOOLS
 from china_trip_weaver.validate_trip import SchemaSubsetValidator, load_schema
@@ -656,6 +657,52 @@ class AMapIdentityAndSemanticTests(unittest.TestCase):
             "verified",
             {claim["status"] for claim in result.claims if claim["claim_id"] in implicated},
         )
+
+
+def _poi_around_request(parameters):
+    return ProviderRequest(
+        request_id="req-poi-around-contract",
+        capability="poi_around",
+        parameters=parameters,
+        deadline_ms=1000,
+        as_of="2026-09-17",
+    )
+
+
+class PoiAroundRequestContractTests(unittest.TestCase):
+    """Transport-layer coverage for the `sortrule` handling in the `poi_around`
+    branch of amap_http._request_contract. Before this class, that branch
+    always hardcoded sortrule=distance and no test exercised it directly.
+    """
+
+    @staticmethod
+    def _base_parameters(**overrides):
+        parameters = {
+            "location": "121.000000,31.000000",
+            "keywords": "餐厅",
+            "types": "050100|050200|050400",
+        }
+        parameters.update(overrides)
+        return parameters
+
+    def test_request_contract_defaults_sortrule_to_distance(self):
+        _, parameters, api = amap_http._request_contract(
+            _poi_around_request(self._base_parameters())
+        )
+        self.assertEqual("distance", parameters["sortrule"])
+        self.assertEqual("around-v5", api)
+
+    def test_request_contract_passes_through_weight_sortrule(self):
+        _, parameters, _ = amap_http._request_contract(
+            _poi_around_request(self._base_parameters(sortrule="weight"))
+        )
+        self.assertEqual("weight", parameters["sortrule"])
+
+    def test_request_contract_rejects_unsupported_sortrule(self):
+        with self.assertRaises(ContractMismatch):
+            amap_http._request_contract(
+                _poi_around_request(self._base_parameters(sortrule="rating"))
+            )
 
 
 for _path in fixture_paths():
