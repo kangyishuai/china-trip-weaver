@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import re
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from .clock import Clock, isoformat_seconds
@@ -273,7 +274,8 @@ def _fold_amap_health(
         if entry.get("provider") != "amap":
             continue
         updated = copy.deepcopy(entry)
-        updated["reason"] = "%s; %s" % (updated["reason"], note)
+        base_reason = re.sub(r"; weather=\d+ days folded \([^)]*\)", "", updated["reason"])
+        updated["reason"] = "%s; %s" % (base_reason, note)
         if "weather" not in updated["capabilities"]:
             updated["capabilities"] = list(updated["capabilities"]) + ["weather"]
         if updated["status"] != "ready" or updated["mode"] not in ("live", "cached"):

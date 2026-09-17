@@ -186,6 +186,33 @@ class WeatherFoldTests(unittest.TestCase):
         report = validate_trip(trip)
         self.assertTrue(report.ok, report.errors)
 
+    def test_health_reason_keeps_only_one_weather_fold_note_after_two_folds(self):
+        trip1 = copy.deepcopy(self.journey["trips"][0])
+        row1, claim1 = forecast_row(
+            "上海", "2026-10-01", "上海", "310000",
+            forecast_value("2026-10-01", "上海", "310000", reported_at="2026-09-22T09:00:00+08:00"),
+        )
+        first_result = envelope([row1], [claim1])
+        first = fold_weather_into_trip(trip1, first_result, CLOCK)
+        self.assertIsNotNone(first)
+
+        later_clock = FixedClock.from_iso("2026-09-22T15:00:00+08:00")
+        row2, claim2 = forecast_row(
+            "上海", "2026-10-01", "上海", "310000",
+            forecast_value("2026-10-01", "上海", "310000", reported_at="2026-09-22T14:00:00+08:00"),
+        )
+        second_result = envelope([row2], [claim2], clock=later_clock)
+        second = fold_weather_into_trip(first.trip, second_result, later_clock)
+        self.assertIsNotNone(second)
+
+        amap_health = next(h for h in second.trip["provider_health"] if h["provider"] == "amap")
+        self.assertEqual(1, amap_health["reason"].count("days folded"))
+        self.assertIn(second_result["queried_at"], amap_health["reason"])
+        self.assertNotIn(first_result["queried_at"], amap_health["reason"])
+
+        report = validate_trip(second.trip)
+        self.assertTrue(report.ok, report.errors)
+
     def test_revision_conflict_and_missing_claim_raise(self):
         wrong_revision = self.journey["revision"]["number"] + 5
         with self.assertRaises(ValueError) as journey_ctx:

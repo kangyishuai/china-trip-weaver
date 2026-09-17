@@ -2262,3 +2262,10 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 3. **`tests/test_contracts.py` 的两个硬编码计数**：白名单写「valid/invalid 各加一份」+ 该文件「都只加」，但两者字面冲突——加了新夹具不改 `test_accepted_examples_are_unchanged_in_test_fixtures` 里的 `3`/`4`，这条测试必然由 3/4 变 4/5 而失败，且失败与任何真实缺陷无关。参照本文件与 PROGRESS.md 记录的同类先例（新增 `.py` 需同步改 `test_design_docs.py` 计数），已直接改成 `4`/`5`，视为「新增夹具」这个被明确批准的动作的机械必然结果；`git diff main -- tests/test_contracts.py` 只有这两个数字变化。
 
 另：任务书未要求、但为通过既有 E003「未在文档中出现的 CNY 事实」检查而必须做的一处联动——`_check_rendered_facts` 的 `known_prices` 集合原本只收 `transport_legs`/`lodgings`/`pois` 的 `price.amount`，现同时收 `slot.dining.options[].cost_cny`（page 里的「人均 ¥32」需要被认出是 Trip 里真实存在的价格，而不是被当成臆造事实拒收）；07-renderer.md §7.1 的 E003 条目已补一句说明，`git diff main --stat` 只多了这一处判断逻辑与一句文档。
+## 书 AP3「健康行去重与探针三能力」（2026-09-17，第三十三波，worktree `.tmp/wt-ap3` 分支 `fold-health-probe`）：无
+
+无。全程没有遇到拿不准、需要管理者裁决的真实二义性。任务书「我替领导拍的板」一节已经把健康行正则
+的删除范围、探针三请求的参数、`business`/`contract`/`network` 的汇总口径逐一定死，照做即可闭合
+任务 0 那条复现测试；探针的异常兜底（三个子请求任一抛异常记 `business=failed` 不外抛）也是任务书
+明确要求的行为，不算设计判断分叉。详细完成记录见 PROGRESS.md「书 AP3」小节（任务 0 核对、任务 1/2
+完成、验收结果，含反向验证红→绿的实际断言与实网 `ctw doctor --probe` 的 amap 行输出）。

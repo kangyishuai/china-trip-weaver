@@ -1984,31 +1984,99 @@ def _probe_amap(
     repo_root: Path,
     credential_status: str,
     progress: _NDJSONProgress,
-) -> Mapping[str, str]:
+) -> Mapping[str, Any]:
     del repo_root
     if credential_status == "missing":
         return _not_run_probe(credential_status)
     from .clock import SystemClock
-    from .contracts import ProviderRequest
-    from .providers.amap import AMapAdapter
     from .providers.amap_http import AMapCallBudget, AMapHTTPTransport
-    from .providers.base import ProviderContext, stable_id
 
     progress.emit({"event": "probe", "provider": "amap", "scope": "doctor", "status": "started"})
     clock = SystemClock()
+    as_of = clock.now().date().isoformat()
+    transport = AMapHTTPTransport(credentials, budget=AMapCallBudget(max_calls=4))
+    _attach_progress(transport, progress)
+    capability_layers = {
+        "poi": _probe_amap_capability(
+            transport, clock, credentials, credential_status, as_of,
+            capability="poi",
+            parameters={"city": "北京", "keywords": "天安门", "page_size": 1, "page_num": 1},
+            request_id_parts=("doctor-amap", "北京", "天安门"),
+        ),
+        "weather": _probe_amap_capability(
+            transport, clock, credentials, credential_status, as_of,
+            capability="weather",
+            parameters={"adcode": "110000"},
+            request_id_parts=("doctor-amap-weather", "110000"),
+        ),
+        "poi_around": _probe_amap_capability(
+            transport, clock, credentials, credential_status, as_of,
+            capability="poi_around",
+            parameters={
+                "location": "116.397428,39.909187",
+                "keywords": "餐厅",
+                "types": "050000",
+                "radius": 1500,
+                "page_size": 1,
+            },
+            request_id_parts=("doctor-amap-around", "116.397428,39.909187"),
+        ),
+    }
+    return _combine_amap_capability_layers(credential_status, capability_layers)
+
+
+def _probe_amap_capability(
+    transport: Any,
+    clock: Any,
+    credentials: Any,
+    credential_status: str,
+    as_of: str,
+    *,
+    capability: str,
+    parameters: Mapping[str, Any],
+    request_id_parts: Sequence[Any],
+) -> Mapping[str, str]:
+    from .contracts import ProviderRequest
+    from .providers.amap import AMapAdapter
+    from .providers.base import ProviderContext, stable_id
+
     request = ProviderRequest(
-        request_id=stable_id("doctor-amap", "北京", "天安门"),
-        capability="poi",
-        parameters={"city": "北京", "keywords": "天安门", "page_size": 1, "page_num": 1},
+        request_id=stable_id(*request_id_parts),
+        capability=capability,
+        parameters=parameters,
         deadline_ms=6000,
-        as_of=clock.now().date().isoformat(),
+        as_of=as_of,
         cache_policy="bypass",
         trace={"stage": "doctor"},
     )
-    transport = AMapHTTPTransport(credentials, budget=AMapCallBudget(max_calls=2))
-    _attach_progress(transport, progress)
-    result = AMapAdapter().query(request, ProviderContext(clock, credentials, transport))
+    try:
+        result = AMapAdapter().query(request, ProviderContext(clock, credentials, transport))
+    except Exception:
+        return {"credential": credential_status, "contract": "failed", "network": "failed", "business": "failed"}
     return _probe_layers(credential_status, result)
+
+
+def _combine_amap_capability_layers(
+    credential_status: str, capability_layers: Mapping[str, Mapping[str, str]],
+) -> Mapping[str, Any]:
+    business_rank = {"passed": 0, "not_run": 1, "degraded": 2, "failed": 3}
+    business = "passed"
+    contract = "passed"
+    network = "passed"
+    for layers in capability_layers.values():
+        if business_rank.get(layers["business"], 0) > business_rank.get(business, 0):
+            business = layers["business"]
+        if contract == "passed" and layers["contract"] != "passed":
+            contract = layers["contract"]
+        if network == "passed" and layers["network"] != "passed":
+            network = layers["network"]
+    return {
+        "credential": credential_status,
+        "contract": contract,
+        "network": network,
+        "business": business,
+        "capabilities": {key: layers["business"] for key, layers in capability_layers.items()},
+    }
 
 
 def _probe_variflight(
