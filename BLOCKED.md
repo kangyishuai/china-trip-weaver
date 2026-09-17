@@ -2070,3 +2070,10 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 **新发现、未在任务书列出范围内、记录待裁决的一项**：`amap_http.py::_request_contract` 的 `weather` 分支（`adcode`/`city` 二选一、拼 `/v3/weather/weatherInfo` 请求参数）没有被任何自动化测试覆盖——`tests/fixtures/providers/*.json` 夹具全部经 `ReplayTransport` 回放，从不真正调用 `_request_contract`；唯一能验证这条分支形状是否正确的既有测试文件是 `tests/test_amap_live.py`（`09-impl-map.md` 里"4 capability 请求 shape ... fixtures 全过"说的就是它覆盖 geocode/poi/poi_around/route 四种），但该文件不在本书「界限」授权可改列表内。本轮改用实网抽查代替：用真实 Key 分别查「福州」（`city=福州`）与「鼓楼区」（`city=鼓楼区`）验证了 `_request_contract` 拼参数、发请求、`AMapAdapter` 归一化的完整链路都成立（福州 4 条 claim、鼓楼区因 4 个同名行政区触发 `weather_ambiguous:4` 判 no_results，见 PROGRESS.md 任务 1 证据），但这只是一次性人工验证，不是回归门禁——以后如果有人改坏 `_request_contract` 的 `weather` 分支（比如参数名拼错、`adcode`/`city` 校验逻辑改坏），全量测试不会变红，只有下次真的连真实 AMap 发请求才会发现。
 
 供裁决：是否要另开一本小书，把 `tests/test_amap_live.py` 加入某一波的「界限」授权名单，给 `weather` 分支补一个不依赖真实网络（用注入的 fake opener）的请求形状单测，使其获得跟 geocode/poi/poi_around/route 同等的回归保护。
+## 书「AN2：Trip 每日天气渲染与校验」（2026-09-17，第二十九波，worktree `.tmp/wt-an2` 分支 `day-weather-render`）：无裁决分叉，一处非阻塞判断供核对
+
+全程未遇到需要领导裁决、拿不准怎么办的分叉。「我替领导拍的板」四条（schema 纯增量形状、缺省文案、天气行文案模板、错误码 E006/JH006）均已按字面执行，仅在文案模板遇到 `day_weather_line(day, labels)` 的签名约束时做了必要收窄（见下）。
+
+唯一需要自行设计判断（非裁决分叉，供核对）的一点：任务书「拍的板」给的猜测文案示例含 provider 名（「高德 09-17 14:33 报」），但 `day.weather` 本身没有 `provider` 字段，且任务书把 `day_weather_line` 的签名明确钉死为 `(day, labels)`——两者字面冲突。按「页面不说 Trip 里没有的话」的最高让步优先级，天气行最终不带 provider 名，只保留 `<time>` 包裹的 `reported_at`（复用既有 `_time()` 帮手）；provider 归属仍能从 `claim_id` 追溯到对应 claim 的 `provider` 字段核验，只是不重复摘要到这一行文字里。
+
+另有一处技术必然性记在 PROGRESS.md 任务 2 小节，供核对但不构成裁决分叉：`day_weather_line` 若对每天无条件渲染会改变 `demo/journey-16d`（16 天全无 `weather` 键）的渲染字节，直接与任务书「demo 必须字节不变」硬冲突；已加一道「整份 Trip/Journey 里至少一天带 `weather` 键才渲染」的门解开，两个约束都满足，`build_renderer_fixtures.py` 重跑后 demo 的 `journey_sha256`/`html_sha256` 与开工基线逐字一致。

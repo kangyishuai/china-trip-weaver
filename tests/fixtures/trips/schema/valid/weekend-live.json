@@ -29,6 +29,20 @@
       "date": "2026-10-16",
       "city": "上海",
       "timezone": "Asia/Shanghai",
+      "weather": {
+        "forecast_date": "2026-10-16",
+        "adcode": "310000",
+        "city": "上海",
+        "day_text": "多云",
+        "night_text": "晴",
+        "temp_high_c": 23,
+        "temp_low_c": 16,
+        "wind_day": "东南风3-4级",
+        "wind_night": "东南风1-2级",
+        "reported_at": "2026-10-01T08:35:00+08:00",
+        "advice": ["紫外线较强，建议涂抹防晒霜"],
+        "claim_id": "claim-day1-weather"
+      },
       "slots": [
         {
           "slot_id": "slot-1",
@@ -231,6 +245,35 @@
       "confidence": 0,
       "mode": "live",
       "as_of": null,
+      "raw_ref": null,
+      "response_hash": null,
+      "json_path": null
+    },
+    {
+      "claim_id": "claim-day1-weather",
+      "subject_ref": "day-1",
+      "field_path": "/weather",
+      "value": {
+        "forecast_date": "2026-10-16",
+        "adcode": "310000",
+        "city": "上海",
+        "day_text": "多云",
+        "night_text": "晴",
+        "temp_high_c": 23,
+        "temp_low_c": 16,
+        "wind_day": "东南风3-4级",
+        "wind_night": "东南风1-2级",
+        "reported_at": "2026-10-01T08:35:00+08:00",
+        "advice": ["紫外线较强，建议涂抹防晒霜"],
+        "claim_id": "claim-day1-weather"
+      },
+      "source_url": "https://restapi.amap.com/v3/weather/weatherInfo",
+      "provider": "amap",
+      "queried_at": "2026-10-01T08:35:00+08:00",
+      "status": "verified",
+      "confidence": 0.9,
+      "mode": "live",
+      "as_of": "2026-10-01T08:35:00+08:00",
       "raw_ref": null,
       "response_hash": null,
       "json_path": null

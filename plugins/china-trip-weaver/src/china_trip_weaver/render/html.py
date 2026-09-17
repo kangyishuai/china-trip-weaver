@@ -287,6 +287,8 @@ def _labels(locale: str) -> Mapping[str, str]:
             "day_label": "Day %d", "footer_notice": "This page only compares information and links to official pages; inventory, prices, punctuality, and opening status are not guaranteed.",
             "unknown_reason": "Available evidence does not confirm %s; verify it for the trip dates on the official page.",
             "health_reason": "Status: %s. Technical detail is preserved in the page data.",
+            "weather_none": "Weather: no forecast yet",
+            "weather_line": "Weather: %s/%s · %s–%s°C · %s/%s · reported %s",
         }
     return {
         "locale": "zh-CN",
@@ -313,6 +315,8 @@ def _labels(locale: str) -> Mapping[str, str]:
         "day_label": "第 %d 天", "footer_notice": "本页只做查询、比较和官方深链；不保证库存、价格、准点或开放状态。",
         "unknown_reason": "现有资料不足以确认“%s”；请按行程日期在官方页面复核。",
         "health_reason": "当前状态为“%s”；技术详情已保留在页面数据中。",
+        "weather_none": "天气：暂无预报",
+        "weather_line": "天气：%s／%s · %s–%s℃ · %s／%s · %s 报",
     }
 
 
@@ -653,11 +657,29 @@ def _render_day_slots(
     return "".join(slots) or '<li class="empty-state">%s</li>' % text(labels["none"])
 
 
+def day_weather_line(day: Mapping[str, Any], labels: Mapping[str, str]) -> str:
+    """Render one day's weather forecast (or a 'no forecast yet' line); shared by the Trip and Journey day cards."""
+    weather = day.get("weather")
+    if not weather:
+        return '<p class="day-weather">%s</p>' % text(labels["weather_none"])
+    summary = labels["weather_line"] % (
+        text(weather["day_text"]), text(weather["night_text"]),
+        text(weather["temp_low_c"]), text(weather["temp_high_c"]),
+        text(weather["wind_day"]), text(weather["wind_night"]),
+        _time(weather["reported_at"]),
+    )
+    advice_items = "".join("<li>%s</li>" % text(item) for item in weather["advice"])
+    advice_html = '<ul class="weather-advice">%s</ul>' % advice_items if advice_items else ""
+    return '<p class="day-weather" data-weather-date="%s">%s</p>%s' % (attr(weather["forecast_date"]), summary, advice_html)
+
+
 def _days_section(trip: Mapping[str, Any], claims: Mapping[str, Any], labels: Mapping[str, str]) -> str:
+    show_weather = any("weather" in day for day in trip["days"])
     days = []
     for index, day in enumerate(trip["days"]):
-        body = '<article class="day-block" id="%s" data-day-id="%s"><h3>%s · %s · %s</h3><ol class="timeline">%s</ol></article>' % (
+        body = '<article class="day-block" id="%s" data-day-id="%s"><h3>%s · %s · %s</h3>%s<ol class="timeline">%s</ol></article>' % (
             dom_id("day", day["day_id"]), attr(day["day_id"]), text(labels["day_label"] % (index + 1)), text(day["date"]), text(day["city"]),
+            day_weather_line(day, labels) if show_weather else "",
             _render_day_slots(day, claims, labels),
         )
         days.append(body)

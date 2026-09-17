@@ -528,6 +528,39 @@
         "claim_ids": {"$ref": "#/$defs/idList"}
       }
     },
+    "weatherForecast": {
+      "description": "A single day's weather forecast attached to Trip day.weather; carries the AMap-sourced forecast fields plus rendering advice and the claim that backs the values. Optional on every day and null-able; a day with no key or a null value has no forecast yet.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "forecast_date",
+        "adcode",
+        "city",
+        "day_text",
+        "night_text",
+        "temp_high_c",
+        "temp_low_c",
+        "wind_day",
+        "wind_night",
+        "reported_at",
+        "advice",
+        "claim_id"
+      ],
+      "properties": {
+        "forecast_date": {"type": "string", "format": "date"},
+        "adcode": {"type": "string", "pattern": "^\\d{6}$"},
+        "city": {"type": "string", "minLength": 1},
+        "day_text": {"type": "string", "minLength": 1},
+        "night_text": {"type": "string", "minLength": 1},
+        "temp_high_c": {"type": "integer"},
+        "temp_low_c": {"type": "integer"},
+        "wind_day": {"type": "string", "minLength": 1},
+        "wind_night": {"type": "string", "minLength": 1},
+        "reported_at": {"type": "string", "format": "date-time"},
+        "advice": {"$ref": "#/$defs/stringList"},
+        "claim_id": {"type": ["string", "null"]}
+      }
+    },
     "day": {
       "type": "object",
       "additionalProperties": false,
@@ -544,6 +577,10 @@
         "timezone": {"const": "Asia/Shanghai"},
         "pace": {"type": "string", "enum": ["slow", "balanced", "full"]},
         "planned_walking_km": {"type": "number", "minimum": 0},
+        "weather": {
+          "description": "This day's weather forecast, or null/absent when none has been fetched yet. Optional only for legacy Trip documents.",
+          "oneOf": [{"$ref": "#/$defs/weatherForecast"}, {"type": "null"}]
+        },
         "slots": {"type": "array", "items": {"$ref": "#/$defs/slot"}}
       }
     },

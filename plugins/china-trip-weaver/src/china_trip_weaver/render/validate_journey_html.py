@@ -17,6 +17,7 @@ from .validate_html import (
     HTMLIssue,
     HTMLValidationReport,
     SECRET_PATTERNS,
+    _check_weather_blocks,
     _csp,
     _css_contract,
     _number,
@@ -53,6 +54,7 @@ def validate_journey_html(
     _check_connection_coverage(parser, journey, add)
     _check_provider_health_coverage(parser, journey, add)
     _check_day_timeline_coverage(parser, journey, add)
+    _check_day_weather(html_text, journey, add)
     _check_transport_overview_coverage(parser, journey, add)
     checklist, risks = _check_checklist_priority_and_risk_traces(parser, journey, add)
     _check_budget_ledger(parser, journey, add)
@@ -174,6 +176,11 @@ def _check_day_timeline_coverage(
             }
             if any(day_nodes[index].get(key) != value for key, value in expected.items()):
                 add("JH201", "day-timeline facts differ at index %d" % index)
+
+
+def _check_day_weather(html_text: str, journey: Mapping[str, Any], add: Callable[[str, str], None]) -> None:
+    days = [day for trip in journey["trips"] for day in trip["days"]]
+    _check_weather_blocks(html_text, days, "JH006", add)
 
 
 def _check_transport_overview_coverage(
