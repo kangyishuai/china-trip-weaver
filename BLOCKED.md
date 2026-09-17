@@ -56,6 +56,12 @@ uniquely matched」。这是 schema 本身「只支持同城两站发站消歧�
 
 管理者裁决（2026-09-17，验收时补记）：两点缺陷均经管理者独立复核成立——缺陷 A 从代码核实：`render/validate_html.py::_check_rendered_facts` 的 `known_services` 只取本 Trip `transport_legs` 的车次号，而 `journey.py::_segment_request` 把整份 `assumptions` 复制进每个原子 Trip；缺陷 B 用 `ctw rail --date 2026-09-29 --from 武夷山 --to 福州` 实网复核：G5023 两行都是 10:00 出发，到福州 11:13（FZS）与到福州南 11:32（FYS）。裁决：**开一本授权改代码的书（第三十波 AN5）**——E003 的已知车次集合并入 `request.locked_rail_services[].service_number`；`lockedRailService` 加可选 `arrive_time`（与 `depart_time` 同型），`_locked_rail_candidate` 把它传给 `select_service` 的 `requested_arrive_at`；补一条跨原子 Trip 的 `journey plan` 回归测试。修好后用第 2 次实网额度重跑 AN4 的任务 2。执行者两次实跑与三次独立复现的判断正确，任务书对 0.22.0 单 Trip 测试的外推是管理者的责任。
 
+**已修复（2026-09-17，AN5，分支 `locked-service-fixes`）**：两点缺陷均按裁决修好并逐一反向验证
+（红→绿）；用裁决保留的第 2 次实网额度重跑真实 `journey plan`（`request.json` 的 G5023 条目补
+`arrive_time: "11:13"` 后），退出码 0，`trips=3 days=16 errors=0`，G1902 07:50→09:30
+`locked=True`、G5023 10:00→11:13 `locked=True`，`journey validate`/`validate-html` 均通过。详细证据见
+`PROGRESS.md`「AN5」一节的任务 1/2/3。此条目本身按历史记录原样保留，不删除、不改写上文诊断内容。
+
 ## 书「统一 replan/planning 的按车次号挑车逻辑」（2026-09-15，第二十八波）：无
 
 全程未遇到需要领导裁决、拿不准怎么办的分叉。「我替领导拍的板」三条（共用函数放新模块
@@ -2083,3 +2089,21 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 唯一需要自行设计判断（非裁决分叉，供核对）的一点：任务书「拍的板」给的猜测文案示例含 provider 名（「高德 09-17 14:33 报」），但 `day.weather` 本身没有 `provider` 字段，且任务书把 `day_weather_line` 的签名明确钉死为 `(day, labels)`——两者字面冲突。按「页面不说 Trip 里没有的话」的最高让步优先级，天气行最终不带 provider 名，只保留 `<time>` 包裹的 `reported_at`（复用既有 `_time()` 帮手）；provider 归属仍能从 `claim_id` 追溯到对应 claim 的 `provider` 字段核验，只是不重复摘要到这一行文字里。
 
 另有一处技术必然性记在 PROGRESS.md 任务 2 小节，供核对但不构成裁决分叉：`day_weather_line` 若对每天无条件渲染会改变 `demo/journey-16d`（16 天全无 `weather` 键）的渲染字节，直接与任务书「demo 必须字节不变」硬冲突；已加一道「整份 Trip/Journey 里至少一天带 `weather` 键才渲染」的门解开，两个约束都满足，`build_renderer_fixtures.py` 重跑后 demo 的 `journey_sha256`/`html_sha256` 与开工基线逐字一致。
+
+## 书 AN5「locked_rail_services 两点缺陷修复」（2026-09-17，第三十波，分支 `locked-service-fixes`）：无
+
+任务书三项任务全部完成，完成条件两条均达成（详见 PROGRESS.md「AN5」一节）。全程未遇到需要领导裁决、
+拿不准怎么办的分叉。
+
+唯一记一句供核对、不构成裁决分叉的偏离：任务书任务 0 写「候选照 `locked_candidates()` 扩一家福州住宿」，
+但按工程实测（见 PROGRESS.md 任务 0 小节）只加一份福州住宿不足以让 `journey.py` 的分段机制在最小复现
+里切出「有火车腿」与「无火车腿」两个原子 Trip——`_lodging_city_by_date` 需要真实的两城住宿链才能定位
+分段边界；已按工程判断额外补了一份武夷山住宿，两条测试（任务 0 的 (a)/(b)）验收结果与任务书预判逐字
+吻合，不影响结论。另一句供核对：任务书把 07-renderer.md 的落点写成「§7.3」，经 `git grep` 核对 E003 实
+际记在 §7.1（§7.3 是另一类「事实/降级 errors」），已在 §7.1 落笔，07-renderer.md 整份文件仍在白名单内，
+不算越界。
+
+真实行程实网复验（任务 3）额外观察到一件与本书无关的事实，已诚实记入 PROGRESS.md 任务 3 小节：会话
+期间 `journey.json` 被外部并发进程改写（另一个与「住宿已订」相关的会话/进程，非本书任何命令所为），
+本书自己从未写过 `journey.json`/`journey-r*.json`/`福建中秋国庆16天行程*.html`，`candidates.json`（本书
+只读）mtime 也确认未变。
