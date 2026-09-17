@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from .clock import Clock, isoformat_seconds
 from .contracts import PatchResult
-from .journey import replace_trip_in_journey, validate_journey
+from .journey import replace_trips_in_journey, validate_journey
 from .planning import _weather_unknown
 from .replan import _all_refs, _locked_refs
 from .validate_trip import validate_trip
@@ -107,11 +107,11 @@ def fold_weather_into_journey(
     """Fold the same weather envelope into every Trip of a Journey, one reassembly.
 
     Delegates each Trip to `fold_weather_into_trip`; a Trip that does not change
-    is left alone. Every Trip that does change is swapped in with
-    `replace_trip_in_journey` (its revision bump is chained when more than one
-    Trip changes), and the resulting revision's `created_by` is forced back to
-    `"system"`, since `replace_trip_in_journey` defaults it to `"user"` for its
-    own human-triggered use case. Returns None when no Trip changed.
+    is left alone. Every Trip that does change is folded into one
+    `replace_trips_in_journey` call, so the Journey's `revision.number` advances
+    by exactly one no matter how many Trips changed, with `created_by` forced to
+    `"system"` (this function's own trigger is always the automated weather
+    fold, never a human edit). Returns None when no Trip changed.
     """
 
     current_revision = int(journey["revision"]["number"])
@@ -120,23 +120,19 @@ def fold_weather_into_journey(
             "revision_conflict: Journey is at revision %d, not %d" % (current_revision, base_revision)
         )
 
-    working = journey
-    changed_any = False
-    for trip_id in [item["trip_id"] for item in journey["trips"]]:
-        trip = next(item for item in working["trips"] if item["trip_id"] == trip_id)
+    changed_trips: List[Mapping[str, Any]] = []
+    for trip in journey["trips"]:
         patch_result = fold_weather_into_trip(trip, result, clock, reason=reason)
         if patch_result is None:
             continue
-        changed_any = True
-        working = replace_trip_in_journey(
-            working, patch_result.trip, int(working["revision"]["number"]), clock, reason=reason,
-        )
-        working = dict(working)
-        working["revision"] = dict(working["revision"])
-        working["revision"]["created_by"] = "system"
+        changed_trips.append(patch_result.trip)
 
-    if not changed_any:
+    if not changed_trips:
         return None
+
+    working = replace_trips_in_journey(
+        journey, changed_trips, current_revision, clock, reason=reason, created_by="system",
+    )
 
     report = validate_journey(working)
     if not report.ok:

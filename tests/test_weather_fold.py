@@ -240,6 +240,25 @@ class WeatherFoldTests(unittest.TestCase):
         report = validate_trip(trip)
         self.assertTrue(report.ok, report.errors)
 
+    def test_fold_across_two_trips_bumps_journey_revision_once(self):
+        row1, claim1 = forecast_row(
+            "上海", "2026-10-05", "上海", "310000",
+            forecast_value("2026-10-05", "上海", "310000", reported_at="2026-09-22T09:00:00+08:00"),
+        )
+        row2, claim2 = forecast_row(
+            "杭州", "2026-10-06", "杭州", "330100",
+            forecast_value("2026-10-06", "杭州", "330100", reported_at="2026-09-22T09:00:00+08:00", temp_high_c=27),
+        )
+        result = envelope([row1, row2], [claim1, claim2])
+
+        journey_result = fold_weather_into_journey(self.journey, result, self.journey["revision"]["number"], CLOCK)
+        self.assertIsNotNone(journey_result)
+        self.assertEqual(journey_result["revision"]["number"], 2)
+        self.assertEqual(journey_result["revision"]["parent_revision"], 1)
+        self.assertEqual(journey_result["trips"][0]["revision"]["number"], 2)
+        self.assertEqual(journey_result["trips"][1]["revision"]["number"], 2)
+        self.assertEqual(canonical_json(journey_result["trips"][2]), canonical_json(self.original_trips[2]))
+
 
 if __name__ == "__main__":
     unittest.main()

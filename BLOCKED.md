@@ -2135,3 +2135,11 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 
 管理者裁决（2026-09-17，验收时补记）：按 `value` 逐键匹配 claim 的判断认可（真实 16 天信封一次混 22 行、多城同日，按日期取第一条必错）。验收另查出一处与任务书「一次重组、revision+1」不符的行为：`fold_weather_into_journey` 逐 Trip 调 `replace_trip_in_journey`，两个 Trip 同时被改时 Journey 版本从 1 跳到 3、`parent_revision` 指向从未落盘的 2（demo/journey-16d 折 10/05+10/06 实测）。根因是本书把 journey.py 设为只读，执行者没有单次多 Trip 重组的入口，不算执行者违规；AN8b 补 `replace_trips_in_journey` 并让 `fold_weather_into_journey` 改走它。其余暗卷（真实 journey 副本折入手造 9/25 预报：只 north 变、另两段逐字节不变、页面 16 行天气 1 有 15 暂无、validate-html 0、署名含高德；二折 NOOP；claim 篡改报错不写；四个假 Key 全量 750 绿）全部通过。已关闭。
 
+## 书 AN8b「journey 天气命令」（2026-09-17，第三十二波，worktree `.tmp/wt-an8b` 分支 `journey-weather`）：无裁决分叉，一处非阻塞设计判断供核对
+
+无裁决分叉。全程未遇到需要管理者裁决、拿不准怎么办的真实二义性——任务书「我替领导拍的板」一节已经把 `query` 取法、`replace_trips_in_journey` 的重组/revision 语义、`ctw journey weather` 的四条出口（成功/NOOP/revision 冲突/异常）逐一定死，照做即可闭合任务 0 那条复现测试。
+
+**一处非阻塞设计判断，供核对**（详见 PROGRESS.md「AN8b 任务 1 完成」小节）：`replace_trips_in_journey(journey, trips, base_revision, clock, reason=None, created_by="user")` 在 `reason` 为 `None` 时该取哪个 Trip 的 `revision.reason` 作默认值，任务书只给了函数签名、未定义多 Trip 场景的取法。按「保持与原单 Trip 版本行为一致」的原则，取 `trips[0]["revision"]["reason"]`（原版本是唯一那个 Trip 自己的 reason，现在退化为列表第一个）；由于 `fold_weather_into_journey` 传入的 `changed_trips` 顺序就是 `journey["trips"]` 的原序（只保留真正变化的那些），「列表第一个」总是这批变化里日期最早的 Trip，语义上是单 Trip 版本的自然推广，不影响任何调用方（`fold_weather_into_journey` 和 `_cmd_journey_weather` 都显式传了 `reason`，从未走到这条默认值分支）。
+
+任务 3 真实行程只读演练（`fujian-2026-09-25-to-10-10/journey.json`，revision 9）额外确认一件事，供核对：距最早一天 9/25 还有 8 天，高德「当天+3 天」视野下 `ctw weather --journey` 22 行全部 `out_of_window`，`ctw journey weather` 因此对真实行程必然是 NOOP（退出 2、不写文件、sha 不变）——这是当前日期下的正常行为，不是缺陷；两条命令折回真实文件的正向路径（有预报可折时 revision 是否真的只加一）留给 9/22 之后那本「把预报折回现役 journey.json」的书用真实预报数据验收。
+
