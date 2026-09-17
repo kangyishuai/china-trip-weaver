@@ -1121,3 +1121,71 @@ git diff main --stat -- plugins/china-trip-weaver/src/china_trip_weaver/{journey
 ```
 
 `git diff main --stat` 总览：5 个文件（`planning.py`+159/-7、`weather.py`+26/-1、`06-pipeline.md`+16、`09-impl-map.md`+2/-2、`SKILL.md`+1/-1）+ 新建 `tests/test_planner_weather.py`（8 项测试），全部落在任务书白名单内。BLOCKED.md 记了 1 条「无裁决分叉」+ 3 处自行设计判断供核对，无需管理者答复即可合并。只提交并推送 `planner-weather` 分支，未合并、未改 CI。
+
+## 第三十一波 AN8「天气折回库函数」任务 0 核对记录
+
+- 目标：新建 `weather_fold.py` 两个库函数，把 `ctw weather --output-json` 的结果信封折回既有 Trip/Journey——逐天按「日期相同且 `split_city_names(day.city)` 首段 == 行的 `query`」匹配 `forecasts[]`；`forecast` 行写 `day.weather`（10 键+advice+claim_id）并搬一条 claim；`no_forecast` 行写 `weather: null` 加 unknown；`out_of_window` 或无匹配行不动。`fold_weather_into_journey` 在此基础上用 `replace_trip_in_journey` 重组一次。命令与文档是下一本。
+- 顺序：任务 0（本节）已完成 → 任务 1 写 `weather_fold.py` + `tests/test_weather_fold.py` 六条验收（含 3 处反向验证）→ 补 `test_design_docs.py`（51→52）与 `09-impl-map.md` 登记 → 跑满全量门禁与 demo Journey 渲染校验后交付。
+- 基线核对（worktree `.tmp/wt-an8`，分支 `weather-fold`）：`unittest discover` `Ran 744 tests ... OK`（0 skipped）；`tests/test_design_docs.py:20` 断言 `51`；`git grep -n weather_fold -- plugins tests` 0 命中。demo/journey-16d 三个 Trip 各 revision 1（上海 day-1..5=10/1-5、杭州 day-1..5=10/6-10、苏州 day-1..6=10/11-16），每天的 `day` 字典里**没有** `weather` 键（不是 null，是键缺失）；三个 Trip 的 amap 健康行都是 `status=missing mode=static capabilities=[geocode,poi,route] version=web-service-v5-v3-route`。
+- 最大风险：①claim 匹配不能照「建议」直接用 `planning._weather_cast_claim`（它只按 `forecast_date` 找第一条），因为一次 Journey 级查询的 `claims[]` 会混进不同城市同一天的多条记录，必须改成按 `value` 逐键等于该行 `forecast` 来消歧——这是有意偏离任务书「建议复用」，原因记在此处供核对；`_weather_unknown` 仍按建议直接复用。②`replace_trip_in_journey` 一次只换一个 Trip 且把 `revision.created_by` 定死成 `"user"`，折 Journey 后必须手动把它改回 `"system"`。③day.weather 从「键缺失」到「有预报」是 JSON Patch `add`，第二次覆盖已有值才是 `replace`，两者按 `"weather" in day` 判断，不能都用同一种 op。④`render/validate_html.py::_check_weather_blocks` 只要 Trip（或 Journey 展平后）任意一天有 `weather` 键就会给**全部**天都渲染天气行（没预报的显「暂无」），所以只需折 2 天即可让验收断言的「16 行、2 有预报 14 暂无」成立，不需要碰另外两个 Trip。
+
+### 任务 1 完成（`weather_fold.py` + 六条测试）
+
+`plugins/china-trip-weaver/src/china_trip_weaver/weather_fold.py`：`fold_weather_into_trip(trip, result, clock, reason=None) -> Optional[PatchResult]` 与 `fold_weather_into_journey(journey, result, base_revision, clock, reason=None) -> Optional[Dict]`，按「拍的板」逐天匹配、覆盖判定、五步操作顺序（删 unknown→删旧 claim→天 add/replace（+no_forecast 顺带加 unknown）→加 claim→改健康行）、patch/revision 形状、AMap 健康行更新实现；返回前分别跑 `validate_trip`/`validate_journey`，不过就抛 `ValueError`。`tests/test_weather_fold.py` 六个用例对应验收①–⑥：
+
+```
+/usr/bin/python3 -m unittest tests.test_weather_fold -v
+test_forecast_rows_add_weather_and_claims_other_trips_untouched ... ok   # ①
+test_no_forecast_row_nulls_weather_with_unknown ... ok                   # ⑤
+test_query_disambiguates_compound_city_name ... ok                      # ⑥
+test_reported_at_update_replaces_weather_and_claim_count_stays ... ok    # ③
+test_revision_conflict_and_missing_claim_raise ... ok                   # ④
+test_same_result_folded_twice_is_noop ... ok                            # ②
+Ran 6 tests in 0.184s
+OK
+```
+
+反向验证（按任务书指定的两处）：
+
+1. 注释掉 `fold_weather_into_trip` 里的 `_remove_stale_claims(trip, changed, operations)` 调用，单跑③：`AssertionError: 17 != 16`（旧 claim 没删，总数从 16 变 17）——红；还原后单跑③恢复 `ok`——绿。
+2. 把 `_matching_forecast_row` 的判据从 `row.get("query") == target_name` 改成 `row.get("city") == target_name`，单跑⑥：`AssertionError: unexpectedly None`（day-3 city 是「平潭／泉州」拆出的目标名「平潭」，两行的 AMap 返回 city 分别是「平潭县」「泉州市」，都不等于「平潭」，两行全部落空，day-3 未被折入）——红；还原后单跑⑥恢复 `ok`——绿。
+
+折入后的 demo Journey 渲染证据（`fold_weather_into_journey` 折 10/1、10/2 两天，逐字打印）：
+
+```
+journey revision: {'number': 2, 'parent_revision': 1, 'created_at': '2026-09-22T09:00:00+08:00',
+                    'reason': 'weather forecast fold (2026-09-22T09:00:00+08:00)', 'created_by': 'system'}
+validate_journey_html errors: 0 ()
+total <p class="day-weather"> blocks: 16
+forecast rows (data-weather-date=): 2
+no-forecast rows (暂无预报): 14
+amap health: ready live ['geocode', 'poi', 'route', 'weather'] | AMap mobility is off; calls=0/80 qps<=2;
+             route matrix uses static estimates; weather=2 days folded (2026-09-22T09:00:00+08:00)
+amap health: missing static ['geocode', 'poi', 'route'] | AMap mobility is off; ...   # 第二个 Trip 未改
+amap health: missing static ['geocode', 'poi', 'route'] | AMap mobility is off; ...   # 第三个 Trip 未改
+```
+
+第一个 Trip 的 amap 行 `status/mode` 从 `missing/static` 升到 `ready/live`、`capabilities` 加 `weather`、旧 reason 接在前面、后缀 `; weather=2 days folded (...)`；另两个 Trip 的 amap 行逐字未动，`canonical_json` 比对两个 Trip 与折入前逐字相同（见测试内断言）。
+
+全量与门禁（新增 `weather_fold.py`+`test_weather_fold.py` 后，含 `git add` 使新文件纳入 `git ls-files`）：
+
+```
+/usr/bin/python3 -m unittest discover -s tests -v
+Ran 750 tests in 44.500s
+OK
+~/miniconda3/envs/core/bin/python -m pyflakes $(git ls-files '*.py')   # 0 行
+/usr/bin/python3 scripts/scan_secrets.py
+secret scan: 0 finding(s) across 405 file(s)
+git status --short -- demo   # 空
+```
+
+约束 pathspec（完成条件 2）：
+
+```
+git diff main --stat -- plugins/china-trip-weaver/src/china_trip_weaver/{replan,journey,planning,cli,weather}.py \
+  plugins/china-trip-weaver/src/china_trip_weaver/{render,providers} \
+  plugins/china-trip-weaver/schema
+# 输出为空
+```
+
+`git diff main --stat` 总览：5 个文件——新建 `weather_fold.py`（331 行）与 `tests/test_weather_fold.py`（245 行，6 例）、`tests/test_design_docs.py`（51→52，+1/-1）、`docs/design/09-impl-map.md`（+4，登记新模块）、`PROGRESS.md`（本节）。BLOCKED.md 记了「无裁决分叉」一条（唯一的自行设计判断——不用 `planning._weather_cast_claim` 按日期匹配——已在任务 0 核对记录说明原因，按任务书规则属「建议可走更好的路」，不算裁决分叉）。只提交并推送 `weather-fold` 分支，未合并。
