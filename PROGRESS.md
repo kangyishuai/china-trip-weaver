@@ -496,3 +496,65 @@ fix-names` 会把它们列为人工项。
   天气折回库函数与 `ctw journey weather` 命令，对应 0.23.0、0.24.0）：
   [docs/history/progress-2026-09-17.md](docs/history/progress-2026-09-17.md)
   （2026-09-17 发 0.24.0 时从本文件整体迁出，一字未改，按合入顺序）。
+
+## 书 AP3「健康行去重与探针三能力」（2026-09-17，第三十三波，worktree `.tmp/wt-ap3` 分支 `fold-health-probe`）
+
+任务 0 核对：main `6378f80` 全量 756 项 OK。新增
+`test_health_reason_keeps_only_one_weather_fold_note_after_two_folds`（对 demo/journey-16d
+第一个 Trip 折两次不同 `reported_at` 的 10-01 预报），现状确认红：amap 健康行 reason 里
+`days folded` 出现 2 次（期望 1 次）。核对通过，动工。
+
+目标：①`_fold_amap_health` 追加新段前正则删掉 reason 里所有既有同类段，其余文字一字不动；
+②`_probe_amap` 从只探 `poi` 一项改为共用一个 `AMapCallBudget(max_calls=4)` 顺序探
+`poi`/`weather`/`poi_around` 三项，行里新增 `capabilities` 三键，`business` 取三者最差、
+`contract`/`network` 取三者中第一个非 passed。
+
+顺序：先任务 1（纯字符串处理，风险小）转绿并跑存量 weather_fold/journey_weather_cli 测试；
+再任务 2（新建 test_doctor_probe.py，脚本传输层按 capability 回放 success/weather/around_stations
+fixture body）；两项都绿后跑全量 + 反向验证 + pyflakes + scan_secrets，最后实网
+`ctw doctor --probe` 贴 amap 行。
+
+最大风险：`_probe_amap` 外部签名（4 个位置参数）不能变，因为调用方 `_doctor_probe_report`
+不在改动白名单内；三个子请求任一抛异常都要吞住记 `business=failed`，不能让并发探针整体崩。
+
+**任务 1 完成**：`_fold_amap_health` 追加新段前，先用 `re.sub(r"; weather=\d+ days folded
+\([^)]*\)", "", updated["reason"])` 删掉既有同类段（其余文字含规划器写的
+`; weather=<n> queried, <m> unknown` 逐字不动），再接新段。任务 0 那条测试转绿，
+`reason` 里的 `(…)` 确认是第二次的 `queried_at`；`test_weather_fold`（8 项）与
+`test_journey_weather_cli`（4 项）全绿。反向验证：把正则那行还原成直接拼接
+（`base_reason = updated["reason"]`），任务 0 那条测试红（`1 != 2`）；`cp` 回备份 +
+`touch` 后复跑绿（8 项 `test_weather_fold` 全绿）。
+
+**任务 2 完成**：`_probe_amap` 改为构造一个共用的 `AMapHTTPTransport(credentials,
+budget=AMapCallBudget(max_calls=4))`，顺序调新帮手 `_probe_amap_capability`（新建，
+每次单独 try/except 包住 `AMapAdapter().query(...)`，异常记
+`{business:"failed", contract:"failed", network:"failed"}` 不外抛）三次
+（`poi`/`weather`/`poi_around`，`poi` 参数与原来的天安门查询逐字不变），再用新帮手
+`_combine_amap_capability_layers` 汇总：`capabilities` 三键各取该请求的 `business`；
+行的 `business` 取三者最差（`business_rank` passed<not_run<degraded<failed）；
+`contract`/`network` 取三者中第一个非 passed，否则 passed。新建
+`tests/test_doctor_probe.py`（4 项，`ScriptedCapabilityTransport` 用
+`mock.patch.object(AMapHTTPTransport, "execute", ...)` 按 capability 回放
+`success.json`/`weather.json`/`weather_empty.json`/`around_stations.json` 的
+`transport.body`）：①三个都成功→`capabilities` 三项 passed、`business`/`contract`/
+`network` 全 passed、行仍含四键+`capabilities`；②`weather_empty.json`→`weather`
+degraded、`business` degraded、其余 passed；③`poi_around` 抛 `RuntimeError`→
+`poi_around` failed、`business` failed、探针不崩（另两项仍 passed）；④凭据缺失→
+原样 `_not_run_probe`（不含 `capabilities` 键）。四项全绿。反向验证：把汇总函数的
+`business` 改成直接取 `capability_layers["poi"]["business"]`（去掉最差判断），
+②③两项都转红（②`degraded != passed`、③`failed != passed`，符合预期——两者的
+异常/降级都不在 `poi` 上）；`cp` 回备份 + `touch` 后复跑，`test_doctor_probe`
+（4 项）与 `test_credentials`（22 项，含逐字未改的
+`test_doctor_probe_reports_credential_contract_network_and_business_only` 等）全绿。
+
+**验收结果**：全量 `Ran 761 tests`（756 + 1 + 4）OK、0 skipped；四个假 Key
+（`AMAP_WEBSERVICE_KEY`/`FLYAI_API_KEY`/`VARIFLIGHT_API_KEY`/`ANYSEARCH_API_KEY`
+全设 `ctw-canary-fake-*`）复跑全量同样 761 OK；`pyflakes $(git ls-files '*.py')`
+0 行；`scripts/scan_secrets.py` 0 finding / 408 file；`git status --porcelain --
+demo` 空。实网 `plugins/china-trip-weaver/scripts/ctw doctor --probe` 的 amap 行：
+`{"business":"passed","capabilities":{"poi":"passed","poi_around":"passed",
+"weather":"passed"},"contract":"passed","credential":"configured",
+"network":"passed"}`——三项能力全部 passed。`git diff main --name-only` 只有
+`PROGRESS.md`/`cli.py`/`weather_fold.py`/`tests/test_weather_fold.py`（纯新增）+
+新建 `tests/test_doctor_probe.py`，均在白名单内；`test_credentials.py` 逐字未改。
+BLOCKED.md：无裁决分叉，全程未遇到需要管理者裁决的真实二义性。
