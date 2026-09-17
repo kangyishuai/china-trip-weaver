@@ -187,6 +187,7 @@ ctw research --city CITY --query TEXT [--max-results N] --output-json research.j
 ctw mobility --candidates CANDIDATES.json --modes transit,walking --output-json mobility.json
 ctw lodging --city CITY --check-in YYYY-MM-DD --check-out YYYY-MM-DD --output-json lodging.json
 ctw air --origin CITY --destination CITY --date YYYY-MM-DD --output-json air.json
+ctw weather (--city CITY [--city CITY ...] | --adcode CODE [--adcode CODE ...] | --journey JOURNEY.json | --trip TRIP.json) [--output-json weather.json]
 ctw replan --trip TRIP.json --event EVENT.json --base-revision N --output-json TRIP-rN.json --output-html TRIP-rN.html [--rail-result RAIL.json]
 ctw render TRIP.json --output TRIP.html
 ctw validate-html TRIP.html TRIP.json
@@ -202,6 +203,8 @@ ctw journey assemble --journey JOURNEY.json --replace-trip TRIP-rN.json --base-r
 During initial assembly and `--replace-trip`, a child Trip without a `budget_ledger` has one recomputed from the facts already in that Trip before connections and Journey totals are derived; an existing ledger is left unchanged.
 
 The runtime uses no third-party Python package. Trip and Journey renderers refuse invalid input; both HTML validators block structural, CSP, remote-resource, unsafe-link, secret, fact-mapping, traceability, and transaction-action violations.
+
+`ctw weather` reports AMap's forecast for cities, adcodes, or every day in a Journey/Trip file, picking exactly one of `--city` (repeatable, splits compound names like 福州／平潭), `--adcode` (repeatable), `--journey`, or `--trip`. AMap only ever returns today-plus-3-days of forecast; a Journey/Trip day past that horizon is reported as `out_of_window` with the date it becomes queryable, never a guessed forecast. A city that cannot be resolved, or resolves to more than one place, is reported as `no_forecast` with the reason instead of being silently dropped.
 
 `ctw replan`'s `refresh` event replaces one rail leg with a freshly queried service: run `ctw rail --output-json` first, then pass that file's path as `--rail-result`. `--rail-result` is required for a `refresh` event and rejected for every other event type. A refresh removes every existing claim whose `subject_ref` is the replaced leg before adding that service's current claims, so repeated refreshes do not accumulate stale evidence. When the event omits `service_number`, the default selection only considers same-day services that depart no earlier than the previous slot's end before picking the earliest arrival, raising `refresh_overlap` (naming the candidate count and that end time) only when none qualify; an explicit `service_number` that still matches more than one same-day row raises `refresh_service_ambiguous` unless the event's `arrive_at` or `depart_at` (either a full ISO timestamp or a bare `HH:MM`) picks one. A `suspend` event removes a leg that stopped running (a cancelled train, a suspended ferry crossing) together with its slot, budget-ledger line, and any now-orphaned claims in one patch, swapping the slot for a `free`- or `poi`-kind `replacement_slot`; the patch `trigger` is `disruption`.
 

@@ -16,6 +16,7 @@ Resolve only the candidate endpoints supplied by the parent Skill.
 - A live/cached cell needs route evidence and query time. A static cell needs an explicit method and conservative buffer. Missing or unreachable cells are not routes.
 - Fail closed on endpoint/pagination/response drift and return health plus degradation rung. Do not choose the daily order.
 - Do not substitute host search or AnySearch for an unavailable AMap capability. Keep mobility degradation separate from the destination-search rung recorded by `$research-china-destination`.
+- A city, district, or adcode's current AMap forecast is available separately through `ctw weather`; it only covers today-plus-3-days and reports `out_of_window` rather than guessing further out. This command is informational only — it does not attach weather to a Trip or Journey and is not part of the candidate-resolution matrix below.
 
 Inspect a bounded live matrix directly or return its normalized cells to the parent. When AMap is unavailable, `ctw plan` builds only labeled static estimates:
 
@@ -24,6 +25,7 @@ scripts/ctw candidates add-poi candidates.json --name "景点全名" --city "城
 scripts/ctw mobility --candidates candidates.json --modes transit,walking --output-json mobility.json
 scripts/ctw plan --request request.json --candidates candidates.json --rail off --mobility live --output-json trip.json --output-html trip.html
 scripts/ctw validate trip.json
+scripts/ctw weather --city "城市" --output-json weather.json
 ```
 
 Never turn an AMap fixture response into live output outside an explicit offline fixture test.

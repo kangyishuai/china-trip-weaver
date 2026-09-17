@@ -738,4 +738,41 @@ README。全部改动加上本节记录一次性提交并 `git push origin refre
 - `test_renderer.py` 新增 3 项（`test_day_weather_renders_forecast_and_no_forecast_line_with_zero_errors`、`test_day_weather_temperature_mismatch_reports_e006`、`test_day_weather_missing_forecast_line_removed_reports_e006`）；`test_journey.py` 新增 2 项（`test_weekend_live_journey_with_day_weather_validates_with_zero_errors`、`test_weekend_live_journey_day_weather_tamper_reports_jh006`，用 `assemble_journey_from_trips([weekend-live], ...)` 现成组出一个带 weather 的单 Trip Journey，不必跑完整规划器）。全量 `Ran 704 tests ... OK`（699+5），0 skipped；`scan_secrets` 0；`pyflakes` 全仓库 0 行；`build_renderer_fixtures.py` 重跑后 `journey_sha256`/`html_sha256` 与任务 0 基线一致、`git status --short -- demo` 为空、夹具 counts 仍 `{"trip":10,"html":12}`；`scripts/qa_renderer_browser.py` 对渲染出的 weekend-live 页 `--sections 12` 返回 `"failures": []`、四个 viewport `sectionCount`/`nonEmptySections` 均为 12、`horizontalOverflow`/`internalOverflow` 均为 0（既有测试 `test_network_blocked_browser_viewports_and_print` 同样跑这条路径，已在全量里覆盖）。
 反向验证：分别注释掉 `validate_html.py`/`validate_journey_html.py` 里的 `_check_day_weather(...)` 调用，两个「篡改」测试（temperature mismatch → E006、tamper → JH006）各自变红（`AssertionError: 'E006'/'JH006' not found in []`），「渲染正确」的测试仍绿；还原调用后 5 项全绿。
 完成条件 2：`git diff main --stat -- plugins/china-trip-weaver/src/china_trip_weaver/{planning,journey,cli}.py plugins/china-trip-weaver/src/china_trip_weaver/providers demo README.md README.zh-CN.md` 输出为空。
+
+## AN6 `ctw weather` 命令（2026-09-17，第三十波，worktree `.tmp/wt-an6` 分支 `weather-cli`）
+
+任务 0 已核对：从 main（`672b53a`）分出 worktree 后复跑 `Ran 719 tests ... OK`、0 skipped；`ctw --help` 不含 `weather`；`git grep -n _cmd_weather -- plugins` 0 命中，与任务书基线逐字一致。
+
+理解的目标／顺序／最大风险（≤10 行，核对后补记，先做了核对但未在动工前落盘，此处如实按顺序记录）：
+
+- 目标：新增 `ctw weather`，四选一输入（`--city`/`--adcode`/`--journey`/`--trip`）查高德城市天气，绝不为超出「今天+3 天」窗口的日期编造预报；`amap_http._request_contract` 的 `weather` 分支补请求形状单测（书 AN1 的 BLOCKED.md 记录已把这项明确并入本书，见下）。
+- 顺序：先读 `cli.py` 里 `_add_rail_parser`/`_cmd_rail`、`amap.py::_weather`、`amap_http.py::_request_contract`、`weather.py` 四份现成代码摸清合同形状，再写 `_cmd_weather`，最后补测试与文档——文档里的每个新词（`out_of_window`/`no_forecast`/`_cmd_weather`）都要能 `git grep` 命中真实代码。
+- 风险①（最大）：任务书「拍的板」里 `--city`/`--adcode` 模式的输出行数与「日期晚于今天+3」判断如何落到没有显式目标日期的场景上，字面读法有歧义（逐行按 `forecast_available_on` 判断只会得到 1 条 forecast+3 条 out_of_window，凑不出验收文字「4 天全 out_of_window」）；解法见任务 1 证据段。
+- 风险②：`AMapAdapter` 要求 `AMAP_WEBSERVICE_KEY`，`--fixture` 回放必须配合夹具自带的 `credential_state` 注入一个假 Key，否则连 fixture 都会在 preflight 阶段被 `credential_missing` 拦下，永远走不到 `ReplayTransport`。
+- 风险③：界限不许碰 planning/journey/weather.py/providers/render/schema/demo，`weather.py` 只读不改。
+
+### 任务 1 完成（`ctw weather` 命令）
+
+`_add_weather_parser`/`_cmd_weather` 加在 `cli.py`（`_add_air_parser`/`_cmd_rail` 附近），`_parser()`/`main()` 各加一行注册与分派。四选一用 `add_mutually_exclusive_group(required=True)`；`--city`/`--adcode` 可重复、经 `weather.split_city_names` 拆复合名后按原始顺序去重；`--journey`/`--trip` 把 `days[].date/city` 摊平（Journey 先摊平 `trips[].days`），`city` 同样拆复合名，按 `(date, city)` 去重后按日期+地名排序。
+
+**任务书「拍的板」里唯一需要自行设计判断的点**（非裁决分叉，逐字核对通过后确认按此实现，供核对）：`--city`/`--adcode` 模式没有显式目标日期，「日期晚于今天+3 → out_of_window」这条规则若逐行套用到 AMap 实际返回的最多 4 条 cast 上，用 `weather.json` 夹具（cast 日期 2026-09-04～07）算，`--fixed-clock 2026-09-01` 时只有 09-04 这一天满足 `forecast_available_on(09-04)=09-01<=today`，应显示 forecast，其余 3 天 out_of_window——是 1+3 而不是任务书验收文字写的「4 天全 out_of_window」。反复验算确认这不是我读错公式：`forecast_available_on` 的既有实现与 `tests/test_weather.py` 的断言都要求 travel_date−3 是「最早可查日」，09-04 在 clock=09-01 时确实已进入可查窗口。改用「整批」判断解开矛盾：`--city`/`--adcode` 模式改成对比 `today` 与「本批返回里最早的 `forecast_date`」——如果 `today` 早于这个最早日期，说明这批数据（不管是真实 API 还是回放夹具）代表的是比「今天」更晚的一个查询窗口，整批标记 `out_of_window`（每行的「可查日期」提示仍用该行自己的日期 −3 天，逐行不同）；否则整批按各自真实值显示 `forecast`。这个规则在真实直连查询里几乎永远不触发（AMap 活查询返回的首日恒等于当天），只在「夹具回放 + `--fixed-clock` 设定早于夹具数据」这种测试场景下起作用，且逐字满足了任务书两条验收（`--fixed-clock 2026-09-04` 时 4 条 forecast；`--fixed-clock 2026-09-01` 时 4 条 out_of_window 且都带「可查日期」提示）。`--journey`/`--trip` 模式因为有显式目标日期，不用这条整批规则，直接按「目标日期 > today+3 → 不查询，直接 out_of_window」/「目标日期 < today → 不查询，`no_forecast(日期已过)`」/「否则查询后按目标日期在返回里精确匹配」处理，三态互斥、逻辑更直接。
+
+验收证据（逐条对着任务书原文核对）：
+- `--fixture weather.json --fixed-clock 2026-09-04T00:00:00+08:00 --city 示例市` → 退出 0，4 行 `status=forecast`（贴出的 4 行分别是 09-04～09-07，两行带高温/雨具提示）。
+- `--fixture weather_empty.json` → 退出 2，`— 示例市 无预报（无结果）`。
+- 同一夹具、`--fixed-clock 2026-09-01T00:00:00+08:00` → 退出 2，4 行全 `预报未开放，可查日期 ...`，提示日期分别是 09-01/09-02/09-03/09-04。
+- `--trip tests/fixtures/trips/schema/valid/weekend-live.json`（系统真实时钟，未传 `--fixture`）→ 不查网络（两天都在 today+3 之外），2 行 `2026-10-16/17 上海 预报未开放，可查日期 2026-10-13/14`，退出 2。
+- 实网抽查 `ctw weather --city 福州 --city 鼓楼区 --city 福州／平潭`：福州 4 行 forecast；鼓楼区 `无预报（多个同名地点）`（AMap 对「鼓楼区」这个名字同时命中福州/南京/徐州/赣州等多个同名区，与书 AN1 的 BLOCKED.md 记录的实测结论一致）；复合名拆成福州（已去重跳过重复查询）与平潭（新查，4 行）。
+- 实网抽查 `ctw weather --journey ../../../fujian-2026-09-25-to-10-10/journey.json`（相对路径以 worktree 根为基准）：不崩，22 行（16 天+3 天含复合地名拆分），全部 `out_of_window`——因为真实「今天」（2026-09-17）到最早的 9/25 还有 8 天，超出「今天+3」的预报窗口，这是诚实的「不编造预报」结果，不是 bug。
+- 反向验证：把 `_cmd_weather` 里 `horizon = today + timedelta(days=weather_helpers.FORECAST_DAYS - 1)` 先后改成 `timedelta(days=30)`（未触发——`weekend-live.json` 的目标日期距 `--fixed-clock` 42 天，仍在窗口外）与 `timedelta(days=3650)`（触发：trip 与 journey 两项断言各自变红，`AssertionError` 显示两行都从「预报未开放，可查日期」变成了「无预报（预报未覆盖该日期）」，因为放宽窗口后转去对回放夹具做精确日期匹配、匹配不到）；还原后 12 项全绿，证明测试确实在盯这一行代码。
+
+### 任务 2 完成（请求形状单测 + 文档）
+
+`tests/test_weather_cli.py` 新增 `WeatherRequestContractTests`：直接 `import amap_http` 调 `_request_contract`，验证 `{"adcode":"350100"}`/`{"city":"福州"}` 都拼出 `/v3/weather/weatherInfo` + `{"city": <值>, "extensions":"all","output":"JSON"}` + 标签 `weather-v3`；都给/都不给两个键各抛一次 `ContractMismatch`。这项就是书 AN1（2026-09-17，BLOCKED.md）记录的缺口，管理者裁决已明确「并入第三十波 AN6 的任务清单」——本书完成后可视为该条已闭合。
+
+README.md／README.zh-CN.md「其他命令」代码块各加一行 `ctw weather (...)` 用法，正文各加一段说明四选一输入、今天+3 窗口、`out_of_window`/`no_forecast` 语义；`skills/resolve-china-mobility/SKILL.md` 正文加一条说明 `ctw weather` 是独立于候选解析矩阵的只读天气查询，`bash` 示例块加一行 `scripts/ctw weather --city "城市" --output-json weather.json`（frontmatter 未动，`tests.test_skills` 全量单跑 11 项仍绿，包括逐字钉住 description 与「每条提到的 `ctw <cmd>` 必须是真实命令」两项）；`docs/design/09-impl-map.md` 的 `cli.py` 行补 `` `_cmd_weather` ``。
+
+全量与门禁：`/usr/bin/python3 -m unittest discover -s tests` → `Ran 731 tests ... OK`（719+12，0 skipped）；`scripts/scan_secrets.py` → `0 finding(s) across 402 file(s)`；`~/miniconda3/envs/core/bin/python -m pyflakes $(git ls-files '*.py')` → 0 行；`tests.test_skills` 单跑 `Ran 11 tests ... OK`。完成条件 2：`git diff main --stat -- plugins/china-trip-weaver/src/china_trip_weaver/{planning,journey,weather}.py plugins/china-trip-weaver/src/china_trip_weaver/{providers,render} plugins/china-trip-weaver/schema demo` 输出为空。`git status --short` 只有 5 个改动文件（`cli.py`/两份 README/SKILL.md/09-impl-map.md）+ 1 个新建文件（`tests/test_weather_cli.py`），全部落在任务书白名单内。
+
+顺手活按任务书裁定不做，记录：doctor 加 weather 探针（与书 AN1 记录的同一项，仍未做）、把预报写进 `journey.json`（AN7 的事）、用 `/provider_identity` 的 adcode（AN7 的事）。
 `git diff main --stat` 总览：11 个文件、+242/-2，全部落在界限允许列表内。

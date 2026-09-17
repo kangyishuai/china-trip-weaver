@@ -8,7 +8,7 @@ import platform
 import sys
 import threading
 from pathlib import Path
-from typing import Any, Mapping, Optional, Sequence, TextIO
+from typing import Any, Dict, List, Mapping, Optional, Sequence, TextIO
 
 from . import SCHEMA_VERSION, __version__
 from .contracts import canonical_json, read_json, write_canonical_json
@@ -76,6 +76,7 @@ def _parser() -> argparse.ArgumentParser:
     _add_mobility_parser(commands)
     _add_lodging_parser(commands)
     _add_air_parser(commands)
+    _add_weather_parser(commands)
     _add_render_parser(commands)
     _add_validate_html_parser(commands)
     return parser
@@ -398,6 +399,20 @@ def _add_air_parser(commands: Any) -> None:
     air.add_argument("--output-json", type=Path, default=None)
 
 
+def _add_weather_parser(commands: Any) -> None:
+    weather = commands.add_parser("weather", help="show AMap weather forecasts for cities, adcodes, or a journey/trip")
+    _add_progress_argument(weather)
+    targets = weather.add_mutually_exclusive_group(required=True)
+    targets.add_argument("--city", action="append", default=None, help="city or district name; repeatable")
+    targets.add_argument("--adcode", action="append", default=None, help="AMap adcode; repeatable")
+    targets.add_argument("--journey", type=Path, default=None, help="Journey JSON; queries every trip day")
+    targets.add_argument("--trip", type=Path, default=None, help="Trip JSON; queries every day")
+    weather.add_argument("--deadline", type=float, default=8.0)
+    weather.add_argument("--fixture", type=Path, default=None)
+    weather.add_argument("--fixed-clock", default=None)
+    weather.add_argument("--output-json", type=Path, default=None)
+
+
 def _add_render_parser(commands: Any) -> None:
     render = commands.add_parser("render", help="render a validated Trip as deterministic HTML")
     render.add_argument("trip", type=Path)
@@ -468,6 +483,7 @@ def main(
         "lodging": lambda: _cmd_lodging_air(args, progress),
         "air": lambda: _cmd_lodging_air(args, progress),
         "rail": lambda: _cmd_rail(args, progress),
+        "weather": lambda: _cmd_weather(args, progress),
         "research": lambda: _cmd_research(args, credential_path, progress),
         "replan": lambda: _cmd_replan(args),
         "render": lambda: _cmd_render(args),
@@ -1271,6 +1287,286 @@ def _cmd_rail(args: argparse.Namespace, progress: "_NDJSONProgress") -> int:
     except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
         _progress_failed(progress, "rail")
         print("RAIL_FAILED %s" % exc, file=sys.stderr)
+        return 1
+
+
+def _weather_targets_from_values(values: Sequence[str], kind: str) -> List[Dict[str, Any]]:
+    seen: List[str] = []
+    for raw in values:
+        text = raw.strip()
+        if text and text not in seen:
+            seen.append(text)
+    return [{"date": None, "display": text, "kind": kind} for text in seen]
+
+
+def _weather_targets_from_days(days: Any, weather_helpers: Any) -> List[Dict[str, Any]]:
+    from datetime import date as _date_cls
+
+    targets: List[Dict[str, Any]] = []
+    seen = set()
+    if not isinstance(days, list):
+        return targets
+    for day in days:
+        if not isinstance(day, dict):
+            continue
+        raw_date = day.get("date")
+        raw_city = day.get("city")
+        if not isinstance(raw_date, str) or not isinstance(raw_city, str):
+            continue
+        try:
+            parsed_date = _date_cls.fromisoformat(raw_date)
+        except ValueError:
+            continue
+        for name in weather_helpers.split_city_names(raw_city):
+            key = (parsed_date, name)
+            if key in seen:
+                continue
+            seen.add(key)
+            targets.append({"date": parsed_date, "display": name, "kind": "city"})
+    targets.sort(key=lambda target: (target["date"], target["display"]))
+    return targets
+
+
+def _weather_needs_query(target: Mapping[str, Any], today: Any, horizon: Any) -> bool:
+    return target["date"] is None or today <= target["date"] <= horizon
+
+
+def _weather_row(
+    date: Any, city: str, adcode: Optional[str], *, status: str,
+    forecast: Optional[Mapping[str, Any]] = None, advice: Any = None, note: Optional[str] = None,
+) -> Dict[str, Any]:
+    return {
+        "date": date, "city": city, "adcode": adcode, "forecast": forecast,
+        "advice": list(advice or ()), "status": status, "note": note,
+    }
+
+
+def _format_weather_row(row: Mapping[str, Any]) -> str:
+    date_text = row["date"].isoformat() if row["date"] else "—"
+    if row["status"] == "forecast":
+        value = row["forecast"]
+        line = "%s %s %s／%s %d–%d℃ %s／%s" % (
+            date_text, row["city"], value["day_text"], value["night_text"],
+            value["temp_low_c"], value["temp_high_c"], value["wind_day"], value["wind_night"],
+        )
+        if row["advice"]:
+            line += " · " + "、".join(row["advice"])
+        return line
+    if row["status"] == "out_of_window":
+        return "%s %s 预报未开放，可查日期 %s" % (date_text, row["city"], row["note"])
+    return "%s %s 无预报（%s）" % (date_text, row["city"], row["note"])
+
+
+def _cmd_weather(args: argparse.Namespace, progress: "_NDJSONProgress") -> int:
+    from datetime import date as _date_cls
+    from datetime import timedelta
+
+    from .clock import FixedClock, SystemClock, isoformat_seconds
+    from .contracts import ProviderRequest
+    from .credentials import resolve_credentials
+    from . import weather as weather_helpers
+    from .providers.amap import AMapAdapter
+    from .providers.amap_http import AMapCallBudget, AMapHTTPTransport
+    from .providers.base import ProviderContext, ReplayTransport, stable_id
+
+    try:
+        if args.deadline <= 0:
+            raise ValueError("--deadline must be positive")
+        if args.fixed_clock and args.fixture is None:
+            raise ValueError("--fixed-clock is allowed only with --fixture")
+        repo_root = _repo_root()
+
+        fixture = None
+        if args.fixture is not None:
+            fixture = read_json(args.fixture)
+            if fixture.get("provider") != "amap" or not isinstance(fixture.get("transport"), dict):
+                raise ValueError("--fixture must be an amap provider fixture")
+            clock = FixedClock.from_iso(args.fixed_clock or fixture["captured_at"])
+        else:
+            clock = SystemClock()
+        today = clock.now().date()
+        horizon = today + timedelta(days=weather_helpers.FORECAST_DAYS - 1)
+
+        if args.journey is not None:
+            days: List[Any] = []
+            for trip in read_json(args.journey).get("trips", []):
+                if isinstance(trip, dict):
+                    days.extend(trip.get("days", []))
+            raw_targets = _weather_targets_from_days(days, weather_helpers)
+        elif args.trip is not None:
+            raw_targets = _weather_targets_from_days(read_json(args.trip).get("days", []), weather_helpers)
+        elif args.adcode:
+            raw_targets = _weather_targets_from_values(args.adcode, "adcode")
+        else:
+            names: List[str] = []
+            for raw in args.city:
+                names.extend(weather_helpers.split_city_names(raw))
+            raw_targets = _weather_targets_from_values(names, "city")
+
+        if not raw_targets:
+            raise ValueError("no weather target resolved from the given input")
+
+        unique_queries: List[Mapping[str, Any]] = []
+        seen_keys = set()
+        for target in raw_targets:
+            if not _weather_needs_query(target, today, horizon):
+                continue
+            key = (target["kind"], target["display"])
+            if key not in seen_keys:
+                seen_keys.add(key)
+                unique_queries.append(target)
+
+        query_results: Dict[Any, Any] = {}
+        credential_missing = False
+        if unique_queries:
+            if fixture is not None:
+                env = (
+                    {"AMAP_WEBSERVICE_KEY": "ctw-fixture-canary-not-real"}
+                    if fixture.get("credential_state") == "configured" else {}
+                )
+                credentials = resolve_credentials(env, repo_root / ".tmp" / "weather-fixture-no-credentials")
+            else:
+                credentials = resolve_credentials(credential_path=None)
+            credential_missing = not credentials.get("AMAP_WEBSERVICE_KEY")
+            if not credential_missing:
+                budget = AMapCallBudget(max_calls=20)
+                adapter = AMapAdapter()
+                for target in unique_queries:
+                    if fixture is not None:
+                        transport: Any = ReplayTransport(fixture["transport"], raw_ref=args.fixture.as_posix())
+                    else:
+                        transport = AMapHTTPTransport(credentials, budget=budget)
+                    _attach_progress(transport, progress)
+                    parameters = (
+                        {"adcode": target["display"]} if target["kind"] == "adcode"
+                        else {"city": target["display"]}
+                    )
+                    request = ProviderRequest(
+                        request_id=stable_id("weather-query", target["kind"], target["display"]),
+                        capability="weather",
+                        parameters=parameters,
+                        deadline_ms=int(args.deadline * 1000),
+                        as_of=today.isoformat(),
+                        cache_policy="bypass",
+                        trace={"stage": "weather-cli"},
+                    )
+                    context = ProviderContext(clock=clock, credentials=credentials, transport=transport)
+                    query_results[(target["kind"], target["display"])] = adapter.query(request, context)
+
+        rows: List[Dict[str, Any]] = []
+        all_claims: List[Mapping[str, Any]] = []
+        all_warnings: List[str] = []
+        hard_error = False
+        for target in raw_targets:
+            if target["date"] is not None and target["date"] > horizon:
+                rows.append(_weather_row(
+                    target["date"], target["display"], None, status="out_of_window",
+                    note=weather_helpers.forecast_available_on(target["date"]).isoformat(),
+                ))
+                continue
+            if target["date"] is not None and target["date"] < today:
+                rows.append(_weather_row(target["date"], target["display"], None, status="no_forecast", note="日期已过"))
+                continue
+            if credential_missing:
+                rows.append(_weather_row(target["date"], target["display"], None, status="no_forecast", note="凭据缺失"))
+                continue
+            result = query_results[(target["kind"], target["display"])]
+            all_claims.extend(result.claims)
+            all_warnings.extend(result.warnings)
+            if not result.claims:
+                ambiguous = any(warning.startswith("weather_ambiguous") for warning in result.warnings)
+                note = "多个同名地点" if ambiguous else "无结果"
+                rows.append(_weather_row(target["date"], target["display"], None, status="no_forecast", note=note))
+                if result.error_class not in (None, "no_results"):
+                    hard_error = True
+                continue
+            sorted_claims = sorted(result.claims, key=lambda claim: claim["value"]["forecast_date"])
+            if target["date"] is None:
+                earliest = _date_cls.fromisoformat(sorted_claims[0]["value"]["forecast_date"])
+                stale = today < earliest
+                for claim in sorted_claims:
+                    value = claim["value"]
+                    row_date = _date_cls.fromisoformat(value["forecast_date"])
+                    if stale:
+                        rows.append(_weather_row(
+                            row_date, value.get("city", target["display"]), value.get("adcode"),
+                            status="out_of_window",
+                            note=weather_helpers.forecast_available_on(row_date).isoformat(),
+                        ))
+                    else:
+                        rows.append(_weather_row(
+                            row_date, value.get("city", target["display"]), value.get("adcode"),
+                            status="forecast", forecast=value, advice=weather_helpers.advice_for(value),
+                        ))
+            else:
+                match = next(
+                    (claim for claim in sorted_claims if claim["value"]["forecast_date"] == target["date"].isoformat()),
+                    None,
+                )
+                if match is None:
+                    rows.append(_weather_row(
+                        target["date"], target["display"], None, status="no_forecast", note="预报未覆盖该日期",
+                    ))
+                else:
+                    value = match["value"]
+                    rows.append(_weather_row(
+                        target["date"], value.get("city", target["display"]), value.get("adcode"),
+                        status="forecast", forecast=value, advice=weather_helpers.advice_for(value),
+                    ))
+
+        forecast_count = sum(1 for row in rows if row["status"] == "forecast")
+        if forecast_count:
+            exit_code = 0
+        elif credential_missing or not hard_error:
+            exit_code = 2
+        else:
+            exit_code = 1
+
+        if args.output_json is not None:
+            output = {
+                "provider": AMapAdapter.provider,
+                "provider_version": AMapAdapter.provider_version,
+                "queried_at": isoformat_seconds(clock),
+                "transport_legs": [],
+                "claims": all_claims,
+                "health": {
+                    "provider": AMapAdapter.provider,
+                    "status": "credential_missing" if credential_missing else "ready",
+                    "checked_at": isoformat_seconds(clock),
+                },
+                "warnings": sorted(set(all_warnings)),
+                "error_class": None if forecast_count else (
+                    "credential_missing" if credential_missing else ("no_results" if not hard_error else "contract_mismatch")
+                ),
+                "forecasts": [
+                    {
+                        "date": row["date"].isoformat() if row["date"] else None,
+                        "city": row["city"],
+                        "adcode": row["adcode"],
+                        "forecast": row["forecast"],
+                        "advice": row["advice"],
+                        "status": row["status"],
+                    }
+                    for row in rows
+                ],
+            }
+            args.output_json.parent.mkdir(parents=True, exist_ok=True)
+            write_canonical_json(args.output_json, output)
+            print("WEATHER_COMPLETE output=%s forecasts=%d rows=%d" % (
+                args.output_json, forecast_count, len(rows),
+            ))
+        else:
+            for row in rows:
+                print(_format_weather_row(row))
+        progress.emit({
+            "event": "completion", "command": "weather",
+            "status": "ok" if forecast_count else "degraded",
+            "items": len(rows),
+        })
+        return exit_code
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        _progress_failed(progress, "weather")
+        print("WEATHER_FAILED %s" % exc, file=sys.stderr)
         return 1
 
 
