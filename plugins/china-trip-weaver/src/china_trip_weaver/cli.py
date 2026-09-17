@@ -77,6 +77,7 @@ def _parser() -> argparse.ArgumentParser:
     _add_lodging_parser(commands)
     _add_air_parser(commands)
     _add_weather_parser(commands)
+    _add_dining_parser(commands)
     _add_render_parser(commands)
     _add_validate_html_parser(commands)
     return parser
@@ -431,6 +432,22 @@ def _add_weather_parser(commands: Any) -> None:
     weather.add_argument("--output-json", type=Path, default=None)
 
 
+def _add_dining_parser(commands: Any) -> None:
+    dining = commands.add_parser("dining", help="show AMap nearby-dining options for a journey/trip's meal slots")
+    _add_progress_argument(dining)
+    targets = dining.add_mutually_exclusive_group(required=True)
+    targets.add_argument("--journey", type=Path, default=None, help="Journey JSON; queries every trip's meal slots")
+    targets.add_argument("--trip", type=Path, default=None, help="Trip JSON; queries every meal slot")
+    dining.add_argument("--radius", type=int, default=1500)
+    dining.add_argument("--limit", type=int, default=3)
+    dining.add_argument("--cuisine", default=None)
+    dining.add_argument("--avoid", action="append", default=None, help="word to avoid in name/tag/keytag/rectag; repeatable")
+    dining.add_argument("--deadline", type=float, default=8.0)
+    dining.add_argument("--fixture", type=Path, default=None)
+    dining.add_argument("--fixed-clock", default=None)
+    dining.add_argument("--output-json", type=Path, default=None)
+
+
 def _add_render_parser(commands: Any) -> None:
     render = commands.add_parser("render", help="render a validated Trip as deterministic HTML")
     render.add_argument("trip", type=Path)
@@ -502,6 +519,7 @@ def main(
         "air": lambda: _cmd_lodging_air(args, progress),
         "rail": lambda: _cmd_rail(args, progress),
         "weather": lambda: _cmd_weather(args, progress),
+        "dining": lambda: _cmd_dining(args, progress),
         "research": lambda: _cmd_research(args, credential_path, progress),
         "replan": lambda: _cmd_replan(args),
         "render": lambda: _cmd_render(args),
@@ -1643,6 +1661,199 @@ def _cmd_weather(args: argparse.Namespace, progress: "_NDJSONProgress") -> int:
     except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
         _progress_failed(progress, "weather")
         print("WEATHER_FAILED %s" % exc, file=sys.stderr)
+        return 1
+
+
+def _cmd_dining(args: argparse.Namespace, progress: "_NDJSONProgress") -> int:
+    from .clock import FixedClock, SystemClock, isoformat_seconds
+    from .contracts import ProviderRequest
+    from .credentials import resolve_credentials
+    from . import dining as dining_helpers
+    from .providers.amap import AMapAdapter
+    from .providers.amap_http import AMapCallBudget, AMapHTTPTransport
+    from .providers.base import ProviderContext, ReplayTransport, stable_id
+
+    meal_word = {"lunch": "午餐", "dinner": "晚餐"}
+
+    def _row(target: Mapping[str, Any], *, status: str, options: Sequence[Mapping[str, Any]] = (), note: Optional[str] = None) -> Dict[str, Any]:
+        has_anchor = target["anchor"] is not None
+        return {
+            "trip_id": target["trip_id"],
+            "day_id": target["day_id"],
+            "date": target["date"],
+            "slot_id": target["slot_id"],
+            "meal_type": target["meal_type"],
+            "anchor": target["anchor"],
+            "radius_m": args.radius if has_anchor else None,
+            "keywords": target["keywords"] if has_anchor else None,
+            "status": status,
+            "options": list(options),
+            "search_url": dining_helpers.search_url(target["anchor"]) if has_anchor else None,
+            "note": note,
+        }
+
+    def _format_row(row: Mapping[str, Any]) -> str:
+        label = "%s %s" % (row["date"], meal_word.get(row["meal_type"], row["meal_type"]))
+        if row["status"] == "options":
+            names = "；".join(dining_helpers.format_option(option) for option in row["options"])
+            return "%s ← %s · %d 家：%s" % (label, row["anchor"]["name"], len(row["options"]), names)
+        if row["status"] == "no_anchor":
+            return "%s 无锚点（%s）" % (label, row["note"])
+        verb = "查询失败" if row["status"] == "provider_error" else "无结果"
+        return "%s ← %s %s（%s）" % (label, row["anchor"]["name"], verb, row["note"])
+
+    try:
+        if args.deadline <= 0:
+            raise ValueError("--deadline must be positive")
+        if args.fixed_clock and args.fixture is None:
+            raise ValueError("--fixed-clock is allowed only with --fixture")
+        repo_root = _repo_root()
+
+        fixture = None
+        if args.fixture is not None:
+            fixture = read_json(args.fixture)
+            if fixture.get("provider") != "amap" or not isinstance(fixture.get("transport"), dict):
+                raise ValueError("--fixture must be an amap provider fixture")
+            clock = FixedClock.from_iso(args.fixed_clock or fixture["captured_at"])
+        else:
+            clock = SystemClock()
+
+        if args.journey is not None:
+            trips = [trip for trip in read_json(args.journey).get("trips", []) if isinstance(trip, dict)]
+        else:
+            trips = [read_json(args.trip)]
+
+        cli_avoid = list(args.avoid) if args.avoid else None
+        targets: List[Dict[str, Any]] = []
+        for trip in trips:
+            prefs = (trip.get("request") or {}).get("dining_preferences") or {}
+            cuisine = args.cuisine if args.cuisine is not None else prefs.get("cuisine")
+            avoid = cli_avoid if cli_avoid is not None else list(prefs.get("avoid") or ())
+            for day_index, slot_index, meal_type in dining_helpers.meal_slots(trip):
+                day = trip["days"][day_index]
+                slot = day["slots"][slot_index]
+                anchor = dining_helpers.anchor_for(trip, day_index, slot_index)
+                targets.append({
+                    "trip_id": trip.get("trip_id"), "day_id": day.get("day_id"), "date": day.get("date"),
+                    "slot_id": slot.get("slot_id"), "meal_type": meal_type, "anchor": anchor,
+                    "cuisine": cuisine, "avoid": avoid, "keywords": cuisine or "餐厅", "cache_key": None,
+                })
+
+        unique_parameters: Dict[Any, Mapping[str, Any]] = {}
+        for target in targets:
+            if target["anchor"] is None:
+                continue
+            parameters = dining_helpers.query_parameters(target["anchor"], args.radius, target["cuisine"])
+            key = (parameters["location"], parameters["keywords"])
+            target["cache_key"] = key
+            unique_parameters[key] = parameters
+
+        query_results: Dict[Any, Any] = {}
+        all_claims: List[Mapping[str, Any]] = []
+        all_warnings: List[str] = []
+        credential_missing = False
+        if unique_parameters:
+            if fixture is not None:
+                env = (
+                    {"AMAP_WEBSERVICE_KEY": "ctw-fixture-canary-not-real"}
+                    if fixture.get("credential_state") == "configured" else {}
+                )
+                credentials = resolve_credentials(env, repo_root / ".tmp" / "dining-fixture-no-credentials")
+            else:
+                credentials = resolve_credentials(credential_path=None)
+            credential_missing = not credentials.get("AMAP_WEBSERVICE_KEY")
+            if not credential_missing:
+                budget = AMapCallBudget(max_calls=80)
+                adapter = AMapAdapter()
+                for key, parameters in unique_parameters.items():
+                    if fixture is not None:
+                        transport: Any = ReplayTransport(fixture["transport"], raw_ref=args.fixture.as_posix())
+                    else:
+                        transport = AMapHTTPTransport(credentials, budget=budget)
+                    _attach_progress(transport, progress)
+                    request = ProviderRequest(
+                        request_id=stable_id("dining-query", key[0], key[1]),
+                        capability="poi_around",
+                        parameters=parameters,
+                        deadline_ms=int(args.deadline * 1000),
+                        as_of=clock.now().date().isoformat(),
+                        cache_policy="bypass",
+                        trace={"stage": "dining-cli"},
+                    )
+                    context = ProviderContext(clock=clock, credentials=credentials, transport=transport)
+                    result = adapter.query(request, context)
+                    query_results[key] = result
+                    all_claims.extend(result.claims)
+                    all_warnings.extend(result.warnings)
+
+        rows: List[Dict[str, Any]] = []
+        hard_error = False
+        with_options = 0
+        for target in targets:
+            if target["anchor"] is None:
+                rows.append(_row(target, status="no_anchor", note="无锚点坐标"))
+                continue
+            if credential_missing:
+                rows.append(_row(target, status="provider_error", note="凭据缺失"))
+                continue
+            result = query_results[target["cache_key"]]
+            if not result.normalized_items:
+                if result.error_class not in (None, "no_results"):
+                    hard_error = True
+                    rows.append(_row(target, status="provider_error", note=result.error_class))
+                else:
+                    rows.append(_row(target, status="no_results", note="无结果"))
+                continue
+            options = dining_helpers.select_options(
+                result.normalized_items, result.claims, avoid=target["avoid"], limit=args.limit,
+            )
+            if options:
+                with_options += 1
+                rows.append(_row(target, status="options", options=options))
+            else:
+                rows.append(_row(target, status="no_results", note="无符合条件的结果"))
+
+        if with_options:
+            exit_code = 0
+        elif credential_missing or not hard_error:
+            exit_code = 2
+        else:
+            exit_code = 1
+
+        if args.output_json is not None:
+            output = {
+                "provider": AMapAdapter.provider,
+                "provider_version": AMapAdapter.provider_version,
+                "queried_at": isoformat_seconds(clock),
+                "claims": all_claims,
+                "health": {
+                    "provider": AMapAdapter.provider,
+                    "status": "credential_missing" if credential_missing else "ready",
+                    "checked_at": isoformat_seconds(clock),
+                },
+                "warnings": sorted(set(all_warnings)),
+                "error_class": None if with_options else (
+                    "credential_missing" if credential_missing else ("no_results" if not hard_error else "contract_mismatch")
+                ),
+                "slots": rows,
+            }
+            args.output_json.parent.mkdir(parents=True, exist_ok=True)
+            write_canonical_json(args.output_json, output)
+            print("DINING_COMPLETE output=%s slots=%d with_options=%d" % (
+                args.output_json, len(rows), with_options,
+            ))
+        else:
+            for row in rows:
+                print(_format_row(row))
+        progress.emit({
+            "event": "completion", "command": "dining",
+            "status": "ok" if with_options else "degraded",
+            "items": len(rows),
+        })
+        return exit_code
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        _progress_failed(progress, "dining")
+        print("DINING_FAILED %s" % exc, file=sys.stderr)
         return 1
 
 

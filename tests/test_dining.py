@@ -100,6 +100,14 @@ class MealSlotsTests(unittest.TestCase):
         self.assertEqual(dining.meal_type_for(morning), "lunch")
         self.assertEqual(dining.meal_type_for(evening), "dinner")
 
+    def test_rest_slot_with_lunch_wording_classifies_as_lunch(self):
+        slot = _slot("rest", "午餐与完整午休", "2026-10-01T12:00:00+08:00")
+        self.assertEqual(dining.meal_type_for(slot), "lunch")
+
+    def test_rest_slot_without_meal_wording_is_none(self):
+        slot = _slot("rest", "午休", "2026-10-01T13:00:00+08:00")
+        self.assertIsNone(dining.meal_type_for(slot))
+
 
 class AnchorForTests(unittest.TestCase):
     def test_preceding_checkin_with_lodging_coordinates_wins(self):

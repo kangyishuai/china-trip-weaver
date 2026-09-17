@@ -2285,3 +2285,7 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 无。全程没有遇到拿不准、需要管理者裁决的真实二义性。本书只把领导已经拍板的 `plans/<可读名称>/` 目录约定写进三份 SKILL 正文与两份 README、`docs/design/02-plugin-skills.md` §4，未触碰任何 `.py`、schema、demo 或测试夹具，没有需要裁决的设计空间。详细改动与验收证据见 PROGRESS.md「书 AP4」条目。
 
 管理者裁决（2026-09-17，验收时补记）：认可。三份 SKILL frontmatter 零改动、`tests.test_skills` 绿、README 两份各 1 处 `plans/`、02 §4 一段、新增行无本机路径无版本号。已关闭。
+
+## 书 AP5a「`ctw dining` 命令」（2026-09-17，第三十四波四本并行之一，worktree `.tmp/wt-ap5a` 分支 `dining-cli`）：无
+
+无。全程没有遇到拿不准、需要管理者裁决的真实二义性。任务书「我替领导拍的板」一节把 `meal_type_for` 的改动范围、命令的参数与去重口径、信封形状、退出码都定死，实现时唯一需要自行决断的是「无锚点时 `radius_m`/`keywords`/`search_url` 是否置 `null`」——任务书只标注了 `anchor|null` 与 `search_url|null` 两个字段允许为空，`radius_m`/`keywords` 没标 `|null`；但既然没有锚点就不会真的发起查询，`radius_m`/`keywords` 这两个「查询会用到的参数」在没有查询时置 `null` 更诚实（不编造一个「本可以用但没用上」的半真值），且四个验收用例都不检查这两个字段在 `no_anchor` 状态下的取值，判断为可走的「更好路」而非违反「只允许/不许」。详细实现与验收证据见 PROGRESS.md「书 AP5a」条目。
