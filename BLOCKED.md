@@ -2083,3 +2083,11 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 唯一需要自行设计判断（非裁决分叉，供核对）的一点：任务书「拍的板」给的猜测文案示例含 provider 名（「高德 09-17 14:33 报」），但 `day.weather` 本身没有 `provider` 字段，且任务书把 `day_weather_line` 的签名明确钉死为 `(day, labels)`——两者字面冲突。按「页面不说 Trip 里没有的话」的最高让步优先级，天气行最终不带 provider 名，只保留 `<time>` 包裹的 `reported_at`（复用既有 `_time()` 帮手）；provider 归属仍能从 `claim_id` 追溯到对应 claim 的 `provider` 字段核验，只是不重复摘要到这一行文字里。
 
 另有一处技术必然性记在 PROGRESS.md 任务 2 小节，供核对但不构成裁决分叉：`day_weather_line` 若对每天无条件渲染会改变 `demo/journey-16d`（16 天全无 `weather` 键）的渲染字节，直接与任务书「demo 必须字节不变」硬冲突；已加一道「整份 Trip/Journey 里至少一天带 `weather` 键才渲染」的门解开，两个约束都满足，`build_renderer_fixtures.py` 重跑后 demo 的 `journey_sha256`/`html_sha256` 与开工基线逐字一致。
+
+## 书 AN7「规划器天气阶段」（2026-09-17，第三十波，worktree `.tmp/wt-an7` 分支 `planner-weather`）：无裁决分叉，三处自行设计判断供核对
+
+全程未遇到需要领导裁决、拿不准怎么办的分叉。任务书「我替领导拍的板」一节本身承认「地点键」等几处是「猜的」，按其字面实现后遇到三处需要自行补完细节的地方，均非阻塞，记录供核对：
+
+1. **多数票的遍历顺序**：`_weather_location_key` 最初按「当天各 POI」直接构造 Python `set` 再取值列表，会因字符串哈希随机化在不同进程间产生不确定的取值顺序，导致平票时「取第一条」这一类回归测试变得不可复现。改成按当天 slots 出现顺序去重的列表（`dict.fromkeys(...)`）取代裸 `set`，多数票结果本身不受影响（多数票和最小值平票规则都与顺序无关），只是让"如果退化成不做多数票、直接取第一条"这条反向验证测试能确定性地变红。
+2. **健康行「查询数」的统计口径**：任务书写「`weather=<查询数> queried, <unknown 数> unknown`」但未定义「查询数」按次调用还是按地点键计数。因为地点键本身就是去重单位（一个键一次 `plan_trip` 只查一次），两种计数在本实现里数值相同，按地点键计数（`len(cache)`）实现，语义上更贴近“这次规划实际发起了几次天气查询”。
+3. **验收测试①「两天 Trip（9/05、9/10）」的结构**：`validate_trip._check_date_range_and_day_count` 要求 `trip.days` 与 `request.start_date..end_date` 连续覆盖，9/05 到 9/10 是 6 天而非 2 天，字面按「一个两天的 Trip」搭不出符合 schema 的夹具。按「两个各一天的 Trip，一个订在 9/05、一个订在 9/10」实现（`tests/test_planner_weather.py` 的 `PlanWeatherLiveTripTests`），分别覆盖「预报窗口内」与「超出预报窗口」两条路径，每个都完整跑通 `plan_trip`→`validate_trip`→`render_trip`→`validate_html` 全链路且零错误；「同键两天只查一次」与「健康行格式」两条改用一个横跨 9/05、9/06 两个连续日期、共享同一地点键的 2 天 Trip 单独验证。

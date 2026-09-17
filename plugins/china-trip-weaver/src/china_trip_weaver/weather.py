@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from datetime import date, timedelta
-from typing import List, Mapping, Sequence
+from typing import Dict, List, Mapping, Optional, Sequence
 
 FORECAST_DAYS = 4
 
@@ -54,3 +54,28 @@ def _as_int(value: object, *, default: int = -1000) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         return default
     return value
+
+
+def location_key_vote(codes: Sequence[str]) -> Optional[str]:
+    """Majority vote among a day's POI adcodes; ties break on the lexicographically smallest code."""
+
+    if not codes:
+        return None
+    counts: Dict[str, int] = {}
+    for code in codes:
+        counts[code] = counts.get(code, 0) + 1
+    top = max(counts.values())
+    return min(code for code, count in counts.items() if count == top)
+
+
+def result_reason(error_class: Optional[str], warnings: Sequence[str]) -> Optional[str]:
+    """Map an AMap weather query outcome to a Trip unknown reason, or None when a forecast was returned."""
+
+    if error_class is None:
+        return None
+    for warning in warnings:
+        if warning.startswith("weather_ambiguous:"):
+            return warning
+    if error_class == "no_results":
+        return "weather_no_results"
+    return "weather_provider_error:%s" % error_class

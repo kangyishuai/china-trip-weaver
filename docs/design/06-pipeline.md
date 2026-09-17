@@ -120,6 +120,22 @@ AMap query 一律使用 GCJ-02。无 Key/失败时：fresh cached cell → publi
 
 FlyAI 候选解析并经 VariFlight 增强后，`_validate_meeting_anchor` 才校验各组抵达 `meet_by` 前是否仍留足 `buffer_minutes`。当前铁路腿不合规时，`_promote_meeting_flight_leg` 只在同一 `from_ref`/`to_ref` 路线中选满足缓冲的航班，并按 `arrive_at`、再按 `depart_at` 取最早抵达者；若铁路和航班都不能满足缓冲，则抛出 `MEETING_BUFFER_INSUFFICIENT`，并报告已知最早到达与实际缓冲。
 
+### 5.5 天气标注
+
+`plan_trip` 在 `_plan_trip_unknowns` 产出 `days`之后、组装 Trip 之前调用 `_plan_weather`，为每天补一条 AMap 天气预报或一条带原因的 unknown；这一步不产生自己的 pipeline checkpoint，只在既有 `SCHEDULED` 与 `VALIDATED` 之间运行一次。
+
+- **触发条件**：只在 `active_mobility.mode == "live"` 时运行，复用该 live mobility backend 已持有的 AMap transport，与 POI/geocode/route 查询共用同一份 80 次/run 调用预算与 2 QPS 门。mobility 为 `off` 时完全不调用，每天既不加 `weather` 键也不加 unknown，旧产物字节不变。
+- **地点键**：先取当天各 slot 引用的 POI 的 `/provider_identity` claim 里的 `adcode`，按出现的 POI 做多数票，票数并列时取字符串最小的 adcode；当天没有任何 POI 能提供 adcode 时，退回用 `weather.split_city_names(day["city"])` 的第一段作为 `city` 名查询。同一个地点键（无论是 adcode 还是 city 名）在一次 `plan_trip` 内只查一次，结果按目标日期匹配到共享该键的每一天。
+- **可查窗口**：AMap `weather` 能力返回「当天起 4 天」的预报，`weather.forecast_available_on(travel_date)` 给出该日期最早可查到的日期（`travel_date` 减 3 天）；当前时钟早于这个日期时，直接跳过查询，不浪费调用预算。
+- **五种 unknown 原因**（`field_path` 固定为 `/days/<i>/weather`，`provider` 固定为 `amap`，`claim_id` 固定为 `null`）：
+  - `weather_forecast_horizon:<可查日期>` — 目标日期超出当前可查窗口。
+  - `weather_no_location` — 当天既无可用 POI adcode 也解析不出 city 名。
+  - `weather_no_results` — AMap 返回但没有可用的 forecast/casts。
+  - `weather_ambiguous:<n>` — AMap 按城市名匹配到 `n` 个 forecast，无法确定唯一预报。
+  - `weather_provider_error:<error_class>` — 查询以其他 `error_class`（如 `rate_limited`、`contract_mismatch`）失败。
+- **成功时**：`day["weather"]` 写入 AMap 预报的 10 个字段、`weather.advice_for` 算出的 `advice`，以及一条 `subject_ref` 改写为该 `day_id`（而非 AMap 默认的地点 subject）的新 claim 的 `claim_id`；这条 claim 一并追加进 Trip 的 `claims`。
+- **健康行**：只要这次运行实际发起过至少一次天气查询，`provider_health` 里 `provider=amap` 的合并健康行就在 `capabilities` 追加 `weather`，并在 `reason` 末尾追加 `; weather=<查询次数> queried, <unknown 天数> unknown`；一次查询都没发起时（mobility 为 `off`，或每天都在可查窗口之外）健康行不受影响。每次实际查询还会在 `business_calls` 里记一条 `weather@<地点键>:date=<查询当日日期>`。
+
 ## 6. P5：发布前语义校验
 
 依次运行；前一层 FAIL 仍可汇总后续独立错误，但最终不可渲染：
