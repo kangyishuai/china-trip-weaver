@@ -17,6 +17,7 @@ Resolve only the candidate endpoints supplied by the parent Skill.
 - Fail closed on endpoint/pagination/response drift and return health plus degradation rung. Do not choose the daily order.
 - Do not substitute host search or AnySearch for an unavailable AMap capability. Keep mobility degradation separate from the destination-search rung recorded by `$research-china-destination`.
 - A city, district, or adcode's current AMap forecast is available separately through `ctw weather`; it only covers today-plus-3-days and reports `out_of_window` rather than guessing further out. This command is informational only — it does not attach weather to a Trip or Journey and is not part of the candidate-resolution matrix below.
+- A `ctw weather --output-json` result can be folded back into an existing Journey with `ctw journey weather`: it matches each `forecasts[]` row to a day by date and `query`, writes `day.weather` (or a `weather_no_results` unknown), and advances the Journey's revision by exactly one no matter how many child Trips changed. A run that changes no day exits 2 and writes nothing; this command never modifies the `--journey` input file.
 
 Inspect a bounded live matrix directly or return its normalized cells to the parent. When AMap is unavailable, `ctw plan` builds only labeled static estimates:
 
@@ -26,6 +27,7 @@ scripts/ctw mobility --candidates candidates.json --modes transit,walking --outp
 scripts/ctw plan --request request.json --candidates candidates.json --rail off --mobility live --output-json trip.json --output-html trip.html
 scripts/ctw validate trip.json
 scripts/ctw weather --city "城市" --output-json weather.json
+scripts/ctw journey weather --journey journey.json --weather-result weather.json --base-revision 1 --output-json journey-r2.json
 ```
 
 Never turn an AMap fixture response into live output outside an explicit offline fixture test.

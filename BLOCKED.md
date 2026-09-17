@@ -2135,3 +2135,7 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 
 管理者裁决（2026-09-17，验收时补记）：按 `value` 逐键匹配 claim 的判断认可（真实 16 天信封一次混 22 行、多城同日，按日期取第一条必错）。验收另查出一处与任务书「一次重组、revision+1」不符的行为：`fold_weather_into_journey` 逐 Trip 调 `replace_trip_in_journey`，两个 Trip 同时被改时 Journey 版本从 1 跳到 3、`parent_revision` 指向从未落盘的 2（demo/journey-16d 折 10/05+10/06 实测）。根因是本书把 journey.py 设为只读，执行者没有单次多 Trip 重组的入口，不算执行者违规；AN8b 补 `replace_trips_in_journey` 并让 `fold_weather_into_journey` 改走它。其余暗卷（真实 journey 副本折入手造 9/25 预报：只 north 变、另两段逐字节不变、页面 16 行天气 1 有 15 暂无、validate-html 0、署名含高德；二折 NOOP；claim 篡改报错不写；四个假 Key 全量 750 绿）全部通过。已关闭。
 
+## 书 AN8c「天气折回文档」（2026-09-17，第三十二波，worktree `.tmp/wt-an8c` 分支 `journey-weather-docs`）：无
+
+无。全程没有遇到拿不准、需要管理者裁决的真实二义性。本书只改文档，写的是「拍的板」规定的目标态（`replace_trips_in_journey`、`_cmd_journey_weather`、`forecasts[].query` 等 AN8b 尚未合并的名字），核对方式是把另外 7 个已在 main 落地的标识符逐一 `git grep -n -- plugins tests` 确认真实存在（`fold_weather_into_journey`/`weather_fold_claim_missing`/`revision_conflict`/`split_city_names`/`weather_no_results`/`JH006`/`_plan_weather`，均命中，见 PROGRESS.md 本书任务 0/任务 2 记录），本书拍的板里的新名字则逐字比对文案与任务书原文。合并时仍需管理者对照 AN8b 实际落地的代码核验这些目标态名字与签名是否一致。
+
