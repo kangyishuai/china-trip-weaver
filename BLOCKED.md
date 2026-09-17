@@ -1980,3 +1980,24 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 已验证：把 `scripts/measure_coverage.py` 临时整体移出 `scripts/`（不是复制，是移动，避免两份文件同时被 glob 到）单独重跑全量，`test_design_docs` 恢复绿，其余全部一并绿，证明这条红只来自这一个、且仅这一个原因；移回后恢复交付状态。全过程见 PROGRESS.md 任务 1 小节。
 
 管理者裁决（2026-09-15）：确认这是任务书自身「授权新建 scripts/ 文件」与「不许改现有测试/docs」两条要求之间的内在矛盾，执行者如实报红、不取巧的处置正确；已按执行者给出的精确两行修复解开（`tests/test_design_docs.py` 计数 48→49，`docs/design/09-impl-map.md` 补登 `measure_coverage.py`），随执行者分支一并提交。收尾实测 `Ran 690 tests ... OK`、`scripts/measure_coverage.py` 直接跑通出具报告（TOTAL 89%）；已关闭。
+
+## AN3「refresh 重写时段标题」（第二十九波，2026-09-17，分支 `refresh-title`）：无新增裁决分叉，两项顺手活明确不做，附一条对旧条目的交叉引用
+
+全程未遇到需要领导裁决、拿不准怎么办的分叉，任务书「我替领导拍的板」按字面执行，猜测的默认标题格式
+`"%s → %s 铁路 %s"` 实测跑出 `北京 → 上海 铁路 G1001`，符合预期。以下记录两类非阻塞事项：
+
+1. **交叉引用**：本书是上文「书 Z3d」（2026-09-15）记录的同一个缺陷——`_apply_refresh` 从不改
+   `title`——当时管理者裁决「不单独立项，并入 9/22 的 `south-2-rail` 刷新书」；但 2026-09-17 第
+   二十九波的任务书把这项提前拆成独立的 AN3 书先修（工作区 CLAUDE.md 第二十九波小节：「AN3
+   提前修掉标题缺陷后，9/22 的 `south-2-rail` 刷新书就变成纯操作书」）。本书已把该缺陷修好并验证
+   （见 PROGRESS.md「AN3」小节），9/22 那本书届时不必再处理标题问题，供合并时核对与关闭 Z3d 条目
+   参考，未直接改动 Z3d 原文。
+2. **顺手活按任务书指定不做，记录供下一份任务书取用**：
+   - `user_delete` 删除时段后，同一 day 内后续 `transport_leg` 的路径重编号缺口——`_apply_suspend`
+     已有 `_reindex_transport_leg_unknowns` 处理非末尾腿删除后的 `unknowns` 路径重排（见
+     `docs/design/06-pipeline.md` §7.2 suspend 行），但 `user_delete` 分支（`replan.py` 里
+     `event_type == "user_delete"` 的 `pop(slot_index)`）没有对应的重编号逻辑；未探究是否存在真实
+     触发路径，仅按任务书要求记录、未改代码。
+   - `closure`/`weather` 事件不像本书新增的 `refresh` 一样自动生成/重写标题——这两类事件走
+     `replacement_slot`（调用方直接提供完整替换 slot，含 `title`），本身就没有「默认标题该怎么拼」
+     的空白，是否值得同样支持事件级覆盖校验（例如空白 `title` 报错）未评估，按任务书要求不做。

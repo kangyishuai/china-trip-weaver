@@ -437,3 +437,40 @@ fix-names` 会把它们列为人工项。
   [docs/history/progress-2026-09-15.md](docs/history/progress-2026-09-15.md)
   （2026-09-15 知识收尾时从本文件整体迁出，一字未改，按波次正序）。书 AM1 的四节 2026-09-12 记录
   当时漏迁，同日补进 `progress-2026-09-08-to-12.md` 末尾。
+
+## AN3「refresh 重写时段标题」（第二十九波，2026-09-17，worktree `.tmp/wt-an3` 分支 `refresh-title`）
+
+**任务 0 核对**：worktree 建好；699/OK/0 skipped、`test_replan.py` 39 个 `def test_`（`grep -c`
+不去缩进得 38，是缩进差异不是数字错）、22 个 refresh 命名、三份 ADR 均 `Proposed`，与任务书一致。
+新增 `test_refresh_default_rewrites_slot_title`（对 `demo/trip.json` 铁路槽位跑默认
+`_refresh_event()`+`_refresh_rail_result()`，`slot_index=0` 不触发 overlap 检查），刷新前后标题
+都是「北京 → 上海 铁路」，`assertNotEqual` 红，符合预期。
+**目标**：`_apply_refresh` 构造 `new_slot` 时按 `"%s → %s 铁路 %s"`（起终点用
+`_place_name(trip["request"], ref_id)`，车次号用 `new_leg["service_number"]`）重写 `title`；事件
+可选非空 `title` 覆盖（原样采用，不 strip），空白报 `ReplanError("refresh_title", …)`；校验放在
+`_apply_refresh` 内所有 `refresh_*` 报错共享的「先校验、后变更 trip」位置（覆盖 leg 之前）。
+**顺序**：任务 1（代码 + SKILL/06-pipeline/ADR-0015 三处文档）→ 任务 2（五份 ADR 状态回填）。
+**最大风险**（核对后判断可控）：`service_number` 若为空会让新标题出现字面 `None`——检查确认
+`_select_refresh_service`/`_select_refresh_service_by_number` 返回的行必然来自真实 12306
+`transport_legs` 行，车次号是行本身的标识字段，正常路径不会为空，未加多余防御。
+
+**任务 1 完成**：三条新测试绿（`test_refresh_default_rewrites_slot_title`、
+`test_refresh_event_title_overrides_default_verbatim`、`test_refresh_blank_event_title_fails`），
+金样 `refresh.json`（`operation_count` 33）随 `test_replan_refresh`（动态生成，来自
+`FIXTURES.glob("*.json")`）原样通过。反向验证：把设置默认标题那行注释掉，任务 0 测试红
+（`AssertionError: '北京 → 上海 铁路' == '北京 → 上海 铁路'`）；还原并 `touch` 源文件后绿。
+全量 `Ran 702 tests`、`OK`、0 skipped（699 + 3 新增）；pyflakes 0 行；`scan_secrets` 0 命中
+（395 个文件）。`git diff main --stat -- plugins/china-trip-weaver/schema tests/fixtures
+plugins/china-trip-weaver/src/china_trip_weaver/planning.py README.md README.zh-CN.md` 为空。
+**任务 2 完成**：ADR-0017/0018/0019 的 `Status` 行改 `Accepted` 并按拍板加括注；ADR-0020
+「Still unresolved」四条各追加一行 `2026-09-17 注：`（travel_date 逐 route 匹配指向已有实施记录；
+查不到/歧义退占位腿并点名；`journey plan` 经 `_segment_request` 的 `copy.deepcopy(dict(source))`
+逐段沿用顶层 request 的 `locked_rail_services`、未过滤，故 `journey.schema.json` 无需改；
+`locked_rail_services` 本身仍未过实网 12306，与同波 AN4 的真实用例衔接）。验收
+`grep -c "Status:\*\* Proposed" docs/design/adr/0017*.md docs/design/adr/0018*.md
+docs/design/adr/0019*.md` 各 0；`grep -c "2026-09-17 注" docs/design/adr/0020*.md` 为 4。
+**顺手活记 BLOCKED 不做**（任务书原文指定跳过）：`user_delete` 删时段后的路径重编号缺口；给
+`closure`/`weather` 事件也自动生成标题——已写入 BLOCKED.md 末尾，供下一份任务书取用。
+**改动文件**（与白名单逐一对应）：`replan.py`、`test_replan.py`（只加测试）、SKILL.md、
+06-pipeline.md、adr/0015/0017/0018/0019/0020、本文件、BLOCKED.md；未碰 schema/金样/planning.py/
+README。全部改动加上本节记录一次性提交并 `git push origin refresh-title` 交付。

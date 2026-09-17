@@ -1,6 +1,6 @@
 # ADR-0018: Maps and images on the mobile page
 
-- **Status:** Proposed
+- **Status:** Accepted（2026-09-11 决定三项都不做，只加离线位置示意）
 - **Date:** 2026-09-11
 
 ## Context

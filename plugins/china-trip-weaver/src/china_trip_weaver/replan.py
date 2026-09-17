@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
 from .clock import Clock, isoformat_seconds
 from .contracts import PatchResult, canonical_json
-from .planning import _budget_ledger
+from .planning import _budget_ledger, _place_name
 from .rail_selection import select_service
 from .validate_trip import MODE_RANK
 
@@ -258,6 +258,9 @@ def _apply_refresh(
         previous_slot = trip["days"][day_index]["slots"][slot_index - 1]
         if str(selected["depart_at"]) < str(previous_slot["end_at"]):
             raise ReplanError("refresh_overlap", "refreshed service departs before the previous slot ends")
+    event_title = event.get("title")
+    if event_title is not None and (not isinstance(event_title, str) or not event_title.strip()):
+        raise ReplanError("refresh_title", "refresh title must be a non-blank string when provided")
 
     new_leg = copy.deepcopy(dict(selected))
     for key in ("leg_id", "from_ref", "to_ref", "locked"):
@@ -275,6 +278,10 @@ def _apply_refresh(
     new_slot["start_at"] = new_leg["depart_at"]
     new_slot["end_at"] = new_leg["arrive_at"]
     new_slot["claim_ids"] = list(new_leg["claim_ids"])
+    new_slot["title"] = event_title if event_title is not None else "%s → %s 铁路 %s" % (
+        _place_name(trip["request"], new_leg["from_ref"]), _place_name(trip["request"], new_leg["to_ref"]),
+        new_leg["service_number"],
+    )
     trip["days"][day_index]["slots"][slot_index] = new_slot
     operations.append({
         "op": "replace", "path": "/days/%d/slots/%d" % (day_index, slot_index), "value": copy.deepcopy(new_slot),

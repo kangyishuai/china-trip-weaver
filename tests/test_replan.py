@@ -474,6 +474,49 @@ class ReplanTests(unittest.TestCase):
         self.assertTrue(html_report.ok, [issue.render() for issue in html_report.errors])
         self.assertIn(leg["service_number"], html)
 
+    def test_refresh_default_rewrites_slot_title(self):
+        base = load(ROOT / "demo/trip.json")
+        day_index, slot_index = next(
+            (d_index, s_index)
+            for d_index, day in enumerate(base["days"])
+            for s_index, slot in enumerate(day["slots"])
+            if slot.get("ref_id") == "leg-rail-fallback-6d95c810b44d"
+        )
+        before_title = base["days"][day_index]["slots"][slot_index]["title"]
+        result = replan_trip(
+            base, _refresh_event(), base_revision=base["revision"]["number"],
+            user_locked_refs=[], clock=FixedClock.from_iso(FIXED_NOW),
+            rail_result=_refresh_rail_result(),
+        )
+        after_title = result.trip["days"][day_index]["slots"][slot_index]["title"]
+        self.assertNotEqual(before_title, after_title)
+
+    def test_refresh_event_title_overrides_default_verbatim(self):
+        base = load(ROOT / "demo/trip.json")
+        day_index, slot_index = next(
+            (d_index, s_index)
+            for d_index, day in enumerate(base["days"])
+            for s_index, slot in enumerate(day["slots"])
+            if slot.get("ref_id") == "leg-rail-fallback-6d95c810b44d"
+        )
+        result = replan_trip(
+            base, _refresh_event(title="  改签后的自定义标题  "), base_revision=base["revision"]["number"],
+            user_locked_refs=[], clock=FixedClock.from_iso(FIXED_NOW),
+            rail_result=_refresh_rail_result(),
+        )
+        after_title = result.trip["days"][day_index]["slots"][slot_index]["title"]
+        self.assertEqual("  改签后的自定义标题  ", after_title)
+
+    def test_refresh_blank_event_title_fails(self):
+        base = load(ROOT / "demo/trip.json")
+        with self.assertRaises(ReplanError) as raised:
+            replan_trip(
+                base, _refresh_event(title="   "), base_revision=base["revision"]["number"],
+                user_locked_refs=[], clock=FixedClock.from_iso(FIXED_NOW),
+                rail_result=_refresh_rail_result(),
+            )
+        self.assertEqual("refresh_title", raised.exception.code)
+
     def test_refresh_replaces_target_leg_claims_and_records_removals(self):
         fixture = load(FIXTURES / "refresh.json")
         base = load(ROOT / fixture["base_fixture"])

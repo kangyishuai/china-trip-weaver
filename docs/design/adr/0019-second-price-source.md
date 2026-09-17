@@ -1,6 +1,6 @@
 # ADR-0019: Whether a second price source is worth adding, per price category
 
-- **Status:** Proposed
+- **Status:** Accepted（机票第二价（Option B）随 0.17.0 落地，住宿 Option C 搁置）
 - **Date:** 2026-09-11
 
 ## Context
