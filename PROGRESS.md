@@ -584,3 +584,44 @@ fix-names` 会把它们列为人工项。
   天气折回库函数与 `ctw journey weather` 命令，对应 0.23.0、0.24.0）：
   [docs/history/progress-2026-09-17.md](docs/history/progress-2026-09-17.md)
   （2026-09-17 发 0.24.0 时从本文件整体迁出，一字未改，按合入顺序）。
+
+## 第三十三波 AP1b 执行记录（2026-09-17，`dining-rules` 分支，worktree `.tmp/wt-ap1b`）
+
+任务 0 核对：main `6378f80`（0.24.0）全量 `Ran 756 tests` OK 0 skipped；`test_design_docs.py` 写死 52；
+`git grep -i -c dining -- plugins tests` 0 命中。三项与任务书基线一致，未见偏差。
+
+理解的目标：把「附近餐饮参考」的选址/筛选/文案规则写成一个不碰网络、不 import cli/planning/providers 的
+纯函数模块 `dining.py`，供命令、规划器、折回三个后续调用方共用；本书只交付模块与其自测，不接线。
+顺序：先读 `weather_fold.py`/`weather.py` 定风格，再读 `contracts.py`/`evidence.py`/`providers/amap.py::_pois`
+定数据形状（claim `/provider_identity` 的 `value.business`、归一化 item 的 `coordinates.gcj02`/`claim_ids`），
+最后读 `docs/design/03-trip-model.md` 与 `trip.schema.json` 定 slot/poi/lodging 的 `kind`/`ref_id` 合同。
+最大风险：`select_options` 怎么把一个 item 关联到「它的」`/provider_identity` claim 没有先例可抄——选了
+`item["claim_ids"]` 成员匹配（比 `subject_ref == poi_id` 更贴合 amap.py 真实产出，不依赖 subject_ref 默认值
+这一隐藏假设）。另一个风险是 `search_url`/marker 深链里「美食」「china-trip-weaver」等字面文本会被
+`urllib.parse.urlencode` 整体转义、破坏任务书给的逐字格式串——改成只对 `name` 这一项单独 `urllib.parse.quote`，
+其余按字面拼接，`search_url` 含 `keyword=美食` 的验收因此能过。
+
+任务 1 完成：新增 `plugins/china-trip-weaver/src/china_trip_weaver/dining.py`（8 个公开函数：
+`meal_type_for`/`meal_slots`/`anchor_for`/`query_parameters`/`select_options`/`option_from`/`search_url`/
+`format_option`，只 import stdlib）与 `tests/test_dining.py`（13 例，覆盖任务书①-④四组验收）；
+`tests/test_design_docs.py` 52→53，`docs/design/09-impl-map.md` 登记 `dining.py`（树与表各一处）。
+
+验收证据（实际命令输出，2026-09-17）：
+- `python3 -m unittest tests.test_dining -v` → `Ran 13 tests ... OK`（13 例名单见测试文件，覆盖 demo 首日
+  两餐分类、free 标题两例、meal 无字样按小时兜底、anchor_for 三例、select_options 三例、format_option/
+  search_url 三例）。
+- 反向验证：把 `select_options` 里 `if not business.get("rating"): continue` 两行注释掉，
+  `python3 -m unittest tests.test_dining.SelectOptionsTests -v` → `FAILED (failures=3)`（`无评分小馆`
+  混进结果、`provider_poi_id` 断言错位）；还原并 `touch dining.py` 后重跑同组 → `OK`。
+- `python3 -m unittest discover -s tests -v` → `Ran 769 tests ... OK`（756 基线 + 13 新增，0 skipped）。
+- `pyflakes $(git ls-files '*.py')` → 0 行输出。
+- `python3 scripts/scan_secrets.py` → `secret scan: 0 finding(s) across 409 file(s)`。
+- `git status --porcelain -- demo` → 空。
+- `git diff main --name-only` + 未跟踪文件 → 仅 `docs/design/09-impl-map.md`、`tests/test_design_docs.py`
+  （改动）与 `plugins/china-trip-weaver/src/china_trip_weaver/dining.py`、`tests/test_dining.py`（新建），
+  与任务书「界限」白名单一致。
+
+未使用 `contracts.py`/`evidence.py`：任务书写的是「只 import stdlib 与 contracts/evidence」这一允许清单，
+不是强制项——`dining.py` 的八个函数都只读调用方已经造好的 claim/item 字典，不需要 `make_claim` 造新证据，
+也不需要 `canonical_json` 序列化，所以最终只 import 了 stdlib（`urllib.parse`、`datetime`、`typing`），更省。
+未合并到 main，只推送 `dining-rules` 分支等待管理者合并。

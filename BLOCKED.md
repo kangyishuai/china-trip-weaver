@@ -2249,3 +2249,7 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 无。全程没有遇到拿不准、需要管理者裁决的真实二义性。本书只改文档，写的是「拍的板」规定的目标态（`replace_trips_in_journey`、`_cmd_journey_weather`、`forecasts[].query` 等 AN8b 尚未合并的名字），核对方式是把另外 7 个已在 main 落地的标识符逐一 `git grep -n -- plugins tests` 确认真实存在（`fold_weather_into_journey`/`weather_fold_claim_missing`/`revision_conflict`/`split_city_names`/`weather_no_results`/`JH006`/`_plan_weather`，均命中，见 PROGRESS.md 本书任务 0/任务 2 记录），本书拍的板里的新名字则逐字比对文案与任务书原文。合并时仍需管理者对照 AN8b 实际落地的代码核验这些目标态名字与签名是否一致。
 
 管理者裁决（2026-09-17，验收时补记）：全部认可。合并后逐个 `git grep` 核对：`--weather-result`、`JOURNEY_WEATHER_NOOP`、`JOURNEY_WEATHER_COMPLETE`、`replace_trips_in_journey`、`_cmd_journey_weather`、`query`、`weather_fold_claim_missing`、`weather_no_results`、`JH006`、`_plan_weather`、`split_city_names` 在 AN8b 合入后的代码里全部命中；06 §7.6 的覆盖判定、op 顺序、健康行文案对着 weather_fold.py 逐条读过一致；README 两份用法行逐字相同；新增行无本机路径、无版本号字面值。已关闭。
+
+## 书 AP1b「附近餐饮参考规则 `dining.py`」（2026-09-17，第三十三波，worktree `.tmp/wt-ap1b` 分支 `dining-rules`）：无
+
+无。全程没有遇到拿不准、需要管理者裁决的真实二义性——任务书「我替领导拍的板」一节已把八个函数的入参/出参形状、字段来源、跳过条件逐一定死，照做即可闭合任务 1 的四组验收。唯二自行判断的点都不构成裁决分叉，已在 PROGRESS.md「第三十三波 AP1b 执行记录」写明原因，此处仅索引：①`select_options` 用 `item["claim_ids"]` 成员匹配而非 `claim["subject_ref"] == poi_id` 去关联一个 item 与它的 `/provider_identity` claim，因为前者是 `providers/amap.py::_pois` 真实产出的显式链接，后者依赖「调用方没传自定义 `subject_ref`」这一隐藏假设；②`dining.py` 最终没有 import `contracts`/`evidence`——任务书写的是允许清单不是强制项，八个函数都只读调用方已经造好的 claim/item 字典，不需要造新证据或序列化，只 import 了 stdlib。
