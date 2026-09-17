@@ -17,6 +17,6 @@ class DesignDocsTests(unittest.TestCase):
         )
         script_files = sorted((ROOT / "scripts").glob("*.py"))
         files = runtime_files + script_files
-        self.assertEqual(52, len(files))
+        self.assertEqual(53, len(files))
         missing = [path.name for path in files if path.name not in impl_map]
         self.assertEqual([], missing, f"09-impl-map.md is missing: {missing}")

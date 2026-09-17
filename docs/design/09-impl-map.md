@@ -17,6 +17,7 @@ plugins/china-trip-weaver/src/china_trip_weaver/
 ├── clock.py
 ├── contracts.py
 ├── credentials.py
+├── dining.py
 ├── errors.py
 ├── evidence.py
 ├── flyai_inventory.py
@@ -195,6 +196,7 @@ tests/
 | `station_distance.py` | 铁路站点歧义候选的高德距离富化（`AMapStationDistanceEnricher`）：同城/跨城两遍 POI 查询、80 km 距离上限，以及站点全空时的 50 km 邻近车站回查（`find_nearby_stations`） | providers/amap、geo | §04.2 | 距离富化/邻近回查 fixtures 全过；无 Key 不发请求 |
 | `weather.py` | 天气纯函数：`forecast_available_on` 算可见窗口起点、`split_city_names` 拆复合地名、`advice_for` 按五条固定规则给出行提示、`location_key_vote` 做地点 adcode 多数票（并列取最小）、`result_reason` 把查询结果映到 unknown 原因 | stdlib | ADR-0021；§06.5.5 | 五条规则各一例＋无提示一例＋窗口/拆分各一例 tests 全过 |
 | `weather_fold.py` | 把 `ctw weather --output-json` 的结果信封折回既有 Trip/Journey：`fold_weather_into_trip` 逐天按（日期相同、`query` 精确等于 `split_city_names` 首段）匹配 `forecasts[]`，产出 `trigger=weather` 的 patch；`fold_weather_into_journey` 在其上用 `replace_trips_in_journey` 一次重组全部被改子 Trip，并把结果 `revision.created_by` 改回 `system`（AN8，2026-09-17） | contracts/validate_trip/journey/planning/replan/weather（全部只读 import） | §06.7 | `test_weather_fold.py` 六例（新增两天/同结果二折幂等/`reported_at` 更新覆盖替换/revision 冲突与 claim 不匹配报错/`no_forecast` 置空/复合地名靠 `query` 消歧）全过；折入后 demo Journey `validate_journey_html` 0 errors |
+| `dining.py` | 附近餐饮参考纯函数：`meal_type_for`/`meal_slots` 按 slot kind 与 title 字样（`meal` 无字样按 `start_at` 小时 <15 兜底）把 lunch/dinner 时段找出来；`anchor_for` 在同一天先向前再向后找最近一个有坐标的 `poi`/`checkin`/`checkout`/`rest`/`lodging` 时段作为圆心（`meal` 占位 POI 永不当锚点）；`query_parameters` 拼 AMap 周边搜索参数（1.5 km、综合排序 `sortrule=weight`）；`select_options` 按 `items` 原序挑前 `limit` 个有评分且不含 `avoid` 词的候选，`option_from` 落成含深链的展示 option；`format_option` 拼「名 · 菜系 · 评分 · 人均 · 距离 · 今日营业」单行文案，缺项整段跳过（AP1b，2026-09-17） | stdlib only | 本任务书拍板（AP1b，2026-09-17）；无独立设计篇章，命令/渲染/规划器接线见后续波 | `test_dining.py` 十三例（demo 首日两餐分类/free 标题分类两例/meal 无字样按小时兜底/anchor_for 前向命中住宿·全无坐标退到后一 poi·全天无坐标三例/select_options 默认选取保序·避词跳过·option 形状与深链三例/format_option 完整串·缺 cost 降级·search_url 含字面 `keyword=美食` 三例）全过；反向验证：注释掉 select_options 的评分跳过行后同组三例转红，还原后绿 |
 
 `validate_trip.py` 不尝试重新实现任意 JSON Schema 引擎；它实现本产品固定 v1 release-critical checks，并用设计期 `jsonschema` suite 交叉验证。完整 Draft 2020-12 校验保留在 CI/开发工具，不让默认 `python3` 依赖手动 venv。此取舍见 ADR-0002。
 
