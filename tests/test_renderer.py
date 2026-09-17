@@ -221,6 +221,39 @@ class RendererTests(unittest.TestCase):
         self.assertLess(parser.section_order.index("alternatives-and-unknowns"), parser.section_order.index("transport-summary"))
         self.assertLess(parser.section_order.index("provider-health"), parser.section_order.index("days"))
 
+    def test_day_weather_renders_forecast_and_no_forecast_line_with_zero_errors(self):
+        trip = load(VALID / "weekend-live.json")
+        rendered = render_trip(trip)
+        visible = visible_text(rendered)
+
+        self.assertEqual(2, rendered.count('class="day-weather"'))
+        self.assertIn('data-weather-date="2026-10-16"', rendered)
+        self.assertIn("多云／晴", visible)
+        self.assertIn("16–23℃", visible)
+        self.assertIn("东南风3-4级／东南风1-2级", visible)
+        self.assertIn("紫外线较强，建议涂抹防晒霜", visible)
+        self.assertIn("天气：暂无预报", visible)
+        report = validate_html(rendered, trip)
+        self.assertTrue(report.ok, [item.render() for item in report.errors])
+
+    def test_day_weather_temperature_mismatch_reports_e006(self):
+        trip = load(VALID / "weekend-live.json")
+        rendered = render_trip(trip)
+        mutated = rendered.replace("23℃", "33℃")
+        self.assertNotEqual(mutated, rendered)
+
+        report = validate_html(mutated, trip)
+        self.assertIn("E006", [item.code for item in report.errors])
+
+    def test_day_weather_missing_forecast_line_removed_reports_e006(self):
+        trip = load(VALID / "weekend-live.json")
+        rendered = render_trip(trip)
+        mutated = re.sub(r'<p class="day-weather">[^<]*</p>', "", rendered, count=1)
+        self.assertNotEqual(mutated, rendered)
+
+        report = validate_html(mutated, trip)
+        self.assertIn("E006", [item.code for item in report.errors])
+
     def test_multicity_locations_are_grouped_without_cross_city_route_line(self):
         trip = load(VALID / "multicity-static.json")
         poi = copy.deepcopy(trip["pois"][0])

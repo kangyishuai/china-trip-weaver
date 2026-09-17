@@ -22,6 +22,7 @@ from .html import (
     _provider_label,
     _rail_seat_line,
     _render_day_slots,
+    day_weather_line,
     rail_station_names,
 )
 from .template import CSP, RENDERER_VERSION, attr, claim_source_html, dom_id, embedded_json, external_link, renderer_css, text
@@ -337,6 +338,8 @@ def _journey_labels(locale: str) -> Mapping[str, str]:
             "price_unknown": "Price unknown", "queried": "Checked",
             "day_timeline": "Day-by-day plan", "priority_actions": "Priority actions",
             "transport_overview": "Cross-city transport",
+            "weather_none": "Weather: no forecast yet",
+            "weather_line": "Weather: %s/%s · %s–%s°C · %s/%s · reported %s",
         }
     return {
         "locale": "zh-CN", "skip": "跳到全程总览", "travelers": "人数", "segments": "分段",
@@ -379,6 +382,8 @@ def _journey_labels(locale: str) -> Mapping[str, str]:
         "price_unknown": "价格未知 / 点击核验", "queried": "查询于",
         "day_timeline": "逐日安排", "priority_actions": "现在先处理",
         "transport_overview": "跨城交通",
+        "weather_none": "天气：暂无预报",
+        "weather_line": "天气：%s／%s · %s–%s℃ · %s／%s · %s 报",
     }
 
 
@@ -596,6 +601,7 @@ def _day_timeline_section(
     flattened_days: Sequence[Mapping[str, Any]],
     labels: Mapping[str, str],
 ) -> str:
+    show_weather = any("weather" in entry["day"] for entry in flattened_days)
     cards = []
     for index, entry in enumerate(flattened_days):
         day = entry["day"]
@@ -604,11 +610,13 @@ def _day_timeline_section(
             '<article class="day-card" id="%s" data-day-index="%d" data-trip-index="%d" '
             'data-date="%s" data-city="%s"><h3>%s · %s · %s</h3>'
             '<p>%s · %s：%s</p>'
+            '%s'
             '<p class="trace-note"><a href="#segment-%d">%s</a></p>'
             '<ol class="timeline">%s</ol></article>' % (
                 attr(entry["anchor_id"]), index, entry["trip_index"], attr(day["date"]), attr(day["city"]),
                 text(labels["day_label"] % (index + 1)), text(day["date"]), text(_weekday(day["date"], labels)),
                 text(day["city"]), text(labels["lodging"]), text(stay_text),
+                day_weather_line(day, labels) if show_weather else "",
                 entry["trip_index"] + 1, text(labels["segment"] % (entry["trip_index"] + 1)),
                 _render_day_slots(
                     day,

@@ -29,7 +29,7 @@ validate_html(trip.html, validated_trip) -> report
 4. `request-summary`：origin/destinations、预算、兴趣、节奏、constraints/assumptions。
 5. `transport-summary`：跨城腿、时刻、typed price、状态、官方/booking deep link。
 6. `lodging-summary`：片区/候选、入住日期、typed price/unknown、条件与 deep links。
-7. `days`：每一天的线性 timeline；slot 展示时间、类型、标题、status/lock、移动时长与 claim badges。
+7. `days`：每一天的线性 timeline；slot 展示时间、类型、标题、status/lock、移动时长与 claim badges。每天 `<h3>` 标题后另加一行天气（`day_weather_line`：有 `day.weather` 就显示日/夜天气、高低温、风力与 advice 提示，没有则显示“暂无预报”；整份 Trip 没有任何一天带 `weather` 键时不渲染这行，保证旧 Trip 字节不变）。
 8. `location-overview`：只用 Trip 中已存在的 WGS84/GCJ02 点画内联 SVG **位置示意**；醒目标注“非真实路线”，另给 AMap/官方 `https` deep links。
 9. `alternatives-and-unknowns`：未排候选原因、unknown field/reason/下一步。
 10. `evidence`：按 claim 分组的 source/provider/queried_at/status/confidence；不嵌 raw payload。
@@ -134,6 +134,7 @@ renderer 进程不接收 provider env，Trip Schema 没有 credential 字段；�
 - E003：任一 day/slot/entity ID 未恰好渲染一次；或 UI 出现 Trip 中不存在的时间/价格/service number。
 - E004：内部 ID 重复、anchor 断裂、heading 顺序错误。
 - E005：claim/unknown/provider-health 必要 section 缺失。
+- E006：`.day-weather` 行数与 `days` 数不等，或其文案（day/night 描述、高低温、每条 advice 原文）、`data-weather-date`、暂无预报文案与 Trip 的 `day.weather` 不逐字一致；Journey 页对每个子 Trip 的同一规则记作 JH006。
 
 ### 7.2 安全 errors
 

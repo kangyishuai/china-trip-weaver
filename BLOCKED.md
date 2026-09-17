@@ -1980,3 +1980,11 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 已验证：把 `scripts/measure_coverage.py` 临时整体移出 `scripts/`（不是复制，是移动，避免两份文件同时被 glob 到）单独重跑全量，`test_design_docs` 恢复绿，其余全部一并绿，证明这条红只来自这一个、且仅这一个原因；移回后恢复交付状态。全过程见 PROGRESS.md 任务 1 小节。
 
 管理者裁决（2026-09-15）：确认这是任务书自身「授权新建 scripts/ 文件」与「不许改现有测试/docs」两条要求之间的内在矛盾，执行者如实报红、不取巧的处置正确；已按执行者给出的精确两行修复解开（`tests/test_design_docs.py` 计数 48→49，`docs/design/09-impl-map.md` 补登 `measure_coverage.py`），随执行者分支一并提交。收尾实测 `Ran 690 tests ... OK`、`scripts/measure_coverage.py` 直接跑通出具报告（TOTAL 89%）；已关闭。
+
+## 书「AN2：Trip 每日天气渲染与校验」（2026-09-17，第二十九波，worktree `.tmp/wt-an2` 分支 `day-weather-render`）：无裁决分叉，一处非阻塞判断供核对
+
+全程未遇到需要领导裁决、拿不准怎么办的分叉。「我替领导拍的板」四条（schema 纯增量形状、缺省文案、天气行文案模板、错误码 E006/JH006）均已按字面执行，仅在文案模板遇到 `day_weather_line(day, labels)` 的签名约束时做了必要收窄（见下）。
+
+唯一需要自行设计判断（非裁决分叉，供核对）的一点：任务书「拍的板」给的猜测文案示例含 provider 名（「高德 09-17 14:33 报」），但 `day.weather` 本身没有 `provider` 字段，且任务书把 `day_weather_line` 的签名明确钉死为 `(day, labels)`——两者字面冲突。按「页面不说 Trip 里没有的话」的最高让步优先级，天气行最终不带 provider 名，只保留 `<time>` 包裹的 `reported_at`（复用既有 `_time()` 帮手）；provider 归属仍能从 `claim_id` 追溯到对应 claim 的 `provider` 字段核验，只是不重复摘要到这一行文字里。
+
+另有一处技术必然性记在 PROGRESS.md 任务 2 小节，供核对但不构成裁决分叉：`day_weather_line` 若对每天无条件渲染会改变 `demo/journey-16d`（16 天全无 `weather` 键）的渲染字节，直接与任务书「demo 必须字节不变」硬冲突；已加一道「整份 Trip/Journey 里至少一天带 `weather` 键才渲染」的门解开，两个约束都满足，`build_renderer_fixtures.py` 重跑后 demo 的 `journey_sha256`/`html_sha256` 与开工基线逐字一致。

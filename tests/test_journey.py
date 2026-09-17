@@ -1662,6 +1662,33 @@ class JourneyContinuityTests(unittest.TestCase):
         report = validate_journey_html(rendered, journey)
         self.assertTrue(report.ok, [item.render() for item in report.errors])
 
+    def test_weekend_live_journey_with_day_weather_validates_with_zero_errors(self):
+        trip = load(VALID_TRIP)
+        journey = assemble_journey_from_trips([trip], trip["request"], FixedClock.from_iso(FIXED_NOW))
+        rendered = render_journey(journey)
+        parser = AuditParser()
+        parser.feed(rendered)
+        parser.close()
+        visible = " ".join(parser.visible_text)
+
+        self.assertEqual(2, rendered.count('class="day-weather"'))
+        self.assertIn("多云／晴", visible)
+        self.assertIn("16–23℃", visible)
+        self.assertIn("紫外线较强，建议涂抹防晒霜", visible)
+        self.assertIn("天气：暂无预报", visible)
+        report = validate_journey_html(rendered, journey)
+        self.assertTrue(report.ok, [item.render() for item in report.errors])
+
+    def test_weekend_live_journey_day_weather_tamper_reports_jh006(self):
+        trip = load(VALID_TRIP)
+        journey = assemble_journey_from_trips([trip], trip["request"], FixedClock.from_iso(FIXED_NOW))
+        rendered = render_journey(journey)
+        mutated = rendered.replace("23℃", "33℃")
+        self.assertNotEqual(mutated, rendered)
+
+        report = validate_journey_html(mutated, journey)
+        self.assertIn("JH006", [item.code for item in report.errors])
+
     def test_checked_in_sixteen_day_demo_passes_offline_browser_qa(self):
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
             qa = subprocess.run(

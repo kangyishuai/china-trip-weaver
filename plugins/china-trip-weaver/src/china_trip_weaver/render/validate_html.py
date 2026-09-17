@@ -6,6 +6,7 @@ import json
 import re
 from collections import Counter
 from dataclasses import dataclass
+from html import unescape
 from html.parser import HTMLParser
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 from urllib.parse import urlsplit
@@ -175,6 +176,7 @@ def validate_html(html_text: str, trip: Mapping[str, Any]) -> HTMLValidationRepo
 
     visible = _check_trip_mode_badge(parser, trip, add)
     _check_dynamic_fact_coverage(parser, trip, add)
+    _check_day_weather(html_text, trip, add)
     _check_coordinates_and_schematic(parser, trip, add)
     _check_transaction_actions(parser, visible, add)
 
@@ -405,6 +407,46 @@ def _check_dynamic_fact_coverage(parser: AuditParser, trip: Mapping[str, Any], a
         for node, unknown in zip(parser.unknown_nodes, trip["unknowns"]):
             if node.get("data-unknown-path") != unknown["field_path"] or node.get("data-unknown-reason") != unknown["reason"]:
                 add("E202", "unknown path/reason differs from Trip")
+
+
+NO_FORECAST_TEXT = ("天气：暂无预报", "Weather: no forecast yet")
+WEATHER_BLOCK_RE = re.compile(
+    r'<p class="day-weather"(?: data-weather-date="(?P<date>[^"]*)")?>(?P<summary>.*?)</p>'
+    r'(?:<ul class="weather-advice">(?P<advice>.*?)</ul>)?',
+    re.DOTALL,
+)
+WEATHER_ADVICE_ITEM_RE = re.compile(r"<li>(.*?)</li>", re.DOTALL)
+
+
+def _check_weather_blocks(html_text: str, days: Sequence[Mapping[str, Any]], code: str, add: Callable[[str, str], None]) -> None:
+    """Each day's rendered weather (or its absence) must read back exactly what its own day.weather says.
+
+    Shared by the Trip page (code ``E006``) and the Journey page (code ``JH006``), which render the
+    same ``day_weather_line`` output; ``days`` is the Journey's flattened days for the latter.
+    """
+    if not any("weather" in day for day in days):
+        return
+    blocks = list(WEATHER_BLOCK_RE.finditer(html_text))
+    if len(blocks) != len(days):
+        add(code, "day-weather row count differs from source days")
+        return
+    for day, block in zip(days, blocks):
+        weather = day.get("weather")
+        summary = unescape(block.group("summary"))
+        if weather:
+            if block.group("date") != weather["forecast_date"]:
+                add(code, "day-weather date differs from Trip: %s" % day["day_id"])
+            advice_html = block.group("advice") or ""
+            advice_items = [unescape(item) for item in WEATHER_ADVICE_ITEM_RE.findall(advice_html)]
+            expected_text = (weather["day_text"], weather["night_text"], str(weather["temp_high_c"]), str(weather["temp_low_c"]))
+            if any(value not in summary for value in expected_text) or advice_items != weather["advice"]:
+                add(code, "day-weather text differs from Trip: %s" % day["day_id"])
+        elif block.group("date") or not any(label in summary for label in NO_FORECAST_TEXT):
+            add(code, "day-weather missing-forecast text differs from Trip: %s" % day["day_id"])
+
+
+def _check_day_weather(html_text: str, trip: Mapping[str, Any], add: Callable[[str, str], None]) -> None:
+    _check_weather_blocks(html_text, trip["days"], "E006", add)
 
 
 def _check_coordinates_and_schematic(parser: AuditParser, trip: Mapping[str, Any], add: Callable[[str, str], None]) -> None:

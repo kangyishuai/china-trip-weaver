@@ -437,3 +437,37 @@ fix-names` 会把它们列为人工项。
   [docs/history/progress-2026-09-15.md](docs/history/progress-2026-09-15.md)
   （2026-09-15 知识收尾时从本文件整体迁出，一字未改，按波次正序）。书 AM1 的四节 2026-09-12 记录
   当时漏迁，同日补进 `progress-2026-09-08-to-12.md` 末尾。
+
+## AN2 天气渲染与校验（2026-09-17，第二十九波，worktree `.tmp/wt-an2` 分支 `day-weather-render`，进行中）
+
+任务 0 已核对：699 测试 OK、渲染夹具 `{"trip":10,"html":12}`、重生成后 `git status --short` 为空。
+
+理解的目标／顺序／最大风险（≤10 行）：
+
+- 目标：`day.weather`（`weatherForecast` 12 键 + `advice` + `claim_id`）进 schema；Trip/Journey 两页每日卡片各加一行天气；两个校验器逐字核对页面文案与 Trip 数据一致，不符报 E006/JH006。天气从哪来是下一波规划器接线的事，本书只管形状、显示与校验。
+- 顺序：任务 1 schema+夹具在先（否则 `validate_trip.py` 的 `_check_unknowns` 解析 `/days/0/weather` 这个 JSON 指针会失败）→ 任务 2 渲染函数+校验规则+测试在后。
+- 风险①：`additionalProperties:false` + 12 键全 required，AN1 那侧任何键名或类型错位都会让 `ctw validate` 直接报错，必须严格照接缝清单核对（`temp_high_c`/`temp_low_c` 是 int、`adcode` 是 `^\d{6}$` 的字符串）。
+- 风险②：「暂无预报」与 advice 原文逐条出现这两条断言容易在 HTML 转义（`·`、`℃`、中文标点）上出偏差，先看渲染出的真实 HTML 再写断言，不凭空猜测。
+- 风险③：界限不许碰 planning/journey/cli/providers/demo/README/SKILL，新增函数必须是纯函数、不改变既有函数签名。
+
+### 任务 1 完成（schema + 夹具）
+
+`$defs/weatherForecast`（12 键全 required、`additionalProperties:false`）加在 `day` 定义前；`day.weather` 是 `oneOf [$ref, null]`，不进 `day` 的 `required`。12 键 = 接缝清单的 10 个字段（`temp_high_c`/`temp_low_c` 用 `integer`，`adcode` 用 `^\d{6}$`）+ `advice`（复用既有 `#/$defs/stringList`，允许空数组）+ `claim_id`（`["string","null"]`，与既有单数 `claim_id` 字段同型，如 `price.claim_id`）。`weekend-live.json` day-1 加一份合成天气（多云/晴、23/16℃、东南风、一条 advice）与对应 claim `claim-day1-weather`（`subject_ref: day-1`、`field_path: /weather`，`value` 即天气对象本身，`provider: amap`，`source_url` 指向高德天气接口）；day-2 未加 `weather` 键，用来覆盖「缺键」路径（不是 `null`）。`03-trip-model.md` 在 `locked_rail_services` 段后加一段，链到 `07-renderer.md` 的 §2/§7.1 锚点（那两处的实际文案随任务 2 一起写）。
+
+证据：`ctw validate tests/fixtures/trips/schema/valid/weekend-live.json` → `VALID`；全量 `Ran 699 tests ... OK`；`scan_secrets` 0、`pyflakes` 0 行；重跑 `build_renderer_fixtures.py` 后 `journey_sha256`/`html_sha256` 与任务 0 基线完全一致、`git status --short -- demo` 为空——渲染夹具只存 `base_fixture` 路径 + mutation diff，不内嵌 `weekend-live.json` 内容，Journey demo 走独立的 `journey_sixteen_day_case()`，两者都不因这个字段改动而变。反向验证：把 `temp_high_c` 改成字符串 `"32"` 后 `ctw validate` 报 `S_ONE_OF /days/0/weather must match exactly one allowed shape`；还原后恢复 `VALID`（还原时发现直接用 Python `json.dump` 写回会打乱原 fixture 的手工缩进风格，改用 `git checkout` 复原后重做两处 Edit 工具改动，保住原格式，最终 `git diff` 只剩意图内的两处新增）。
+
+### 任务 2 完成（渲染 + 校验）
+
+`html.py` 新增纯函数 `day_weather_line(day, labels)`：有 `weather` 就渲染 `<p class="day-weather" data-weather-date="forecast_date">天气：day_text／night_text · low–high℃ · wind_day／wind_night · <time>reported_at</time> 报</p>`，advice 非空再加 `<ul class="weather-advice"><li>...</li></ul>`；没有（缺键或 `null`）就渲染 `<p class="day-weather">天气：暂无预报</p>`。`_days_section` 在每天 `<h3>` 后插入它的输出；`journey_html.py` 从 `.html` 导入同一个函数，在 `_day_timeline_section` 的住宿 `<p>` 后插入。两套 `_labels`/`_journey_labels` 各加 `weather_none`/`weather_line` 中英文键。
+
+**执行中发现并解决一个与任务书隐含冲突的点**：`day_weather_line` 若对每天无条件渲染（含「暂无预报」），会改变demo Journey（`demo/journey-16d`，全部 16 天都没有 `weather` 键）的渲染字节，直接把既有测试 `test_checked_in_sixteen_day_demo_matches_the_deterministic_renderer` 打红——这与任务书「不许动 demo，必须字节不变」硬冲突。处置：在 `_days_section`/`_day_timeline_section` 里加一道门 `show_weather = any("weather" in day for day in ...)`，只有当这份 Trip／Journey 里*确实*至少有一天带 `weather` 键（哪怕是 `null`）才整体渲染天气行（那一天真没预报的仍显示「暂无预报」）；从未碰过天气功能的旧 Trip/Journey 一行代码都不多渲染，demo 字节因此纹丝不动。`day_weather_line` 函数本身签名与纯函数性质未变，门开在调用侧。
+
+`validate_html.py` 新增 `_check_weather_blocks(html_text, days, code, add)`（用正则 `WEATHER_BLOCK_RE` 从原始 HTML 精确抠出每个 `.day-weather` 块与其后可选的 `.weather-advice` 列表，逐天核对 `data-weather-date`、day/night 文案、两个温度、每条 advice 原文，或「暂无预报」），`_check_day_weather` 包一层传入 `"E006"` 调用它；同一门（`any("weather" in day ...)`）为空则直接放行，与渲染器对称。`validate_journey_html.py` 从 `.validate_html` 直接导入 `_check_weather_blocks` 复用同一份逻辑，`_check_day_weather` 把 Journey 摊平成 `[day for trip in journey["trips"] for day in trip["days"]]` 后传入 `"JH006"`。**技术教训**：最初用 `parser.all_attrs`/`parser.visible_text`（整页拼一起找子串）实现，实测把 `temp_high_c=23` 改成别的数字时检测不出来——因为「23」这个短数字恰好也出现在同一页某坐标值 `31.238200` 里，整页子串查找假阴性。改用正则抠出每个 `.day-weather` 块自己的文本再逐块比较后，同样的篡改能可靠命中。
+
+07-renderer.md §2 第 7 条追加一句说明天气行位置与「整份 Trip 无 weather 键则不渲染」的字节不变理由；§7.1 追加 E006 一条，同句点出 Journey 对应 JH006。
+
+验收证据：
+- `test_renderer.py` 新增 3 项（`test_day_weather_renders_forecast_and_no_forecast_line_with_zero_errors`、`test_day_weather_temperature_mismatch_reports_e006`、`test_day_weather_missing_forecast_line_removed_reports_e006`）；`test_journey.py` 新增 2 项（`test_weekend_live_journey_with_day_weather_validates_with_zero_errors`、`test_weekend_live_journey_day_weather_tamper_reports_jh006`，用 `assemble_journey_from_trips([weekend-live], ...)` 现成组出一个带 weather 的单 Trip Journey，不必跑完整规划器）。全量 `Ran 704 tests ... OK`（699+5），0 skipped；`scan_secrets` 0；`pyflakes` 全仓库 0 行；`build_renderer_fixtures.py` 重跑后 `journey_sha256`/`html_sha256` 与任务 0 基线一致、`git status --short -- demo` 为空、夹具 counts 仍 `{"trip":10,"html":12}`；`scripts/qa_renderer_browser.py` 对渲染出的 weekend-live 页 `--sections 12` 返回 `"failures": []`、四个 viewport `sectionCount`/`nonEmptySections` 均为 12、`horizontalOverflow`/`internalOverflow` 均为 0（既有测试 `test_network_blocked_browser_viewports_and_print` 同样跑这条路径，已在全量里覆盖）。
+反向验证：分别注释掉 `validate_html.py`/`validate_journey_html.py` 里的 `_check_day_weather(...)` 调用，两个「篡改」测试（temperature mismatch → E006、tamper → JH006）各自变红（`AssertionError: 'E006'/'JH006' not found in []`），「渲染正确」的测试仍绿；还原调用后 5 项全绿。
+完成条件 2：`git diff main --stat -- plugins/china-trip-weaver/src/china_trip_weaver/{planning,journey,cli}.py plugins/china-trip-weaver/src/china_trip_weaver/providers demo README.md README.zh-CN.md` 输出为空。
+`git diff main --stat` 总览：11 个文件、+242/-2，全部落在界限允许列表内。
