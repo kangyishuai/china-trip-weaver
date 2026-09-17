@@ -2269,3 +2269,6 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 任务 0 那条复现测试；探针的异常兜底（三个子请求任一抛异常记 `business=failed` 不外抛）也是任务书
 明确要求的行为，不算设计判断分叉。详细完成记录见 PROGRESS.md「书 AP3」小节（任务 0 核对、任务 1/2
 完成、验收结果，含反向验证红→绿的实际断言与实网 `ctw doctor --probe` 的 amap 行输出）。
+## 书 AP4「产物目录约定文档」（2026-09-17，第三十三波五本并行之一，worktree `.tmp/wt-ap4` 分支 `plans-dir-docs`）：无
+
+无。全程没有遇到拿不准、需要管理者裁决的真实二义性。本书只把领导已经拍板的 `plans/<可读名称>/` 目录约定写进三份 SKILL 正文与两份 README、`docs/design/02-plugin-skills.md` §4，未触碰任何 `.py`、schema、demo 或测试夹具，没有需要裁决的设计空间。详细改动与验收证据见 PROGRESS.md「书 AP4」条目。

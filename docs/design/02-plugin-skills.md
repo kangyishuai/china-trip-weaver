@@ -144,6 +144,8 @@ policy:
 
 脚本名是实现地图合同，不代表本阶段已有产品代码。所有 provider 输出先归一化再进入 Trip；renderer 不直连 provider。[依据：研究决策 4](../research/04-design-insights.md#4-采用一个版本化-itineraryjson-是所有层的唯一事实源)
 
+领导裁决补充（2026-09-17）：上表「输入」列列出的 request/candidates/Trip/Journey 等文件不再假定散落在当前目录，统一约定放进「调用这个插件的项目根目录」下的 `plans/<可读名称>/`（可读名称用中文短语或拼音，如 `福建中秋国庆16天`）；同一趟行程的 request、candidates、Trip/Journey、渲染出的 HTML，以及天气／美食折回结果、`*.progress.ndjson` 全放这一个目录。每次 replan 或天气／美食折回都新增一个 `plans/<可读名称>/journey-r<N>.json` 这样的版本文件而不覆盖旧版本，现役版本由用户手动改名接替。三个会给出具体文件路径命令示例的 Skill（`plan-china-trip`、`replan-china-trip`、`resolve-china-mobility`）与两份仓库 README 已按此改写；仓库自己的 `demo/` 与测试夹具不受影响。
+
 ## 5. 主入口确定性路由
 
 ```text

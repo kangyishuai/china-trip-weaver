@@ -83,6 +83,10 @@ The expected result is `china-trip-weaver@china-trip-weaver-local`, with the ver
 
 For Codex Desktop UI installation, add this repository as a local marketplace, ensure `china-travel-assistant` is disabled, install China Trip Weaver Local, restart, and create a new task. The two plugins must not be enabled together because both expose `plan-china-trip`.
 
+## Where a plan lives
+
+Every file for one trip — the request, `candidates.json`, the resulting `trip.json`/`journey.json`, their rendered `.html`, and any `weather-<date>.json`, `dining-<date>.json`, or `*.progress.ndjson` — lives together in `plans/<name>/` under the project root that invoked this plugin, not scattered across that root. Pick `<name>` as a readable Chinese phrase or its pinyin, for example `plans/福建中秋国庆16天/`, and create the directory first if it does not exist yet. Each replan or weather/dining fold writes a new revision file such as `plans/<name>/journey-r<N>.json` instead of overwriting the one it started from; the user promotes a revision to the active file by renaming it themselves. This convention does not apply to this repository's own [`demo/`](demo/) fixtures or test fixtures.
+
 ## Candidate input
 
 `candidates.json` contains exactly `candidates_version`, `pois`, `lodgings`, `claims`, and `unknowns`. It does not contain transport legs. Its entity shapes reuse the frozen Trip `$defs`, and every entity/price/opening-window claim reference must resolve.
