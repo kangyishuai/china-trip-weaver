@@ -57,7 +57,8 @@ plugins/china-trip-weaver/src/china_trip_weaver/
 │   └── light.py
 ├── station_distance.py
 ├── validate_trip.py
-└── variflight_enrichment.py
+├── variflight_enrichment.py
+└── weather.py
 
 scripts/
 ├── build_plan_fixtures.py
@@ -191,6 +192,7 @@ tests/
 | `pipeline.py` | P0–P6 状态机、checkpoint、取消与 stage invalidation | all core | §06.1–2 | resume/hash/version tests；失败不越 stage boundary |
 | `journey.py` | 长行程拆分为多个 1–7 天子 Trip、`extract`/`assemble`/`--replace-trip`、Journey 校验、按 `deadline_kind` 排序的预订/核验清单（`journey_booking_checklist`）；装配前由 `_with_missing_budget_ledgers` 只为缺失账本的子 Trip 按现有事实补算 `budget_ledger` | contracts/validate_trip | §01；[决策 4](../research/04-design-insights.md#4-采用一个版本化-itineraryjson-是所有层的唯一事实源) | 段拆分/连续性 golden；缺失账本补算；`ctw journey` 全子命令 tests |
 | `station_distance.py` | 铁路站点歧义候选的高德距离富化（`AMapStationDistanceEnricher`）：同城/跨城两遍 POI 查询、80 km 距离上限，以及站点全空时的 50 km 邻近车站回查（`find_nearby_stations`） | providers/amap、geo | §04.2 | 距离富化/邻近回查 fixtures 全过；无 Key 不发请求 |
+| `weather.py` | 天气纯函数：`forecast_available_on` 算可见窗口起点、`split_city_names` 拆复合地名、`advice_for` 按五条固定规则给出行提示 | stdlib | AN1 任务书（2026-09-17）；正式设计文档随下一波 ADR-0021 补齐 | 五条规则各一例＋无提示一例＋窗口/拆分各一例 tests 全过 |
 
 `validate_trip.py` 不尝试重新实现任意 JSON Schema 引擎；它实现本产品固定 v1 release-critical checks，并用设计期 `jsonschema` suite 交叉验证。完整 Draft 2020-12 校验保留在 CI/开发工具，不让默认 `python3` 依赖手动 venv。此取舍见 ADR-0002。
 
@@ -203,8 +205,8 @@ tests/
 | `rail12306.py` | 调 8 个 MCP tools、解析 text JSON | base/cache | §04.2–4.2；[决策 7](../research/04-design-insights.md#7-采用12306-mcp-为铁路主-provider不采用当前-12306-skill) | exact pin/fingerprint；rail fixture matrix 全过 |
 | `mcp_stdio.py` | 12306 stdio MCP 传输（`RailMCPStdioTransport`）与站点解析编排：三层 station resolve、行政区后缀剥离重试（`_resolve_rail_stations`）、第四层邻近车站回查（`_resolve_nearby_station_candidates`） | base/station_distance | §04.2 | 四层解析 fixtures 全过；`station_resolution_nearby_fallback` 只在四层皆空且有 Key 时出现 |
 | `flyai.py` | probe 1.0.16 CLI 并归一 flight/hotel | base/credentials | §04.2–4.4；[Q3](../research/05-open-questions.md#q3-fly-aiflyai-cli-的当前-commandschemakeyless-trial-到底是什么) | 不猜 command；trial/key/error/wrong-shape 全过 |
-| `amap.py` | AMap adapter：normalize POI/geocode/route/poi_around 为 candidates 与 claims，GCJ02 标记 | base/credentials/geo/amap_http | §04.3–4.5；[Q5](../research/05-open-questions.md#q5-amap-当前-web-api-的-v3v4v5-schemacrs-与-route-quota-能否形成稳定-adapter) | endpoints/probe/quota/error/CRS fixtures 全过 |
-| `amap_http.py` | AMap 的 stdlib HTTP 传输（`AMapHTTPTransport`）：按 capability 构造请求（`_request_contract`，含 `poi` 的 `types`/`city_limit` 与 `poi_around`），执行按 Trip 计的调用预算（`AMapCallBudget`） | base/credentials | §04.2、§04.5 | 4 capability 请求 shape 与预算耗尽 fixtures 全过 |
+| `amap.py` | AMap adapter：normalize POI/geocode/route/poi_around 为 candidates 与 claims，GCJ02 标记；`weather` 把 `forecasts[0].casts` 归一为逐日 claim（AN1，2026-09-17） | base/credentials/geo/amap_http | §04.3–4.5；[Q5](../research/05-open-questions.md#q5-amap-当前-web-api-的-v3v4v5-schemacrs-与-route-quota-能否形成稳定-adapter) | endpoints/probe/quota/error/CRS fixtures 全过；`weather`/`weather_empty`/`weather_ambiguous` 三份合同夹具全过 |
+| `amap_http.py` | AMap 的 stdlib HTTP 传输（`AMapHTTPTransport`）：按 capability 构造请求（`_request_contract`，含 `poi` 的 `types`/`city_limit`、`poi_around`，以及 `weather` 的 `adcode`/`city` 二选一），执行按 Trip 计的调用预算（`AMapCallBudget`） | base/credentials | §04.2、§04.5 | 4 capability 请求 shape 与预算耗尽 fixtures 全过；`weather` 分支未进 `test_amap_live.py`（AN1 界限未授权），仅实网抽查验证，见 PROGRESS.md |
 | `variflight.py` | 调可选 MCP 航空增强并对齐 flight identity | base/credentials | §04.2–4.3；[Q6](../research/05-open-questions.md#q6-航班价格库存状态跨-flyai-与-variflight-如何同一航段对齐) | 9-tool fingerprint；无 Key 0 business call；conflict tests |
 | `anysearch.py` | 可选搜索补充，拒绝 auto-registration | base/credentials | §04.2–4.1；[Q8](../research/05-open-questions.md#q8-目的地调研应使用内置-webanysearch还是两者组合) | 默认 off；usage/402/429/auto-key fixtures 全过 |
 | `anysearch_http.py` | AnySearch 的有界标准库 HTTP transport，固定 origin、JSON-RPC `tools/call` 与响应上限 | base/credentials | §04.1、§04.5 | 缺凭据不发请求；redirect/timeout/network/wrong-shape fixtures 全过 |

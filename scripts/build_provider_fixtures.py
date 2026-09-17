@@ -372,6 +372,38 @@ def amap_riding_body() -> Mapping[str, Any]:
     }
 
 
+def amap_weather_cast(
+    date: str, week: str, day_text: str, night_text: str,
+    day_temp: str, night_temp: str, day_wind: str, night_wind: str,
+    day_power: str, night_power: str,
+) -> Mapping[str, Any]:
+    return {
+        "date": date, "week": week,
+        "dayweather": day_text, "nightweather": night_text,
+        "daytemp": day_temp, "nighttemp": night_temp,
+        "daywind": day_wind, "nightwind": night_wind,
+        "daypower": day_power, "nightpower": night_power,
+        "daytemp_float": day_temp + ".0", "nighttemp_float": night_temp + ".0",
+    }
+
+
+def amap_weather_forecast(
+    adcode: str, city: str, province: str, reporttime: str,
+    casts: Sequence[Mapping[str, Any]],
+) -> Mapping[str, Any]:
+    return {
+        "city": city, "adcode": adcode, "province": province,
+        "reporttime": reporttime, "casts": list(casts),
+    }
+
+
+def amap_weather_body(forecasts: Sequence[Mapping[str, Any]]) -> Mapping[str, Any]:
+    return {
+        "status": "1", "count": str(len(forecasts)), "info": "OK", "infocode": "10000",
+        "api": "weather-v3", "forecasts": list(forecasts),
+    }
+
+
 def amap_identity_poi(
     name: str,
     identifier: str,
@@ -813,6 +845,40 @@ def build() -> List[Dict[str, Any]]:
                 }],
             }),
             item_count=1, schema_refs=[SCHEMA_REFS["poi"]], source=AMAP_SOURCE, captured_at=AMAP_CAPTURED_AT,
+        ),
+    ])
+
+    amap_weather_req = request("weather", {"adcode": "990100"})
+    amap_weather_ambiguous_req = request("weather", {"city": "示例区"})
+    fixtures.extend([
+        fixture(
+            "amap", "weather", amap_weather_req,
+            response(amap_weather_body([
+                amap_weather_forecast("990100", "示例市", "示例省", "2026-09-04 08:00:00", [
+                    amap_weather_cast("2026-09-04", "5", "晴", "多云", "31", "24", "北", "北", "1-3", "1-3"),
+                    amap_weather_cast("2026-09-05", "6", "多云", "阴", "30", "23", "东南", "东南", "1-3", "1-3"),
+                    amap_weather_cast("2026-09-06", "7", "小雨", "小雨", "27", "22", "东", "东", "3-4", "3-4"),
+                    amap_weather_cast("2026-09-07", "1", "雷阵雨", "多云", "29", "23", "南", "南", "4-5", "4-5"),
+                ]),
+            ])),
+            source=AMAP_SOURCE, captured_at=AMAP_CAPTURED_AT,
+        ),
+        fixture(
+            "amap", "weather_empty", amap_weather_req,
+            response(amap_weather_body([])),
+            error_class="no_results", source=AMAP_MUTATION_SOURCE, captured_at=AMAP_CAPTURED_AT,
+        ),
+        fixture(
+            "amap", "weather_ambiguous", amap_weather_ambiguous_req,
+            response(amap_weather_body([
+                amap_weather_forecast("990100", "示例区(甲)", "示例省", "2026-09-04 08:00:00", [
+                    amap_weather_cast("2026-09-04", "5", "晴", "晴", "31", "24", "北", "北", "1-3", "1-3"),
+                ]),
+                amap_weather_forecast("990200", "示例区(乙)", "示例省", "2026-09-04 08:00:00", [
+                    amap_weather_cast("2026-09-04", "5", "晴", "晴", "30", "23", "北", "北", "1-3", "1-3"),
+                ]),
+            ])),
+            error_class="no_results", source=AMAP_MUTATION_SOURCE, captured_at=AMAP_CAPTURED_AT,
         ),
     ])
 

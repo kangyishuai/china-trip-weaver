@@ -114,7 +114,7 @@ class ProviderCorpusTests(unittest.TestCase):
         manifest = load(FIXTURES / "manifest.json")
         listed = {entry["path"] for entry in manifest["files"]}
         actual = {path.relative_to(FIXTURES).as_posix() for path in fixture_paths()}
-        self.assertEqual(85, manifest["fixture_count"])
+        self.assertEqual(88, manifest["fixture_count"])
         self.assertEqual(listed, actual)
         for entry in manifest["files"]:
             data = (FIXTURES / entry["path"]).read_bytes()
@@ -267,6 +267,33 @@ class ProviderCorpusTests(unittest.TestCase):
             "city": geocode_raw["city"],
             "district": geocode_raw["district"],
         }, geocode.normalized_items[0])
+
+    def test_amap_weather_forecast_maps_casts_to_claims_and_flags_ambiguity(self):
+        weather = run_fixture_value(FIXTURES / "amap" / "weather.json")
+        self.assertIsNone(weather.error_class)
+        self.assertEqual((), weather.normalized_items)
+        self.assertEqual(4, len(weather.claims))
+        expected_keys = {
+            "forecast_date", "adcode", "city", "day_text", "night_text",
+            "temp_high_c", "temp_low_c", "wind_day", "wind_night", "reported_at",
+        }
+        for claim in weather.claims:
+            self.assertEqual("amap", claim["provider"])
+            self.assertEqual("/weather", claim["field_path"])
+            self.assertEqual("https://restapi.amap.com/v3/weather/weatherInfo", claim["source_url"])
+            self.assertEqual("verified", claim["status"])
+            self.assertEqual(0.7, claim["confidence"])
+            self.assertEqual("live", claim["mode"])
+            self.assertEqual(expected_keys, set(claim["value"]))
+            self.assertIsInstance(claim["value"]["temp_high_c"], int)
+            self.assertIsInstance(claim["value"]["temp_low_c"], int)
+            self.assertEqual("990100", claim["value"]["adcode"])
+        empty = run_fixture_value(FIXTURES / "amap" / "weather_empty.json")
+        self.assertEqual("no_results", empty.error_class)
+        self.assertNotIn("weather_ambiguous", " ".join(empty.warnings))
+        ambiguous = run_fixture_value(FIXTURES / "amap" / "weather_ambiguous.json")
+        self.assertEqual("no_results", ambiguous.error_class)
+        self.assertIn("weather_ambiguous:2", ambiguous.warnings)
 
     def test_amap_poi_coordinates_preserve_valid_location_and_tolerate_invalid_values(self):
         fixture_path = FIXTURES / "amap" / "success.json"

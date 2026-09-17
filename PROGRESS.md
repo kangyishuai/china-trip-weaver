@@ -437,3 +437,79 @@ fix-names` 会把它们列为人工项。
   [docs/history/progress-2026-09-15.md](docs/history/progress-2026-09-15.md)
   （2026-09-15 知识收尾时从本文件整体迁出，一字未改，按波次正序）。书 AM1 的四节 2026-09-12 记录
   当时漏迁，同日补进 `progress-2026-09-08-to-12.md` 末尾。
+
+## 第二十九波 AN1（高德天气能力）任务 0 核对记录
+
+- 目标：给 AMap 适配器加第 5 个能力 `weather`（`/v3/weather/weatherInfo`），产出合同夹具三份
+  （weather/weather_empty/weather_ambiguous）与规则化提示纯函数模块 `weather.py`；本波只做适配器与
+  夹具，不接线进 planning/cli，那是下一波。
+- 顺序：任务 1（`amap_http` 合同分支 + `amap.py` normalize + 夹具重生成 85→88 + 实网抽查 + 反向验证）
+  →任务 2（`weather.py` 五条规则纯函数 + 测试）。
+- 基线核对（本机实测，与任务书一致）：699 项 `OK`、0 skipped；`scan_secrets` 0 命中；pyflakes 0 行；
+  `tests/test_providers.py:117` 断言 `fixture_count==85`；`tests/test_design_docs.py:20` 断言
+  `len(files)==50`；`git grep weatherInfo -- plugins` 0 命中。
+- 最大风险：①界限清单很窄，不许碰 planning/journey/mobility/cli/render/schema，改完要用
+  `git diff main --stat` 核对范围；②天气对象键名是与 AN2 书共用的接缝，一个字都不能改；③新增
+  claim 的 `value` 键集合要与全局其它夹具 claim 逐字一致，动工前要先读一份现有 claim 的真实结构
+  照抄键名，不能凭任务书猜；④温度要转 int、风力拼接格式要与真实实测（`daypower` 形如 `1-3`）对齐。
+
+## 第二十九波 AN1 任务 1／2 完成证据（2026-09-17）
+
+- **实现**：`amap_http.py::_request_contract` 加 `weather` 分支（`adcode`/`city` 二选一、都给/都缺
+  判 `ContractMismatch`，拼 `/v3/weather/weatherInfo?city=<值>&extensions=all&output=JSON`，api 标签
+  `weather-v3`）。`amap.py` capabilities 加 `"weather"`；新增 `_weather()`：`forecasts` 非 list→
+  `ContractMismatch`；长度 >1→`Normalization((), (), warnings=("weather_ambiguous:%d",))`（走
+  `_build_result` 的空 items+空 claims 分支自动补 `no_results`）；长度 0 或 `casts` 空→
+  `ProviderFailure("no_results", ...)`；否则每个 cast 一条 claim，`value` 恰好 10 键（
+  `forecast_date/adcode/city/day_text/night_text/temp_high_c/temp_low_c/wind_day/wind_night/
+  reported_at`，与 AN2 书共用接缝逐字一致）、`subject_ref` 取请求参数 `subject_ref`，缺省时用响应
+  自带的 `adcode`（不是请求参数的 `adcode`，因为请求也可能只给了 `city`）拼 `weather-<adcode>`；
+  claim 的 provider/field_path/source_url/status/confidence/mode 与任务书「全局」一节逐字一致。
+  新建 `weather.py`：`FORECAST_DAYS=4`、`forecast_available_on`（返回 `travel_date -
+  timedelta(days=FORECAST_DAYS-1)`）、`split_city_names`（依次按「／」「/」「、」拆分再 strip 空串）、
+  `advice_for`（五条规则固定顺序：雨/雷/暴/台风→雪/冰→高温≥35→低温≤5→大风；「大风」判定用
+  `re.findall(r"\d+", ...)` 抽出风力文本里的整数再比较 `>=6`，不是逐字符比对——避免「10-11 级」被
+  误判成"不含≥6的数字"这类字符串子串匹配的坑，任务书原文「风力含 ≥6 的数字」按数值理解更准确，
+  已按这个理解实现，无更好路可循时属「建议」范围内的工程判断）。
+- **夹具**：`build_provider_fixtures.py` 新增 `amap_weather_cast/forecast/body` 三个构造函数与
+  `weather`（4 casts，adcode `990100`「示例市」）、`weather_empty`（0 forecasts）、`weather_ambiguous`
+  （2 个同 adcode 段但不同区「示例区(甲)/(乙)」的 forecast）三条夹具；重生成后
+  `wrote 88 provider fixtures and 5 AMap scenarios`，`tests/test_providers.py` 的
+  `fixture_count` 断言同步改 85→88。
+- **专项断言**：`tests/test_providers.py` 新增
+  `test_amap_weather_forecast_maps_casts_to_claims_and_flags_ambiguity`——`weather` 夹具恰好 4 条
+  claim、每条 `value` 键集合与任务书 10 键集合逐字相等、`temp_high_c`/`temp_low_c` 均为
+  `int`；`weather_empty` 夹具 `no_results` 且 warnings 不含 `weather_ambiguous`；`weather_ambiguous`
+  夹具 `no_results` 且 warnings 含 `weather_ambiguous:2`。全部实测通过。
+- **反向验证**：把 `_weather()` 里 `if len(forecasts) > 1:` 临时改成 `if False and len(forecasts) > 1:`
+  （等价于"多于 1 条时退化成取第一条"），复跑
+  `test_fixture_amap_weather_ambiguous` 与新增的专项断言两个测试——两个都从 `no_results` 变
+  `AssertionError: 'no_results' != None`，确认变红；`git diff`还原该行后 `touch amap.py`（避开
+  `~/Library/Caches/com.apple.python/` 按 mtime+size 缓存字节码的坑，见本文件「验收教训」一节）
+  复跑同两个测试，`OK`，确认变绿。
+- **实网抽查**：仿 `cli.py::_probe_amap` 写法（未改该函数本身）在 scratchpad 写了一次性脚本，用
+  `~/.config/china-trip-weaver/credentials.env` 里的真实 `AMAP_WEBSERVICE_KEY`、真走
+  `AMapHTTPTransport`→`_request_contract`→真实 HTTPS 请求→`AMapAdapter.query` 全链路，查
+  `capability="weather"`、`parameters={"city": "福州"}` 与 `{"city": "鼓楼区"}`：
+  - `福州`：`error_class=None warnings=() claims=4 health_status='ready'`，首条 claim
+    `value={'forecast_date': '2026-09-17', 'adcode': '350100', 'city': '福州市', 'day_text': '晴',
+    'night_text': '晴', 'temp_high_c': 32, 'temp_low_c': 23, 'wind_day': '北1-3级',
+    'wind_night': '北1-3级', 'reported_at': '2026-09-17T15:33:54+08:00'}`。
+  - `鼓楼区`：`error_class='no_results' warnings=('weather_ambiguous:4', 'no_results') claims=0
+    health_status='ready'`——真实 AMap 对「鼓楼区」这个名字同时命中 4 个不同城市的同名区（福州/
+    南京/徐州/赣州等），与任务书「现状与任务 0」记录的实测结论一致，也与「完成条件」写的「鼓楼区
+    no_results」完全吻合。
+  与任务书完成条件逐字对上：福州 4 条 claim、鼓楼区 no_results。
+- **全量与门禁**：改完 `/usr/bin/python3 -m unittest discover -s tests` `Ran 711 tests ... OK`
+  （699 基线 + 3 条新夹具自动生成测试 + 1 条专项断言测试 + 8 条 `test_weather.py`）；
+  `scripts/scan_secrets.py` `0 finding(s) across 400 file(s)`；
+  `~/miniconda3/envs/core/bin/python -m pyflakes $(git ls-files '*.py')` 0 行；
+  `tests/test_design_docs.py` 单测通过（50→51，`weather.py` 已登记进 `09-impl-map.md` 目录树与
+  Core modules 表格，含一条诚实备注：`_request_contract` 的 `weather` 分支没有自动化请求形状测试，
+  只有本轮的实网抽查，缺口记在 BLOCKED.md 待裁决）。
+  `git diff main --stat -- plugins/china-trip-weaver/src/china_trip_weaver/{planning,journey,cli}.py
+  plugins/china-trip-weaver/src/china_trip_weaver/render plugins/china-trip-weaver/schema` 为空，
+  `git status --short` 改动的文件与新建文件均落在任务书白名单内，无越界文件。
+- **未做（按任务书裁定，记 BLOCKED.md）**：geocode 保留 adcode、VariFlight 机场天气整合、
+  `_probe_amap` 加 weather 分支（`cli.py` 本波不碰）。另在 BLOCKED.md 记了一条新发现待裁决：
+  `_request_contract` 的 `weather` 分支缺自动化回归测试（`test_amap_live.py` 不在本书界限内）。
