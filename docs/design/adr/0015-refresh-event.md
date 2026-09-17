@@ -151,3 +151,15 @@ the remaining candidates, sorted by `(depart_at, arrive_at)`, as
 same error starts with `no row matches depart_at=… arrive_at=…; ` and lists
 the original candidates. The default path used when `service_number` is
 omitted is unchanged.
+
+## Amendment (2026-09-17): slot title rewrite
+
+`_apply_refresh` previously left the replaced slot's `title` untouched, so it
+kept describing whichever service the trip had been scheduled or last
+refreshed against. It now rewrites `title` to `起点 → 终点 铁路 车次号` (place
+names via `_place_name`, service number from the newly selected service)
+unless the event supplies its own non-blank `title`, which is adopted
+verbatim; a blank one fails with the new error code `refresh_title`. Evidence:
+`test_refresh_default_rewrites_slot_title`,
+`test_refresh_event_title_overrides_default_verbatim`,
+`test_refresh_blank_event_title_fails`.

@@ -157,7 +157,7 @@ user_locked_refs[], optional allowed_changes[], now
 | local delay | 延迟 leg/slot | 从该点到下一个 locked anchor 之间 |
 | cross-city train/flight delay/cancel | 该 transport leg | 到达 day、接驳/check-in；只有跨午夜/失去住宿时才扩下一 day |
 | provider claim stale/conflict | 引用该 claim 的字段 | 依赖该字段的 slot/hop/price summary |
-| rail leg refresh（`replan.py` 的 `_apply_refresh`，[ADR-0015](adr/0015-refresh-event.md)） | 该 rail leg 与其 slot | `_select_refresh_service` 默认排除会与前一 slot 重叠的行（无可行行报 `refresh_overlap`），再按 `arrive_at`、`depart_at` 选最早到达者；显式车次有多行时，`_disambiguate_service_matches` 依次用事件的 `depart_at`、`arrive_at` 挑行，仍非唯一则报 `refresh_service_ambiguous`；换腿时先删除旧 leg 的 claims，再只复制所选行的 claims；若新到达时间推迟，顺延同日之后的 slots |
+| rail leg refresh（`replan.py` 的 `_apply_refresh`，[ADR-0015](adr/0015-refresh-event.md)） | 该 rail leg 与其 slot | `_select_refresh_service` 默认排除会与前一 slot 重叠的行（无可行行报 `refresh_overlap`），再按 `arrive_at`、`depart_at` 选最早到达者；显式车次有多行时，`_disambiguate_service_matches` 依次用事件的 `depart_at`、`arrive_at` 挑行，仍非唯一则报 `refresh_service_ambiguous`；换腿时先删除旧 leg 的 claims，再只复制所选行的 claims；若新到达时间推迟，顺延同日之后的 slots；slot 的 `title` 同步重写为「起点 → 终点 铁路 车次号」，事件可用非空 `title` 覆盖，空白则报 `refresh_title` |
 | transport leg suspend（`_apply_suspend`） | 该 leg 的 slot | 该 leg 本身、其 budget_ledger 行、引用该 leg 的 claims 与 unknowns 全部移除；非末尾腿被删时，后面腿的 `/transport_legs/N/...` unknowns 由 `_reindex_transport_leg_unknowns` 重新编号 |
 
 范围外 days/refs 不进入 provider requery 或 scheduler state。

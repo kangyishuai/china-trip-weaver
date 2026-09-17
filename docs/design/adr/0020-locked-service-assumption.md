@@ -329,20 +329,41 @@ If Direction D is adopted as interim guidance only:
   pair, the only key available before leg ids exist) or per-leg-index after
   a first successful plan — this round only traced the pre-leg-id case
   (`_resolve_rail`); it did not design the exact matching key shape.
+  - 2026-09-17 注：0.22.0 按 `travel_date` 逐 route 匹配，未采用
+    per-leg-index 方案——`_locked_rail_candidate` 对每条 `RouteSpec` 都尝试
+    同日期的每一条锁定项，不额外存城市对或 leg 索引；两条锁定腿恰好撞同一
+    日期也能各自匹配到自己的路线（详见上文「Implementation record」与
+    「Update — shared helper extracted」两节）。
 - Whether Direction A's "locked service not found live" case should abort
   the Trip (loud, consistent with E003's own philosophy) or degrade to an
   `unknowns` entry (consistent with `_resolve_rail`'s existing no-live-match
   fallback) — flagged in Direction A above as needing product judgment, not
   resolved here.
+  - 2026-09-17 注：2026-09-15 领导裁决查不到或歧义都不中止整趟 Trip；退回既有
+    的 `_deep_link_leg` 占位腿路径，`unknowns`/`runtime_warnings` 用
+    `locked_service_not_found`/`locked_service_ambiguous` 点名具体车次号与
+    日期（详见上文「Implementation record」）。
 - Whether `journey.schema.json`'s own top-level `assumptions`
   (`journey.schema.json:77,95`) would need a parallel change for Direction A
   in journeys assembled from independently-planned Trips
   (`journey assemble` build mode) rather than planned via `journey plan` in
   one pass — not traced in this round.
+  - 2026-09-17 注：`journey plan` 逐段调用 `plan_trip`；`_segment_request`
+    （`journey.py:768`）对每个分段都是 `copy.deepcopy(dict(source))`，不过滤
+    `locked_rail_services`，随后照常经同一个 `_normalize_request` 归一化，
+    所以每个分段各自沿用顶层 request 的锁定项，`journey.schema.json` 无需
+    改动；`journey assemble` 的 build 模式仍是逐个独立 Trip 各自处理，未在
+    本轮验证。
 - No live network calls were made this round (per the task book's
   constraint); Direction A's design has not been validated against a live
   12306 response shape beyond what `replan.py`'s existing, already-live-
   tested code already assumes.
+  - 2026-09-17 注：仍未针对 `locked_rail_services`（`_resolve_rail` 消费这条
+    新路径）本身跑过实网 12306 校验；共享匹配逻辑
+    `rail_selection.select_service` 已通过 `refresh` 路径在真实 G1902/G5023
+    两条腿上实网跑通（2026-09-15 之前），但那是 Direction D 的临时工作流，不
+    是 Direction A 的初次规划路径。同波 AN4 计划把真实行程的自由文本换成结构
+    化锁定、走一次 `ctw journey plan`，本轮未动。
 
 ## Implementation record — Direction A shipped (2026-09-15)
 

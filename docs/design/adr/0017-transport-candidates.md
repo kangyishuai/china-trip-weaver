@@ -1,6 +1,6 @@
 # ADR-0017: Where rental-car and ferry legs come from
 
-- **Status:** Proposed
+- **Status:** Accepted（2026-09-11 决定维持现状、暂不做候选生产者）
 - **Date:** 2026-09-11
 
 ## Context
