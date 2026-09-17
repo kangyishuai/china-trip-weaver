@@ -992,3 +992,99 @@ adr/0020`；`tests/test_locked_rail_services.py` 只加；`PROGRESS.md`）。
 **任务 3 完成条件核对**：退出码 0 ✓；两条腿 `locked:true` 且时刻吻合 ✓；
 `grep -c locked_service` 为 0 ✓；`journey validate` 通过 ✓；
 `journey render` 后 `validate-html` errors=0 ✓——全部六项逐字达成。
+## AN7 规划器天气阶段（2026-09-17，第三十波，worktree `.tmp/wt-an7` 分支 `planner-weather`）
+
+任务 0 已核对：`git worktree add .tmp/wt-an7 -b planner-weather main` 于 `672b53a` 建出；全量 `Ran 719 tests ... OK` 0 skipped；`scan_secrets` 0（401 files）；pyflakes 0 行；demo `ctw plan` 与 `build_renderer_fixtures.py` 重跑后 `git status --short` 均为空，`trip_sha256=7ea7888f...`、`html_sha256=c2d0770...`、`journey_sha256=7ada91c0...` 与主干基线一致。
+
+理解的目标／顺序／最大风险（≤10 行）：
+
+- 目标：`plan_trip` 在 `active_mobility.mode == "live"` 时，为每天补一条 AMap 天气（10 键+advice+claim_id）或一条带原因的 unknown；`off` 时旧产物字节不变。新函数 `_plan_weather` 插在 `_plan_trip_unknowns` 之后、`_plan_build_trip` 之前，不占独立 pipeline stage（`test_keyless_e2e.py` 钉住 stage 名单）。
+- 顺序：先吃透既有事实（`AMapAdapter._weather`、`_request_contract` 的 weather 分支、`day.weather` schema、`MobilityBackend.transport/credentials` 是公开属性可直接复用）→ 写 `planning.py`+`weather.py` 实现 → 写 `tests/test_planner_weather.py` → 反向验证 → 实网抽查 → 补文档。
+- 风险①：地点键/健康行格式是任务书自认「猜的」，必须先想清楚再落代码，且把猜测的取舍写进 PROGRESS.md（见下）。
+- 风险②：验收①要求的「两天 Trip（9/05、9/10）」与 `_check_date_range_and_day_count` 的连续日期约束字面冲突，需要自行决定怎么搭夹具（见 BLOCKED.md 记录 3）。
+- 风险③：只能改 planning.py/weather.py，weather.py 只许新增纯函数——多数票+错误原因映射这类逻辑要判断放哪个文件。
+
+### 设计取舍（对着「拍的板」的字面猜测做的具体实现决定，供核对）
+
+- **触发与复用**：`_plan_weather` 第一行判 `active_mobility.mode != "live"` 直接短路返回空结果，不建任何 transport/context，保证 `off` 时连一次属性访问都没有。live 时直接用 `active_mobility.transport`/`active_mobility.credentials`（`MobilityBackend` 的公开属性，见 `mobility.py:104-105`）建 `ProviderContext`，与 POI/geocode/route 查询共用同一个 `AMapHTTPTransport`/`AMapCallBudget` 实例，天然共享 80 次/run 与 2 QPS 门，没有另开一套。
+- **地点键**：`_weather_poi_adcodes(pois, claims)` 扫一遍 `claims`，只收 `field_path=="/provider_identity"` 且 `subject_ref` 是当前 `pois` 某个 `poi_id` 的条目（`mobility.py` 里只有 POI 实体会做 identity 解析，lodging 不会，经 `git grep '"/provider_identity"'` 核实）。`_weather_location_key` 按当天 slots 出现顺序（去重、非裸 `set`，理由见 BLOCKED.md 记录 1）取这些 POI 的 adcode 投票，`weather.location_key_vote`（新增纯函数）多数票、并列取字符串最小；一票没有则退到 `weather.split_city_names(day["city"])` 第一段当 `city` 名。键以 `("adcode"|"city", 值)` 存于 `_plan_weather` 内部的 `cache` dict，同键只查一次，不同天共享同一次查询结果按各自 `date` 匹配对应的 cast。
+- **健康行「查询数」口径**：等于 `len(cache)`（本轮实际发起的地点键查询次数），「unknown 数」等于本轮产出的 weather-unknown 总条数（含 horizon/no_location，不止 provider 报错的那些）；只有 `queried>0` 才碰 `capabilities`/`reason`，理由与取舍见 BLOCKED.md 记录 2。新函数 `_apply_weather_health` 承担这段合并逻辑，`_combined_amap_health` 加一个默认 `None` 的第三参数，两处既有 2 参调用（`test_amap_live.py` 内）不受影响。
+- **claim 改写**：命中的 cast claim 用 `dict(cast_claim)` 浅拷贝后只改 `subject_ref` 为该天的 `day_id`，`claim_id` 保留 AMap 适配器原生成的那个（其摘要输入已含 `value`，同一次查询覆盖的 4 个 cast 因 `forecast_date` 不同天然生成不同 `claim_id`，不会跨天冲突）；`day["weather"]` = cast `value` 的 10 键 + `weather.advice_for(value)` + 这条新 claim 的 `claim_id`。
+
+### 任务 1 完成（天气阶段实现 + 测试）
+
+`planning.py` 新增 `_plan_weather`、`_weather_poi_adcodes`、`_weather_location_key`、`_weather_query`、`_weather_cast_claim`、`_weather_unknown`，`_plan_build_trip`/`_combined_amap_health` 各加一个默认 `None` 的 `weather_health` 参数并新增 `_apply_weather_health` 帮手，`plan_trip` 在 `_plan_trip_unknowns` 后接一段四行调用把 `weather_claims`/`weather_unknowns` 并入既有列表、把 `weather_business_calls` 并入 `PlanResult.business_calls`。`weather.py` 只新增两个纯函数：`location_key_vote`（多数票+平票取最小）、`result_reason`（把 `error_class`+`warnings` 映到五种 unknown 原因之一，或 `None` 表示成功）。
+
+`tests/test_planner_weather.py`（新建，8 项）：
+- `PlanWeatherLiveTripTests`（复用 `tests/test_amap_live.py` 的 `ScriptedAmapTransport`/`credentials`，子类化加 `weather` 能力）：`test_near_day_gets_forecast_within_horizon`（9/05 单日 Trip，FixedClock 9/04，10 键+advice+claim_id 齐全、多出一条 `/weather` claim、`subject_ref==day_id`）、`test_far_day_beyond_forecast_horizon_is_a_typed_unknown`（9/10 单日 Trip，`weather=None`、unknown reason 以 `weather_forecast_horizon:2026-09-07` 开头、一次 weather 查询都没发）、`test_ambiguous_forecast_marks_every_sharing_day_unknown`（9/05+9/06 两天共享一个 adcode，AMap 答 2 条 forecasts，两天都 `weather_ambiguous:2`，且只查了 1 次）、`test_mobility_off_adds_no_weather_key_and_no_unknown`（`mobility="off"`，逐天无 `weather` 键、无对应 unknown）、`test_health_line_reports_weather_capability_and_dedupes_shared_key`（同一对 9/05+9/06，AMap 健康行 `capabilities` 含 `weather`、`reason` 含 `"; weather=1 queried, 0 unknown"`、`business_calls` 含 `"weather@adcode:310000:date=2026-09-04"`）。每项都真跑 `plan_trip`→`validate_trip`→`render_trip`→`validate_html` 全链路并断言零错误。
+- `PlanWeatherLocationKeyTests`（不经完整 pipeline，直接单测 `_plan_weather`）：`test_majority_vote_breaks_a_tie_on_the_smallest_adcode`（2 POI 各投 1 票、不同 adcode，平票取字符串最小）、`test_majority_vote_prefers_the_more_frequent_adcode`（3 POI 2:1 票选出多数）、`test_no_poi_adcode_falls_back_to_city_name`（无 POI 时退到 `split_city_names` 第一段）。
+
+```
+/usr/bin/python3 -m unittest tests.test_planner_weather -v
+...
+Ran 8 tests in 0.285s
+OK
+```
+
+反向验证（红→绿）：
+1. 把 `weather.py::location_key_vote` 临时改成 `return codes[0]`（跳过多数票直接取第一条）：`test_majority_vote_breaks_a_tie_on_the_smallest_adcode` 变红——`KeyError: '320000'`（用了错误的 adcode 去查一个测试没准备数据的键）；还原后复跑该测试单独 `OK`。
+2. 把 `weather.py::FORECAST_DAYS` 临时从 `4` 改成 `34`：`test_far_day_beyond_forecast_horizon_is_a_typed_unknown` 变红——`KeyError: '310000'`（9/10 被误判成落在可查窗口内，真的发起了一次测试没准备数据的查询）；还原后单独复跑 `OK`。
+
+实网抽查：把 `demo/request.json`/`demo/candidates.json` 所有日期整体平移 −28 天复制到 `.tmp/an7-live-request.json`/`.tmp/an7-live-candidates.json`（`start_date` 落到明天 2026-09-18），不带 `--fixed-clock`（用真实系统时钟），执行：
+
+```
+plugins/china-trip-weaver/scripts/ctw plan \
+  --request .tmp/an7-live-request.json --candidates .tmp/an7-live-candidates.json \
+  --rail off --mobility live --lodging off --aviation off \
+  --output-json .tmp/an7-live-trip.json --output-html .tmp/an7-live-trip.html
+```
+
+```
+PLAN_COMPLETE ... calls=amap.geocode:...,amap.poi:...,weather@city:上海:date=2026-09-17,weather@adcode:310104:date=2026-09-17 ... errors=0
+```
+
+三天（9/18、9/19、9/20）全部拿到真实预报，无一天 unknown；前两天走 `city:上海` 键（310000/上海市），第三天某 POI 解析到徐汇区后走 `adcode:310104` 键（两个键都被真实触发，覆盖了两条地点键路径）。AMap 健康行：
+
+```json
+{
+  "capabilities": ["geocode", "poi", "route", "weather"],
+  "mode": "live",
+  "reason": "calls=8/80 qps<=2; live_cells=2; locations=2; errors=identity_conflict; warnings=identity_conflict; weather=2 queried, 0 unknown",
+  "status": "degraded"
+}
+```
+
+（`errors=identity_conflict` 是 demo 候选数据自带的既有告警，与天气无关；`weather=2 queried, 0 unknown` 是本波新增的部分，格式与「拍的板」逐字一致。）CLI 打出 `errors=0` 即 `validate_trip`+`validate_html` 零错误（`plan_trip` 校验失败会直接抛异常，不会走到这行）。
+
+全量与门禁：
+
+```
+/usr/bin/python3 -m unittest discover -s tests -v
+...
+Ran 727 tests in 77.9s
+OK
+~/miniconda3/envs/core/bin/python -m pyflakes $(git ls-files '*.py')   # 0 行
+/usr/bin/python3 scripts/scan_secrets.py                               # secret scan: 0 finding(s) across 402 file(s)
+```
+
+demo 零漂移：`ctw plan`（`--mobility off` 路径）与 `build_renderer_fixtures.py` 重跑后 `trip_sha256`/`html_sha256`/`journey_sha256` 与任务 0 基线逐字一致，`git status --short -- demo` 为空——因为 `off` 时 `_plan_weather` 第一行就短路返回，`days`/`claims`/健康行/`business_calls` 全部不受影响。
+
+### 任务 2 完成（文档）
+
+`docs/design/06-pipeline.md` 在「5.4 汇合腿」后新加「5.5 天气标注」一节（不动 §3.3），写触发条件、地点键规则、可查窗口、五种 unknown 原因、健康行格式。`docs/design/09-impl-map.md` 两处各加半句：`weather.py` 行补上 `location_key_vote`/`result_reason` 两个新函数；`pipeline.py` 行补一句「`_plan_weather` 不占独立 checkpoint，夹在 SCHEDULED 与 VALIDATED 之间运行（§06.5.5）」（`planning.py` 本身在这份文档里从未有过专属表格行，故选择与其编排语义最相关的 `pipeline.py` 行落笔，供核对）。`skills/plan-china-trip/SKILL.md` 正文第 3 步末尾加一句「mobility live 时 `ctw plan` 会自动附上每天的天气或带原因的 unknown」，frontmatter 未动。
+
+验收：全量 727 项复跑仍 `OK`；`git grep` 逐一命中新文案标识符（`location_key_vote`、`result_reason`、`weather_forecast_horizon`、`weather_no_location`、`weather_no_results`、`weather_ambiguous`、`weather_provider_error`、`_plan_weather`）；demo 与 `build_renderer_fixtures.py` 重跑后 `git status --short -- demo` 为空（文档改动不影响任何代码路径）。
+
+### 完成条件核对
+
+1. 任务 1 四条测试绿（见上，`PlanWeatherLiveTripTests` 4 项 + `PlanWeatherLocationKeyTests` 3 项，共 7 项覆盖①②③④；另加 1 项 `test_majority_vote_prefers_the_more_frequent_adcode` 补充覆盖，共 8 项）；实网抽查当天带 `weather`、AMap 健康行含 `weather`（见上，逐字证据）。
+2. demo 零漂移（见上）；约束 pathspec：
+
+```
+git diff main --stat -- plugins/china-trip-weaver/src/china_trip_weaver/{journey,mobility,cli}.py \
+  plugins/china-trip-weaver/src/china_trip_weaver/{render,providers} \
+  plugins/china-trip-weaver/schema README*.md
+# 输出为空
+```
+
+`git diff main --stat` 总览：5 个文件（`planning.py`+159/-7、`weather.py`+26/-1、`06-pipeline.md`+16、`09-impl-map.md`+2/-2、`SKILL.md`+1/-1）+ 新建 `tests/test_planner_weather.py`（8 项测试），全部落在任务书白名单内。BLOCKED.md 记了 1 条「无裁决分叉」+ 3 处自行设计判断供核对，无需管理者答复即可合并。只提交并推送 `planner-weather` 分支，未合并、未改 CI。

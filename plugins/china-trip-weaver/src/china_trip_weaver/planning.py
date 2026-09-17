@@ -20,6 +20,7 @@ from .flyai_inventory import AMapLodgingBackend, FlyAIBackend
 from .matrix import haversine_meters, static_estimate_cell
 from .mobility import MobilityBackend, MobilityResult, apply_locations
 from .pipeline import PipelineRun
+from .providers.amap import AMapAdapter
 from .providers.base import ProviderContext, ReplayTransport, stable_id
 from .providers.mcp_stdio import RailMCPStdioTransport
 from .providers.rail12306 import Rail12306Adapter
@@ -28,6 +29,7 @@ from .render import render_trip, validate_html
 from .scheduler.light import LightScheduler, PaceProfile, pace_profile
 from .validate_trip import SchemaSubsetValidator, load_schema, validate_trip
 from .variflight_enrichment import VariFlightBackend
+from .weather import advice_for, forecast_available_on, location_key_vote, result_reason, split_city_names
 
 __all__ = ["SUPPORTED_KEY_NAMES"]
 
@@ -404,6 +406,134 @@ def _plan_trip_unknowns(
     return days, unknowns, budget_ledger
 
 
+def _plan_weather(
+    days: Sequence[Mapping[str, Any]],
+    pois: Sequence[Mapping[str, Any]],
+    claims: Sequence[Mapping[str, Any]],
+    active_mobility: MobilityBackend,
+    clock: Clock,
+    now: str,
+) -> Tuple[List[Mapping[str, Any]], List[Mapping[str, Any]], Tuple[str, ...], Mapping[str, int]]:
+    """Attach each day's AMap forecast (or a typed unknown) when mobility is live; a no-op otherwise.
+
+    Queries at most once per distinct location key (adcode majority vote across that day's POIs,
+    falling back to the day's city name), sharing the live mobility transport's call budget and QPS gate.
+    """
+
+    if active_mobility.mode != "live":
+        return [], [], (), {"queried": 0, "unknown": 0}
+
+    poi_adcodes = _weather_poi_adcodes(pois, claims)
+    today = date.fromisoformat(now[:10])
+    adapter = AMapAdapter()
+    context = ProviderContext(clock=clock, credentials=active_mobility.credentials, transport=active_mobility.transport)
+    deadline_ms = int(min(active_mobility.deadline_seconds, 8.0) * 1000)
+
+    cache: Dict[Tuple[str, str], AdapterResult] = {}
+    business_calls: List[str] = []
+    weather_claims: List[Mapping[str, Any]] = []
+    unknowns: List[Mapping[str, Any]] = []
+
+    for index, day in enumerate(days):
+        travel_date = date.fromisoformat(day["date"])
+        horizon = forecast_available_on(travel_date)
+        if today < horizon:
+            day["weather"] = None
+            unknowns.append(_weather_unknown(index, "weather_forecast_horizon:%s" % horizon.isoformat()))
+            continue
+        key = _weather_location_key(day, poi_adcodes)
+        if key is None:
+            day["weather"] = None
+            unknowns.append(_weather_unknown(index, "weather_no_location"))
+            continue
+        if key not in cache:
+            cache[key] = _weather_query(key, adapter, context, now, deadline_ms)
+            business_calls.append("weather@%s:%s:date=%s" % (key[0], key[1], now[:10]))
+        result = cache[key]
+        reason = result_reason(result.error_class, result.warnings)
+        if reason is not None:
+            day["weather"] = None
+            unknowns.append(_weather_unknown(index, reason))
+            continue
+        cast_claim = _weather_cast_claim(result.claims, day["date"])
+        if cast_claim is None:
+            day["weather"] = None
+            unknowns.append(_weather_unknown(index, "weather_no_results"))
+            continue
+        day_claim = dict(cast_claim)
+        day_claim["subject_ref"] = day["day_id"]
+        weather_claims.append(day_claim)
+        forecast = dict(cast_claim["value"])
+        forecast["advice"] = advice_for(cast_claim["value"])
+        forecast["claim_id"] = day_claim["claim_id"]
+        day["weather"] = forecast
+
+    return weather_claims, unknowns, tuple(business_calls), {"queried": len(cache), "unknown": len(unknowns)}
+
+
+def _weather_poi_adcodes(
+    pois: Sequence[Mapping[str, Any]], claims: Sequence[Mapping[str, Any]],
+) -> Dict[str, str]:
+    poi_ids = {poi["poi_id"] for poi in pois}
+    adcodes: Dict[str, str] = {}
+    for claim in claims:
+        if claim.get("field_path") != "/provider_identity" or claim.get("subject_ref") not in poi_ids:
+            continue
+        value = claim.get("value")
+        adcode = value.get("adcode") if isinstance(value, dict) else None
+        if adcode:
+            adcodes[claim["subject_ref"]] = adcode
+    return adcodes
+
+
+def _weather_location_key(day: Mapping[str, Any], poi_adcodes: Mapping[str, str]) -> Optional[Tuple[str, str]]:
+    day_poi_refs = list(dict.fromkeys(
+        slot["ref_id"] for slot in day["slots"] if slot["ref_id"] in poi_adcodes
+    ))
+    winner = location_key_vote([poi_adcodes[ref] for ref in day_poi_refs])
+    if winner is not None:
+        return ("adcode", winner)
+    city_parts = split_city_names(day.get("city", ""))
+    if city_parts:
+        return ("city", city_parts[0])
+    return None
+
+
+def _weather_query(
+    key: Tuple[str, str], adapter: AMapAdapter, context: ProviderContext, now: str, deadline_ms: int,
+) -> AdapterResult:
+    kind, value = key
+    parameters = {"adcode": value} if kind == "adcode" else {"city": value}
+    request = ProviderRequest(
+        request_id=stable_id("plan-weather", kind, value, now[:10]),
+        capability="weather",
+        parameters=parameters,
+        deadline_ms=deadline_ms,
+        as_of=now[:10],
+        cache_policy="bypass",
+        trace={"stage": "plan-weather"},
+    )
+    return adapter.query(request, context)
+
+
+def _weather_cast_claim(
+    claims: Sequence[Mapping[str, Any]], target_date: str,
+) -> Optional[Mapping[str, Any]]:
+    for claim in claims:
+        if claim["value"].get("forecast_date") == target_date:
+            return claim
+    return None
+
+
+def _weather_unknown(day_index: int, reason: str) -> Mapping[str, Any]:
+    return {
+        "field_path": "/days/%d/weather" % day_index,
+        "reason": reason,
+        "provider": "amap",
+        "claim_id": None,
+    }
+
+
 def _plan_build_trip(
     normalized_request: Mapping[str, Any],
     days: Sequence[Mapping[str, Any]],
@@ -421,6 +551,7 @@ def _plan_build_trip(
     enrichment,
     anysearch_configured: bool,
     unknowns: Sequence[Mapping[str, Any]],
+    weather_health: Optional[Mapping[str, int]] = None,
 ) -> Dict[str, Any]:
     transport_pricing = _transport_pricing(
         normalized_request, days, transport_legs,
@@ -450,6 +581,7 @@ def _plan_build_trip(
             _combined_amap_health(
                 mobility.health,
                 amap_lodging.health if amap_lodging is not None else None,
+                weather_health,
             ),
             enrichment.health,
             anysearch_configured,
@@ -519,10 +651,15 @@ def plan_trip(
         lodging_unknowns, stay_selections, rail_unknowns, routine_unknowns,
         rail_warnings, inventory, mobility, enrichment,
     )
+    weather_claims, weather_unknowns, weather_business_calls, weather_health = _plan_weather(
+        days, pois, claims, active_mobility, clock, now,
+    )
+    claims = list(claims) + weather_claims
+    unknowns = list(unknowns) + weather_unknowns
     trip = _plan_build_trip(
         normalized_request, days, transport_legs, trip_id, now, budget_ledger,
         lodgings, pois, claims, rail_health, inventory, mobility, amap_lodging,
-        enrichment, anysearch_configured, unknowns,
+        enrichment, anysearch_configured, unknowns, weather_health,
     )
     html, html_digest = _plan_validate_and_render(trip, run, trip_id)
     return PlanResult(
@@ -533,6 +670,7 @@ def plan_trip(
             + inventory.business_calls
             + (amap_lodging.business_calls if amap_lodging is not None else ())
             + enrichment.business_calls
+            + weather_business_calls
         ),
         stages=tuple(item.stage for item in run.checkpoints()),
         trip_sha256=hashlib.sha256(canonical_json(trip).encode("utf-8")).hexdigest(),
@@ -2787,9 +2925,11 @@ def _trip_days(
 def _combined_amap_health(
     mobility: Mapping[str, Any],
     lodging: Optional[Mapping[str, Any]],
+    weather: Optional[Mapping[str, int]] = None,
 ) -> Mapping[str, Any]:
     if lodging is None:
-        return copy.deepcopy(dict(mobility))
+        combined = dict(copy.deepcopy(dict(mobility)))
+        return _apply_weather_health(combined, weather)
     severity = {
         "contract_mismatch": 7,
         "forbidden": 6,
@@ -2817,7 +2957,7 @@ def _combined_amap_health(
     capabilities = list(dict.fromkeys(
         list(mobility.get("capabilities", ())) + list(lodging.get("capabilities", ()))
     ))
-    return {
+    combined = {
         "provider": "amap",
         "version": mobility["version"],
         "mode": "live" if any(item.get("mode") == "live" for item in (mobility, lodging)) else "static",
@@ -2826,6 +2966,19 @@ def _combined_amap_health(
         "capabilities": capabilities,
         "reason": "lodging=%s; mobility=%s" % (lodging["reason"], mobility["reason"]),
     }
+    return _apply_weather_health(combined, weather)
+
+
+def _apply_weather_health(
+    combined: Dict[str, Any], weather: Optional[Mapping[str, int]],
+) -> Mapping[str, Any]:
+    if not weather or weather.get("queried", 0) <= 0:
+        return combined
+    combined["capabilities"] = list(dict.fromkeys(list(combined["capabilities"]) + ["weather"]))
+    combined["reason"] = "%s; weather=%d queried, %d unknown" % (
+        combined["reason"], weather["queried"], weather["unknown"],
+    )
+    return combined
 
 
 def _effective_amap_health_status(health: Mapping[str, Any]) -> str:

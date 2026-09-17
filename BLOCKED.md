@@ -2117,3 +2117,10 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
    - `cli.py::_probe_amap` 未加 `weather` 分支，`ctw doctor` 仍查不出高德天气能力是否配置正确——与书 AN1 记录的同一项未做事项重复，非新发现。
    - 把预报写进 `journey.json`（day.weather 由规划器主动填充）——按任务书标注属于 AN7（规划器天气接线）范围，本书未碰 `planning.py`/`journey.py`。
    - 用 `/provider_identity` claim 里的 `adcode`（跳过按城市名二次消歧）——同样标注属于 AN7 范围，本书 `--city`/`--adcode` 模式两种查询路径都直接转发用户输入，不做基于既有 `provider_identity` claim 的预解析。
+## 书 AN7「规划器天气阶段」（2026-09-17，第三十波，worktree `.tmp/wt-an7` 分支 `planner-weather`）：无裁决分叉，三处自行设计判断供核对
+
+全程未遇到需要领导裁决、拿不准怎么办的分叉。任务书「我替领导拍的板」一节本身承认「地点键」等几处是「猜的」，按其字面实现后遇到三处需要自行补完细节的地方，均非阻塞，记录供核对：
+
+1. **多数票的遍历顺序**：`_weather_location_key` 最初按「当天各 POI」直接构造 Python `set` 再取值列表，会因字符串哈希随机化在不同进程间产生不确定的取值顺序，导致平票时「取第一条」这一类回归测试变得不可复现。改成按当天 slots 出现顺序去重的列表（`dict.fromkeys(...)`）取代裸 `set`，多数票结果本身不受影响（多数票和最小值平票规则都与顺序无关），只是让"如果退化成不做多数票、直接取第一条"这条反向验证测试能确定性地变红。
+2. **健康行「查询数」的统计口径**：任务书写「`weather=<查询数> queried, <unknown 数> unknown`」但未定义「查询数」按次调用还是按地点键计数。因为地点键本身就是去重单位（一个键一次 `plan_trip` 只查一次），两种计数在本实现里数值相同，按地点键计数（`len(cache)`）实现，语义上更贴近“这次规划实际发起了几次天气查询”。
+3. **验收测试①「两天 Trip（9/05、9/10）」的结构**：`validate_trip._check_date_range_and_day_count` 要求 `trip.days` 与 `request.start_date..end_date` 连续覆盖，9/05 到 9/10 是 6 天而非 2 天，字面按「一个两天的 Trip」搭不出符合 schema 的夹具。按「两个各一天的 Trip，一个订在 9/05、一个订在 9/10」实现（`tests/test_planner_weather.py` 的 `PlanWeatherLiveTripTests`），分别覆盖「预报窗口内」与「超出预报窗口」两条路径，每个都完整跑通 `plan_trip`→`validate_trip`→`render_trip`→`validate_html` 全链路且零错误；「同键两天只查一次」与「健康行格式」两条改用一个横跨 9/05、9/06 两个连续日期、共享同一地点键的 2 天 Trip 单独验证。
