@@ -11,6 +11,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
+from . import dining
 from .candidates import validate_candidates
 from .clock import Clock, isoformat_seconds
 from .contracts import AdapterResult, ProviderRequest, canonical_json
@@ -534,6 +535,142 @@ def _weather_unknown(day_index: int, reason: str) -> Mapping[str, Any]:
     }
 
 
+def _plan_dining(
+    days: Sequence[Mapping[str, Any]],
+    pois: Sequence[Mapping[str, Any]],
+    lodgings: Sequence[Mapping[str, Any]],
+    request: Mapping[str, Any],
+    active_mobility: MobilityBackend,
+    clock: Clock,
+    now: str,
+) -> Tuple[List[Mapping[str, Any]], List[Mapping[str, Any]], Tuple[str, ...], Mapping[str, int]]:
+    """Attach each meal/free slot's nearby-dining reference (or a typed unknown) when mobility is live.
+
+    Queries at most once per distinct anchor point + keyword combination, sharing the live
+    mobility transport's call budget and QPS gate; a no-op when mobility is not live.
+    """
+
+    if active_mobility.mode != "live":
+        return [], [], (), {"queried": 0, "unknown": 0}
+
+    prefs = request.get("dining_preferences") or {}
+    cuisine = prefs.get("cuisine")
+    avoid = prefs.get("avoid") or []
+
+    trip_view = {"days": days, "pois": pois, "lodgings": lodgings}
+    adapter = AMapAdapter()
+    context = ProviderContext(clock=clock, credentials=active_mobility.credentials, transport=active_mobility.transport)
+    deadline_ms = int(min(active_mobility.deadline_seconds, 8.0) * 1000)
+
+    cache: Dict[Tuple[str, str], AdapterResult] = {}
+    business_calls: List[str] = []
+    dining_claims: List[Mapping[str, Any]] = []
+    unknowns: List[Mapping[str, Any]] = []
+
+    for day_index, slot_index, _meal_type in dining.meal_slots(trip_view):
+        slot = days[day_index]["slots"][slot_index]
+        anchor = dining.anchor_for(trip_view, day_index, slot_index)
+        if anchor is None:
+            slot["dining"] = None
+            unknowns.append(_dining_unknown(day_index, slot_index, "dining_no_anchor"))
+            continue
+        parameters = dining.query_parameters(anchor, cuisine=cuisine)
+        key = (parameters["location"], parameters["keywords"])
+        if key not in cache:
+            cache[key] = _dining_query(parameters, adapter, context, now, deadline_ms)
+            business_calls.append("dining@%s" % slot["slot_id"])
+        result = cache[key]
+        reason = _dining_result_reason(result.error_class)
+        if reason is not None:
+            slot["dining"] = None
+            unknowns.append(_dining_unknown(day_index, slot_index, reason))
+            continue
+        options, option_claims = _dining_selected_options(result, avoid, slot["slot_id"], clock)
+        dining_claims.extend(option_claims)
+        slot["dining"] = {
+            "queried_at": now,
+            "anchor_ref": anchor["ref_id"],
+            "anchor_name": anchor["name"],
+            "radius_m": parameters["radius"],
+            "search_url": dining.search_url(anchor),
+            "options": options,
+        }
+
+    return dining_claims, unknowns, tuple(business_calls), {"queried": len(cache), "unknown": len(unknowns)}
+
+
+def _dining_query(
+    parameters: Mapping[str, Any], adapter: AMapAdapter, context: ProviderContext, now: str, deadline_ms: int,
+) -> AdapterResult:
+    request = ProviderRequest(
+        request_id=stable_id("plan-dining", parameters["location"], parameters["keywords"]),
+        capability="poi_around",
+        parameters=parameters,
+        deadline_ms=deadline_ms,
+        as_of=now[:10],
+        cache_policy="bypass",
+        trace={"stage": "plan-dining"},
+    )
+    return adapter.query(request, context)
+
+
+def _dining_result_reason(error_class: Optional[str]) -> Optional[str]:
+    """Map an AMap poi_around query outcome to a Trip unknown reason, or None when options were returned."""
+
+    if error_class is None:
+        return None
+    if error_class == "no_results":
+        return "dining_no_results"
+    return "dining_provider_error:%s" % error_class
+
+
+def _dining_selected_options(
+    result: AdapterResult, avoid: Sequence[str], slot_id: str, clock: Clock,
+) -> Tuple[List[Mapping[str, Any]], List[Mapping[str, Any]]]:
+    """Selected options with each ``claim_id`` re-pointed at a fresh per-slot copy of its identity claim.
+
+    A copy (not the original provider-subject_ref claim) is required because the same cached
+    query result can be selected into more than one slot (two meals sharing an anchor); reusing
+    the original claim_id verbatim across slots would add the same claim_id to the Trip twice.
+    """
+
+    raw_options = dining.select_options(result.normalized_items, result.claims, avoid=avoid)
+    identity_by_claim_id = {
+        claim["claim_id"]: claim for claim in result.claims if claim.get("field_path") == "/provider_identity"
+    }
+    options: List[Mapping[str, Any]] = []
+    claims: List[Mapping[str, Any]] = []
+    for option in raw_options:
+        original = identity_by_claim_id[option["claim_id"]]
+        copied = make_claim(
+            subject_ref=slot_id,
+            field_path="/provider_identity",
+            value=original["value"],
+            source_url=original["source_url"],
+            provider=original["provider"],
+            status=original["status"],
+            confidence=original["confidence"],
+            mode=original["mode"],
+            clock=clock,
+            as_of=original.get("as_of"),
+            raw_ref=original.get("raw_ref"),
+            response_hash=original.get("response_hash"),
+            json_path=original.get("json_path"),
+        )
+        claims.append(copied)
+        options.append(dict(option, claim_id=copied["claim_id"]))
+    return options, claims
+
+
+def _dining_unknown(day_index: int, slot_index: int, reason: str) -> Mapping[str, Any]:
+    return {
+        "field_path": "/days/%d/slots/%d/dining" % (day_index, slot_index),
+        "reason": reason,
+        "provider": "amap",
+        "claim_id": None,
+    }
+
+
 def _plan_build_trip(
     normalized_request: Mapping[str, Any],
     days: Sequence[Mapping[str, Any]],
@@ -552,6 +689,7 @@ def _plan_build_trip(
     anysearch_configured: bool,
     unknowns: Sequence[Mapping[str, Any]],
     weather_health: Optional[Mapping[str, int]] = None,
+    dining_health: Optional[Mapping[str, int]] = None,
 ) -> Dict[str, Any]:
     transport_pricing = _transport_pricing(
         normalized_request, days, transport_legs,
@@ -582,6 +720,7 @@ def _plan_build_trip(
                 mobility.health,
                 amap_lodging.health if amap_lodging is not None else None,
                 weather_health,
+                dining_health,
             ),
             enrichment.health,
             anysearch_configured,
@@ -656,10 +795,15 @@ def plan_trip(
     )
     claims = list(claims) + weather_claims
     unknowns = list(unknowns) + weather_unknowns
+    dining_claims, dining_unknowns, dining_business_calls, dining_health = _plan_dining(
+        days, pois, lodgings, normalized_request, active_mobility, clock, now,
+    )
+    claims = list(claims) + dining_claims
+    unknowns = list(unknowns) + dining_unknowns
     trip = _plan_build_trip(
         normalized_request, days, transport_legs, trip_id, now, budget_ledger,
         lodgings, pois, claims, rail_health, inventory, mobility, amap_lodging,
-        enrichment, anysearch_configured, unknowns, weather_health,
+        enrichment, anysearch_configured, unknowns, weather_health, dining_health,
     )
     html, html_digest = _plan_validate_and_render(trip, run, trip_id)
     return PlanResult(
@@ -671,6 +815,7 @@ def plan_trip(
             + (amap_lodging.business_calls if amap_lodging is not None else ())
             + enrichment.business_calls
             + weather_business_calls
+            + dining_business_calls
         ),
         stages=tuple(item.stage for item in run.checkpoints()),
         trip_sha256=hashlib.sha256(canonical_json(trip).encode("utf-8")).hexdigest(),
@@ -2926,10 +3071,12 @@ def _combined_amap_health(
     mobility: Mapping[str, Any],
     lodging: Optional[Mapping[str, Any]],
     weather: Optional[Mapping[str, int]] = None,
+    dining_health: Optional[Mapping[str, int]] = None,
 ) -> Mapping[str, Any]:
     if lodging is None:
         combined = dict(copy.deepcopy(dict(mobility)))
-        return _apply_weather_health(combined, weather)
+        combined = _apply_weather_health(combined, weather)
+        return _apply_dining_health(combined, dining_health)
     severity = {
         "contract_mismatch": 7,
         "forbidden": 6,
@@ -2966,7 +3113,8 @@ def _combined_amap_health(
         "capabilities": capabilities,
         "reason": "lodging=%s; mobility=%s" % (lodging["reason"], mobility["reason"]),
     }
-    return _apply_weather_health(combined, weather)
+    combined = _apply_weather_health(combined, weather)
+    return _apply_dining_health(combined, dining_health)
 
 
 def _apply_weather_health(
@@ -2977,6 +3125,18 @@ def _apply_weather_health(
     combined["capabilities"] = list(dict.fromkeys(list(combined["capabilities"]) + ["weather"]))
     combined["reason"] = "%s; weather=%d queried, %d unknown" % (
         combined["reason"], weather["queried"], weather["unknown"],
+    )
+    return combined
+
+
+def _apply_dining_health(
+    combined: Dict[str, Any], dining_health: Optional[Mapping[str, int]],
+) -> Mapping[str, Any]:
+    if not dining_health or dining_health.get("queried", 0) <= 0:
+        return combined
+    combined["capabilities"] = list(dict.fromkeys(list(combined["capabilities"]) + ["poi_around"]))
+    combined["reason"] = "%s; dining=%d queried, %d unknown" % (
+        combined["reason"], dining_health["queried"], dining_health["unknown"],
     )
     return combined
 
