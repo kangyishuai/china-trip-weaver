@@ -50,8 +50,9 @@
 | [`ADR-0018`](adr/0018-map-and-images.md) | 手机页不放交互地图与图片，改用离线位置示意 |
 | [`ADR-0019`](adr/0019-second-price-source.md) | 逐价格类别判断是否值得加第二价源 |
 | [`ADR-0020`](adr/0020-locked-service-assumption.md) | 「已购锁定车次」表达缺口：推荐加结构化锁定字段，报错定位为独立可做的低成本项，不隔离自由文本 |
+| [`ADR-0021`](adr/0021-weather-forecast-source.md) | 天气只用高德（现有 Key）、视野当天+3 天、歧义不选、规则表提示不改排程；预报作 claim 与 `day.weather` 进 Trip，两页各一行并由 E006/JH006 回读 |
 
-20 份均含 Status/Context/Decision/Consequences/Evidence。若阶段三 benchmark 或官方规范改变决定，新增/替代 ADR，不静默改实现常量。
+21 份均含 Status/Context/Decision/Consequences/Evidence。若阶段三 benchmark 或官方规范改变决定，新增/替代 ADR，不静默改实现常量。
 
 ## 3. 阶段三施工硬顺序
 

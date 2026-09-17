@@ -73,7 +73,7 @@ normalized_items[], claims[], health, warnings[], raw_ref?, response_hash?
 | 宿主内置 web（host version） | 目的地、官方开放、活动、天气/政策链接 | 无本插件 Key | 可用即 `static/live`（按宿主结果）；不可用走用户资料/已有 cache | cached → 用户粘贴/官方 deep links → unknown | 工具缺失=`unavailable`；URL/日期不足=`degraded` |
 | `12306-mcp@0.3.10` | station、直达/中转余票、座席/价格、经停 | 无 | 正常公共查询；仍需网络 | fresh cache → 12306 dated deep link → unknown | 冷启动网络、8 tools、text JSON/parser 漂移 |
 | `@fly-ai/flyai-cli@1.0.16` | 航班/酒店 inventory 与 deep links | `FLYAI_API_KEY` 可选增强 | 只有 keyless trial probe 通过才调用；质量/额度不作承诺 | cached → trial → dated Fliggy deep link/estimate → unknown | command/schema/version 漂移优先判 mismatch |
-| AMap Web Service（endpoint schema fingerprint） | POI、附近搜索（poi_around）、geocode、walking/transit/driving/riding route matrix | `AMAP_WEBSERVICE_KEY` | 不发 API；保留已有可信坐标或 static candidates | cached → keyless official map deep link/estimate → unknown | 401/403/429；v3/v4/v5 shape 与 GCJ-02 |
+| AMap Web Service（endpoint schema fingerprint） | POI、附近搜索（poi_around）、geocode、walking/transit/driving/riding route matrix、逐日天气预报（weather，当天+3 天） | `AMAP_WEBSERVICE_KEY` | 不发 API；保留已有可信坐标或 static candidates；天气留 unknown | cached → keyless official map deep link/estimate → unknown | 401/403/429；v3/v4/v5 shape 与 GCJ-02；天气「成功但空」与多 forecasts 歧义都判 no_results |
 | `@variflight-ai/variflight-mcp@1.0.3` | 航班状态、转机、舒适度、机场天气、价格交叉 | `VARIFLIGHT_API_KEY` | 只 list/probe，不发业务调用 | 跳过 enrichment → FlyAI/官方 deep link | 9 tools、any/text response、余额/timeout |
 | AnySearch（可选，runtime fingerprint） | 中文目的地搜索补充 | `ANYSEARCH_API_KEY` 可选 | anonymous 仅在明确不 auto-register 且 probe 通过时使用 | 宿主 web → cached → official deep links | response/usage/auto-registration 漂移 |
 
@@ -125,6 +125,8 @@ Adapter 输出区域、候选物业、dated deep links 和已核验条件。只�
 ### 4.5 AMap/坐标/route
 
 Adapter 保存 AMap native GCJ-02、再由有版本的转换函数派生 WGS-84；route query 始终使用 GCJ-02。每个 matrix cell 含 from/to/mode/duration/distance/fare?/queried_at/claim/health；不可达也是有证据的 cell。禁止传旧 pagination 字段或把相邻 POI 顺序连线当 route。endpoint/schema/quota 已按 Q5 所述完成 probe 并投入实网使用（geocode/POI/walking/transit/driving/riding 均已实测），当前的已知天花板是定位准确率而非 endpoint 可用性：某次真实 16 天福建行程 78 个地点定位成功 60、坐标 unknown 12、名字 unknown 6，三条判定口径见 `mobility.py`。[依据：ADR-0011](adr/0011-live-amap-flyai-variflight-boundaries.md)，定位天花板数据见仓库 `PROGRESS.md`「定位失败天花板」
+
+天气（`weather`，`/v3/weather/weatherInfo`，`extensions=all`）是 AMap 的第五个能力：请求只带 `adcode` 或 `city` 之一，响应 `forecasts[0].casts` 恰为当天+3 天，每个 cast 归一为一条 `field_path=/weather` 的 claim（`amap.py::_weather`）；`forecasts` 为空或 casts 为空是「成功但空」判 `no_results`，多于一条 forecasts 是重名歧义，判 `no_results` 并加 warning `weather_ambiguous:<n>`，绝不取第一条。视野以外的日期、无 Key、限流都留 unknown，不猜。[依据：ADR-0021](adr/0021-weather-forecast-source.md)
 
 ## 5. 降级阶梯
 

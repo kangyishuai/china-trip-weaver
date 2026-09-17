@@ -54,6 +54,8 @@ uniquely matched」。这是 schema 本身「只支持同城两站发站消歧�
 缺陷 A 是给定这份 request.json 时 100% 确定性的代码路径结果，不是网络抖动或偶然。已用
 `spawn_task` 给管理者留一条「授权修缺陷 A/B」的后续任务建议，供其决定是否采纳。
 
+管理者裁决（2026-09-17，验收时补记）：两点缺陷均经管理者独立复核成立——缺陷 A 从代码核实：`render/validate_html.py::_check_rendered_facts` 的 `known_services` 只取本 Trip `transport_legs` 的车次号，而 `journey.py::_segment_request` 把整份 `assumptions` 复制进每个原子 Trip；缺陷 B 用 `ctw rail --date 2026-09-29 --from 武夷山 --to 福州` 实网复核：G5023 两行都是 10:00 出发，到福州 11:13（FZS）与到福州南 11:32（FYS）。裁决：**开一本授权改代码的书（第三十波 AN5）**——E003 的已知车次集合并入 `request.locked_rail_services[].service_number`；`lockedRailService` 加可选 `arrive_time`（与 `depart_time` 同型），`_locked_rail_candidate` 把它传给 `select_service` 的 `requested_arrive_at`；补一条跨原子 Trip 的 `journey plan` 回归测试。修好后用第 2 次实网额度重跑 AN4 的任务 2。执行者两次实跑与三次独立复现的判断正确，任务书对 0.22.0 单 Trip 测试的外推是管理者的责任。
+
 ## 书「统一 replan/planning 的按车次号挑车逻辑」（2026-09-15，第二十八波）：无
 
 全程未遇到需要领导裁决、拿不准怎么办的分叉。「我替领导拍的板」三条（共用函数放新模块
@@ -2059,6 +2061,8 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
    - `closure`/`weather` 事件不像本书新增的 `refresh` 一样自动生成/重写标题——这两类事件走
      `replacement_slot`（调用方直接提供完整替换 slot，含 `title`），本身就没有「默认标题该怎么拼」
      的空白，是否值得同样支持事件级覆盖校验（例如空白 `title` 报错）未评估，按任务书要求不做。
+
+管理者裁决（2026-09-17，验收时补记）：两项顺手活均维持不做——`user_delete` 的重编号缺口此前已裁定为「无生产者、只记录」；`closure`/`weather` 由调用方提供完整 `replacement_slot`，不存在默认标题空白。Z3d 条目的「并入 9/22」裁决由本书提前落地，9/22 的 `south-2-rail` 刷新书改为纯操作书。已关闭。
 ## 书 AN1「高德天气能力」（2026-09-17，worktree `.tmp/wt-an1` 分支 `amap-weather`）：界限外顺手活按任务书裁定未做，另有一处覆盖缺口记录待裁决
 
 任务书「界限」一节明确点名三项顺手活「记 BLOCKED 不做」——geocode 保留 adcode、VariFlight 机场天气、doctor 探针——均未动，仅在此记录合规：
@@ -2070,6 +2074,8 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 **新发现、未在任务书列出范围内、记录待裁决的一项**：`amap_http.py::_request_contract` 的 `weather` 分支（`adcode`/`city` 二选一、拼 `/v3/weather/weatherInfo` 请求参数）没有被任何自动化测试覆盖——`tests/fixtures/providers/*.json` 夹具全部经 `ReplayTransport` 回放，从不真正调用 `_request_contract`；唯一能验证这条分支形状是否正确的既有测试文件是 `tests/test_amap_live.py`（`09-impl-map.md` 里"4 capability 请求 shape ... fixtures 全过"说的就是它覆盖 geocode/poi/poi_around/route 四种），但该文件不在本书「界限」授权可改列表内。本轮改用实网抽查代替：用真实 Key 分别查「福州」（`city=福州`）与「鼓楼区」（`city=鼓楼区`）验证了 `_request_contract` 拼参数、发请求、`AMapAdapter` 归一化的完整链路都成立（福州 4 条 claim、鼓楼区因 4 个同名行政区触发 `weather_ambiguous:4` 判 no_results，见 PROGRESS.md 任务 1 证据），但这只是一次性人工验证，不是回归门禁——以后如果有人改坏 `_request_contract` 的 `weather` 分支（比如参数名拼错、`adcode`/`city` 校验逻辑改坏），全量测试不会变红，只有下次真的连真实 AMap 发请求才会发现。
 
 供裁决：是否要另开一本小书，把 `tests/test_amap_live.py` 加入某一波的「界限」授权名单，给 `weather` 分支补一个不依赖真实网络（用注入的 fake opener）的请求形状单测，使其获得跟 geocode/poi/poi_around/route 同等的回归保护。
+
+管理者裁决（2026-09-17，验收时补记）：认可缺口，但不需要动 `test_amap_live.py`——`amap_http._request_contract` 是可直接导入的纯函数，给它写请求形状单测不需要网络也不需要 fake opener；并入第三十波 `ctw weather` 命令书（AN6）的任务清单。三项顺手活维持不做（doctor 探针留到有人真需要时再加）。已关闭。
 ## 书「AN2：Trip 每日天气渲染与校验」（2026-09-17，第二十九波，worktree `.tmp/wt-an2` 分支 `day-weather-render`）：无裁决分叉，一处非阻塞判断供核对
 
 全程未遇到需要领导裁决、拿不准怎么办的分叉。「我替领导拍的板」四条（schema 纯增量形状、缺省文案、天气行文案模板、错误码 E006/JH006）均已按字面执行，仅在文案模板遇到 `day_weather_line(day, labels)` 的签名约束时做了必要收窄（见下）。
