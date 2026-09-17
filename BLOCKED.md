@@ -2129,3 +2129,7 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 
 管理者裁决（2026-09-17，验收时补记）：三处判断全部认可（有序去重、按地点键计数、两个单日 Trip 替代不合法的两天 Trip）。合并后管理者用平移到明天的 demo 请求实网 `ctw plan --mobility live`：三天全部带 `weather`、页面三行天气、`validate-html` errors=0、AMap 健康行含 `weather`。已关闭。
 
+## 书 AN8「天气折回库函数」（2026-09-17，第三十一波，worktree `.tmp/wt-an8` 分支 `weather-fold`）：无裁决分叉
+
+无。全程没有遇到拿不准、需要管理者裁决的真实二义性。任务书「建议复用 `planning._weather_cast_claim`」这一条经核对后判定不适用（该函数只按 `forecast_date` 匹配，`ctw weather --journey` 一次查询的 `claims[]` 会混进不同城市同一天的多条记录，按日期匹配会选错城市），改成按 `value` 逐键等于该行 `forecast` 消歧；这属于任务书明确允许的「建议可走更好的路」，已在 PROGRESS.md「任务 0 核对记录」写明原因，不算裁决分叉，此处仅留一句索引供核对。
+

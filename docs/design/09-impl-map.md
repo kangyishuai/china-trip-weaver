@@ -58,7 +58,8 @@ plugins/china-trip-weaver/src/china_trip_weaver/
 ├── station_distance.py
 ├── validate_trip.py
 ├── variflight_enrichment.py
-└── weather.py
+├── weather.py
+└── weather_fold.py
 
 scripts/
 ├── build_plan_fixtures.py
@@ -193,6 +194,7 @@ tests/
 | `journey.py` | 长行程拆分为多个 1–7 天子 Trip、`extract`/`assemble`/`--replace-trip`、Journey 校验、按 `deadline_kind` 排序的预订/核验清单（`journey_booking_checklist`）；装配前由 `_with_missing_budget_ledgers` 只为缺失账本的子 Trip 按现有事实补算 `budget_ledger` | contracts/validate_trip | §01；[决策 4](../research/04-design-insights.md#4-采用一个版本化-itineraryjson-是所有层的唯一事实源) | 段拆分/连续性 golden；缺失账本补算；`ctw journey` 全子命令 tests |
 | `station_distance.py` | 铁路站点歧义候选的高德距离富化（`AMapStationDistanceEnricher`）：同城/跨城两遍 POI 查询、80 km 距离上限，以及站点全空时的 50 km 邻近车站回查（`find_nearby_stations`） | providers/amap、geo | §04.2 | 距离富化/邻近回查 fixtures 全过；无 Key 不发请求 |
 | `weather.py` | 天气纯函数：`forecast_available_on` 算可见窗口起点、`split_city_names` 拆复合地名、`advice_for` 按五条固定规则给出行提示、`location_key_vote` 做地点 adcode 多数票（并列取最小）、`result_reason` 把查询结果映到 unknown 原因 | stdlib | ADR-0021；§06.5.5 | 五条规则各一例＋无提示一例＋窗口/拆分各一例 tests 全过 |
+| `weather_fold.py` | 把 `ctw weather --output-json` 的结果信封折回既有 Trip/Journey：`fold_weather_into_trip` 逐天按（日期相同、`query` 精确等于 `split_city_names` 首段）匹配 `forecasts[]`，产出 `trigger=weather` 的 patch；`fold_weather_into_journey` 在其上用 `replace_trip_in_journey` 重组一次，并把结果 `revision.created_by` 改回 `system`（AN8，2026-09-17） | contracts/validate_trip/journey/planning/replan/weather（全部只读 import） | §06.7 | `test_weather_fold.py` 六例（新增两天/同结果二折幂等/`reported_at` 更新覆盖替换/revision 冲突与 claim 不匹配报错/`no_forecast` 置空/复合地名靠 `query` 消歧）全过；折入后 demo Journey `validate_journey_html` 0 errors |
 
 `validate_trip.py` 不尝试重新实现任意 JSON Schema 引擎；它实现本产品固定 v1 release-critical checks，并用设计期 `jsonschema` suite 交叉验证。完整 Draft 2020-12 校验保留在 CI/开发工具，不让默认 `python3` 依赖手动 venv。此取舍见 ADR-0002。
 
