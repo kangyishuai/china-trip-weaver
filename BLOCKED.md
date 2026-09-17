@@ -2285,3 +2285,7 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 无。全程没有遇到拿不准、需要管理者裁决的真实二义性。本书只把领导已经拍板的 `plans/<可读名称>/` 目录约定写进三份 SKILL 正文与两份 README、`docs/design/02-plugin-skills.md` §4，未触碰任何 `.py`、schema、demo 或测试夹具，没有需要裁决的设计空间。详细改动与验收证据见 PROGRESS.md「书 AP4」条目。
 
 管理者裁决（2026-09-17，验收时补记）：认可。三份 SKILL frontmatter 零改动、`tests.test_skills` 绿、README 两份各 1 处 `plans/`、02 §4 一段、新增行无本机路径无版本号。已关闭。
+
+## 书 AP5b「dining 结果折回 Journey」（2026-09-18，第三十四波四本并行之一，worktree `.tmp/wt-ap5b` 分支 `dining-fold`）：无
+
+无。全程没有遇到拿不准、需要管理者裁决的真实二义性；实现严格按任务书已拍板的信封、patch、健康行、一次 Journey 重组与 CLI exit/output 契约执行。详细命令输出与反向验证红→绿证据见 PROGRESS.md「书 AP5b」小节。
