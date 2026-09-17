@@ -437,3 +437,161 @@ fix-names` 会把它们列为人工项。
   [docs/history/progress-2026-09-15.md](docs/history/progress-2026-09-15.md)
   （2026-09-15 知识收尾时从本文件整体迁出，一字未改，按波次正序）。书 AM1 的四节 2026-09-12 记录
   当时漏迁，同日补进 `progress-2026-09-08-to-12.md` 末尾。
+
+## 书 AN4「真实行程改结构化 locked_rail_services」（2026-09-17，main 直改）
+
+### 任务 0：核对与理解（15:22–15:32）
+
+- 全量测试：`/usr/bin/python3 -m unittest discover -s tests` → `Ran 699 tests in
+  143.505s`、`OK`，0 skipped，与任务书基线一致。
+- `ctw doctor`：`{"plugin_version":"0.22.1","providers":{"amap":"configured",
+  "anysearch":"missing","flyai":"configured","variflight":"configured"},
+  "schema_version":"1.0.0",...}`。amap 一行是 `configured`；12306 不出现在
+  `providers` 字典里——它走 MCP、不需要 API Key，`ctw doctor` 不为它单列一行，
+  改用后面两条 `ctw rail` 实查证明其可用（均 200 且 `health.status:"ready"`）。
+- `ctw rail --date 2026-09-26 --from 福州 --to 武夷山`：10 行，G1902 出现两次
+  （福州南 07:50→09:30 与福州 08:12→09:30，同到不同发，`warnings:
+  ["station_rows_filtered:20"]`）。
+- `ctw rail --date 2026-09-29 --from 武夷山 --to 福州`：9 行，G5023 出现两次
+  （均 10:00 出发，到福州站 11:13 与到福州南站 11:32，**同发不同到**，
+  `warnings: ["station_rows_filtered:21"]`）。
+
+目标：让 request.json 用结构化 `locked_rail_services` 表达 G1902（9/26）与
+G5023（9/29）两张已购票，从零实网规划一次证明两腿被锁定选中、不再撞 E003；
+现役 journey.json 与页面全程不碰。
+顺序：任务 0 核验环境（已完成）→ 任务 1 加字段（零代码，纯数据）→ 任务 2
+从零实网规划验证。
+最大风险（任务书未预见的新发现）：9/29 的 G5023 与 9/26 的 G1902 结构相反——
+G1902 是「两站同到不同发」（`depart_time` 能消歧），G5023 是「两站同发不同到」
+（两行 `depart_at` 都是 `10:00`，只有 `arrive_at` 不同：11:13 到福州站 FZS、
+11:32 到福州南站 FYS）。读 `rail_selection.select_service`
+（[rail_selection.py:29](plugins/china-trip-weaver/src/china_trip_weaver/rail_selection.py:29)）
+与 `_locked_rail_candidate`
+（[planning.py:1476](plugins/china-trip-weaver/src/china_trip_weaver/planning.py:1476)）
+确认：`lockedRailService` schema（0.22.0 新增）只有 `service_number` /
+`travel_date` / `depart_time` 三个键，没有 `arrive_time`；传入
+`depart_time="10:00"` 时 `_matches_time` 会同时命中两行，
+`time_matched` 长度为 2、`select_service` 返回 `row=None`，
+`_locked_rail_candidate` 据此把 G5023 判为 `present_but_ambiguous` →
+整条返回 `(None, "G5023", "ambiguous")`；`_resolve_rail` 因
+`locked_failure="ambiguous"` 不进入锁定分支，会退回占位腿并写
+`locked_service_ambiguous` 警告——这与任务书预判的「G5023 10:00→11:13
+locked true」直接矛盾。这是当前 schema 的一个真实缺口（只支持同城两站发站
+消歧，不支持到站消歧），不是我的实现错误，本书界限禁止改代码/schema，
+只能如实在任务 2 跑出后记录实测结果，不能靠猜测提前下结论——下面任务 2
+按此风险执行并贴出真实产物证据。
+
+### 任务 1：改 request（15:33 完成）
+
+- 先 `cp request.json request-2026-09-17-pre-locked.json`，`shasum -a 256`
+  两份文件一致（`7851a439...`），确认备份逐字节相同。
+- 在 `assumptions` 数组之后、`locale` 之前插入顶层字段：
+  ```json
+  "locked_rail_services": [
+    {"service_number": "G1902", "travel_date": "2026-09-26", "depart_time": "07:50"},
+    {"service_number": "G5023", "travel_date": "2026-09-29", "depart_time": "10:00"}
+  ],
+  ```
+- `/usr/bin/python3 -c` 读回打印该字段，两条记录字段值与上面一致，JSON 合法。
+- `diff request-2026-09-17-pre-locked.json request.json`：仅 `126a127,130`
+  一处，即新增这 4 行，没有改动其它字段。
+- `git status --short`（仓库根）：只有一行 `M PROGRESS.md`（任务 0 按任务书
+  要求已先写入的理解记录），不出现任何 `fujian-2026-09-25-to-10-10/` 路径，
+  证明该目录确实被根 `.gitignore` 挡住、request.json 的改动不会被提交。
+  任务书原文字面写「`git status --short` 为空」，但任务 0 已按任务书自身
+  要求「核对后…写进 PROGRESS.md 再动工」先改了 PROGRESS.md，两条要求按
+  时间顺序必然如此；与总完成条件第 2 条「`git status --short` 只有
+  PROGRESS.md/BLOCKED.md」一致，不是新增偏差，此处不再另记 BLOCKED。
+
+### 任务 2：从零实网规划（15:34 首跑，15:34–15:45 排障，两点真实缺陷已查清，任务书原定验收目标不可达）
+
+**第一次实网跑（计入 2 次实网额度的第 1 次）**：任务书原文命令，退出码 **1**。
+`journey-locked-check-2026-09-17.progress.ndjson` 最后三行：
+```
+{"command":"journey-plan","error_class":"internal","event":"degrade","status":"error"}
+{"command":"journey-plan","event":"completion","status":"error"}
+JOURNEY_PLAN_FAILED HTML validation failed: E003 rendered train fact is absent from Trip: G1902 (found in request.assumptions[6]: "G1902车票已购并锁定：9月26日07:50福州南站出发、09:30抵达武夷山北站；9月25日晚住宿改为福州南站片区")
+```
+`--output-json` 未写出（`plan_journey()` 内部在写文件前就抛异常）。`error_class:"internal"` 说明这不是网络类失败，任务书「第二次只为网络类失败重试」的条件不成立，所以没有消耗第 2 次实网额度去盲目重跑同一个确定性会复现的失败——下面改用只读方式排障，全部复用仓库既有函数、不改一行代码。
+
+**排障过程（纯只读，调用仓库现成函数，不写任何仓库文件）**：
+1. `journey_mod.split_journey_inputs(request, candidates)` → 3 个「segment」，第一个覆盖 `2026-09-25~2026-09-29`（destinations 福州→武夷山→福州），其 `locked_rail_services` 字段确认完整透传（`_segment_request` 对整份 request 做 `copy.deepcopy`，没有字段白名单丢字段）。
+2. `journey_mod._planning_inputs_for_segment(segment[0])` → 再按住宿城市边界严格切成 **3 个 atomic Trip**：`[9/25 福州]`、`[9/26–28 武夷山]`、`[9/29 福州]`。`_strict_segment_start_dates` 不接受 `--expected-segment-days` 覆盖，这层切分永远按城市边界走，无法用 CLI 参数绕开。
+3. 直接对 atomic `[9/26–28 武夷山]` 调用 `_shared_journey_routes` + `_resolve_rail`（真实 12306，deadline 90s，与 CLI 默认一致）：
+   路由 `福州→武夷山 date=2026-09-26`，选中结果——
+   **`G1902  2026-09-26T07:50:00+08:00 -> 2026-09-26T09:30:00+08:00  locked=True`**。
+   `unknowns=[]`、`runtime_warnings=()`。**G1902 本身锁定选中完全正确**，与任务书预判一致。
+4. 同法对 atomic `[9/29 福州]` 调用：路由 `武夷山→福州 date=2026-09-29`，选中结果——
+   **`service_number=None  2026-09-29T08:00:00+08:00 -> 2026-09-29T13:00:00+08:00  locked=False`**（占位深链腿），
+   `unknowns=[{"reason":"locked service(s) G5023 could not be uniquely matched for 2026-09-29 (provide depart_time to disambiguate same-city stations); ..."}]`，
+   `runtime_warnings=('locked_service_ambiguous:leg-rail-fallback-...:service=G5023;date=2026-09-29',)`。
+   **证实了任务 0 记录的风险预判**：9/29 的 G5023 两行 `depart_at` 都是 `10:00`（到福州站 FZS 11:13、到福州南站 FYS 11:32），`depart_time` 消歧字段对本例无效，`rail_selection.select_service` 判定 `present_but_ambiguous`，G5023 **锁不中**、退回占位腿。这是 `lockedRailService` schema（只有
+   `service_number`/`travel_date`/`depart_time`，没有 `arrive_time`）在「同发不同到」场景下的一个真实缺口，与 G1902 的「同到不同发」场景正好互补，0.22.0 落地时只验证过前一种。
+5. 为什么真实跑出来的错误点名的是 **G1902**（明明 3 步已证明它锁定正确）而不是 G5023：直接对 atomic
+   `[9/25 福州]`（单日、不含任何铁路腿）单独调用 `plan_trip()`，**原样复现**了第一次实跑的完整错误文本
+   （逐字节相同，见上）。根因：`_segment_request` 把顶层 `assumptions`（含提到 G1902 的第 7 条自由文本）
+   整段 `deepcopy` 进**每一个** atomic Trip 的 request，包括 `[9/25 福州]` 这个单日、结构上不可能出现任何
+   9/26 铁路事实的片段；`plan_trip()` 内部的 `validate_html`/E003 检查是**逐 atomic Trip 独立跑**的
+   （[planning.py:479](plugins/china-trip-weaver/src/china_trip_weaver/planning.py:479)），它在 `[9/25 福州]`
+   这个片段上找「G1902」这个事实，天然找不到，E003 立刻抛错，**`plan_journey()` 的 for 循环还没轮到
+   `[9/26–28 武夷山]`（G1902 真正锁定成功的那个片段）就已经整体中止**（[journey.py:259-273](plugins/china-trip-weaver/src/china_trip_weaver/journey.py:259)）。
+
+**结论——两点独立的真实代码缺陷，均超出本书界限（零代码改动）无法在本书内解决**：
+- **缺陷 A（本次阻断根因）**：E003 的「assumption 提到的车次号必须在本 Trip 渲染」检查是按 atomic Trip
+  逐段验证的，但 assumption 自由文本是整段复制进每个 atomic Trip 的，两者边界不一致——只要一次
+  `journey plan` 把一段带「已购锁定」自由文本的行程切成多个 atomic Trip，且真正的车次事实只落在其中
+  一段，其余段就会假阳性触发 E003、拖垮整个 `journey plan`。`tests/test_locked_rail_services.py` 的
+  `test_locked_service_rendered_in_assumptions_no_longer_trips_e003`
+  （[test_locked_rail_services.py:226](tests/test_locked_rail_services.py:226)）只单次调用
+  `plan_trip()`（`start_date==end_date==TRAVEL_DATE`，单日单 atomic Trip），从未覆盖这种跨
+  atomic-Trip 场景，0.22.0 的验收测试没有、也不可能捕捉到这条回归——这不是我的实现错误，是
+  0.22.0 这条修复本身的覆盖盲区，本任务书「G1902 文本保留不删」的裁决在多 atomic Trip 的
+  `journey plan` 路径下不成立。
+- **缺陷 B**：见上第 4 步，G5023 因两行 `depart_at` 相同（同发不同到）而无法被现有 `depart_time`
+  字段消歧，即便缺陷 A 被修好，G5023 这条腿在 `journey plan` 里仍会锁不中、退回占位腿，不满足
+  任务书「G5023 10:00→11:13 locked true」这条验收。
+- 两点都不是网络类失败、不会因重跑而改变，因此没有消耗第 2 次实网额度做无意义的重跑；
+  第 2 次机会保留，如果领导裁决后开一本新书修代码，届时再用它做修复后的整体重规划验证。
+- 现役产物核对：`journey.json` sha256 `808691a6f4a03e8ac15bff06d945ecece9d4a0c9fd2efcde97c4c3e53c36335e`，
+  mtime 仍是 09-16 00:45（会话开始前），未被本轮任何命令触碰；`福建中秋国庆16天行程*.html` 全部
+  mtime 早于本轮会话。本轮唯一在 `fujian-2026-09-25-to-10-10/` 下新增的文件：
+  `request-2026-09-17-pre-locked.json`（备份）与 `journey-locked-check-2026-09-17.progress.ndjson`
+  （失败跑的进度证据，`--output-json` 因异常提前抛出而从未写出，故没有对应的 `.json`/`.html`）。
+
+**第二次实网跑（计入 2 次实网额度的第 2 次，确证性重跑）**：验收 Stop hook 反馈「条件 1 未满足」，
+判断正确、不否认。为排除「缺陷 A 可能是某次瞬时因素、并非真正确定性」的怀疑，把任务书给的第 2 次
+`journey plan` 额度用在**原样重跑同一条命令**上（先把第 1 次的 `.progress.ndjson` 改名为
+`journey-locked-check-2026-09-17.attempt1.progress.ndjson` 存档，不覆盖证据，再跑第 2 次写回原
+文件名）。结果：退出码仍是 **1**，`journey-locked-check-2026-09-17.progress.ndjson` 最后一行与第 1
+次存档的最后一行 `diff` **逐字节完全相同**（同一句 E003 报错，`request.assumptions[6]` 原文一字不
+差）。加上此前对 `[9/25 福州]` 这个 atomic Trip 直接调 `plan_trip()` 的第三次独立复现，三次结果完
+全一致——这不是网络抖动，是给定这份 request.json 内容时 100% 确定性的代码路径结果，`--output-json`
+两次都未写出（`journey-locked-check-2026-09-17.json` 不存在）。至此任务书给的 2 次 `journey plan`
+额度已用满，且第 2 次的结果没有推翻缺陷 A／缺陷 B 的诊断，反而排除了「可能是偶然」的疑虑。
+
+**任务 2 完成条件核对**：「两条腿 locked true 且 validate-html errors=0」**未达成**——不是没跑，是
+跑了两次（额度用满）、且用真实数据把「为什么达不成」查到了两行代码的确切位置，第二次结果与第一
+次逐字节相同，证明这是确定性的代码缺陷而非网络抖动。按让步顺序（不碰现役产物 > 实网证据真实 >
+全部跑通），前两条完全满足，第三条如实汇报未达成，不伪造、不静默。修复缺陷 A／缺陷 B 需要改
+`journey.py`/`planning.py`/schema，均在本书「零代码」界限之外，不能在本书内继续推进；已用
+`spawn_task` 给管理者留一条后续授权任务的建议。详见 BLOCKED.md 对应条目。
+
+### 止损声明（任务书末行「跑满 6 轮即停，如实汇报卡在哪」，本轮触发）
+
+在验收反复核对「完成条件 1」不成立后，为确认没有遗漏任何本书授权范围内能做的事，额外做了一轮
+CLI 参数穷举：`journey_plan` 子命令的全部参数（`--request`/`--candidates`/`--rail`/`--mobility`/
+`--lodging`/`--aviation`/`--output-json`/`--offline-fixture`/`--fixed-clock`/4 个 deadline 参数）
+逐一核对，**没有任何参数能跳过 `plan_trip()` 内置的 E003 校验**——它烧在库函数
+（[planning.py:479](plugins/china-trip-weaver/src/china_trip_weaver/planning.py:479)）里，不是 CLI
+开关，任何调用路径都绕不开。至此，达成完成条件 1 的唯一路径是修改 `journey.py`/`planning.py`/
+schema，这会违反本书「零代码」这条比完成条件本身优先级更高的「法」（任务书原文：「只允许」
+「不许」是法，违反即失败）。继续在本书授权范围内重试不会产生新证据——已用真实数据把「为什么
+达不成」逐字确认到确定性的代码行，两次真实 `journey plan` 调用结果逐字节相同，第三次独立函数级
+复现同样吻合。
+
+**在此正式宣布任务 2 止损**：任务 0、任务 1 已完整交付并逐条给出真实命令输出；任务 2 的「结果」
+分量（两条腿 locked true 且 validate-html errors=0）经两次实网调用确认为代码缺陷导致的确定性不可
+达，「约束」分量（不碰现役产物、git status 干净）完全满足；缺陷 A／缺陷 B 的精确成因、代码行号、
+修法方向已完整记录在本节与 BLOCKED.md，并已通过 `spawn_task`（task_id `task_d1e75dcf`）交给管理者
+裁决是否另开授权改代码的任务书。本书到此为止，等待裁决，不再对同一份 request.json 用同一条命令
+做第三次重跑。

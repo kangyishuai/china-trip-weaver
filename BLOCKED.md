@@ -1,3 +1,59 @@
+## 书 AN4「真实行程改结构化 locked_rail_services」（2026-09-17）：任务书验收目标不可达，两点独立真实代码缺陷，供裁决
+
+任务 1（改 request.json 加 `locked_rail_services`）已按字面完成并验收通过，不受本条影响。任务 2（从零
+`ctw journey plan`，验证 G1902/G5023 两条腿 `locked:true` 且 `journey validate-html` errors=0）**用真实
+12306 数据实跑后失败**，退出码 1，且用只读方式（不改一行仓库代码，全部复用现成函数）把根因查到了确
+切代码位置，是两个相互独立、都超出本书「零代码」界限、需要另开授权改代码的书才能修的真实缺陷：
+
+**缺陷 A（本次实跑的直接阻断原因）**：`ctw journey plan` 会按住宿城市边界把长行程切成多个「atomic
+Trip」（本例 9/25–9/29 这一段被切成 `[9/25 福州]`／`[9/26–28 武夷山]`／`[9/29 福州]` 三段），但顶层
+`assumptions`（含提到 G1902 的自由文本第 7 条）在切分时被整段复制进**每一个** atomic Trip 的 request
+（`_segment_request` 对整份 request 做 `copy.deepcopy`，[journey.py:768](plugins/china-trip-weaver/src/china_trip_weaver/journey.py:768)，不区分该 atomic Trip 的日期范围是否真的覆盖这句话提到的车次）。
+E003（「assumption 提到的车次号必须能在 Trip 里渲染出对应事实」）的检查是**逐 atomic Trip 独立跑**
+的（`plan_trip()` 内部，[planning.py:479](plugins/china-trip-weaver/src/china_trip_weaver/planning.py:479)），`plan_journey()` 对 atomic Trip 的处理是顺序 for 循环、任何一段抛异常就整体中止
+（[journey.py:259-273](plugins/china-trip-weaver/src/china_trip_weaver/journey.py:259)）。`[9/25 福州]`
+这一段是单日、结构上不可能出现 9/26 才发生的铁路事实，但它也继承了提到「G1902」的 assumption 文本，
+E003 在这一段上必然假阳性抛错，且**排在** `[9/26–28 武夷山]`（G1902 真正锁定成功的那一段）**之前**
+处理，导致整个 `journey plan` 还没轮到 G1902 真正生效的那一段就已经整体失败。用只读诊断脚本单独对
+`[9/26–28 武夷山]` 这个 atomic Trip 调 `_resolve_rail`（真实 12306）证实 G1902 本身锁定完全正确
+（`G1902 2026-09-26T07:50→09:30 locked=True`）；单独对 `[9/25 福州]` 调 `plan_trip()` 精确复现了第一次
+实跑的完整错误文本（逐字节相同）。`tests/test_locked_rail_services.py` 的
+`test_locked_service_rendered_in_assumptions_no_longer_trips_e003`
+（[test_locked_rail_services.py:226](tests/test_locked_rail_services.py:226)）只单次调用
+`plan_trip()`（单日单 atomic Trip），从未覆盖跨 atomic-Trip 场景，0.22.0 的验收测试没有、也不可能捕
+捉到这条回归。任务书「assumptions 第 7 条那句 G1902 文本保留不删」的裁决依据（引用的正是这条测试）
+在多 atomic Trip 的 `journey plan` 路径下不成立——测试证明的是单 Trip 场景，任务书据此外推到了多
+Trip 场景，外推错了，不是我的实现错误。
+
+**缺陷 B（即便缺陷 A 修好，G5023 这条腿仍会锁不中）**：9/29 武夷山→福州，12306 对 G5023 返回两行，
+`depart_at` **都是** 10:00，只有 `arrive_at` 不同（到福州站 11:13、到福州南站 11:32）——与 G1902 的
+「同到不同发」正好相反，是「同发不同到」。`lockedRailService` schema（0.22.0 新增）只有
+`service_number`/`travel_date`/`depart_time` 三个键，没有 `arrive_time`；传入 `depart_time="10:00"`
+时 `rail_selection.select_service`（[rail_selection.py:29](plugins/china-trip-weaver/src/china_trip_weaver/rail_selection.py:29)）的 `_matches_time` 会同时命中两行，`_locked_rail_candidate`
+（[planning.py:1476](plugins/china-trip-weaver/src/china_trip_weaver/planning.py:1476)）据此判定
+`present_but_ambiguous`，G5023 锁不中、退回占位腿并写 `locked_service_ambiguous` 警告。用只读诊断脚本
+直接对 `[9/29 福州]` 这个 atomic Trip 调 `_resolve_rail`（真实 12306）复现：选中结果是占位深链腿
+（`service_number=None locked=False`），`unknowns` 明确写「locked service(s) G5023 could not be
+uniquely matched」。这是 schema 本身「只支持同城两站发站消歧、不支持到站消歧」的缺口，不是选路错误。
+
+两点都不是网络类失败、不会因重跑而改变（12306 对固定未来日期的车次表是确定性数据），所以没有消耗任
+务书给的第 2 次实网额度去做无意义的重跑，留给修复后的验证。完整复现步骤、每一步的真实命令输出、
+四段诊断脚本的关键片段见 `PROGRESS.md` 本书任务 2 小节。现役 `journey.json`／页面、仓库代码/测试/文
+档均未改动（journey.json sha256 前后一致，见 PROGRESS.md）。
+
+供裁决：是否要另开一本授权改代码的任务书修缺陷 A（E003 assumption 检查应该在合并后的 Journey/Trip
+粒度上做，或 `_segment_request` 不应把与本段日期无关的 assumption 原样复制进每个 atomic Trip）和/或
+缺陷 B（`lockedRailService` schema 加 `arrive_time`，仿照 `depart_time` 的消歧逻辑对称实现）；在此之
+前，真实 16 天行程的 `request.json` 里「G1902 已购锁定」只能继续停留在自由文本层面，`locked_rail_services`
+结构化字段虽已按任务 1 加上、对单独调用 `plan_trip()` 有效，但对 `ctw journey plan` 这条实际会被使用
+的命令路径暂时无法达成「从零规划不撞 E003」的原始目的。
+
+**补记（验收 Stop hook 追问后，用满第 2 次实网额度做确证重跑）**：把任务书给的第 2 次 `journey plan`
+额度用在原样重跑同一条命令上，退出码仍是 1，最终报错文本与第 1 次逐字节完全相同（`diff` 无输出）。
+两次真实调用 + 一次对 `[9/25 福州]` atomic Trip 单独调 `plan_trip()` 的直接复现，三次结果一致，确认
+缺陷 A 是给定这份 request.json 时 100% 确定性的代码路径结果，不是网络抖动或偶然。已用
+`spawn_task` 给管理者留一条「授权修缺陷 A/B」的后续任务建议，供其决定是否采纳。
+
 ## 书「统一 replan/planning 的按车次号挑车逻辑」（2026-09-15，第二十八波）：无
 
 全程未遇到需要领导裁决、拿不准怎么办的分叉。「我替领导拍的板」三条（共用函数放新模块
