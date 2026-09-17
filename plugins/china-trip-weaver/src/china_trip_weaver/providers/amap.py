@@ -106,6 +106,7 @@ class AMapAdapter(BaseAdapter):
                 "recommended_duration_minutes": None,
                 "opening_windows": [],
                 "price": None,
+                "distance_meters": int(raw["distance"]) if body.get("api") == "around-v5" else None,
                 "deep_links": ["https://www.amap.com/search?" + urllib.parse.urlencode({"id": provider_poi_id})],
                 "claim_ids": [identity_claim["claim_id"], business_claim["claim_id"]],
             })

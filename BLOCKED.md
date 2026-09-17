@@ -1,4 +1,4 @@
-## 书 AP1a「poi_around 综合排序与 distance_meters」（2026-09-17，第三十三波，worktree `.tmp/wt-ap1a` 分支 `around-sortrule`）：任务 0 数字一处不符（非阻塞）＋ distance_meters 与 schema 边界互斥（阻塞，供裁决）
+## 书 AP1a「poi_around 综合排序与 distance_meters」（2026-09-17，第三十三波，worktree `.tmp/wt-ap1a` 分支 `around-sortrule`）：任务 0 数字一处不符（非阻塞）＋ distance_meters 与 schema 边界互斥（已裁决，已解决）
 
 **任务 0 核对，一处不符，非阻塞**：任务书「现状与任务 0」给出六类基线数字，五类精确核对一致——全量
 `Ran 756 tests` OK 0 skipped；`scripts/scan_secrets.py` 0 finding(s)；
@@ -73,6 +73,27 @@ schema」）来把 `distance_meters` 补进 `_pois`、把 `AroundDiningFixtureTe
 真断言、并补 checklist③；在此之前，`_pois` 无法安全地携带 `distance_meters`，下游 AP1b/AP2 若依赖这
 个键需要先等这条裁决。已用 `spawn_task` 给管理者留一条提
 醒，供其决定是否采纳。
+
+**管理者裁决（2026-09-17，通过 AskUserQuestion 当场作答）**：认可上面提出的最小修复，选择「授权本书
+直接改 schema」——豁免本书界限里「不许碰 schema」这一条，允许给 `#/$defs/poi` 加上面提出的那个可选
+属性。**已按裁决实施并验收**：`plugins/china-trip-weaver/schema/trip.schema.json` 的 `#/$defs/poi.
+properties` 加了 `"distance_meters": {"type": ["integer", "null"], "minimum": 0}`（不进 `required`，
+其余 9 个 `required` 键与 `properties` 逐字不改）；`amap.py::_pois` 补回
+`"distance_meters": int(raw["distance"]) if body.get("api") == "around-v5" else None`；
+`AroundDiningFixtureTests` 补两个真断言（`test_each_item_carries_distance_meters_equal_to_fixture_
+distance`、`test_fifth_item_business_claim_has_no_rating`）；新增 `DistanceMetersByApiTests` 两个用例
+落实 checklist③（`around_stations` 回放项 `distance_meters == 5883`；`success.json`——`poi-v5` 文本搜
+索——回放项 `distance_meters is None`）。四条 checklist 全部转绿：`/usr/bin/python3 -m unittest
+tests.test_providers -v` `Ran 120 tests OK`；全量 `/usr/bin/python3 -m unittest discover -s tests`
+`Ran 767 tests OK` 0 skipped；`scan_secrets` 0 finding(s) across 408 file(s)；pyflakes 0。三处反向验
+证均红→绿：①（已在上面记录）；②③——把 `_pois` 的 `distance_meters` 临时改回硬编码 `None`，
+`test_each_item_carries_distance_meters_equal_to_fixture_distance`（`None is not an instance of
+<class 'int'>`）与 `test_around_stations_item_carries_the_fixture_distance`（`5883 != None`）红，
+`cp`+`touch` 还原后绿；单独把 schema 的 `distance_meters` 属性删掉，`test_providers` 从 120 全绿变回
+6 项 `S_ADDITIONAL`（`around_dining`／`around_stations`／`boundary_hk`／`malicious`／
+`pagination_page2`／`success`），还原后绿。`around_stations.json`/`station_distance.py` 相对 main 仍
+零改动。`git diff main --name-only` 现含 `plugins/china-trip-weaver/schema/trip.schema.json`——这是
+经管理者当场明确授权的唯一一处超出原始白名单的改动，其余文件不变。已关闭。
 
 ---
 

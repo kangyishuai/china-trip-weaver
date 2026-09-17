@@ -507,6 +507,26 @@ checklist③（`around_stations` 带 `distance_meters=5883`、文本搜索夹具
 `validate_trip.py` 的 `properties` 校验只在键存在于被测值里才递归（[validate_trip.py:167-169](plugins/china-trip-weaver/src/china_trip_weaver/validate_trip.py:167)），不存在的可选键不触发任何检查；
 `required` 列表不变意味着没有该键的旧数据也仍然合法。
 
+**裁决落地（2026-09-17，管理者通过 AskUserQuestion 当场选择「授权本书直接改 schema」）**：Stop hook 连
+续三轮反馈都确认 checklist②③ 的 `distance_meters` 子项在结构上无法在不碰 schema 的前提下满足，
+问了管理者后拿到明确授权，豁免本书界限里「不许碰 schema」这一条。落地：`trip.schema.json` 的
+`#/$defs/poi.properties` 按上面的方案原样加了 `distance_meters`（不进 `required`，其余 9 个键逐字不
+改）；`amap.py::_pois` 补回 `"distance_meters": int(raw["distance"]) if body.get("api") == "around-v5"
+else None`；`AroundDiningFixtureTests` 补两个真断言（每项 `distance_meters` 为 int 且等于夹具
+`distance`；第 5 项 business 无 `rating`）；新增 `DistanceMetersByApiTests`（`around_stations` 回放项
+`distance_meters == 5883`；`success.json` 文本搜索回放项 `distance_meters is None`）。四条 checklist
+全部转绿。三处反向验证红→绿：①（见上）；②③——`_pois` 的 `distance_meters` 临时改回硬编码 `None`
+后 `test_each_item_carries_distance_meters_equal_to_fixture_distance`（`None is not an instance of
+<class 'int'>`）与 `test_around_stations_item_carries_the_fixture_distance`（`5883 != None`）红，还原
+后绿；单独删掉 schema 里那条 `distance_meters` 属性，`tests.test_providers` 从 120 全绿变回 6 项
+`S_ADDITIONAL`（`around_dining`／`around_stations`／`boundary_hk`／`malicious`／`pagination_page2`／
+`success`），还原后绿。最终态：`/usr/bin/python3 -m unittest discover -s tests` `Ran 767 tests OK`
+0 skipped；`scan_secrets` 0 finding(s) across 408 file(s)；pyflakes 0；`git status -- demo` 空；
+`around_stations.json`/`station_distance.py` 相对 main 仍零改动。`git diff main --name-only` 现含
+`plugins/china-trip-weaver/schema/trip.schema.json`——这是管理者当场明确授权的唯一一处超出原始白名
+单的改动，界限里其余文件（`render/`/`cli.py`/`planning.py`/`station_distance.py`）仍未碰。详见
+BLOCKED.md「书 AP1a」的管理者裁决记录。
+
 ## 定位失败天花板
 
 2026-09-06 用同一份真实福建 16 天行程反复重跑验证（78 个地点 = POI + 住宿）：
