@@ -97,6 +97,8 @@ tests.test_providers -v` `Ran 120 tests OK`；全量 `/usr/bin/python3 -m unitte
 
 ---
 
+管理者裁决（2026-09-17，验收时补记）：任务 0 那处「0 命中」是管理者数错（providers/ 里 mcp_stdio.py、rail12306.py 早有同名键），执行者判非阻塞正确。给 `#/$defs/poi` 加可选 `distance_meters` 是领导在 Codex 侧当场授权的，验收认可：`validate_trip` 与全部夹具只对存在的键递归，旧产物零影响；合并后全量 790 绿、`fixture_count` 89、`around_stations.json`/`station_distance.py` 零改动。暗卷：真实 Key 对三坊七巷 `sortrule=weight` 周边搜索，10 项 `distance_meters` 与 raw distance 一致、前 3 家全有评分与人均。已关闭。
+
 ## 书 AN4「真实行程改结构化 locked_rail_services」（2026-09-17）：任务书验收目标不可达，两点独立真实代码缺陷，供裁决
 
 任务 1（改 request.json 加 `locked_rail_services`）已按字面完成并验收通过，不受本条影响。任务 2（从零
@@ -2253,6 +2255,9 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 ## 书 AP1b「附近餐饮参考规则 `dining.py`」（2026-09-17，第三十三波，worktree `.tmp/wt-ap1b` 分支 `dining-rules`）：无
 
 无。全程没有遇到拿不准、需要管理者裁决的真实二义性——任务书「我替领导拍的板」一节已把八个函数的入参/出参形状、字段来源、跳过条件逐一定死，照做即可闭合任务 1 的四组验收。唯二自行判断的点都不构成裁决分叉，已在 PROGRESS.md「第三十三波 AP1b 执行记录」写明原因，此处仅索引：①`select_options` 用 `item["claim_ids"]` 成员匹配而非 `claim["subject_ref"] == poi_id` 去关联一个 item 与它的 `/provider_identity` claim，因为前者是 `providers/amap.py::_pois` 真实产出的显式链接，后者依赖「调用方没传自定义 `subject_ref`」这一隐藏假设；②`dining.py` 最终没有 import `contracts`/`evidence`——任务书写的是允许清单不是强制项，八个函数都只读调用方已经造好的 claim/item 字典，不需要造新证据或序列化，只 import 了 stdlib。
+
+管理者裁决（2026-09-17，验收时补记）：认可。暗卷：对真实 journey 副本跑 `meal_slots` 识别 19 个（晚餐 11、午餐 8），`anchor_for` 9/26 午餐取前一个景点、9/25 晚餐（前面只有无坐标的入住时段）为 None；实网结果 `select_options` 取 3 家、`avoid=("闽菜",)` 生效、marker 深链带 urlencode 店名。查出一处规则缺口：真实行程有 3 个 kind `rest` 的时段标题含「午餐」（如「午餐与完整午休」）未被识别——任务书只写了 `meal`/`free`，是管理者的规则遗漏，AP5 把 `rest` 也纳入。已关闭。
+
 ## 书「AP2：附近餐饮参考渲染与校验」（2026-09-17，第三十三波，worktree `.tmp/wt-ap2` 分支 `slot-dining-render`）：无裁决分叉，三处非阻塞判断供核对
 
 全程未遇到需要领导裁决、拿不准怎么办的分叉。「我替领导拍的板」三段（schema 形状、渲染模板、E007/JH007 校验规则）均已按字面执行，以下三处是必要的技术性收窄或白名单内的机械后果，非产品语义裁决，记录供核对：
@@ -2262,6 +2267,9 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 3. **`tests/test_contracts.py` 的两个硬编码计数**：白名单写「valid/invalid 各加一份」+ 该文件「都只加」，但两者字面冲突——加了新夹具不改 `test_accepted_examples_are_unchanged_in_test_fixtures` 里的 `3`/`4`，这条测试必然由 3/4 变 4/5 而失败，且失败与任何真实缺陷无关。参照本文件与 PROGRESS.md 记录的同类先例（新增 `.py` 需同步改 `test_design_docs.py` 计数），已直接改成 `4`/`5`，视为「新增夹具」这个被明确批准的动作的机械必然结果；`git diff main -- tests/test_contracts.py` 只有这两个数字变化。
 
 另：任务书未要求、但为通过既有 E003「未在文档中出现的 CNY 事实」检查而必须做的一处联动——`_check_rendered_facts` 的 `known_prices` 集合原本只收 `transport_legs`/`lodgings`/`pois` 的 `price.amount`，现同时收 `slot.dining.options[].cost_cny`（page 里的「人均 ¥32」需要被认出是 Trip 里真实存在的价格，而不是被当成臆造事实拒收）；07-renderer.md §7.1 的 E003 条目已补一句说明，`git diff main --stat` 只多了这一处判断逻辑与一句文档。
+
+管理者裁决（2026-09-17，验收时补记）：认可（`data-dining-slot` 与任务书示例的 `data-slot-id` 不同，是为了不与 `<li data-slot-id>` 重名，合理；E003 把 `cost_cny` 并入已知价格集合是必要补充）。暗卷：把实网算出的 3 家塞进真实 journey 副本一个晚餐时段的 `dining`，`validate_journey` 过、Journey 页 `validate_journey_html` 0 错误、1 个块 3 家、marker 深链 6 处；未动的真实 journey 用合并前后两套渲染器出的页面逐字节相同（sha cfe89c71）；demo 与渲染夹具重生成零漂移。已关闭。
+
 ## 书 AP3「健康行去重与探针三能力」（2026-09-17，第三十三波，worktree `.tmp/wt-ap3` 分支 `fold-health-probe`）：无
 
 无。全程没有遇到拿不准、需要管理者裁决的真实二义性。任务书「我替领导拍的板」一节已经把健康行正则
@@ -2269,6 +2277,11 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 任务 0 那条复现测试；探针的异常兜底（三个子请求任一抛异常记 `business=failed` 不外抛）也是任务书
 明确要求的行为，不算设计判断分叉。详细完成记录见 PROGRESS.md「书 AP3」小节（任务 0 核对、任务 1/2
 完成、验收结果，含反向验证红→绿的实际断言与实网 `ctw doctor --probe` 的 amap 行输出）。
+
+管理者裁决（2026-09-17，验收时补记）：认可。暗卷：对真实 journey 副本用注入的 9/25 预报折两次（不同 reported_at/queried_at）→ 高德健康行只含一个 `days folded` 且括号里是第二次的 queried_at；合并后实网 `ctw doctor --probe` amap 行 capabilities 三项 passed。已关闭。
+
 ## 书 AP4「产物目录约定文档」（2026-09-17，第三十三波五本并行之一，worktree `.tmp/wt-ap4` 分支 `plans-dir-docs`）：无
 
 无。全程没有遇到拿不准、需要管理者裁决的真实二义性。本书只把领导已经拍板的 `plans/<可读名称>/` 目录约定写进三份 SKILL 正文与两份 README、`docs/design/02-plugin-skills.md` §4，未触碰任何 `.py`、schema、demo 或测试夹具，没有需要裁决的设计空间。详细改动与验收证据见 PROGRESS.md「书 AP4」条目。
+
+管理者裁决（2026-09-17，验收时补记）：认可。三份 SKILL frontmatter 零改动、`tests.test_skills` 绿、README 两份各 1 处 `plans/`、02 §4 一段、新增行无本机路径无版本号。已关闭。
