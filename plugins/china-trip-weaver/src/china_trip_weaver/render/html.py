@@ -93,6 +93,34 @@ PROVIDER_LABELS: Mapping[str, Mapping[str, str]] = {
 }
 
 
+# Keyed by locale rather than folded into `_labels()`/`_journey_labels()`: slot_dining_block()
+# is reached from both the Trip page's own labels and the Journey page's independent
+# _journey_labels() dict (render/journey_html.py, outside this book's file allowlist), so a
+# lookup keyed only on labels["locale"] avoids requiring a matching edit there.
+DINING_LABELS: Mapping[str, Mapping[str, str]] = {
+    "en": {
+        "dining_head": "Nearby dining (Amap-ranked · near %s, within %s km)",
+        "dining_none": "Nearby dining: none found",
+        "dining_rating": "Rating %s",
+        "dining_cost": "Avg ¥%s",
+        "dining_distance": "%s m away",
+        "dining_today": "Hours today: %s",
+        "dining_more": "See more on the Amap app",
+        "dining_amap": "Amap",
+    },
+    "zh-CN": {
+        "dining_head": "附近餐饮参考（高德综合排序 · 距%s ≤%s km）",
+        "dining_none": "附近餐饮参考：暂无",
+        "dining_rating": "评分 %s",
+        "dining_cost": "人均 ¥%s",
+        "dining_distance": "距 %s m",
+        "dining_today": "今日 %s",
+        "dining_more": "在高德 App 看附近美食",
+        "dining_amap": "高德",
+    },
+}
+
+
 HEALTH_RISK_ORDER = {
     "contract_mismatch": 8, "forbidden": 7, "expired": 6, "rate_limited": 5,
     "unavailable": 4, "missing": 3, "degraded": 2, "ready": 1,
@@ -643,7 +671,7 @@ def _render_day_slots(
             '<li class="timeline-item" data-slot-id="%s" data-ref-id="%s" data-slot-kind="%s" data-slot-status="%s" '
             'data-start-at="%s" data-end-at="%s">'
             '<span class="slot-time"><time datetime="%s">%s</time>–<time datetime="%s">%s</time></span>'
-            '<h3>%s</h3><div class="badge-row"><span class="status-badge" data-kind="%s">%s</span>%s%s</div>%s%s%s</li>' % (
+            '<h3>%s</h3><div class="badge-row"><span class="status-badge" data-kind="%s">%s</span>%s%s</div>%s%s%s%s</li>' % (
                 attr(slot["slot_id"]), attr(slot["ref_id"] or ""), attr(slot["kind"]), attr(slot["status"]),
                 attr(slot["start_at"]), attr(slot["end_at"]),
                 attr(slot["start_at"]), _clock(slot["start_at"]), attr(slot["end_at"]), _clock(slot["end_at"]),
@@ -652,9 +680,56 @@ def _render_day_slots(
                 station_line,
                 seat_line,
                 _claim_links(slot["claim_ids"], claims, labels, anchored=anchored_claims),
+                slot_dining_block(slot, labels),
             )
         )
     return "".join(slots) or '<li class="empty-state">%s</li>' % text(labels["none"])
+
+
+def slot_dining_block(slot: Mapping[str, Any], labels: Mapping[str, str]) -> str:
+    """Render one slot's nearby-dining reference (or its absence); shared by the Trip and Journey day cards.
+
+    Only slots that carry a ``dining`` key render anything, so every slot from before this
+    feature existed stays byte-for-byte unchanged.
+    """
+    if "dining" not in slot:
+        return ""
+    dining_labels = DINING_LABELS[labels["locale"]]
+    dining = slot["dining"]
+    if dining is None:
+        return '<div class="slot-dining" data-dining-slot="%s"><p class="dining-none">%s</p></div>' % (
+            attr(slot["slot_id"]), text(dining_labels["dining_none"]),
+        )
+    radius_km = "%.1f" % (dining["radius_m"] / 1000)
+    options = "".join(_dining_option_item(option, dining_labels) for option in dining["options"])
+    return (
+        '<div class="slot-dining" data-dining-slot="%s"><p class="dining-head">%s</p><ol>%s</ol>'
+        '<p class="dining-more">%s</p></div>'
+    ) % (
+        attr(slot["slot_id"]),
+        text(dining_labels["dining_head"] % (dining["anchor_name"], radius_km)),
+        options,
+        external_link(dining["search_url"], dining_labels["dining_more"]),
+    )
+
+
+def _dining_option_item(option: Mapping[str, Any], dining_labels: Mapping[str, str]) -> str:
+    parts = [text(option["name"])]
+    if option["cuisine"]:
+        parts.append(text(option["cuisine"]))
+    parts.append(text(dining_labels["dining_rating"] % option["rating"]))
+    if option["cost_cny"] is not None:
+        parts.append(text(dining_labels["dining_cost"] % _number(option["cost_cny"])))
+    parts.append(text(dining_labels["dining_distance"] % option["distance_m"]))
+    if option["opentime_today"]:
+        parts.append(text(dining_labels["dining_today"] % option["opentime_today"]))
+    parts.append(external_link(option["deep_links"][0], dining_labels["dining_amap"]))
+    return '<li class="dining-option" data-poi-id="%s" data-rating="%s" data-cost="%s" data-distance="%s">%s</li>' % (
+        attr(option["provider_poi_id"]), attr(option["rating"]),
+        attr("" if option["cost_cny"] is None else _number(option["cost_cny"])),
+        attr(option["distance_m"]),
+        " · ".join(parts),
+    )
 
 
 def day_weather_line(day: Mapping[str, Any], labels: Mapping[str, str]) -> str:

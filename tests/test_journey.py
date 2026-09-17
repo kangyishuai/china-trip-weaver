@@ -55,6 +55,7 @@ from tests.test_amap_live import ScriptedAmapTransport
 
 FIXED_NOW = "2026-09-05T09:00:00+08:00"
 VALID_TRIP = ROOT / "tests" / "fixtures" / "trips" / "schema" / "valid" / "weekend-live.json"
+DINING_TRIP = ROOT / "tests" / "fixtures" / "trips" / "schema" / "valid" / "dining-references.json"
 GROUPED_TRIP = ROOT / "demo" / "grouped-departures" / "trip.json"
 JOURNEY_DEMO = ROOT / "demo" / "journey-16d"
 LODGING_CHAIN_FIXTURE = ROOT / "tests" / "fixtures" / "journey" / "synthetic-six-city-16d.json"
@@ -1688,6 +1689,26 @@ class JourneyContinuityTests(unittest.TestCase):
 
         report = validate_journey_html(mutated, journey)
         self.assertIn("JH006", [item.code for item in report.errors])
+
+    def test_dining_trip_journey_validates_with_zero_errors(self):
+        trip = load(DINING_TRIP)
+        journey = assemble_journey_from_trips([trip], trip["request"], FixedClock.from_iso(FIXED_NOW))
+        rendered = render_journey(journey)
+
+        self.assertEqual(2, rendered.count('class="slot-dining"'))
+        self.assertEqual(1, rendered.count('class="dining-none"'))
+        report = validate_journey_html(rendered, journey)
+        self.assertTrue(report.ok, [item.render() for item in report.errors])
+
+    def test_dining_trip_journey_tamper_reports_jh007(self):
+        trip = load(DINING_TRIP)
+        journey = assemble_journey_from_trips([trip], trip["request"], FixedClock.from_iso(FIXED_NOW))
+        rendered = render_journey(journey)
+        mutated = rendered.replace('data-rating="4.7"', 'data-rating="4.9"', 1)
+        self.assertNotEqual(mutated, rendered)
+
+        report = validate_journey_html(mutated, journey)
+        self.assertIn("JH007", [item.code for item in report.errors])
 
     def test_checked_in_sixteen_day_demo_passes_offline_browser_qa(self):
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:

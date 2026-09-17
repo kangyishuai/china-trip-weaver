@@ -625,3 +625,152 @@ fix-names` 会把它们列为人工项。
 不是强制项——`dining.py` 的八个函数都只读调用方已经造好的 claim/item 字典，不需要 `make_claim` 造新证据，
 也不需要 `canonical_json` 序列化，所以最终只 import 了 stdlib（`urllib.parse`、`datetime`、`typing`），更省。
 未合并到 main，只推送 `dining-rules` 分支等待管理者合并。
+## AP2 附近餐饮参考渲染与校验（2026-09-17，第三十三波，worktree `.tmp/wt-ap2` 分支 `slot-dining-render`，进行中）
+
+任务 0 已核对：main `6378f80`，全量 `Ran 756 tests` OK、0 skipped；`git grep -i -c dining -- plugins tests` 0 命中；
+slot 的 `additionalProperties` 是 false、`kind` 枚举含 `meal`。README demo 命令与 `build_renderer_fixtures.py`
+重跑后 `git status --short` 为空。
+
+理解的目标／顺序／最大风险（≤10 行）：
+
+- 目标：`slot.dining`（`diningReference`/`diningOption` 两个新 `$defs`）进 schema；两页每个带 `dining` 键的
+  时段渲染一块「附近餐饮参考」；两个校验器逐字核对页面与 Trip 数据一致，不符报 E007/JH007。数据从哪来是
+  AP1a/AP1b 的事，本书只管形状、显示与校验，和天气行（AN2/E006/JH006）同一套路。
+- 顺序：任务 1 schema+夹具在先（`meal` 时段的 `ref_id` 必须落在 `poi_map` 里，`_check_day_slots` 逐字硬性要求，
+  夹具要先想清楚再落笔）→ 任务 2 渲染函数+校验规则+文档在后。
+- 风险①：`_render_day_slots` 被 Trip 页与 Journey 页共用，但两页的 `labels` 字典来自各自独立的
+  `_labels`/`_journey_labels`（两份互不派生的字面量字典）；本书白名单只有 `render/html.py`，不含
+  `render/journey_html.py`。若把新标签塞进 `_labels()` 返回值（如天气行的做法），Journey 页调用
+  `_render_day_slots` 时会因 `_journey_labels` 缺键而 `KeyError` 崩溃，且我不能去补那个字典。
+- 风险②：`diningOption.deep_links` 若不加 `minItems:1`，渲染器 `deep_links[0]` 可能越界；`patch.trigger`
+  加 `dining` 后，`validate_trip.py` 用 `SchemaSubsetValidator` 动态读 schema 的 `enum`，没有需要同步的
+  硬编码副本（白名单里「仅同步 trigger 枚举」这条实测不需要动这个文件）。
+
+### 任务 1 完成（schema + 夹具）
+
+`$defs` 新增 `diningPreferences`（`cuisine: string|null`、`avoid: stringList`，两键都 required）、`diningOption`
+（11 键全 required、`additionalProperties:false`，比对照的板子多加了 `deep_links` 的 `minItems:1`——渲染器要
+无条件取 `deep_links[0]`，schema 兜底比渲染器里加防御式判空更对，原因见下）、`diningReference`（6 键全
+required：`queried_at`/`anchor_ref`/`anchor_name`/`radius_m`/`search_url`/`options`，`options` 数组
+`maxItems:3`）。`slot.dining` 是 `oneOf [$ref diningReference, null]`，不进 `slot` 的 `required`（比照
+`day.weather`）。`request.dining_preferences` 是可选的 `$ref`。`patch.trigger` 枚举加 `"dining"`。三个新
+`$defs` 放在 `lockedRailService` 和 `request` 之间（`request`/`slot` 都会引用它们，`$ref` 不依赖文本顺序，
+放在被引用者之前只是可读性考虑）。
+
+新增 valid 夹具 `dining-references.json`：2 天行程，day-1 一个 `poi` 锚点时段 + 一个 `meal` 时段（`ref_id`
+指向新建的 `poi-lunch-spot`，`dining` 带 2 家 options——一家 11 键全非空，一家 `cuisine`/`tag`/`cost_cny`/
+`opentime_today`/`address` 全 `null`，用来同时覆盖「缺项跳过」渲染分支），day-2 一个 `free` 时段
+`dining: null`；`request.dining_preferences: {"cuisine": "闽菜", "avoid": ["动物内脏"]}`；`revision` 从 1 到
+2 的一条 `trigger: "dining"` 的 `patch`（`op: "add"`，照抄 `weather_fold.py` 里「首次写入用 add、已有键才用
+replace」的既有惯例）。2 个 `diningOption.claim_id` 各配一条真实 claim（`subject_ref` 指向 `slot-2`——
+`_iter_claim_ids` 没有遍历 `diningOption.claim_id` 这条新路径，和 AN2 时 `weatherForecast.claim_id` 一样不被
+交叉校验，但补真实 claim 更接近实际数据，成本很低）。新增 invalid 夹具 `dining-option-missing-rating.json`：
+唯一缺陷是 options[0] 缺 `rating`。
+
+**执行中发现并处置一个白名单相关的偏离**：`tests/test_contracts.py::test_accepted_examples_are_unchanged_in_test_fixtures`
+把 valid/invalid 夹具数量硬编码成 3／4；书面白名单写的是「valid/invalid 各加一份」+ `test_contracts.py`
+（都只加），但两者字面上打架——加了新夹具不改这两个数字，这条测试必然由 3/4 变成 4/5 而失败，且这个失败
+与任何真实缺陷无关。参照 CLAUDE.md「验收教训」里同类先例（新增 `.py` 必须同步改 `test_design_docs.py`
+的计数），把这两个数字改成 4／5，视为「新增夹具」这个被明确批准的动作的必然机械结果，不是放宽断言（等式
+严格度不变，只是期望值随批准的新增而更新）。`git diff main --stat -- tests/test_contracts.py` 目前只有
+这一处改动。
+
+证据：
+```
+$ /usr/bin/python3 -m unittest tests.test_contracts -v 2>&1 | tail -3
+Ran 20 tests in 1.620s
+OK
+$ /usr/bin/python3 -c "... validate_trip(dining-references.json) ..."
+valid fixture ok: True
+$ /usr/bin/python3 -c "... validate_trip(dining-option-missing-rating.json) ..."
+invalid fixture ok (should be False): False
+  S_ONE_OF /days/0/slots/0/dining must match exactly one allowed shape
+$ /usr/bin/python3 -m unittest tests.test_renderer -v 2>&1 | tail -3
+Ran 53 tests in 2.339s
+OK
+```
+（`test_valid_examples_render_deterministically_with_zero_errors` 会自动把新 valid 夹具也渲染一遍并跑
+`validate_html`；此时渲染器和校验器都还没认识 `dining` 键，新夹具照常渲染通过，证明任务 1 的 schema
+改动是纯附加、没有动到既有路径。）
+
+### 任务 2 完成（渲染 + 校验 + 文档）
+
+`html.py` 新增模块级 `DINING_LABELS`（按 `locale` 查表，不折进 `_labels()`/`_journey_labels()`——原因见
+下）与纯函数 `slot_dining_block(slot, labels)`：`"dining" not in slot` 时返回空字符串（旧时段一个字节不
+多渲染）；`dining` 为 `null` 渲染 `<div class="slot-dining" data-dining-slot="slot_id"><p
+class="dining-none">附近餐饮参考：暂无</p></div>`；否则渲染标题行「附近餐饮参考（高德综合排序 · 距<锚点>
+≤<半径/1000，1 位小数> km）」+ 每家一条 `<li class="dining-option" data-poi-id data-rating data-cost
+data-distance>` （名·菜系·评分·人均·距离·今日营业时间，缺项按 `if` 跳过整段，不留空分隔符）+ 高德深链
++ 结尾一条「在高德 App 看附近美食」搜索深链。`_render_day_slots` 每个 `<li>` 末尾多插一个 `%s` 调它，
+Trip 页与 Journey 页的 `days`/`day-timeline` 两个 section 因为共用这一个函数而同时获得渲染，零改动
+`journey_html.py`。
+
+**执行中发现并处置一个真实碰撞（非裁决分叉，写法收窄）**：任务书模板字面写 `data-slot-id="…"`，但这个
+属性名在 `validate_html.py::AuditParser`/`_check_rendered_facts`（E003）里已经被占用，专门标记 `<li>`
+时段节点、并核对其 `start_at`/`end_at`/`kind`/`status`。照抄会让渲染出的 `<div>` 被同一套通用逻辑误认成
+「又一个同 id 的时段节点」，因为它没有那些属性字段而立刻触发 E003（渲染出的 slot-2/slot-3 各计数两次、
+且缺失字段判定为「与 Trip 不符」）。改用 `data-dining-slot` 承载同样的「指回哪个 slot」语义，问题消失。
+另发现既有 E003 的「已知 CNY 价格」集合只收 `transport_legs`/`lodgings`/`pois` 的 `price.amount`，会把
+页面上真实存在的「人均 ¥32」误判成臆造事实；把 `slot.dining.options[].cost_cny` 并入 `known_prices`
+后消失（`render/validate_html.py::_check_rendered_facts`，07-renderer.md §7.1 的 E003 条目已补一句）。
+
+`validate_html.py` 新增 `_check_dining_blocks(html_text, days, code, add)`（照抄 `_check_weather_blocks`
+的正则抠块思路：`DINING_BLOCK_RE` 抠出每个 `.slot-dining` 块与其 `data-dining-slot`，块数与「带 `dining`
+键的 slot 数」核对；`dining=null` 的块核对含「暂无」文案；有 options 的块用 `DINING_OPTION_RE` 逐条抠出
+`data-poi-id`/`data-rating`/`data-cost`/`data-distance` 与可见文本首段（名），与 `slot.dining.options[]`
+逐字比对），`_check_slot_dining` 包一层传入 `"E007"`。`validate_journey_html.py` 直接从 `.validate_html`
+导入 `_check_dining_blocks` 复用同一份逻辑，摊平 `[day for trip in journey["trips"] for day in
+trip["days"]]` 后传入 `"JH007"`，零改动共用函数本身。
+
+验收证据（①②③④）：
+```
+$ /usr/bin/python3 -c "render dining-references.json -> validate_html"
+ok: True []
+$ /usr/bin/python3 -c "... .count('class=\"slot-dining\"') ..."
+2   # 1 家带 2 options、1 家 dining:null
+$ grep -o 'uri.amap.com/marker[^"]*' rendered.html | head -1   # 命中
+$ grep -c '在高德 App 看附近美食' rendered.html               # 1
+② 篡改评分 4.7→4.9：validate_html -> ['E007 slot-dining option facts differ from Trip: slot-2']
+   删除一整块 <div class="slot-dining">…</div>：validate_html -> ['E007 slot-dining block count differs from source slots']
+③ 同一 Trip 经 assemble_journey_from_trips 装进 Journey：
+   render_journey(journey) 含 2 个 slot-dining、1 个 dining-none；validate_journey_html -> ok: True []
+   篡改评分：validate_journey_html -> ['JH007 slot-dining option facts differ from Trip: slot-2']
+④ /usr/bin/python3 scripts/build_renderer_fixtures.py   # journey_sha256/html_sha256 与开工基线一致
+   ctw plan（demo/trip.json+html 全部参数）重新生成后 git status --short 不含 demo/ 任何一行
+   全量 tests.test_keyless_e2e / tests.test_journey 里绑定其余三个 demo 目录字节相等的用例照常 OK
+```
+
+反向验证（红→绿）：临时注释掉 `_check_dining_blocks` 里 `or match.group("rating") != option["rating"]`
+这一行逐字比对，重跑「把评分从 4.7 改成 4.9」场景：`validate_html` 从「命中 E007」变成 `ok: True []`
+（检测失效，证明这行是必需的、不是摆设）；还原该行、`touch validate_html.py` 避开 CPython 秒级字节码
+缓存后重跑，恢复「命中 E007」（绿，见下方证据块）。
+
+`docs/design/03-trip-model.md` 在 `day.weather` 段后加一段讲 `slot.dining`/`diningOption`/
+`request.dining_preferences` 的字段与「纯增量、不进 required」的形状规则，链到 07 §2/§7.1。
+`docs/design/07-renderer.md` §2 第 7 条追加一句餐饮块的显示规则，§7.1 追加 E007 一条并给 E003 补一句
+CNY 集合的联动说明。两篇里新写的每个标识符/字面串（`diningReference`/`diningOption`/
+`dining_preferences`/`slot_dining_block`/`slot-dining`/`data-poi-id`/`data-rating`/`data-cost`/
+`data-distance`/「附近餐饮参考：暂无」/「在高德 App 看附近美食」/`E007`/`JH007` 等）逐一 `git grep`
+核对，全部在代码里命中。
+
+收尾全量：
+```
+$ /usr/bin/python3 -m unittest discover -s tests 2>&1 | tail -3
+Ran 761 tests in ~50s
+OK
+$ ~/miniconda3/envs/core/bin/python -m pyflakes $(git ls-files '*.py')   # 0 行
+$ /usr/bin/python3 scripts/scan_secrets.py                              # 0 finding(s)
+$ git diff main --name-only
+PROGRESS.md docs/design/03-trip-model.md docs/design/07-renderer.md
+plugins/china-trip-weaver/schema/trip.schema.json
+plugins/china-trip-weaver/src/china_trip_weaver/render/html.py
+plugins/china-trip-weaver/src/china_trip_weaver/render/validate_html.py
+plugins/china-trip-weaver/src/china_trip_weaver/render/validate_journey_html.py
+tests/test_contracts.py tests/test_journey.py tests/test_renderer.py
+$ git ls-files --others --exclude-standard
+tests/fixtures/trips/schema/invalid/dining-option-missing-rating.json
+tests/fixtures/trips/schema/valid/dining-references.json
+```
+全部落在白名单内；未碰 `providers/`、`planning.py`、`cli.py`、`demo/`。三处非阻塞判断（`DINING_LABELS`
+不进 `_labels()`、`data-dining-slot` 改名、`test_contracts.py` 两个计数）与一处联动（E003 的
+`known_prices`）已记入 BLOCKED.md 供管理者核对，均非产品语义裁决。

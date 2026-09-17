@@ -17,6 +17,7 @@ from .validate_html import (
     HTMLIssue,
     HTMLValidationReport,
     SECRET_PATTERNS,
+    _check_dining_blocks,
     _check_weather_blocks,
     _csp,
     _css_contract,
@@ -55,6 +56,7 @@ def validate_journey_html(
     _check_provider_health_coverage(parser, journey, add)
     _check_day_timeline_coverage(parser, journey, add)
     _check_day_weather(html_text, journey, add)
+    _check_slot_dining(html_text, journey, add)
     _check_transport_overview_coverage(parser, journey, add)
     checklist, risks = _check_checklist_priority_and_risk_traces(parser, journey, add)
     _check_budget_ledger(parser, journey, add)
@@ -181,6 +183,11 @@ def _check_day_timeline_coverage(
 def _check_day_weather(html_text: str, journey: Mapping[str, Any], add: Callable[[str, str], None]) -> None:
     days = [day for trip in journey["trips"] for day in trip["days"]]
     _check_weather_blocks(html_text, days, "JH006", add)
+
+
+def _check_slot_dining(html_text: str, journey: Mapping[str, Any], add: Callable[[str, str], None]) -> None:
+    days = [day for trip in journey["trips"] for day in trip["days"]]
+    _check_dining_blocks(html_text, days, "JH007", add)
 
 
 def _check_transport_overview_coverage(

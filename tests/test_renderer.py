@@ -254,6 +254,39 @@ class RendererTests(unittest.TestCase):
         report = validate_html(mutated, trip)
         self.assertIn("E006", [item.code for item in report.errors])
 
+    def test_slot_dining_renders_options_and_none_with_zero_errors(self):
+        trip = load(VALID / "dining-references.json")
+        rendered = render_trip(trip)
+        visible = visible_text(rendered)
+
+        self.assertEqual(2, rendered.count('class="slot-dining"'))
+        self.assertEqual(1, rendered.count('class="dining-none"'))
+        self.assertIn('data-poi-id="B0FFG00001" data-rating="4.7" data-cost="32" data-distance="320"', rendered)
+        self.assertIn('data-poi-id="B0FFG00002" data-rating="4.5" data-cost="" data-distance="480"', rendered)
+        self.assertIn("uri.amap.com/marker", rendered)
+        self.assertIn("在高德 App 看附近美食", visible)
+        self.assertIn("附近餐饮参考：暂无", visible)
+        report = validate_html(rendered, trip)
+        self.assertTrue(report.ok, [item.render() for item in report.errors])
+
+    def test_slot_dining_rating_mismatch_reports_e007(self):
+        trip = load(VALID / "dining-references.json")
+        rendered = render_trip(trip)
+        mutated = rendered.replace('data-rating="4.7"', 'data-rating="4.9"', 1)
+        self.assertNotEqual(mutated, rendered)
+
+        report = validate_html(mutated, trip)
+        self.assertIn("E007", [item.code for item in report.errors])
+
+    def test_slot_dining_block_removed_reports_e007(self):
+        trip = load(VALID / "dining-references.json")
+        rendered = render_trip(trip)
+        mutated = re.sub(r'<div class="slot-dining".*?</div>', "", rendered, count=1, flags=re.DOTALL)
+        self.assertNotEqual(mutated, rendered)
+
+        report = validate_html(mutated, trip)
+        self.assertIn("E007", [item.code for item in report.errors])
+
     def test_multicity_locations_are_grouped_without_cross_city_route_line(self):
         trip = load(VALID / "multicity-static.json")
         poi = copy.deepcopy(trip["pois"][0])
