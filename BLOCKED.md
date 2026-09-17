@@ -2142,4 +2142,7 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 **一处非阻塞设计判断，供核对**（详见 PROGRESS.md「AN8b 任务 1 完成」小节）：`replace_trips_in_journey(journey, trips, base_revision, clock, reason=None, created_by="user")` 在 `reason` 为 `None` 时该取哪个 Trip 的 `revision.reason` 作默认值，任务书只给了函数签名、未定义多 Trip 场景的取法。按「保持与原单 Trip 版本行为一致」的原则，取 `trips[0]["revision"]["reason"]`（原版本是唯一那个 Trip 自己的 reason，现在退化为列表第一个）；由于 `fold_weather_into_journey` 传入的 `changed_trips` 顺序就是 `journey["trips"]` 的原序（只保留真正变化的那些），「列表第一个」总是这批变化里日期最早的 Trip，语义上是单 Trip 版本的自然推广，不影响任何调用方（`fold_weather_into_journey` 和 `_cmd_journey_weather` 都显式传了 `reason`，从未走到这条默认值分支）。
 
 任务 3 真实行程只读演练（`fujian-2026-09-25-to-10-10/journey.json`，revision 9）额外确认一件事，供核对：距最早一天 9/25 还有 8 天，高德「当天+3 天」视野下 `ctw weather --journey` 22 行全部 `out_of_window`，`ctw journey weather` 因此对真实行程必然是 NOOP（退出 2、不写文件、sha 不变）——这是当前日期下的正常行为，不是缺陷；两条命令折回真实文件的正向路径（有预报可折时 revision 是否真的只加一）留给 9/22 之后那本「把预报折回现役 journey.json」的书用真实预报数据验收。
+## 书 AN8c「天气折回文档」（2026-09-17，第三十二波，worktree `.tmp/wt-an8c` 分支 `journey-weather-docs`）：无
+
+无。全程没有遇到拿不准、需要管理者裁决的真实二义性。本书只改文档，写的是「拍的板」规定的目标态（`replace_trips_in_journey`、`_cmd_journey_weather`、`forecasts[].query` 等 AN8b 尚未合并的名字），核对方式是把另外 7 个已在 main 落地的标识符逐一 `git grep -n -- plugins tests` 确认真实存在（`fold_weather_into_journey`/`weather_fold_claim_missing`/`revision_conflict`/`split_city_names`/`weather_no_results`/`JH006`/`_plan_weather`，均命中，见 PROGRESS.md 本书任务 0/任务 2 记录），本书拍的板里的新名字则逐字比对文案与任务书原文。合并时仍需管理者对照 AN8b 实际落地的代码核验这些目标态名字与签名是否一致。
 

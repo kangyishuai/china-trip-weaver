@@ -200,6 +200,17 @@ user_locked_refs[], optional allowed_changes[], now
 
 未受影响且未过期的 claims 不重查。最小 patch/stability contract 的最终阈值仍需四类 golden（下雨、闭馆、误车、删点）验证。[依据：开放问题 Q11](../research/05-open-questions.md#q11-局部重排的最小-patchstability-contract-应是什么)
 
+### 7.6 天气折回
+
+`weather_fold.py` 把独立发起的 `ctw weather --output-json` 查询结果折回一个已存在的 Trip 或 Journey，是 §7.1–7.5 局部重排合同之外的另一条 patch 生成路径：它不经过 `base_trip + event + locks` 的影响分析，只比对查询结果与 Trip 当前的 `day.weather`。
+
+- **触发**：调用方拿到 `ctw weather --output-json` 的结果信封后，对单个 Trip 调 `fold_weather_into_trip(trip, result, clock, reason=None)`；对整个 Journey 调 `fold_weather_into_journey(journey, result, base_revision, clock, reason=None)`（内部逐 Trip 调用前者）。命令 `ctw journey weather` 驱动后者对一份 Journey 文件工作，用法是先 `ctw weather --journey J --output-json W.json`，再 `ctw journey weather --journey J --weather-result W.json --base-revision N --output-json OUT`；`base_revision` 不等于 Journey 当前 revision 时抛 `revision_conflict`，退出码 1，`--journey` 原文件永不写回。
+- **匹配**：逐天按（`day["date"]` 与 `forecasts[]` 行的 `date` 相同）且（该行 `query` 等于 `split_city_names(day["city"])` 的第一段）匹配唯一一行；没有 `query` 键的行永远不匹配，取不到任何匹配行的天不动。
+- **覆盖判定**：`status="forecast"` 的行只在算出的新 `day.weather` 与当前值不同时才算变化；`status="no_forecast"` 的行只在当前 `weather` 非 `null`、或已有 unknown 的 `reason` 不是 `weather_no_results` 时才算变化；`status="out_of_window"` 或没有匹配行的天永远不变化。折同一个结果两次，第二次逐天都落进「无变化」分支，函数返回 `None`；命令行层面对应 `JOURNEY_WEATHER_NOOP`，退出码 2，不写 `--output-json`。
+- **patch 形状**：有变化的天在一个 patch 里按固定顺序生成 operations——先删旧 `/unknowns/<i>`，再删旧 `/claims/<i>`（按原 `day.weather.claim_id` 定位），然后对每天 `add` 或 `replace` `/days/<i>/weather`（`no_forecast` 顺带 `add` 一条 `/unknowns/<i>`），再 `add` 新 claim，最后按需 `add`/`replace` 一条 `provider=amap` 的 `/provider_health/<i>`；patch 的 `trigger` 固定为 `weather`，`reverify_claim_ids` 恒为空。`forecast` 行必须能在 `result["claims"]` 里找到 `value` 与该行 `forecast` 逐键相等的一条，找不到抛 `weather_fold_claim_missing`；返回前用 `validate_trip`/`validate_journey` 复核，不过就抛错，折回从不产出无效 Trip/Journey。
+- **健康行**：只要本次至少一天变化，Trip 的 `provider_health` 里 `provider=amap` 的那一行 `capabilities` 补上 `weather`（若缺）、`status`/`mode` 不是 `ready`/(`live`或`cached`) 时强制改为 `ready`/`live`、`reason` 末尾追加 `"; weather=<变化天数> days folded (<queried_at>)"`；这一行原本不存在时新建一条。
+- **多 Trip 一次重组**：`fold_weather_into_journey` 把每个被改的子 Trip 交给 `journey.py` 的 `replace_trips_in_journey` 一次重组，不论有几个子 Trip 同时变化，Journey 的 revision 只加一（不会因为逐个替换而链式跳号）；重组后的 `revision.created_by` 固定改回 `"system"`。命令成功时打印 `JOURNEY_WEATHER_COMPLETE`，退出码 0。折回过程只读既有的 `contracts`/`validate_trip`/`journey`/`planning`/`replan`/`weather` 模块，不发起新的 provider 调用。
+
 ## 8. Pipeline 可恢复性与确定性
 
 - 每阶段产生带 `trip_id/revision/stage/schema_version/input_hash/provider versions` 的 checkpoint；不保存 secret/raw personal data。

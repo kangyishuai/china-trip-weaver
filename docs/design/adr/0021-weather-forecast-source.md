@@ -1,6 +1,6 @@
 # ADR-0021: Weather forecasts — source, horizon, advice, and where they live
 
-- **Status:** Accepted（2026-09-17 领导裁决；第二十九波 AN1/AN2 已落地数据层与页面层，规划器接线与 `ctw weather` 命令在第三十波）
+- **Status:** Accepted（2026-09-17 领导裁决；第二十九波 AN1/AN2 已落地数据层与页面层，规划器接线与 `ctw weather` 命令在第三十波；折回既有 Trip/Journey——库函数 `weather_fold.py` 与命令 `ctw journey weather`——在第三十一、三十二波落地，见下方 Implementation record）
 - **Date:** 2026-09-17
 
 ## Context
@@ -81,11 +81,8 @@ convention (ADR-0004, `provider-contracts.md`).
   a guess — when the provider is off, unconfigured, rate-limited, ambiguous or
   out of horizon.
 - Deferred, with reasons: VariFlight airport weather stays undispatched (a
-  second, airport-scoped source would need its own conflict rule); the
-  `_request_contract` weather branch has no request-shape unit test yet (the
-  fixture corpus replays transports and never builds the URL) — the next wave
-  adds one; Open-Meteo can be reconsidered only with a pinned contract and
-  verified terms.
+  second, airport-scoped source would need its own conflict rule); Open-Meteo
+  can be reconsidered only with a pinned contract and verified terms.
 
 ## Evidence
 
@@ -98,3 +95,34 @@ convention (ADR-0004, `provider-contracts.md`).
 - Schema: `plugins/china-trip-weaver/schema/trip.schema.json`
   `#/$defs/weatherForecast` and `day.weather`; docs `03-trip-model.md`,
   `07-renderer.md` §2/§7.1.
+
+## Implementation record
+
+Landed across four waves; each module/command name below carries no version
+number (PROGRESS.md's per-version 现状速览 maps a wave to the release it
+shipped in).
+
+- **Data layer**（第二十九波 AN1）: `amap.py::_weather` as the AMap adapter's
+  fifth capability; leaf module `weather.py` (`forecast_available_on`,
+  `split_city_names`, `advice_for`, `location_key_vote`, `result_reason`).
+- **Trip/Journey model and pages**（第二十九波 AN2）: optional `day.weather`
+  (`#/$defs/weatherForecast`); one weather line per day on both the Trip page
+  and the Journey page, checked back word-for-word by validators `E006`/`JH006`.
+- **Planner wiring**（第三十波 AN7）: `planning.py::_plan_weather`, called from
+  `plan_trip` only when `active_mobility.mode == "live"`; writes `day.weather`
+  or a weather `unknown` for every day.
+- **Query command**（第三十波 AN6）: `ctw weather`
+  (`--city`/`--adcode`/`--journey`/`--trip`, `--output-json`), plus the
+  `amap_http._request_contract` weather-branch request-shape unit test this
+  ADR's Consequences used to list as deferred.
+- **Fold-back**（第三十一波 AN8、第三十二波 AN8b）: library functions
+  `fold_weather_into_trip`/`fold_weather_into_journey` in `weather_fold.py`
+  match a `ctw weather --output-json` result's `forecasts[]` rows to Trip days
+  by date and `query`, and write the matched forecast — or a
+  `weather_no_results` unknown — into `day.weather`. Command
+  `ctw journey weather` (`cli.py::_cmd_journey_weather`) drives
+  `fold_weather_into_journey` against a Journey file in two steps
+  (`ctw weather --journey` first, then `ctw journey weather --weather-result`);
+  when more than one child Trip changes, `journey.py::replace_trips_in_journey`
+  reassembles them in one pass so the Journey's revision advances by exactly
+  one instead of once per Trip.

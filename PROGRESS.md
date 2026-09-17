@@ -1279,3 +1279,68 @@ tests/test_weather_fold.py
 ```
 
 `tests/test_journey.py` 全程未打开过 Edit/Write，`git diff main -- tests/test_journey.py` 输出为空，逐字未改；该文件覆盖的 90 项测试本节任务 1 已单独跑绿。BLOCKED.md 本书记了「无裁决分叉，一处非阻塞设计判断供核对」一条（`replace_trips_in_journey` 的 `reason` 默认值取法，详见任务 1 小节）。只提交并推送 `journey-weather` 分支，未合并、未碰 CI 配置。
+## 第三十二波 AN8c「天气折回文档」（2026-09-17，worktree `.tmp/wt-an8c` 分支 `journey-weather-docs`）
+
+### 任务 0：核对与理解
+
+- 目标：把已在 main 的 `weather_fold.py`（AN8）与并行开发中的 `ctw journey weather` 命令（AN8b，同一份「拍的板」规格）写进 README×2、三份设计文档、ADR-0021、一份 SKILL；只改文档，不碰任何 `.py`。
+- 顺序：任务 1（README+SKILL，两条命令式验收）→ 任务 2（设计文档+ADR，`git grep` 标识符清单）→ 完成条件两条核对 → 只提交推送分支，不合并。
+- 基线：`unittest discover` `Ran 750 tests ... OK`，0 skipped；`git grep -c "ctw journey weather" -- README.md docs` 0 命中（exit 1，无输出）。
+- 最大风险：①AN8b 的 `replace_trips_in_journey`/`_cmd_journey_weather`/`forecasts[].query` 键尚未合并，文档必须按规格写目标态而非抄现状；另外 7 个既有标识符（`fold_weather_into_journey`/`weather_fold_claim_missing`/`revision_conflict`/`split_city_names`/`weather_no_results`/`JH006`/`_plan_weather`）已逐个 `git grep` 确认真实存在于 `weather_fold.py`/`weather.py`/`planning.py`/validator 代码再抄，不臆造拼写。②README 两份 `^ctw journey weather` 用法行须逐字节相同，一份定稿后原样复制到另一份，不分别改写。
+
+### 任务 1 完成（README + SKILL）
+
+README.md/README.zh-CN.md 各加一行用法（`ctw journey assemble --journey` 之后）与一段说明（`ctw weather` 段之后），两份用法行逐字节相同；`resolve-china-mobility/SKILL.md` 正文加一条折回说明与一行命令，frontmatter 未动。验收：
+
+```
+/usr/bin/python3 -m unittest tests.test_skills -v
+Ran 11 tests in 0.438s
+OK
+
+diff <(grep '^ctw journey weather' README.md) <(grep '^ctw journey weather' README.zh-CN.md)
+（无输出，exit 0）
+```
+
+### 任务 2 完成（设计文档 + ADR）
+
+03-trip-model.md 第 33 行末句改成「规划器 `_plan_weather` 在 live 时写入；`weather_fold` 把 `ctw weather` 结果折回」并各带一条到 06-pipeline 对应小节的链接；06-pipeline.md 加 `### 7.6 天气折回`（触发/匹配/覆盖判定/patch 形状/健康行/多 Trip 一次重组六段，对着 main 上 `weather_fold.py` 逐行核对）；09-impl-map.md 三行分别加 `journey weather`（`_cmd_journey_weather`）、`replace_trips_in_journey`、把 `weather_fold.py` 行的 `replace_trip_in_journey` 改成 `replace_trips_in_journey` 一次重组；ADR-0021 补 Status 一句、删 Deferred 里已完成的请求形状单测一条、按四波列出 `## Implementation record`。验收：
+
+```
+/usr/bin/python3 -m unittest tests.test_design_docs -v
+Ran 1 test in 0.001s
+OK
+```
+
+7 个既有标识符逐一 `git grep -n ... -- plugins tests` 核对（均命中，详见任务 0 记录）：`fold_weather_into_journey`（weather_fold.py:100、tests/test_weather_fold.py）、`weather_fold_claim_missing`（weather_fold.py:166、同测试文件）、`revision_conflict`（journey.py:1743、replan.py:36 等 7 处）、`split_city_names`（cli.py 两处、planning.py 等 5 处）、`weather_no_results`（planning.py:461、weather.py:80 等 5 处）、`JH006`（validate_html.py:428、validate_journey_html.py:183、test_journey.py:1690）、`_plan_weather`（planning.py:409/654、test_planner_weather.py:16）。本书拍的板里的新名字（`ctw journey weather`／`--weather-result`／`JOURNEY_WEATHER_NOOP`／`JOURNEY_WEATHER_COMPLETE`／`replace_trips_in_journey`／`_cmd_journey_weather`／`query`）已在全部新增文案里逐字核对拼写一致。
+
+### 完成条件核对
+
+```
+/usr/bin/python3 -m unittest discover -s tests
+Ran 750 tests in 44.701s
+OK
+
+/usr/bin/python3 scripts/scan_secrets.py
+secret scan: 0 finding(s) across 405 file(s)
+
+~/miniconda3/envs/core/bin/python -m pyflakes $(git ls-files '*.py')
+（0 行输出）
+
+git status --short -- demo
+（空）
+
+git diff main --name-only
+PROGRESS.md
+README.md
+README.zh-CN.md
+docs/design/03-trip-model.md
+docs/design/06-pipeline.md
+docs/design/09-impl-map.md
+docs/design/adr/0021-weather-forecast-source.md
+plugins/china-trip-weaver/skills/resolve-china-mobility/SKILL.md
+
+git diff main -- README*.md docs plugins | grep -c -E "^\+.*(/Users/|0\.2[0-9]\.[0-9])"
+0
+```
+
+全部文件都在白名单内（BLOCKED.md 随交付另提交，本轮未改动它就已是空提交，故未列在此 diff 里）；未改任何 `.py`、schema、demo、夹具或其他 SKILL。只提交并推送 `journey-weather-docs` 分支，不合并。
