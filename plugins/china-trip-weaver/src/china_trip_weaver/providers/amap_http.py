@@ -388,6 +388,9 @@ def _request_contract(request: ProviderRequest) -> Tuple[str, Dict[str, Any], st
     if request.capability == "poi_around":
         page_size = _bounded_integer(values.get("page_size", 10), "page_size", 1, 25)
         radius = _bounded_integer(values.get("radius", 3000), "radius", 1, 50000)
+        sortrule = values.get("sortrule", "distance")
+        if sortrule not in ("distance", "weight"):
+            raise ContractMismatch("AMap poi_around sortrule must be distance or weight")
         return (
             AMAP_ORIGIN + "/v5/place/around",
             {
@@ -398,7 +401,7 @@ def _request_contract(request: ProviderRequest) -> Tuple[str, Dict[str, Any], st
                 "page_size": page_size,
                 "page_num": 1,
                 "show_fields": "business",
-                "sortrule": "distance",
+                "sortrule": sortrule,
             },
             "around-v5",
         )

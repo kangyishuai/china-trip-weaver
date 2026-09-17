@@ -1,0 +1,187 @@
+{
+  "captured_at": "2026-09-04T00:00:00+08:00",
+  "case": "around_dining",
+  "contains_personal_data": false,
+  "credential_state": "configured",
+  "expected": {
+    "error_class": null,
+    "health_status": "ready",
+    "item_count": 6,
+    "sanitized": false,
+    "schema_refs": [
+      "#/$defs/poi",
+      "#/$defs/poi",
+      "#/$defs/poi",
+      "#/$defs/poi",
+      "#/$defs/poi",
+      "#/$defs/poi"
+    ],
+    "transport_calls": 1
+  },
+  "fixture_version": 1,
+  "provider": "amap",
+  "provider_version": "web-service-v5-v3-route",
+  "redacted": false,
+  "request": {
+    "as_of": "2026-10-16",
+    "cache_policy": "bypass",
+    "capability": "poi_around",
+    "deadline_ms": 1000,
+    "parameters": {
+      "keywords": "餐厅",
+      "location": "121.000000,31.000000",
+      "page_size": 10,
+      "radius": 1500,
+      "sortrule": "weight",
+      "types": "050100|050200|050400"
+    },
+    "request_id": "fixture-request",
+    "trace": {
+      "stage": "provider-fixture"
+    }
+  },
+  "source": "locally generated synthetic AMap-shaped response; contains no captured provider data",
+  "transport": {
+    "body": {
+      "api": "around-v5",
+      "count": "6",
+      "info": "OK",
+      "infocode": "10000",
+      "page_num": 1,
+      "page_size": 10,
+      "pois": [
+        {
+          "adcode": "310000",
+          "address": "示例路1号",
+          "adname": "示例区",
+          "business": {
+            "business_area": "示例商圈",
+            "cost": "88",
+            "keytag": "川菜",
+            "opentime_today": "10:00-22:00",
+            "opentime_week": "周一至周日 10:00-22:00",
+            "rating": "4.5",
+            "rectag": "人气餐厅;必吃榜",
+            "tag": "川菜;火锅"
+          },
+          "cityname": "上海市",
+          "distance": "820",
+          "id": "SYNTHETIC-AROUND-DINING-1001",
+          "location": "121.005000,31.003000",
+          "name": "示例川菜馆",
+          "pname": "上海市",
+          "type": "餐饮服务;中餐厅;中餐厅"
+        },
+        {
+          "adcode": "310000",
+          "address": "示例路1号",
+          "adname": "示例区",
+          "business": {
+            "business_area": "示例商圈",
+            "cost": "150",
+            "keytag": "海鲜",
+            "opentime_today": "11:00-21:30",
+            "opentime_week": "周一至周日 11:00-21:30",
+            "rating": "4.2",
+            "rectag": "人气餐厅",
+            "tag": "粤菜;海鲜"
+          },
+          "cityname": "上海市",
+          "distance": "1240",
+          "id": "SYNTHETIC-AROUND-DINING-1002",
+          "location": "121.005000,31.003000",
+          "name": "示例海鲜楼",
+          "pname": "上海市",
+          "type": "餐饮服务;海鲜酒楼;海鲜酒楼"
+        },
+        {
+          "adcode": "310000",
+          "address": "示例路1号",
+          "adname": "示例区",
+          "business": {
+            "business_area": "示例商圈",
+            "cost": "35",
+            "keytag": "小吃",
+            "opentime_today": "07:00-20:00",
+            "opentime_week": "周一至周日 07:00-20:00",
+            "rating": "4.8",
+            "rectag": "必吃榜",
+            "tag": "小吃;快餐"
+          },
+          "cityname": "上海市",
+          "distance": "310",
+          "id": "SYNTHETIC-AROUND-DINING-1003",
+          "location": "121.005000,31.003000",
+          "name": "示例小吃店",
+          "pname": "上海市",
+          "type": "餐饮服务;小吃快餐店;小吃快餐店"
+        },
+        {
+          "adcode": "310000",
+          "address": "示例路1号",
+          "adname": "示例区",
+          "business": {
+            "business_area": "示例商圈",
+            "cost": "200",
+            "keytag": "西餐",
+            "opentime_today": "11:30-22:00",
+            "opentime_week": "周一至周日 11:30-22:00",
+            "rating": "4.0",
+            "rectag": "情侣推荐",
+            "tag": "西餐;牛排"
+          },
+          "cityname": "上海市",
+          "distance": "1480",
+          "id": "SYNTHETIC-AROUND-DINING-1004",
+          "location": "121.005000,31.003000",
+          "name": "示例西餐厅",
+          "pname": "上海市",
+          "type": "餐饮服务;西餐厅;西餐厅"
+        },
+        {
+          "adcode": "310000",
+          "address": "示例路1号",
+          "adname": "示例区",
+          "business": {
+            "business_area": "示例商圈",
+            "cost": "30",
+            "keytag": "快餐",
+            "opentime_today": "09:00-21:00",
+            "opentime_week": "周一至周日 09:00-21:00",
+            "rectag": "",
+            "tag": "快餐"
+          },
+          "cityname": "上海市",
+          "distance": "640",
+          "id": "SYNTHETIC-AROUND-DINING-1005",
+          "location": "121.005000,31.003000",
+          "name": "示例快餐店",
+          "pname": "上海市",
+          "type": "餐饮服务;快餐厅;快餐厅"
+        },
+        {
+          "adcode": "310000",
+          "address": "示例路1号",
+          "adname": "示例区",
+          "business": {
+            "cost": "108",
+            "keytag": "火锅",
+            "rating": "4.3",
+            "tag": "火锅"
+          },
+          "cityname": "上海市",
+          "distance": "960",
+          "id": "SYNTHETIC-AROUND-DINING-1006",
+          "location": "121.005000,31.003000",
+          "name": "示例火锅店",
+          "pname": "上海市",
+          "type": "餐饮服务;火锅店;火锅店"
+        }
+      ],
+      "status": "1"
+    },
+    "headers": {},
+    "kind": "response",
+    "status_code": 200
+  }
+}

@@ -762,6 +762,7 @@
         "price": {
           "oneOf": [{"$ref": "#/$defs/price"}, {"type": "null"}]
         },
+        "distance_meters": {"type": ["integer", "null"], "minimum": 0},
         "deep_links": {"type": "array", "items": {"$ref": "#/$defs/url"}},
         "claim_ids": {"$ref": "#/$defs/idList"}
       }

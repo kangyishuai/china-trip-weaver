@@ -5,6 +5,10 @@
       "sha256": "a0acfce31ff5b086a15d8da57b6576f61e6497588ac8a8df60aa0dcded2bfe08"
     },
     {
+      "path": "amap/around_dining.json",
+      "sha256": "34b4728fac9cdc2e102f210370db4a255570fbf1cd959bb0c5cbd161a5aab800"
+    },
+    {
       "path": "amap/around_stations.json",
       "sha256": "75de1deb32995bb61a5166b4a0d91502eb414a01993daebf0e044c6f7ff4dc42"
     },
@@ -353,7 +357,7 @@
       "sha256": "46fd6e92dfa195da7d89386332f94ba20a9279229c78bec2ec1eaf2296321f2e"
     }
   ],
-  "fixture_count": 88,
+  "fixture_count": 89,
   "generated_by": "scripts/build_provider_fixtures.py",
   "manifest_version": 1
 }

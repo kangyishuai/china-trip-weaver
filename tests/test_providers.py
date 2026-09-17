@@ -25,7 +25,8 @@ from china_trip_weaver.providers import (
     Rail12306Adapter,
     VariFlightAdapter,
 )
-from china_trip_weaver.providers.base import ProviderContext, ProviderEnvelope, ReplayTransport
+from china_trip_weaver.providers import amap_http
+from china_trip_weaver.providers.base import ContractMismatch, ProviderContext, ProviderEnvelope, ReplayTransport
 from china_trip_weaver.providers.rail12306 import EXPECTED_TOOLS as RAIL_TOOLS
 from china_trip_weaver.providers.variflight import EXPECTED_TOOLS as VARIFLIGHT_TOOLS
 from china_trip_weaver.validate_trip import SchemaSubsetValidator, load_schema
@@ -114,7 +115,7 @@ class ProviderCorpusTests(unittest.TestCase):
         manifest = load(FIXTURES / "manifest.json")
         listed = {entry["path"] for entry in manifest["files"]}
         actual = {path.relative_to(FIXTURES).as_posix() for path in fixture_paths()}
-        self.assertEqual(88, manifest["fixture_count"])
+        self.assertEqual(89, manifest["fixture_count"])
         self.assertEqual(listed, actual)
         for entry in manifest["files"]:
             data = (FIXTURES / entry["path"]).read_bytes()
@@ -656,6 +657,154 @@ class AMapIdentityAndSemanticTests(unittest.TestCase):
             "verified",
             {claim["status"] for claim in result.claims if claim["claim_id"] in implicated},
         )
+
+
+def _poi_around_request(parameters):
+    return ProviderRequest(
+        request_id="req-poi-around-contract",
+        capability="poi_around",
+        parameters=parameters,
+        deadline_ms=1000,
+        as_of="2026-09-17",
+    )
+
+
+class PoiAroundRequestContractTests(unittest.TestCase):
+    """Transport-layer coverage for the `sortrule` handling in the `poi_around`
+    branch of amap_http._request_contract. Before this class, that branch
+    always hardcoded sortrule=distance and no test exercised it directly.
+    """
+
+    @staticmethod
+    def _base_parameters(**overrides):
+        parameters = {
+            "location": "121.000000,31.000000",
+            "keywords": "餐厅",
+            "types": "050100|050200|050400",
+        }
+        parameters.update(overrides)
+        return parameters
+
+    def test_request_contract_defaults_sortrule_to_distance(self):
+        _, parameters, api = amap_http._request_contract(
+            _poi_around_request(self._base_parameters())
+        )
+        self.assertEqual("distance", parameters["sortrule"])
+        self.assertEqual("around-v5", api)
+
+    def test_request_contract_passes_through_weight_sortrule(self):
+        _, parameters, _ = amap_http._request_contract(
+            _poi_around_request(self._base_parameters(sortrule="weight"))
+        )
+        self.assertEqual("weight", parameters["sortrule"])
+
+    def test_request_contract_rejects_unsupported_sortrule(self):
+        with self.assertRaises(ContractMismatch):
+            amap_http._request_contract(
+                _poi_around_request(self._base_parameters(sortrule="rating"))
+            )
+
+
+class AroundDiningFixtureTests(unittest.TestCase):
+    """Extra coverage for the around_dining fixture beyond the generic replay
+    in ProviderCorpusTests (book AP1a, task 1 checklist item 2).
+    """
+
+    FIXTURE_PATH = FIXTURES / "amap" / "around_dining.json"
+
+    def test_fixture_recorded_request_used_weight_sortrule(self):
+        fixture = load(self.FIXTURE_PATH)
+        self.assertEqual("weight", fixture["request"]["parameters"]["sortrule"])
+
+    def test_raw_distances_are_not_sorted_ascending(self):
+        fixture = load(self.FIXTURE_PATH)
+        distances = [int(poi["distance"]) for poi in fixture["transport"]["body"]["pois"]]
+        self.assertEqual(6, len(distances))
+        self.assertNotEqual(sorted(distances), distances)
+
+    def _replay(self):
+        fixture = load(self.FIXTURE_PATH)
+        adapter = AMapAdapter()
+        request = ProviderRequest(**fixture["request"])
+        credentials = resolve_credentials(PROVIDER_ENV["amap"], ROOT / ".tmp" / "provider-fixture-no-file")
+        transport = ReplayTransport(fixture["transport"], raw_ref=str(self.FIXTURE_PATH))
+        context = ProviderContext(
+            clock=FixedClock.from_iso(fixture["captured_at"]),
+            credentials=credentials,
+            transport=transport,
+        )
+        return fixture, adapter.query(request, context)
+
+    def test_replay_yields_six_items_with_expected_business_variety(self):
+        _, result = self._replay()
+        self.assertEqual(6, len(result.normalized_items))
+        business_claims = [claim for claim in result.claims if claim["field_path"] == "/business"]
+        self.assertEqual(6, len(business_claims))
+        full_keys = {
+            "rating", "cost", "tag", "keytag", "rectag",
+            "opentime_today", "opentime_week", "business_area",
+        }
+        full_count = sum(1 for claim in business_claims if full_keys.issubset(claim["value"]))
+        self.assertEqual(4, full_count)
+        no_rating = [claim for claim in business_claims if "rating" not in claim["value"]]
+        self.assertEqual(1, len(no_rating))
+        hotpot = [claim for claim in business_claims if claim["value"].get("keytag") == "火锅"]
+        self.assertEqual(1, len(hotpot))
+
+    def test_each_item_carries_distance_meters_equal_to_fixture_distance(self):
+        fixture, result = self._replay()
+        raw_pois = fixture["transport"]["body"]["pois"]
+        self.assertEqual(6, len(result.normalized_items))
+        for item, raw in zip(result.normalized_items, raw_pois):
+            self.assertIsInstance(item["distance_meters"], int)
+            self.assertEqual(int(raw["distance"]), item["distance_meters"])
+
+    def test_fifth_item_business_claim_has_no_rating(self):
+        _, result = self._replay()
+        fifth_item = result.normalized_items[4]
+        business_claim = next(
+            claim for claim in result.claims
+            if claim["field_path"] == "/business" and claim["claim_id"] in fifth_item["claim_ids"]
+        )
+        self.assertNotIn("rating", business_claim["value"])
+
+
+class DistanceMetersByApiTests(unittest.TestCase):
+    """Task 1 checklist item 3: around-v5 carries distance_meters, poi-v5
+    (text search) leaves it None."""
+
+    def test_around_stations_item_carries_the_fixture_distance(self):
+        path = FIXTURES / "amap" / "around_stations.json"
+        fixture = load(path)
+        adapter = AMapAdapter()
+        request = ProviderRequest(**fixture["request"])
+        credentials = resolve_credentials(PROVIDER_ENV["amap"], ROOT / ".tmp" / "provider-fixture-no-file")
+        transport = ReplayTransport(fixture["transport"], raw_ref=str(path))
+        context = ProviderContext(
+            clock=FixedClock.from_iso(fixture["captured_at"]),
+            credentials=credentials,
+            transport=transport,
+        )
+        result = adapter.query(request, context)
+        self.assertEqual(1, len(result.normalized_items))
+        self.assertEqual(5883, result.normalized_items[0]["distance_meters"])
+
+    def test_text_search_item_leaves_distance_meters_none(self):
+        path = FIXTURES / "amap" / "success.json"
+        fixture = load(path)
+        self.assertEqual("poi", fixture["request"]["capability"])
+        adapter = AMapAdapter()
+        request = ProviderRequest(**fixture["request"])
+        credentials = resolve_credentials(PROVIDER_ENV["amap"], ROOT / ".tmp" / "provider-fixture-no-file")
+        transport = ReplayTransport(fixture["transport"], raw_ref=str(path))
+        context = ProviderContext(
+            clock=FixedClock.from_iso(fixture["captured_at"]),
+            credentials=credentials,
+            transport=transport,
+        )
+        result = adapter.query(request, context)
+        self.assertEqual(1, len(result.normalized_items))
+        self.assertIsNone(result.normalized_items[0]["distance_meters"])
 
 
 for _path in fixture_paths():
