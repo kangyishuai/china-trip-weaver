@@ -2,20 +2,50 @@
 
 唯一的当前进度记录：现状速览（0.8.0 起每个版本一条）、几条长期有效的实测结论，以及历史索引。逐轮任务书、实测证据与验收记录按时间段归档，见「历史索引」——本文件不再留存单轮过程记录。
 
-## 现状速览（2026-09-15 实测，0.22.1）
+## 现状速览（2026-09-17 实测，0.23.0）
 
-- 版本：`0.22.1`，唯一来源是
+- 版本：`0.23.0`，唯一来源是
   `plugins/china-trip-weaver/.codex-plugin/plugin.json` 与
   `src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
   代码与文档一律引用这两处之一；只有本节的逐版本条目和 git tag 以版本号作索引。
-- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 699 tests`，`OK`，0 skipped；
+- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 744 tests`，`OK`，0 skipped；
   `scripts/scan_secrets.py` 0 命中；
   `~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src
   tests scripts` 0 行。带假 Key（`ANYSEARCH_API_KEY=... unittest`）跑全量同样
-  699 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。0.21.0 记过的
+  744 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。0.21.0 记过的
   「环境变量注入会让 `test_credentials` 红一项」已在 0.22.0 修好：那个文件现在于 `setUp`
   里按 `FILE_ALLOWLIST` 剥掉凭据环境变量，四个 Key 全设与一个不设两种跑法结果相同。
-- 覆盖率：`scripts/measure_coverage.py` 实测 10706 语句、miss 1210、**89%**。
+- 覆盖率：`scripts/measure_coverage.py` 2026-09-17 实测 11154 语句、miss 1259、**89%**（0.22.1 时 10706/1210/89%）。
+- 0.23.0（第二十九波四本＋第三十波三本，2026-09-17，全部并行成书、逐本验收合入）：**天气**从零到有——
+  AMap 适配器加第 5 个能力 `weather`（`amap.py::_weather`，`/v3/weather/weatherInfo`，只带 `adcode`
+  或 `city` 之一；「成功但空」判 `no_results`，多于一条 forecasts 判歧义 `weather_ambiguous:<n>` 绝不
+  取第一条），合成夹具 85→88；新叶子模块 `weather.py`（`FORECAST_DAYS=4`、`forecast_available_on`、
+  `split_city_names`、五条固定规则的 `advice_for`、`location_key_vote`、`result_reason`）。Trip 模型
+  加可选可空的 `day.weather`（`#/$defs/weatherForecast`，12 键全 required，`schema_version` 仍
+  1.0.0），Trip 页 `days` 与 Journey 页 `day-timeline` 每天各一行「天气：…」，`validate_html`/
+  `validate_journey_html` 用 E006/JH006 逐字回读；**只在文档里至少一天带 `weather` 键时才渲染**，
+  所以 0.22.1 之前的 Trip/Journey 与全部 demo 逐字节不变。规划器新增 `_plan_weather`（`plan_trip`
+  里 `_plan_trip_unknowns` 之后、不占独立 checkpoint）：只在高德 live 时跑，地点键先取当天 POI
+  `/provider_identity` 的 adcode 多数票（并列取最小）、无则退 `day.city` 第一段，同键一次只查一次，
+  每天要么写 `day.weather`（10 键+advice+claim_id，claim 以 day_id 为 subject）要么写 `null`＋
+  `/days/<i>/weather` 的 unknown（`weather_forecast_horizon:<可查日期>`/`weather_no_location`/
+  `weather_no_results`/`weather_ambiguous:<n>`/`weather_provider_error:<class>`），AMap 健康行
+  `capabilities` 加 `weather`、reason 追加 `; weather=<n> queried, <m> unknown`。新命令
+  `ctw weather`（`--city`/`--adcode` 可重复，或 `--journey`/`--trip` 逐日；`--fixture`+
+  `--fixed-clock` 回放；退出码同 `ctw rail`），并给 `amap_http._request_contract` 的 weather 分支补
+  了不需网络的请求形状单测。数据源、视野、歧义、建议、落点五项决定见 ADR-0021。
+  **锁定车次**两处真缺陷（AN4 实网发现）修好：E003 的已知车次集合并入
+  `request.locked_rail_services[].service_number`（此前 assumptions 被整段复制进每个原子 Trip，不含
+  那条腿的段假阳性中止整趟 `journey plan`）；`lockedRailService` 加可选 `arrive_time`，
+  `_locked_rail_candidate` 把它传给 `select_service`（G5023 两行同发 10:00、到福州 11:13/福州南 11:32
+  只靠 `depart_time` 消不了歧）。真实 16 天行程的 request 换成结构化锁定后从零实网 `journey plan`
+  一次通过：G1902 07:50→09:30、G5023 10:00→11:13 两腿 `locked:true`，`validate-html` errors=0，
+  现役 journey.json 未动。`ctw replan --event refresh` 现在同步重写时段 `title`（默认「起点 → 终点
+  铁路 车次号」，事件 `title` 可覆盖，空白报 `refresh_title`），ADR-0017/0018/0019 状态改为
+  Accepted，ADR-0020 未决项逐条补注。新增测试文件 `test_weather.py`、`test_weather_cli.py`、
+  `test_planner_weather.py`；测试 699 → 744，运行时+脚本 `.py` 计数 50 → 51，ADR 20 → 21。
+  已知未做：`ctw doctor --probe` 无天气探针；VariFlight 机场天气仍未派发；`ctw weather --city`
+  模式对「回放夹具＋时钟早于夹具数据」的整批 out_of_window 规则只在测试场景触发。
 - 0.22.1（第二十七波，纯重构，对外行为零变化）：「按车次号从当天的车里挑出唯一一趟」
   原本有两份实现——`replan.py` 一份，0.22.0 落地锁定车次时又在 `planning.py` 照搬了一份，
   改了消歧规则只改一处就会悄悄跑偏且无人知晓。现在只剩一份：新叶子模块
@@ -377,6 +407,9 @@
   标签名，不用 `git push --tags`。本机若 `git push` 报 `SSL_ERROR_SYSCALL`，
   先 `curl --noproxy '*' https://github.com` 探直连，通就用
   `env -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy -u https_proxy git push`。
+- 已知抖动：2026-09-17 发 0.23.0 前在本机跑 `scripts/measure_coverage.py`，首跑套件 `Ran 744 tests`
+  `FAILED (failures=1)`（失败项名未被脚本的尾部摘要保留），紧接着原样重跑全绿并出具 89%；同一时段
+  普通 `unittest discover` 与假 Key 全量各 744 全绿。记为抖动，下次再出现要把完整输出留下来。
 - 已知抖动：2026-09-10 GitHub CI 共四次在 `qa_renderer_browser.py` 起无头
   Chrome 时首条 CDP 命令 `Target.createTarget` 10 秒超时（3.9 两次；0.10.0
   发版提交 3.9 与 3.13 同时；D2 任务 3 提交 3.13 一次），`gh run rerun

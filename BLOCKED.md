@@ -2113,6 +2113,8 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 
 2. **非阻塞设计判断，供核对**（详细推导见 PROGRESS.md「AN6」任务 1 段）：任务书「拍的板」对 `--city`/`--adcode` 模式（没有显式目标日期）的「日期晚于今天+3 → out_of_window」规则，逐行套用既有 `weather.forecast_available_on` 公式只会得到「1 条 forecast + 3 条 out_of_window」，凑不出验收文字「`--fixed-clock 2026-09-01` 时 4 天全 out_of_window」。这不是我读错这个已被 `tests/test_weather.py` 钉住的公式（`forecast_available_on(2026-09-04)=2026-09-01`，`today=2026-09-01` 时 09-04 确实已进入可查窗口，理应显示 forecast，不该判 out_of_window）。最终改用「整批」判断：对比 `today` 与本批返回里最早的 `forecast_date`，`today` 早于它就整批标记 out_of_window（每行「可查日期」提示仍用该行自己的日期 −3 天），否则整批按真实值显示。这条规则只在「回放夹具 + `--fixed-clock` 早于夹具数据」的测试场景下才会触发，真实直连查询里 AMap 恒返回以当天为首日的数据，不会走到这条支路；已用任务书给的两个夹具+时钟组合验证 1:1 吻合验收文字，并做了反向验证（改大窗口阈值到 3650 天后两项断言按预期变红，还原后变绿）。未发现需要裁决的真实二义性，此处只是把非显然的推导过程留痕，供以后维护这段逻辑的人核对起点。
 
+管理者裁决（2026-09-17，验收时补记）：认可整批规则；管理者暗卷实测 `--adcode 350100 --adcode 350100` 只发 1 次请求、对真实行程 `--journey` 22 行全部 out_of_window 且退出 2。已关闭。
+
 3. **顺手活按任务书裁定不做**：
    - `cli.py::_probe_amap` 未加 `weather` 分支，`ctw doctor` 仍查不出高德天气能力是否配置正确——与书 AN1 记录的同一项未做事项重复，非新发现。
    - 把预报写进 `journey.json`（day.weather 由规划器主动填充）——按任务书标注属于 AN7（规划器天气接线）范围，本书未碰 `planning.py`/`journey.py`。
@@ -2124,3 +2126,6 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 1. **多数票的遍历顺序**：`_weather_location_key` 最初按「当天各 POI」直接构造 Python `set` 再取值列表，会因字符串哈希随机化在不同进程间产生不确定的取值顺序，导致平票时「取第一条」这一类回归测试变得不可复现。改成按当天 slots 出现顺序去重的列表（`dict.fromkeys(...)`）取代裸 `set`，多数票结果本身不受影响（多数票和最小值平票规则都与顺序无关），只是让"如果退化成不做多数票、直接取第一条"这条反向验证测试能确定性地变红。
 2. **健康行「查询数」的统计口径**：任务书写「`weather=<查询数> queried, <unknown 数> unknown`」但未定义「查询数」按次调用还是按地点键计数。因为地点键本身就是去重单位（一个键一次 `plan_trip` 只查一次），两种计数在本实现里数值相同，按地点键计数（`len(cache)`）实现，语义上更贴近“这次规划实际发起了几次天气查询”。
 3. **验收测试①「两天 Trip（9/05、9/10）」的结构**：`validate_trip._check_date_range_and_day_count` 要求 `trip.days` 与 `request.start_date..end_date` 连续覆盖，9/05 到 9/10 是 6 天而非 2 天，字面按「一个两天的 Trip」搭不出符合 schema 的夹具。按「两个各一天的 Trip，一个订在 9/05、一个订在 9/10」实现（`tests/test_planner_weather.py` 的 `PlanWeatherLiveTripTests`），分别覆盖「预报窗口内」与「超出预报窗口」两条路径，每个都完整跑通 `plan_trip`→`validate_trip`→`render_trip`→`validate_html` 全链路且零错误；「同键两天只查一次」与「健康行格式」两条改用一个横跨 9/05、9/06 两个连续日期、共享同一地点键的 2 天 Trip 单独验证。
+
+管理者裁决（2026-09-17，验收时补记）：三处判断全部认可（有序去重、按地点键计数、两个单日 Trip 替代不合法的两天 Trip）。合并后管理者用平移到明天的 demo 请求实网 `ctw plan --mobility live`：三天全部带 `weather`、页面三行天气、`validate-html` errors=0、AMap 健康行含 `weather`。已关闭。
+
