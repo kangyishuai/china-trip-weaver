@@ -152,6 +152,7 @@ class RecordingOpener:
 class ScriptedAmapTransport:
     def __init__(self, forbidden=False):
         self.calls = 0
+        self.poi_around_calls = 0
         self.forbidden = forbidden
         self._coordinates = {}
 
@@ -165,6 +166,7 @@ class ScriptedAmapTransport:
                 "poi": "poi-v5",
                 "geocode": "geocode-v3",
                 "route": "route-transit-v3",
+                "poi_around": "around-v5",
             }[capability]
             return ProviderEnvelope(200, {"status": "0", "info": "INVALID_USER_KEY", "api": api}, {})
         if capability == "poi":
@@ -225,6 +227,20 @@ class ScriptedAmapTransport:
                 key = "transits" if mode == "transit" else "paths"
                 body = {"api": api, "status": "1", "info": "OK", "route": {key: [path]}}
             return ProviderEnvelope(200, body, {})
+        if capability == "poi_around":
+            # The planner's nearby-dining stage (ADR-0022) queries once per distinct
+            # meal anchor whenever AMap mobility is live; answer with a valid empty page.
+            self.poi_around_calls += 1
+            return ProviderEnvelope(200, {
+                "status": "1",
+                "info": "OK",
+                "infocode": "10000",
+                "count": "0",
+                "api": "around-v5",
+                "page_num": 1,
+                "page_size": provider_request.parameters.get("page_size", 10),
+                "pois": [],
+            }, {})
         raise AssertionError(capability)
 
 
@@ -967,7 +983,8 @@ class AMapMobilityTests(unittest.TestCase):
             item for item in result.trip["unknowns"]
             if item["field_path"].startswith("/pois/0/")
         ]
-        self.assertEqual(["poi", "geocode"], transport.capabilities)
+        # The trailing poi_around is the planner's nearby-dining stage (ADR-0022).
+        self.assertEqual(["poi", "geocode", "poi_around"], transport.capabilities)
         self.assertIsNotNone(result.trip["pois"][0]["coordinates"])
         self.assertEqual(1, len(relevant))
         self.assertEqual("/pois/0/name", relevant[0]["field_path"])
@@ -1943,8 +1960,9 @@ class AMapMobilityTests(unittest.TestCase):
             item for item in result.trip["unknowns"]
             if item["field_path"] == "/lodgings/0/coordinates"
         ]
-        self.assertEqual(1, transport.calls)
-        self.assertEqual(["geocode"], transport.capabilities)
+        # The trailing poi_around is the planner's nearby-dining stage (ADR-0022).
+        self.assertEqual(2, transport.calls)
+        self.assertEqual(["geocode", "poi_around"], transport.capabilities)
         self.assertIsNone(result.trip["lodgings"][0]["coordinates"])
         self.assertEqual(1, len(unknowns))
         self.assertEqual("amap", unknowns[0]["provider"])

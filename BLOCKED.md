@@ -2292,3 +2292,76 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 ## 书 AP5b「dining 结果折回 Journey」（2026-09-18，第三十四波四本并行之一，worktree `.tmp/wt-ap5b` 分支 `dining-fold`）：无
 
 无。全程没有遇到拿不准、需要管理者裁决的真实二义性；实现严格按任务书已拍板的信封、patch、健康行、一次 Journey 重组与 CLI exit/output 契约执行。详细命令输出与反向验证红→绿证据见 PROGRESS.md「书 AP5b」小节。
+## 书 AP6a「规划器餐饮阶段」（2026-09-18，第三十四波，worktree `.tmp/wt-ap6a` 分支 `planner-dining`）：真实阻塞，供裁决——`_plan_dining` 接入 `plan_trip` 后，白名单外三个测试文件的 14 项既有测试失败
+
+**现象**：`_plan_dining` 严格按任务书「我替领导拍的板」实现并在 `plan_trip` 里紧跟 `_plan_weather` 之后接入（`active_mobility.mode == "live"` 时才跑）。接入后本书自己新建的 `tests/test_planner_dining.py`（13 项）全绿，且全量从 790 变 803（790+13）；但白名单**之外**三个既有测试文件里，原本绿的 14 项转红，报错全部逐字相同：
+
+```
+File ".../tests/test_amap_live.py", line 228, in execute
+    raise AssertionError(capability)
+AssertionError: poi_around
+```
+
+14 项清单（`test_amap_live.AMapMobilityTests` 5 项、`test_journey.JourneyAMapRuntimeTests` 4 项、
+`test_planner_weather.PlanWeatherLiveTripTests` 4 项、`test_keyless_e2e.KeylessE2ETests` 1 项）：
+`test_full_plan_adds_lodging_coordinate_unknown_with_runtime_feedback`、
+`test_full_plan_nearby_name_candidates_become_one_name_unknown_and_fix_names_manual`、
+`test_live_lodging_replacement_drops_obsolete_mobility_claim_subject`、
+`test_live_plan_reaches_matrix_ready_and_publishes_coordinates`、
+`test_resolved_coordinates_drop_their_candidate_unknown`、
+`test_amap_response_reuse_never_crosses_journey_invocations`、
+`test_cross_segment_entities_are_resolved_once_with_identical_coordinates`、
+`test_cross_segment_entity_failure_is_not_called_twice`、
+`test_three_logical_trips_each_receive_an_independent_default_budget`、
+`test_ambiguous_forecast_marks_every_sharing_day_unknown`、
+`test_far_day_beyond_forecast_horizon_is_a_typed_unknown`、
+`test_health_line_reports_weather_capability_and_dedupes_shared_key`、
+`test_near_day_gets_forecast_within_horizon`、
+`test_runtime_coordinate_unknown_pipeline_overwrites_adds_and_drops_in_order`。
+
+**根因**：这三个文件的 `ScriptedAmapTransport`（`test_amap_live.py:152-228`，以及
+`test_planner_weather.py` 的 `WeatherScriptedTransport`、`test_journey.py`/`test_keyless_e2e.py` 里
+基于它的变体）只认 `poi`/`geocode`/`route`（`WeatherScriptedTransport` 再加 `weather`），未知能力一律
+`raise AssertionError(capability)`——这是刻意的强隔离设计（未预期的能力调用必须显式报错，不能悄悄
+放过）。`_plan_dining` 只要 `active_mobility.mode == "live"` 且当天有一个 lunch/dinner 卡槽找得到坐标
+锚点（POI 或住宿），就一定会发 `poi_around` 请求；14 项失败全部是"live 模式＋完整多日行程＋坐标已解析
+成功"的真实产品路径（例如 `test_live_plan_reaches_matrix_ready_and_publishes_coordinates` 断言
+"pois/lodgings 坐标全部非空"），不是退化/失败分支，所以命中率高。已用调试脚本逐个复现，14 项失败原因
+完全一致，与 `_plan_dining` 自身逻辑无关（`tests/test_planner_dining.py` 13 项——含直接调用
+`_plan_dining` 的单测、健康行格式、`avoid` 过滤的正向验证与反向验证红→绿、同锚点两餐只查一次且
+claim_id 不重复——全部实测通过，逻辑本身经查是对的）。
+
+**为什么本书解不开**：任务书「界限」写「只允许改：planning.py、新建 tests/test_planner_dining.py、
+PROGRESS.md、BLOCKED.md」，逐字排他；唯一能让这 14 项转绿的改法——给 `ScriptedAmapTransport.execute`
+（及 `test_journey.py`/`test_keyless_e2e.py` 里同构的传输层）加一个 `poi_around` 分支返回一个空/合成
+响应——需要碰 `tests/test_amap_live.py`/`tests/test_journey.py`/`tests/test_keyless_e2e.py` 三个白
+名单外的文件。已排除的替代方案，附排除理由：
+- 给 `_plan_dining` 加日期/预算/请求字段之类的额外门槛以"侥幸避开"这些测试的具体日期或坐标——`weather`
+  能躲开纯属日期窗口巧合（`forecast_available_on` 的当天+3天视野让所有旧测试的日期天然落在窗口外，
+  `git show --stat dcd8d7c` 证实那次接入压根没碰任何测试文件），`dining` 语义上没有等价的"预报视野"，
+  人为加一个只会是为了躲测试而发明的假门槛，且挡不住这 14 项——它们的坐标/日期正是"真正解析成功"的
+  典型正路径，任何语义上说得通的门槛都不会排除它们。
+- 让 `_plan_dining` 吞掉查询过程中的任意异常当作 `dining_provider_error`——`AssertionError` 是测试
+  替身故意用来标记"不该发生的调用"的信号，生产环境的真实传输层永远不会抛 `AssertionError`；吞掉它等
+  于把"测试没预料到这个调用"伪装成一种正常业务结果，会掩盖真问题，且不是任务书要求的行为（`_plan_weather`
+  同样没有这层防御性 try/except）。
+- 给 `plan_trip` 加一个默认关闭的开关参数——`cli.py` 在白名单外不能改去传这个参数，默认关闭就等于生产
+  环境（`ctw plan --mobility live`）永远不会触发，功能形同没做，且与任务书"紧跟 `_plan_weather` 之后
+  调用、只认 `active_mobility.mode`"的字面要求相悖。
+
+**已完成的验证**（详见 PROGRESS.md「书 AP6a」）：`tests/test_planner_dining.py` 13 项绿；全量
+803 项（790 旧 + 13 新）跑法下失败数稳定为 14、且是上面这精确的 14 项（跑了两次核对一致）；
+`pyflakes`/`scan_secrets` 0；`demo`/`tests/fixtures/renderer` 用 `ctw plan`（主 demo）+
+`scripts/build_renderer_fixtures.py` 重生成后 `git status --short` 只有 `planning.py` 改动与新测试
+文件，零字节漂移；用真实 AMap Key 把 `demo/request.json`/`candidates.json` 拷到 `.tmp/` 平移到明天
+（2026-09-19 起 3 天）跑 `ctw plan --mobility live --rail off --lodging off --aviation off`，
+`PLAN_COMPLETE ... errors=0`，两个成功锚定的时段各拿到 3 家（`dining=2 queried, 2 unknown`，"2 unknown"
+是当天一个 POI 因 `identity_conflict` 未解析出坐标导致的合理 `dining_no_anchor`，不是缺陷）。
+
+**建议裁决方向**（供管理者选择，本书未擅自执行任何一种）：①最小侵入——追加一本小书，白名单只开放
+`tests/test_amap_live.py`（给 `ScriptedAmapTransport.execute` 加 `poi_around` 分支，返回
+`{"pois": []}` 空结果即可，不影响任何既有断言）与 `tests/test_journey.py`/`tests/test_keyless_e2e.py`
+里对应的传输层，仿照 `WeatherScriptedTransport` 对 `weather` 的做法；②接受现状——14 项失败视为已知、
+已诊断、非本书逻辑缺陷的技术债记入 PROGRESS「已知抖动」一类条目，等下一个真正需要碰这些测试文件的
+书顺手修；③本书直接扩大白名单重跑（需要管理者明确授权，因为原任务书"只允许"字面排他）。三条建议
+里我倾向①，改动量最小且完全复用已验证有效的 `WeatherScriptedTransport` 模式。

@@ -431,6 +431,17 @@ class AMapScenarioTransport:
                 "count": str(len(entity["poi_results"])),
                 "pois": entity["poi_results"],
             }, {})
+        if provider_request.capability == "poi_around":
+            return ProviderEnvelope(200, {
+                "status": "1",
+                "info": "OK",
+                "infocode": "10000",
+                "count": "0",
+                "api": "around-v5",
+                "page_num": 1,
+                "page_size": provider_request.parameters.get("page_size", 10),
+                "pois": [],
+            }, {})
         if provider_request.capability == "geocode":
             entity = self.entities[provider_request.parameters["subject_ref"]]
             return ProviderEnvelope(200, {
