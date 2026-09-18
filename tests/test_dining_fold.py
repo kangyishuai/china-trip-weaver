@@ -184,6 +184,30 @@ class DiningFoldTests(unittest.TestCase):
         html_report = validate_journey_html(rendered, journey_result)
         self.assertEqual((), html_report.errors, html_report.errors)
 
+    def test_two_meals_sharing_one_query_result_get_their_own_claims(self):
+        # ctw dining queries once per distinct anchor, so a lunch and a dinner anchored on
+        # the same place share one result; each slot must still own distinct claim ids.
+        lunch_row, claims = options_row(self.trip, 0, 1, self.specs)
+        dinner_row = copy.deepcopy(lunch_row)
+        dinner_row["slot_id"] = self.trip["days"][0]["slots"][self.slot_index]["slot_id"]
+        result = envelope([lunch_row, dinner_row], claims)
+
+        folded = fold_dining_into_trip(copy.deepcopy(self.trip), result, CLOCK)
+        self.assertIsNotNone(folded)
+        trip = folded.trip
+        ids = [claim["claim_id"] for claim in trip["claims"]]
+        self.assertEqual(len(ids), len(set(ids)))
+        claims_by_id = {claim["claim_id"]: claim for claim in trip["claims"]}
+        for slot_index in (1, self.slot_index):
+            slot = trip["days"][0]["slots"][slot_index]
+            self.assertEqual(3, len(slot["dining"]["options"]))
+            for option in slot["dining"]["options"]:
+                self.assertEqual(slot["slot_id"], claims_by_id[option["claim_id"]]["subject_ref"])
+        self.assertTrue(validate_trip(trip).ok)
+
+        later = FixedClock.from_iso("2026-09-23T09:00:00+08:00")
+        self.assertIsNone(fold_dining_into_trip(trip, result, later))
+
     def test_same_envelope_folded_twice_is_noop(self):
         result = self._one_slot_result()
         first = fold_dining_into_trip(copy.deepcopy(self.trip), result, CLOCK)

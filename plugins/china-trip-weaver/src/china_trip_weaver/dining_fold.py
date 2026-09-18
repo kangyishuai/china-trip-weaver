@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence
 from .clock import Clock, isoformat_seconds
 from .contracts import PatchResult
 from .journey import replace_trips_in_journey, validate_journey
+from .providers.base import stable_id
 from .replan import _all_refs, _locked_refs
 from .validate_trip import validate_trip
 
@@ -22,10 +23,12 @@ def fold_dining_into_trip(
     """Fold matching ``slots`` rows into one Trip as a new patch revision.
 
     Rows match by both ``trip_id`` and ``slot_id``. ``options`` rows replace a
-    slot's dining reference and copy each option's identity claim onto that
-    slot. ``no_anchor`` and ``no_results`` rows write ``dining: null`` plus a
-    typed unknown. ``provider_error`` and missing rows leave the slot alone.
-    Folding the same result twice is a no-op.
+    slot's dining reference and give that slot its own copy of each option's
+    identity claim (``subject_ref`` = the slot, ``claim_id`` derived from the
+    envelope claim id and the slot id), so two meals that share one query result
+    never add the same claim id twice. ``no_anchor`` and ``no_results`` rows
+    write ``dining: null`` plus a typed unknown. ``provider_error`` and missing
+    rows leave the slot alone. Folding the same result twice is a no-op.
     """
 
     base_trip = trip
@@ -149,6 +152,7 @@ def _plan_slot_actions(
                         % slot["slot_id"]
                     )
                 new_claims = []
+                new_options = []
                 for option in row.get("options", ()):
                     claim_id = option.get("claim_id")
                     claim = claims_by_id.get(claim_id)
@@ -159,14 +163,18 @@ def _plan_slot_actions(
                         )
                     new_claim = copy.deepcopy(dict(claim))
                     new_claim["subject_ref"] = slot["slot_id"]
+                    new_claim["claim_id"] = _slot_claim_id(claim_id, slot["slot_id"])
                     new_claims.append(new_claim)
+                    new_option = copy.deepcopy(dict(option))
+                    new_option["claim_id"] = new_claim["claim_id"]
+                    new_options.append(new_option)
                 new_dining = {
                     "queried_at": queried_at,
                     "anchor_ref": anchor["ref_id"],
                     "anchor_name": anchor["name"],
                     "radius_m": row["radius_m"],
                     "search_url": row["search_url"],
-                    "options": copy.deepcopy(list(row.get("options", ()))),
+                    "options": new_options,
                 }
                 actions.append({
                     "day_index": day_index,
@@ -205,6 +213,12 @@ def _changed_actions(
                 continue
         changed.append(dict(action))
     return changed
+
+
+def _slot_claim_id(claim_id: Any, slot_id: str) -> str:
+    """A deterministic per-slot claim id, so re-folding the same envelope stays a no-op."""
+
+    return stable_id("claim-dining", claim_id, slot_id)
 
 
 def _dining_path(day_index: int, slot_index: int) -> str:
