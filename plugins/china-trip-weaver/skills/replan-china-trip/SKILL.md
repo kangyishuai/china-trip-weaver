@@ -20,7 +20,7 @@ The event file is either the event object itself or a fixture wrapper containing
 scripts/ctw replan --trip plans/<name>/trip.json --event plans/<name>/event.json --base-revision 1 --output-json plans/<name>/trip.json --output-html plans/<name>/trip.html
 ```
 
-`--output-json`/`--output-html` default to the same path as `--trip`/its rendered page, updating both in place; only a new trip, or an explicit request to keep a separate copy, should point them at a new file name instead. A stale `--base-revision` fails closed with `revision_conflict` and leaves the file untouched, so a chained sequence of replans must read back the new `revision.number` and pass it as the next call's `--base-revision`.
+Pass `--output-json`/`--output-html` the same paths as `--trip` and its rendered page so both update in place (both flags are required; there is no implicit default); only for a new trip, or when the user explicitly asks to keep a separate copy, point them at a new file name instead, leaving the earlier file untouched. A stale `--base-revision` fails closed with `revision_conflict` and leaves the file untouched, so a chained sequence of replans must read back the new `revision.number` and pass it as the next call's `--base-revision`.
 
 A `refresh` event replaces one rail leg with a freshly queried 12306 service instead of editing a slot by hand; it is two commands, query then apply:
 
