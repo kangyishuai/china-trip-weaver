@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, TextIO
 
 from . import SCHEMA_VERSION, __version__
-from .contracts import canonical_json, read_json, write_canonical_json
+from .contracts import canonical_json, read_json, write_canonical_json, write_text_atomic
 from .validate_trip import default_schema_path, validate_file
 
 
@@ -885,7 +885,7 @@ def _cmd_journey_render(args: argparse.Namespace) -> int:
             journey_value["journey_id"]
         )
         output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(rendered, encoding="utf-8")
+        write_text_atomic(output, rendered)
         digest = hashlib.sha256(rendered.encode("utf-8")).hexdigest()
         print("JOURNEY_RENDERED %s sha256=%s errors=0" % (output, digest))
         return 0
@@ -1274,7 +1274,7 @@ def _cmd_plan(args: argparse.Namespace, progress: "_NDJSONProgress") -> int:
         args.output_json.parent.mkdir(parents=True, exist_ok=True)
         args.output_html.parent.mkdir(parents=True, exist_ok=True)
         write_canonical_json(args.output_json, result.trip)
-        args.output_html.write_text(result.html, encoding="utf-8")
+        write_text_atomic(args.output_html, result.html)
         print("PLAN_COMPLETE json=%s html=%s mode=%s stages=%s calls=%s trip_sha256=%s html_sha256=%s errors=0" % (
             args.output_json,
             args.output_html,
@@ -2178,7 +2178,7 @@ def _cmd_replan(args: argparse.Namespace) -> int:
         args.output_json.parent.mkdir(parents=True, exist_ok=True)
         args.output_html.parent.mkdir(parents=True, exist_ok=True)
         write_canonical_json(args.output_json, result.trip)
-        args.output_html.write_text(rendered, encoding="utf-8")
+        write_text_atomic(args.output_html, rendered)
         print("REPLAN_COMPLETE json=%s html=%s revision=%d patch=%s trigger=%s reverify=%d trip_sha256=%s html_sha256=%s errors=0" % (
             args.output_json,
             args.output_html,
@@ -2212,7 +2212,7 @@ def _cmd_render(args: argparse.Namespace) -> int:
                 print(issue.render(), file=sys.stderr)
             return 1
         output = args.output or Path.cwd() / safe_output_name(trip["trip_id"])
-        output.write_text(rendered, encoding="utf-8")
+        write_text_atomic(output, rendered)
         digest = hashlib.sha256(rendered.encode("utf-8")).hexdigest()
         print("RENDERED %s sha256=%s errors=0" % (output, digest))
         return 0

@@ -17,14 +17,16 @@ Require the current Trip, exact base revision, event, and user locks.
 The event file is either the event object itself or a fixture wrapper containing `event` and `user_locked_refs`. Files for one trip live together under `plans/<name>/` in the project root that invoked this plugin. Run:
 
 ```bash
-scripts/ctw replan --trip plans/<name>/trip.json --event plans/<name>/event.json --base-revision 1 --output-json plans/<name>/trip-r2.json --output-html plans/<name>/trip-r2.html
+scripts/ctw replan --trip plans/<name>/trip.json --event plans/<name>/event.json --base-revision 1 --output-json plans/<name>/trip.json --output-html plans/<name>/trip.html
 ```
+
+`--output-json`/`--output-html` default to the same path as `--trip`/its rendered page, updating both in place; only a new trip, or an explicit request to keep a separate copy, should point them at a new file name instead. A stale `--base-revision` fails closed with `revision_conflict` and leaves the file untouched, so a chained sequence of replans must read back the new `revision.number` and pass it as the next call's `--base-revision`.
 
 A `refresh` event replaces one rail leg with a freshly queried 12306 service instead of editing a slot by hand; it is two commands, query then apply:
 
 ```bash
 scripts/ctw rail --date 2026-10-16 --from CITY --to CITY --output-json plans/<name>/rail-result.json
-scripts/ctw replan --trip plans/<name>/trip.json --event plans/<name>/refresh-event.json --rail-result plans/<name>/rail-result.json --base-revision 1 --output-json plans/<name>/trip-r2.json --output-html plans/<name>/trip-r2.html
+scripts/ctw replan --trip plans/<name>/trip.json --event plans/<name>/refresh-event.json --rail-result plans/<name>/rail-result.json --base-revision 1 --output-json plans/<name>/trip.json --output-html plans/<name>/trip.html
 ```
 
 `--rail-result` is required when the event's `type` is `refresh` and rejected for every other event type; it only checks the file's top-level shape (provider `12306-mcp` with `transport_legs`, `claims`, and `health`), then hands it to the same revision/lock/stability rules above. Before adding the selected service's current claims, refresh removes every existing claim whose `subject_ref` is the replaced leg, preventing stale evidence from accumulating across repeated refreshes. Omit the event's `service_number` to let it pick automatically: it only considers same-day services that depart no earlier than the previous slot ends, taking the earliest arrival among those, and fails with `refresh_overlap` (naming the candidate count and that end time) only when none qualify. Give a `service_number` that still matches more than one same-day row, and it fails with `refresh_service_ambiguous` unless the event also sets `arrive_at` or `depart_at` (either a full ISO timestamp or a bare `HH:MM`) to pick one. The replaced slot's `title` is rewritten by default to `起点 → 终点 铁路 车次号` from the newly selected service; set the event's own non-blank `title` to override it verbatim, since a blank one fails with `refresh_title`.
@@ -32,7 +34,7 @@ scripts/ctw replan --trip plans/<name>/trip.json --event plans/<name>/refresh-ev
 A `suspend` event handles a service that stopped running altogether — a suspended ferry crossing, a cancelled train — by removing the leg and its slot in one patch instead of leaving a hand-patch step for later:
 
 ```bash
-scripts/ctw replan --trip plans/<name>/trip.json --event plans/<name>/suspend-event.json --base-revision 1 --output-json plans/<name>/trip-r2.json --output-html plans/<name>/trip-r2.html
+scripts/ctw replan --trip plans/<name>/trip.json --event plans/<name>/suspend-event.json --base-revision 1 --output-json plans/<name>/trip.json --output-html plans/<name>/trip.html
 ```
 
 Give it the same `subject_ref` (the slot's `slot_id`, or the leg's `ref_id`) and a required `replacement_slot` as `closure`/`weather`, with two extra rules: `replacement_slot.kind` must be `free` or `poi`, and its `ref_id` must not point at the leg being removed. The patch removes the transport leg, the leg's `budget_ledger` line (recomputed via the same path `refresh` uses), and any claim whose `subject_ref` was that leg — they would otherwise be orphaned and fail validation. A locked leg or slot is rejected with `locked_ref`, same as every other event. The patch `trigger` is `disruption`.

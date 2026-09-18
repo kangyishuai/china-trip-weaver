@@ -543,3 +543,68 @@ fix-names` 会把它们列为人工项。
   `ctw locate` 与 `ctw journey locate`、住宿名称核对、高德错误码归类，对应 0.26.0）：
   [docs/history/progress-2026-09-18.md](docs/history/progress-2026-09-18.md)
   （分别在 2026-09-18 发 0.25.0、0.26.0 时从本文件整体迁出，一字未改，按合入顺序）。
+
+## 书 AS2「in-place-updates」（2026-09-18，第三十七波两本并行之一，worktree `.tmp/wt-as2` 分支 `in-place-updates`）
+
+**任务 0**：核对 main `2164841` 全量 857 项零跳过。`tests/test_in_place_updates.py` 写下
+`WriteCanonicalJsonAtomicityTests`：对已存在文件调 `write_canonical_json`，把
+`china_trip_weaver.contracts.os.replace` 打桩抛 `OSError`，断言原文件字节不变且目录里不留临时文件。
+现状确认红——不是断言失败，而是 `contracts.py` 当时根本没有 `import os`，补丁目标
+`china_trip_weaver.contracts.os` 不存在（`ModuleNotFoundError: No module named
+'china_trip_weaver.contracts.os'`），证明当时确实不是原子写。
+
+目标／顺序／风险（核对后先写，动工在后）：目标是让 `write_canonical_json` 与四处页面直写都变成「同目录
+临时文件 + `os.replace`」，失败时删临时文件、目标字节不动；顺序是先让任务 0 转绿，再补五个命令的原地
+更新／冲突／NOOP 子进程测试，最后改文案；最大风险是失败路径遗漏文件描述符清理导致 fd 泄漏，参照仓库
+已有 `candidates.py::_stage_bytes` 同款「同目录临时文件＋`os.fchmod`＋失败时先 `os.close` 再 `unlink`」
+写法照办，规避了这条风险。
+
+**任务 1**：`contracts.py` 新增 `write_text_atomic(path, text, encoding="utf-8")`——`tempfile.mkstemp`
+在同目录建临时文件、按目标已有权限或缺省 `0o644` 做 `os.fchmod`、写入后 `os.replace`；任何一步失败都
+清理临时文件并把原异常原样抛出，目标文件不动。`write_canonical_json` 改为调用它。`cli.py` 里
+`_cmd_journey_render`、`_cmd_plan`、`_cmd_replan`、`_cmd_render` 四处 `.write_text(...)` 全改调
+`write_text_atomic`（`grep -n '\.write_text('` 核对过全仓库页面直写点正好只有这四行）。
+
+新增 `tests/test_in_place_updates.py`，除任务 0 那条单测外另有 8 条子进程测试（`ctw journey
+weather/dining/locate` 用 subTest 循环覆盖三种折回，另加 `ctw journey assemble --replace-trip`、
+`ctw replan`、`ctw journey render` 各一条，测试方法数 9 与 `Ran 866 tests`＝857+9 对得上）：五个命令
+的 `--output-json`（`replan` 还有 `--output-html`）指向与输入相同路径时，成功一次 revision 升一、
+`ctw journey validate`/`ctw validate` 复核通过；用同一个旧 `--base-revision` 再跑一次，退出码 1 含
+`revision_conflict`，文件字节与上一次成功后完全相同；三种折回把同一份结果按新 `--base-revision`
+再折一次，退出码 2 含各自的 `NOOP` 标记，字节不变；`ctw journey render` 对同一路径连跑两次字节相同。
+造数全部复用现有 `tests/test_weather_fold.py`/`test_dining_fold.py`/`test_locate_fold.py` 的
+`envelope`/`forecast_row`/`options_row`/`located_row`，`assemble --replace-trip` 的替换 Trip 复用
+`test_journey.py::JourneyReplaceTripTests.replanned_trip` 同款做法（`extract_trip_from_journey` +
+对 `slot-poi-routine-meal-2acb635f18d4` 应用一个 `delay` 事件）。
+
+验收证据：worktree 全量 `Ran 866 tests` OK 零跳过；`AMAP_WEBSERVICE_KEY`/`FLYAI_API_KEY`/
+`VARIFLIGHT_API_KEY`/`ANYSEARCH_API_KEY` 四个假 Key 各自单独设值复跑全量，均同样 866 全绿；
+`scripts/scan_secrets.py` 0 命中（434 个文件）；`pyflakes`（含新文件）0 行；`git status -- demo` 空。
+反向验证：把 `write_canonical_json` 临时改回 `path.write_text(...)`，任务 0 那条测试变红
+（`AssertionError: OSError not raised`——退回旧实现后 `os.replace` 根本不会被调用，打桩没有效力）；
+用会话 scratchpad 里的原子版本备份还原并 `touch` 源文件排除字节码缓存干扰后，`test_in_place_updates.py`
+全部 9 条转绿，随后又跑了一次全量 866 确认没有连带回归。
+
+**任务 2**：按任务书「我替领导拍的板」逐条改文案——`plans/<name>/` 段（README×2、02、plan SKILL）与
+三段折回说明（README×2、06 §7.6–§7.8「触发」条、resolve-china-mobility SKILL）都从「每次新增文件／
+`--journey` 原文件永不写回」改成「`--output-json` 默认与输入同一个文件、原地更新；NOOP 与
+`revision_conflict` 都不写文件」；`ctw replan`/`ctw journey assemble --replace-trip` 的用法与示例行
+（README×2、replan SKILL、mobility SKILL）里 `TRIP-rN.json`/`trip-r2.json` 一律改成与输入同路径；
+顺带把另一本书（AS1 `dining-night-stay`）的规则写进用户文案——README×2 的 `ctw dining` 段与
+mobility SKILL 的 dining 条各补一句：晚餐找不到锚点、且当天晚餐之后再无 `transport` 时段时，改以
+当晚住处（`day.stay_id`）为圆心。
+
+验收证据：`tests.test_skills`（11 项）与 `tests.test_design_docs`（1 项）单跑全绿；
+`git grep -n -E "never modif|永不写回|永远不会被改写|renaming it themselves|改名接替|journey-r2|
+journey-r3|journey-r4|trip-r2|TRIP-rN" -- README.md README.zh-CN.md docs/design/02-plugin-skills.md
+docs/design/06-pipeline.md plugins/china-trip-weaver/skills` 空；
+`diff <(grep -E '^ctw (replan|journey)' README.md) <(grep -E '^ctw (replan|journey)' README.zh-CN.md)`
+空（exit 0）。仓库里另有 3 处历史/无关命中未动，均在任务书「界限」之外：ADR-0020 第 244 行是对已发生
+历史事实的记录（`journey.json` 经 `journey-r5.json`）；`tests/test_journey_dining_cli.py`/
+`test_journey_locate_cli.py` 里的 `journey-r2.json` 只是那条既有 NOOP 测试自己起的临时文件名，不是在
+断言约定，且这两个文件不在本书允许改动的范围内。
+
+`git diff main --name-only` 只有 9 个文件：`contracts.py`、`cli.py`、README×2、
+`02-plugin-skills.md`、`06-pipeline.md`、三份 SKILL；加上新建的 `tests/test_in_place_updates.py`，
+与任务书「界限」白名单一一对应，没有多改。已提交并推送分支 `in-place-updates`（未合并），排队等待
+与并行的 AS1 一起由管理者合并。
