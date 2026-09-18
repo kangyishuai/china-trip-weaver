@@ -522,3 +522,66 @@ fix-names` 会把它们列为人工项。
   `ctw dining` 与 `ctw journey dining`、规划器 `_plan_dining`，对应 0.25.0）：
   [docs/history/progress-2026-09-18.md](docs/history/progress-2026-09-18.md)
   （2026-09-18 发 0.25.0 时从本文件整体迁出，一字未改，按合入顺序）。
+
+## 第三十五波 AQ1「高德健康行 calls= 真实调用数」（2026-09-18，worktree `.tmp/wt-aq1` 分支 `amap-calls-total`）
+
+任务 0（动工前记录）：
+
+- 目标：`_finalize_result` 生成 `calls=<n>/<上限>` 时只看到 mobility 阶段的调用数，`_plan_weather`／
+  `_plan_dining` 复用同一 transport 继续发请求，n 不再增长；改为整次规划结束时用真实总调用数替换。
+- 任务 0 已复现：`beijing-shanghai-3d` 夹具用 `ScriptedAmapTransport` 跑 `plan_trip`，健康行显示
+  `calls=29/80`，`transport.calls` 实际 33（29 mobility + 4 dining）；新测试
+  [tests/test_planner_amap_calls.py](tests/test_planner_amap_calls.py) 断言二者相等，现状红，符合任务书预期。
+- 顺序：`plan_trip` 在 `_plan_dining` 之后（mode=="live" 时）取真实调用数 → 经 `_plan_build_trip` 透传 →
+  `_combined_amap_health` 只替换 mobility 段第一处 `calls=`（跳过 lodging 段 `poi_calls=`）→ 补 off 与
+  Journey 分段断言、改既有 `calls=` 断言 → 全量/假 Key/demo 零漂移 → 实网复验 → 反向验证 → 补文档。
+- 最大风险：`plan_trip`/`_plan_build_trip` 里已有局部变量名 `mobility`（绑定 `MobilityResult`），若照抄
+  `from . import mobility` 会被同名局部变量整函数遮蔽；改为按名直接 `from .mobility import _transport_calls`
+  导入，功能等价，仍只改 planning.py。
+
+任务 1/2 完成结果：
+
+- 实现：`plan_trip` 在 `_plan_dining` 之后、`active_mobility.mode == "live"` 时计算
+  `real_amap_calls = _transport_calls(active_mobility.transport)`，经 `_plan_build_trip` 新增的
+  `real_amap_calls` 形参透传给 `_combined_amap_health`；后者末尾统一调用新增的 `_apply_real_amap_calls`，
+  用正则 `(?<![A-Za-z_])calls=\d+/`（`count=1`）只替换第一处不以字母/下划线打头的 `calls=<n>/`，天然跳过
+  lodging 段的 `poi_calls=`；`real_amap_calls` 为 `None`（mobility 非 live）时函数原样返回，字节不变。
+- 新测试 `tests/test_planner_amap_calls.py`（3 项）：①任务 0 那条（真实总调用数与 transport.calls 相等）；
+  ②demo 请求 mobility off 时健康行与硬编码文案逐字相等；③专门证伪"读到 Journey 共享传输层累计值"这一
+  潜在缺陷——手工搭一个共享 `ScriptedAmapTransport` + 两个独立 `AMapBudgetedTransport`/`AMapCallBudget`
+  模拟两个 Journey 分段，跑完 segment 1 后断言 segment 2 报的 n 等于 segment 2 自己的 `budget.calls`、
+  且不等于共享 transport 的累计总数（若实现误读共享层，这条会先烧出来）。
+- 既有断言改值：`tests/test_amap_live.py` 第 2047 行 `calls=29/80`→`calls=33/80`（+4 dining），同时加
+  `self.assertEqual(transport.calls, 33)` 核对；`tests/test_journey.py` 的
+  `test_three_logical_trips_each_receive_an_independent_default_budget` 里 `calls=5/80 `→`calls=7/80 `
+  （+2 dining/段），同时加 `sum(reported_calls) == transport.calls`（21）核对。`calls=1/1`/`calls=0/0`
+  两组（预算耗尽场景）未变——`AMapCallBudget.acquire()` 在耗尽后先抛 `ProviderRateLimited` 再自增，天气/
+  餐饮阶段的请求同样进不了计数，验证过不需要改。
+- 验收：全量 `Ran 823 tests`（820+3）OK 0 skipped；四个假 Key（`AMAP_WEBSERVICE_KEY`/`FLYAI_API_KEY`/
+  `VARIFLIGHT_API_KEY`/`ANYSEARCH_API_KEY`=`ctw-canary-fake-*`）复跑同样 823 OK；`pyflakes $(git ls-files
+  '*.py')` 连新文件共 0 行；`scan_secrets.py` 0 finding/421 file；四个 Trip demo 用历史命令重生成（含从
+  `docs/history` 找回的 guangzhou-shenzhen/multicity-5d 命令，`demo/trip.json` sha256 与历史记录逐字
+  相同）+ `build_plan_fixtures.py`/`build_renderer_fixtures.py`/`build_scheduler_fixtures.py`/
+  `build_provider_fixtures.py` 全部重生成，`git status --short` 只剩本书改动的 5 个文件，demo 与四类
+  夹具零字节漂移。
+- 实网：`demo/request.json`/`candidates.json` 拷到 `.tmp/aq1-realnet/`，日期从 2026-10-16/18 平移到
+  2026-09-19/21（明天起 3 天，`check_in/check_out`、`opening_windows` 一并平移，`queried_at` 引用时间戳
+  不动），`ctw plan --progress ndjson --mobility live --rail off --lodging off --aviation off` 实测
+  健康行 `calls=12/80 qps<=2; live_cells=2; locations=2; errors=identity_conflict;
+  warnings=identity_conflict; weather=2 queried, 0 unknown; dining=2 queried, 2 unknown`；stderr
+  NDJSON 恰好 12 条 `"event":"query"`（1 geocode+4 poi+1 geocode+2 route+2 weather+2 poi_around），
+  全部 `attempt=1` 无重试，n 与真实调用数完全对上。副产品：这次实测复现的「8 vs 12」与任务书原始症状
+  （mobility 阶段 1+4+1+2=8，之后 weather+dining 再加 4 到 12）数字完全吻合。
+- 反向验证：把 `real_amap_calls = (...)` 临时改成 `real_amap_calls = None`，任务 0 与 Journey 专项测试
+  两条转红（`33 != 29`）；换回原实现、`touch planning.py`、复跑全量 823 转绿，`git diff` 确认无 TEMP 残留。
+- 文档：`docs/design/06-pipeline.md` §5.5/§5.6 健康行小节各加一句「`calls=<n>/<上限>` 记整次规划对高德的
+  真实调用数，含天气与餐饮查询」；`skills/plan-china-trip/SKILL.md` 的 `ctw doctor --probe` 那条加半句
+  高德行另有 `capabilities`，给出 `poi`/`weather`/`poi_around` 各自业务层结果（对着 `cli.py` 的
+  `_combine_amap_capability_layers` 逐字核对过，`capabilities` 字段确实是 `{poi/weather/poi_around:
+  business状态}` 的字典）。`tests.test_skills`/`tests.test_design_docs` 单跑绿；`calls=`/`capabilities`/
+  `poi_around` 三个字面串均 `git grep` 命中代码。
+- `git diff main --name-only`：`PROGRESS.md`、`BLOCKED.md`、`docs/design/06-pipeline.md`、
+  `plugins/china-trip-weaver/skills/plan-china-trip/SKILL.md`、`planning.py`、
+  `tests/test_amap_live.py`、`tests/test_journey.py`、新增 `tests/test_planner_amap_calls.py`——
+  严格落在任务书「只允许改」清单内。只提交并推 `amap-calls-total` 分支，未合并、未碰 CI、未动版本号
+  （本书不涉及发版，不跑 `install_local_plugin.sh`）。

@@ -15,7 +15,7 @@ Own the full user request. Keep one schema-valid Trip as the only source of trut
 - Require explicit `group_refs` on every grouped transport leg. Never infer a missing leg owner as the whole party. Keep per-group totals separate from the whole-party transport total in `transport_pricing`.
 - Query, compare, schedule, replan, and provide dated official deep links. Never log in, collect identity, hold inventory, book, pay, cancel, or change an order.
 - Do not request provider keys in chat. If a user pastes a credential or personal order data, do not repeat it; stop that provider path and ask them to remove and rotate it.
-- Run `scripts/ctw doctor --probe` before the first provider call. Read `skill_conflicts` and each provider's separate `credential`, `contract`, `network`, and `business` status; a configured credential alone is never evidence that the provider works. On a Skill `conflict`, stop and show its `notice` verbatim with the reported plugin ids. On `unknown` no Codex CLI could be consulted, so fail closed the same way. Only `clear` may proceed.
+- Run `scripts/ctw doctor --probe` before the first provider call. Read `skill_conflicts` and each provider's separate `credential`, `contract`, `network`, and `business` status; a configured credential alone is never evidence that the provider works. On a Skill `conflict`, stop and show its `notice` verbatim with the reported plugin ids. On `unknown` no Codex CLI could be consulted, so fail closed the same way. Only `clear` may proceed. The AMap row also carries `capabilities`, giving each of `poi`/`weather`/`poi_around`'s own business-layer result.
 
 ## Workflow
 
