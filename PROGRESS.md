@@ -2,20 +2,37 @@
 
 唯一的当前进度记录：现状速览（0.8.0 起每个版本一条）、几条长期有效的实测结论，以及历史索引。逐轮任务书、实测证据与验收记录按时间段归档，见「历史索引」——本文件不再留存单轮过程记录。
 
-## 现状速览（2026-09-18 实测，0.25.0）
+## 现状速览（2026-09-18 实测，0.26.0）
 
-- 版本：`0.25.0`，唯一来源是
+- 版本：`0.26.0`，唯一来源是
   `plugins/china-trip-weaver/.codex-plugin/plugin.json` 与
   `src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
   代码与文档一律引用这两处之一；只有本节的逐版本条目和 git tag 以版本号作索引。
-- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 820 tests`，`OK`，0 skipped；
+- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 857 tests`，`OK`，0 skipped；
   `scripts/scan_secrets.py` 0 命中；
   `~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src
   tests scripts` 0 行。带假 Key（`ANYSEARCH_API_KEY=... unittest`）跑全量同样
-  820 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。0.21.0 记过的
+  857 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。0.21.0 记过的
   「环境变量注入会让 `test_credentials` 红一项」已在 0.22.0 修好：那个文件现在于 `setUp`
   里按 `FILE_ALLOWLIST` 剥掉凭据环境变量，四个 Key 全设与一个不设两种跑法结果相同。
-- 覆盖率：`scripts/measure_coverage.py` 2026-09-18 发 0.25.0 前实测 12005 语句、miss 1299、**89%**（新模块 `dining.py` 95%、`dining_fold.py` 94%；0.24.0 时 11354/1270/89%，0.23.0 时 11154/1259/89%）。
+- 覆盖率：`scripts/measure_coverage.py` 2026-09-18 发 0.26.0 前实测 12404 语句、miss 1344、**89%**（新模块 `locate.py` 95%、`locate_fold.py` 95%；0.25.0 时 12005/1299/89%，0.24.0 时 11354/1270/89%）。
+- 0.26.0（第三十五波四本＋第三十六波两本并行，2026-09-18，逐本验收合入）：**给缺坐标的景点与住宿补坐标**——
+  新命令 `ctw locate`：mobility.py 新增 `MobilityBackend.locate`（`resolve` 的前半段，只解析坐标、不查路线），
+  新模块 `locate.py` 跳过用餐占位、住宿按 `#/$defs/lodging` 投影、只缺住宿的 Trip 借一个已定位景点凑候选文档
+  （零调用、不进信封）、同一 `ref_id` 只查一次，信封每个实体一行 `located`/`unresolved`/`provider_error`，退出
+  0/2/1；`ctw journey locate`（新模块 `locate_fold.py`）只给缺坐标的实体补坐标、已有坐标一个字节不动，
+  `unresolved` 记成带原因的 unknown，每个被改的子 Trip 一个 `trigger=provider_change` 补丁、Journey 版本只加一，
+  没变化打 `JOURNEY_LOCATE_NOOP` 退出 2 不写文件。**住宿与景点同一套名称核对**：`_resolve_entity` 不再让住宿
+  跳过 `_resolve_poi_identity`，住宿按身份的完整地址编码，不再拿「城市+店名」直接编码（公开店名「7天酒店
+  （上海人民广场店）」「如家酒店（上海南京东路步行街店）」原先都被编成上海市中心点）。**高德错误码按官方表
+  归类**：2 开头与 3 开头为 `invalid_request`、10016/10017 为 `upstream_5xx`、限流码为 `rate_limited`，单条查询
+  失败不再被当作致命的 `forbidden` 连累同段后面的实体；合成夹具 89→93。**餐饮锚点不越过换乘**：
+  `dining.anchor_for` 两个方向遇到 `transport` 时段即停（验收查出；离岛后的晚餐锚在岛上、从土楼开回城的晚餐
+  锚在土楼，这两类在 0.25.0 就有），ADR-0022 追加修订段。**健康行说真话**：`calls=<n>/<上限>` 改记整次规划
+  对高德的真实调用数，含天气与餐饮查询（实网 12 = stderr 里 12 条 query 事件）。验收：现役 16 天行程副本实网
+  9 家住宿定位 7 家、0 错点（改前 4 家里 2 家落错），18 次调用；折回副本 revision 10、validate-html 0、二折
+  NOOP；重跑餐饮后换乘日午餐回到到达城市、两顿原本锚错城市的晚餐改记 `dining_no_anchor`；现役 journey.json
+  哈希不变。测试 820→857，运行时+脚本 `.py` 54→56，design docs 56，ADR 22。
 - 0.25.0（第三十三波五本＋第三十四波四本并行，2026-09-17 至 18，逐本验收合入）：**附近餐饮参考**——高德扫街榜
   没有开放接口（Web 服务、MCP、空间智能平台都没有榜单能力），改用高德周边搜索自己的综合排序，决定与理由见
   ADR-0022。适配器：`poi_around` 加 `sortrule`（`distance`/`weight`，缺省 `distance`，车站查询不变），归一化
@@ -490,6 +507,9 @@ fix-names` 会把它们列为人工项。
 
 ## 已知短板
 
+- **名称核对只比相对差**：`_poi_name_is_ambiguous` 只看第一、第二名相似度之差，高德没有目标分店时会把
+  最像的别家分店当身份（2026-09-18 实测「7天酒店（上海人民广场店）」→上海大学店，相似度 0.70；正确匹配
+  0.82–0.90，同楼邻居 0.76–0.79），这次靠后面的地址编码歧义才没落错点。样本太少，未加绝对阈值。
 - **定位天花板**：见上节的 12 坐标 unknown + 6 名字 unknown，需要人工介入
   （`fix-names --export-manual` / `--apply-manual`）。
 - **FlyAI 是唯一的价格来源**：住宿与航班的 AMap/VariFlight 兜底只发布
@@ -517,346 +537,9 @@ fix-names` 会把它们列为人工项。
   天气折回库函数与 `ctw journey weather` 命令，对应 0.23.0、0.24.0）：
   [docs/history/progress-2026-09-17.md](docs/history/progress-2026-09-17.md)
   （2026-09-17 发 0.24.0 时从本文件整体迁出，一字未改，按合入顺序）。
-- 2026-09-17 至 18 的执行者逐轮记录（第三十三波到第三十四波：高德周边搜索综合排序、`dining.py`、
+- 2026-09-17 至 18 的执行者逐轮记录（第三十三波到第三十六波：高德周边搜索综合排序、`dining.py`、
   `slot.dining` 与两页、天气折回健康行去重、`doctor --probe` 三能力、`plans/<可读名称>/` 约定、
-  `ctw dining` 与 `ctw journey dining`、规划器 `_plan_dining`，对应 0.25.0）：
+  `ctw dining` 与 `ctw journey dining`、规划器 `_plan_dining`，对应 0.25.0；健康行真实调用数、
+  `ctw locate` 与 `ctw journey locate`、住宿名称核对、高德错误码归类，对应 0.26.0）：
   [docs/history/progress-2026-09-18.md](docs/history/progress-2026-09-18.md)
-  （2026-09-18 发 0.25.0 时从本文件整体迁出，一字未改，按合入顺序）。
-
-## 第三十五波 AQ1「高德健康行 calls= 真实调用数」（2026-09-18，worktree `.tmp/wt-aq1` 分支 `amap-calls-total`）
-
-任务 0（动工前记录）：
-
-- 目标：`_finalize_result` 生成 `calls=<n>/<上限>` 时只看到 mobility 阶段的调用数，`_plan_weather`／
-  `_plan_dining` 复用同一 transport 继续发请求，n 不再增长；改为整次规划结束时用真实总调用数替换。
-- 任务 0 已复现：`beijing-shanghai-3d` 夹具用 `ScriptedAmapTransport` 跑 `plan_trip`，健康行显示
-  `calls=29/80`，`transport.calls` 实际 33（29 mobility + 4 dining）；新测试
-  [tests/test_planner_amap_calls.py](tests/test_planner_amap_calls.py) 断言二者相等，现状红，符合任务书预期。
-- 顺序：`plan_trip` 在 `_plan_dining` 之后（mode=="live" 时）取真实调用数 → 经 `_plan_build_trip` 透传 →
-  `_combined_amap_health` 只替换 mobility 段第一处 `calls=`（跳过 lodging 段 `poi_calls=`）→ 补 off 与
-  Journey 分段断言、改既有 `calls=` 断言 → 全量/假 Key/demo 零漂移 → 实网复验 → 反向验证 → 补文档。
-- 最大风险：`plan_trip`/`_plan_build_trip` 里已有局部变量名 `mobility`（绑定 `MobilityResult`），若照抄
-  `from . import mobility` 会被同名局部变量整函数遮蔽；改为按名直接 `from .mobility import _transport_calls`
-  导入，功能等价，仍只改 planning.py。
-
-任务 1/2 完成结果：
-
-- 实现：`plan_trip` 在 `_plan_dining` 之后、`active_mobility.mode == "live"` 时计算
-  `real_amap_calls = _transport_calls(active_mobility.transport)`，经 `_plan_build_trip` 新增的
-  `real_amap_calls` 形参透传给 `_combined_amap_health`；后者末尾统一调用新增的 `_apply_real_amap_calls`，
-  用正则 `(?<![A-Za-z_])calls=\d+/`（`count=1`）只替换第一处不以字母/下划线打头的 `calls=<n>/`，天然跳过
-  lodging 段的 `poi_calls=`；`real_amap_calls` 为 `None`（mobility 非 live）时函数原样返回，字节不变。
-- 新测试 `tests/test_planner_amap_calls.py`（3 项）：①任务 0 那条（真实总调用数与 transport.calls 相等）；
-  ②demo 请求 mobility off 时健康行与硬编码文案逐字相等；③专门证伪"读到 Journey 共享传输层累计值"这一
-  潜在缺陷——手工搭一个共享 `ScriptedAmapTransport` + 两个独立 `AMapBudgetedTransport`/`AMapCallBudget`
-  模拟两个 Journey 分段，跑完 segment 1 后断言 segment 2 报的 n 等于 segment 2 自己的 `budget.calls`、
-  且不等于共享 transport 的累计总数（若实现误读共享层，这条会先烧出来）。
-- 既有断言改值：`tests/test_amap_live.py` 第 2047 行 `calls=29/80`→`calls=33/80`（+4 dining），同时加
-  `self.assertEqual(transport.calls, 33)` 核对；`tests/test_journey.py` 的
-  `test_three_logical_trips_each_receive_an_independent_default_budget` 里 `calls=5/80 `→`calls=7/80 `
-  （+2 dining/段），同时加 `sum(reported_calls) == transport.calls`（21）核对。`calls=1/1`/`calls=0/0`
-  两组（预算耗尽场景）未变——`AMapCallBudget.acquire()` 在耗尽后先抛 `ProviderRateLimited` 再自增，天气/
-  餐饮阶段的请求同样进不了计数，验证过不需要改。
-- 验收：全量 `Ran 823 tests`（820+3）OK 0 skipped；四个假 Key（`AMAP_WEBSERVICE_KEY`/`FLYAI_API_KEY`/
-  `VARIFLIGHT_API_KEY`/`ANYSEARCH_API_KEY`=`ctw-canary-fake-*`）复跑同样 823 OK；`pyflakes $(git ls-files
-  '*.py')` 连新文件共 0 行；`scan_secrets.py` 0 finding/421 file；四个 Trip demo 用历史命令重生成（含从
-  `docs/history` 找回的 guangzhou-shenzhen/multicity-5d 命令，`demo/trip.json` sha256 与历史记录逐字
-  相同）+ `build_plan_fixtures.py`/`build_renderer_fixtures.py`/`build_scheduler_fixtures.py`/
-  `build_provider_fixtures.py` 全部重生成，`git status --short` 只剩本书改动的 5 个文件，demo 与四类
-  夹具零字节漂移。
-- 实网：`demo/request.json`/`candidates.json` 拷到 `.tmp/aq1-realnet/`，日期从 2026-10-16/18 平移到
-  2026-09-19/21（明天起 3 天，`check_in/check_out`、`opening_windows` 一并平移，`queried_at` 引用时间戳
-  不动），`ctw plan --progress ndjson --mobility live --rail off --lodging off --aviation off` 实测
-  健康行 `calls=12/80 qps<=2; live_cells=2; locations=2; errors=identity_conflict;
-  warnings=identity_conflict; weather=2 queried, 0 unknown; dining=2 queried, 2 unknown`；stderr
-  NDJSON 恰好 12 条 `"event":"query"`（1 geocode+4 poi+1 geocode+2 route+2 weather+2 poi_around），
-  全部 `attempt=1` 无重试，n 与真实调用数完全对上。副产品：这次实测复现的「8 vs 12」与任务书原始症状
-  （mobility 阶段 1+4+1+2=8，之后 weather+dining 再加 4 到 12）数字完全吻合。
-- 反向验证：把 `real_amap_calls = (...)` 临时改成 `real_amap_calls = None`，任务 0 与 Journey 专项测试
-  两条转红（`33 != 29`）；换回原实现、`touch planning.py`、复跑全量 823 转绿，`git diff` 确认无 TEMP 残留。
-- 文档：`docs/design/06-pipeline.md` §5.5/§5.6 健康行小节各加一句「`calls=<n>/<上限>` 记整次规划对高德的
-  真实调用数，含天气与餐饮查询」；`skills/plan-china-trip/SKILL.md` 的 `ctw doctor --probe` 那条加半句
-  高德行另有 `capabilities`，给出 `poi`/`weather`/`poi_around` 各自业务层结果（对着 `cli.py` 的
-  `_combine_amap_capability_layers` 逐字核对过，`capabilities` 字段确实是 `{poi/weather/poi_around:
-  business状态}` 的字典）。`tests.test_skills`/`tests.test_design_docs` 单跑绿；`calls=`/`capabilities`/
-  `poi_around` 三个字面串均 `git grep` 命中代码。
-- `git diff main --name-only`：`PROGRESS.md`、`BLOCKED.md`、`docs/design/06-pipeline.md`、
-  `plugins/china-trip-weaver/skills/plan-china-trip/SKILL.md`、`planning.py`、
-  `tests/test_amap_live.py`、`tests/test_journey.py`、新增 `tests/test_planner_amap_calls.py`——
-  严格落在任务书「只允许改」清单内。只提交并推 `amap-calls-total` 分支，未合并、未碰 CI、未动版本号
-  （本书不涉及发版，不跑 `install_local_plugin.sh`）。
-
-## 书 AQ2（分支 `locate-query`，worktree `.tmp/wt-aq2`，2026-09-18）
-
-任务书目标：给 `mobility.py` 新增 `MobilityBackend.locate()`（`resolve` 的前半段，不查路线矩阵），
-再写新模块 `locate.py`（`unlocated_entities`/`locate_trips`）与 `ctw locate` 命令，为
-Journey/Trip 里缺 `gcj02`/`wgs84` 坐标的景点与住宿查高德坐标、产出结果信封；折回落盘是另一本书
-（AQ3）。第三十五波四本并行，本书只推 `locate-query` 分支，不合并、不改 CI。
-
-任务 0 核对：`git worktree add .tmp/wt-aq2 -b locate-query main` 建在 `03042f4` 上，全量
-`Ran 820 tests` OK 0 skipped、`git grep -n -E "def locate|locate_trips" -- plugins` 0 命中，
-与任务书基线一致。理解的目标/顺序/风险（≤10 行）：①`mobility.py` 只能新增——`locate()` 把
-`resolve()` 的候选校验/早退/POI-geocode 查找/语义检查逐字复用，只是不跑
-`_resolve_route_matrix`，空列表传给 `_finalize_result`；②`locate.py` 最大风险是 Trip 的
-`lodgings[]` 现代形状是 `#/$defs/stay`（多 `candidate_ref`/`selection_status`/
-`selected_nights` 三个字段），原样塞进候选文档会被 `validate_candidates` 拒收，必须按
-`#/$defs/lodging` 的 11 个字段逐一投影；③候选文档的 `claims` 必须精确等于这些实体
-`claim_ids`（含 `price.claim_id`/`opening_windows[].claim_id`）在 Trip 自己 `claims` 里的
-对应项，多一条触发 `C_ORPHAN_CLAIM`，少一条触发 `C_CLAIM_REF`；④`ctw locate` 照抄
-`_cmd_weather`/`_cmd_dining`/`_cmd_mobility` 的拼装方式（`MobilityBackend.from_spec` +
-`_attach_progress` + `read_json`）。
-
-任务 1（`tests/test_locate.py` 四例，全绿）：demo `journey-16d` 三段各 2 个真实体（1 景点 +
-1 住宿，10–12 个 `poi-routine-meal-*` 占位全跳过）共 6 行全 `located`、坐标含 gcj02/wgs84、
-claim 编号全在信封 `claims` 里、每段恰 3 次调用（POI 1 次 identity + 2 次 geocode）、记能力名
-的传输层子类断言零 `route`；全坐标已知的 Trip 0 行 0 次调用；`ScriptedAmapTransport
-(forbidden=True)` 全员 `provider_error`/`forbidden`；同一 Trip 传两次，第二次零新调用（4 行，
-2 条来自缓存）。反向验证：①在 `locate()` 里临时加回 `_resolve_route_matrix` 调用——
-`transport.calls` 从 9 变 15，断言转红；改回并 `touch` 后绿（`git diff main -- mobility.py`
-用 `grep -c "^-"` 核对为 0，只有新增行）。②去掉 `unlocated_entities` 里跳过
-`poi-routine-meal-` 前缀的 `continue`——单 Trip 从 2 行暴增到 12 行（含 10 个占位），
-`forbidden` 用例断言转红；改回并 `touch` 后绿。
-
-任务 2（`tests/test_locate_cli.py` 四例，全绿）：`--help` 退出 0；
-`tests/fixtures/trips/schema/valid/weekend-live.json`（坐标本就齐全，天然是"无可查"夹具，
-不用另造）直接跑退出 2 且 `entities=0`；坐标置空后子进程 `HOME` 指向空临时目录、环境不带
-`AMAP_WEBSERVICE_KEY`——退出 2，两行全 `credential_missing`；不存在的文件退出 1 且
-`LOCATE_FAILED` 落在 stderr。实网冒烟（本机 `ctw doctor` 显示 `amap: configured`）：复制
-`weekend-live.json` 到 `.tmp/`、景点与住宿坐标置 null，`ctw locate --trip ... --output-json`
-→ `LOCATE_COMPLETE output=... entities=2 located=1`；住宿"南京东路片区候选"真实
-`located`；景点"外滩"因高德 geocode 对同一地址返回 3 个候选而触发既有 `identity_conflict`
-严格口径，落成 `unresolved`，`reason` 精确等于命中的那条
-`identity_conflict:poi-bund:geocode_ambiguous:{...}` warning——印证「宁可查不到也不给假
-坐标」与 `_first_matching_warning` 的取值逻辑都对（这条路径四例单测未覆盖，靠实网冒烟补证）。
-
-设计取舍（任务书未拍板，本书自行决定，记录在案）：①信封顶层 `health` 在"整次调用零次
-`backend.locate()`"（例如 `--trip` 传入的 Trip 全部实体已有坐标）时没有真实探测可用，选择
-填 `{"status": "degraded", ...}` 而不是新造词汇，因为它复用了 `_finalize_result` 既有的
-"无 live_cells 即 degraded"语义，且不影响任何验收断言（只看 `entities`/退出码）。②候选
-文档里 `pois` 一旦为空会被 candidates schema 的 `minItems:1` 拒收——若某个 Trip 只有待定位
-的住宿、没有待定位的景点，本书未加"借一个已定位景点凑数"的兜底，因为 demo 与全部测试夹具
-都是"每段至少一个待定位景点"，加兜底属于没有测试覆盖的过度设计；真遇到"整段没有可查景点"
-的 Trip 会在 `backend.locate()` 里因 `validate_candidates` 报错而整段失败，留作已知限制，
-供 AQ3 或后续折回书注意。
-
-验收：全量 `Ran 828 tests`（820 基线 + 8 新）OK 0 skipped；`scripts/scan_secrets.py` 0；
-`~/miniconda3/envs/core/bin/python -m pyflakes $(git ls-files '*.py')` 0 行；
-`git status --short -- demo` 空；`git add -A` 后 `git diff main --cached --name-only` 恰为 7
-个白名单文件（`docs/design/09-impl-map.md`、`cli.py`、新建 `locate.py`、`mobility.py`、
-`tests/test_design_docs.py`、新建 `tests/test_locate.py`、新建 `tests/test_locate_cli.py`）；
-`mobility.py` 的 diff 用 `grep -E "^[-+]"|grep -v "^+++|^---"|grep -c "^-"` 核对为 0（零删除
-行）。只提交并 push `locate-query` 分支，未合并、未改 CI、未碰白名单外文件。
-
-## 第三十五波 AQ3（locate-fold，worktree `.tmp/wt-aq3`，2026-09-18）
-
-任务 0：`git worktree add .tmp/wt-aq3 -b locate-fold main`（基于 `03042f4`）；全量 `Ran 820 tests` OK、0 skipped；`git grep -c -E "locate_fold|_cmd_journey_locate" -- plugins tests` 0 命中。核对通过。
-
-理解：把 `ctw locate` 的结果信封（`entities[]`+`claims[]`）按 `trip_id`+`kind`+`ref_id` 折回既有 Trip/Journey，只补坐标为空或缺 `gcj02`/`wgs84` 的 POI/住宿，已有完整坐标的实体永不覆盖；`located` 写 `coordinates` 并按 `mobility.apply_locations` 的去重方式追加 `claim_ids`，缺的 claim 从信封补齐；`unresolved` 只记/换该路径的 typed unknown；`provider_error` 或无匹配行不动；patch `trigger=provider_change`，其余记账（health/scope/stability）照 `weather_fold.py`/`dining_fold.py` 的套路搬；Journey 侧走 `replace_trips_in_journey` 一次重组。
-
-顺序：先写 `locate_fold.py`+`test_locate_fold.py` 六条库验收，再接 `ctw journey locate`+`test_journey_locate_cli.py` 三条 CLI 验收，最后补 `test_design_docs.py` 计数（54→55）与 `09-impl-map.md` 一行。
-
-最大风险：demo `journey-16d` 里 `poi-j16-shanghai`/`lodging-j16-shanghai-central` 分别挂在 day-2/day-1 两天，验收①要求两天都进 `scope.day_ids` 且只出一个 patch；`unresolved`「reason 不同则删旧加新」需要显式等值判断兜底二折幂等，不能只靠「entity 是否已有坐标」的资格门槛。
-
-任务 1（`locate_fold.py` + `tests/test_locate_fold.py`）：六条验收首跑全绿。反向验证：把 `_needs_location` 临时改成恒 `return True`（去掉「已有坐标不动」判断），单跑 `test_entity_with_existing_full_coordinates_is_never_overwritten` 变红（`AssertionError: PatchResult(...)`，本该 None 却被覆盖）；`touch` 源文件后还原判断，六条复跑全绿。demo trip0 里 `poi-j16-shanghai`（`/pois/0`）与 `lodging-j16-shanghai-central`（`/lodgings/0`）分别挂在 day-2（slot 0，kind poi）与 day-1（slot 4，kind checkin），折入后 `scope.day_ids={day-1,day-2}`，`dining.anchor_for(trip,0,5)` 按预期从 None 变成该住宿；amap 健康行本就有 `poi`/`geocode`（demo 原始 capabilities 已含两者），只有 status/mode 从 missing/static 改 ready/live。
-
-任务 2（`ctw journey locate` + `tests/test_journey_locate_cli.py`）：仿 `_cmd_journey_dining` 原样实现，`cli.py` 只改 `_add_journey_parser`（新增 `journey_locate` 子解析器）、`_cmd_journey`（一行分派）、新函数 `_cmd_journey_locate`。三条子进程验收首跑全绿（`revision=2`+`journey validate`+`render`+`validate-html errors=0`；已折过再折→`JOURNEY_LOCATE_NOOP` 退出 2 无文件；`--base-revision 7`→退出 1 含 `revision_conflict`）。`tests/test_design_docs.py` 54→55、`docs/design/09-impl-map.md` 加 `locate_fold.py` 一行并把 `cli.py` 行的子命令列表补上 `journey locate`/`_cmd_journey_locate`，`09-impl-map.md` 的目录树（§0）未动。
-
-顺手补了 6 条之外的第 7 条：`test_provider_error_row_leaves_entity_untouched`（`provider_error` 行——书里三处写了「不动」但不在编号验收项里——折入后返回 None、entity 坐标仍 null、既有 unknown 原样保留一条不重复）。
-
-**全量验证**（补第 7 条后）：`/usr/bin/python3 -m unittest discover -s tests`→`Ran 830 tests`、`OK`、0 skipped（820 基线 + 10 新增：`test_locate_fold.py` 7 + `test_journey_locate_cli.py` 3）；`~/miniconda3/envs/core/bin/python -m pyflakes $(git ls-files '*.py')`→0 行；`/usr/bin/python3 scripts/scan_secrets.py`→`0 finding(s)`；`git status -- demo`→干净（本书全程只读 demo journey，从不写回）；`git diff main --name-only`→仅 `PROGRESS.md`、`BLOCKED.md`、`docs/design/09-impl-map.md`、`plugins/.../cli.py`、`tests/test_design_docs.py` 与三个新文件（`locate_fold.py`、`test_locate_fold.py`、`test_journey_locate_cli.py`），与「界限」白名单逐一对应；`tests.test_weather_fold`/`tests.test_dining_fold` 未改动、随全量一起绿。完成条件全部满足，已提交并推送分支 `locate-fold`，未合并。
-
-## 书 AQ4「坐标折回文档」（2026-09-18，第三十五波四本并行之一，worktree `.tmp/wt-aq4` 分支 `locate-docs`）
-
-**任务 0 核对记录**：`git worktree add .tmp/wt-aq4 -b locate-docs main` 后核对与任务书一致——main
-`03042f4` 全量 `/usr/bin/python3 -m unittest discover -s tests` → `Ran 820 tests in 59.852s`、`OK`、
-0 skipped；`git grep -c "ctw locate" -- README.md docs plugins/china-trip-weaver/skills` exit 1
-且无输出（0 命中）；README.md 第 195/207 行分别是 `ctw dining`/`ctw journey dining` 用法行；
-06-pipeline.md 已有 §7.6 天气折回、§7.7 餐饮折回。理解的目标：给并行开发中的 `ctw locate`／
-`ctw journey locate`（AQ2/AQ3，此刻两个 worktree 都还在 `03042f4`，零改动）补 README×2＋
-06-pipeline.md §7.8＋mobility SKILL 四处文档，并把 README 里 `ctw dining` 误标成必填的
-`--output-json` 改成可选（已用 `cli.py:466` 的 `dining.add_argument("--output-json", type=Path,
-default=None)` 与 `_cmd_dining` 里 `else: for row in rows: print(_format_row(row))` 分支核实
-"不带它逐行打印"属实）。顺序：先任务 1（README×2＋SKILL，互相之间用 `diff` 直接校验一致性），
-再任务 2（06-pipeline.md §7.8，需要先读完 §7.6/§7.7 的既有结构与既存标识符定义位置才能仿写）。
-最大风险：AQ2/AQ3 代码尚未落地，任务书「我替领导拍的板」没有拍板的内部字段名／函数名（比如
-`locate_fold.py` 内部单 Trip／整 Journey 折回函数叫什么、`--output-json` 信封里数组键名）一律不
-杜撰，只写任务书原文点名的标识符与可从既有代码（`mobility.py`／`dining.py`／`trip.schema.json`）
-交叉验证的行为（如 `coordinates` 字段必填但值可为 `null`，折回应是 `replace` 不是 `add`）。
-
-**任务 1 完成**：[README.md](README.md) 用法块里 `ctw dining` 行的 `--output-json dining.json` 去掉
-误标的必填方括号缺失（改成 `[--output-json dining.json]`），`ctw journey dining` 行后加两行
-`ctw locate (--journey JOURNEY.json | --trip TRIP.json) [--deadline SECONDS] [--output-json
-locate.json]` 与 `ctw journey locate --journey JOURNEY.json --locate-result LOCATE.json
---base-revision N [--reason REASON] [--fixed-clock ISO] --output-json JOURNEY.json`；`ctw dining`
-说明段补半句「without `--output-json` it prints one line per slot instead」，段后新增一段讲
-`ctw locate`/`ctw journey locate`（实体范围、判定口径同规划器、`status`/`reason` 三态、退出码、
-两步折回法、`trigger=provider_change`、`JOURNEY_LOCATE_NOOP`/`COMPLETE`、`--journey` 永不改写、
-末句呼应"先补住宿坐标再跑 `ctw dining`"）。[README.zh-CN.md](README.zh-CN.md) 同步加逐字相同的
-两行命令与互译说明段。[resolve-china-mobility/SKILL.md](plugins/china-trip-weaver/skills/resolve-china-mobility/SKILL.md)
-在餐饮那条 bullet 后新增一条合并交代两条命令，命令代码块里 `ctw journey weather` 行后加
-`ctw locate`/`ctw journey locate` 两行（放在 `ctw dining` 之前，呼应"先补坐标再查餐饮"的因果顺序；
-`--base-revision`/输出文件名沿用既有代码块「每条 `journey xxx` 独立示例、非链式递进版本号」的既有
-风格，与 `ctw journey weather`/`ctw journey dining` 两行一样都是 `--base-revision 1` → `journey-r2.json`），
-frontmatter 未碰。验收：`/usr/bin/python3 -m unittest tests.test_skills -v` → `Ran 11 tests`、OK；
-`diff <(grep -E '^ctw (dining|locate|journey locate)' README.md) <(grep -E '^ctw (dining|locate|journey
-locate)' README.zh-CN.md)` 空；`git diff main -- plugins/.../resolve-china-mobility/SKILL.md` 确认
-改动行全部在第 19 行之后（frontmatter 是第 1-4 行），diff 为空。
-
-**任务 2 完成**：[docs/design/06-pipeline.md](docs/design/06-pipeline.md) 在 §7.7 后加
-`### 7.8 坐标折回`，仿 §7.6/§7.7 的开头句式点出 `locate_fold.py` 与 §7.1–7.5 局部重排合同的关系，
-按任务书七点结构写七条 bullet——触发（`ctw locate`/`ctw journey locate` 两步用法、
-`revision_conflict`）、实体范围（跳过 `poi-routine-meal-*`、已有坐标不动）、判定口径
-（`MobilityBackend.locate` 只解析坐标不查路线矩阵、`_poi_admin_matches`/
-`POI_NAME_SIMILARITY_MARGIN`(0.15)/`POI_COORDINATE_CLUSTER_MAX_METERS`(300 米) 与规划器共用一条不放宽）、
-信封状态（`status` 三态、`credential_missing`/`locate_no_result`、折回只消费 `located` 行）、
-覆盖规则（只补仍缺坐标的实体、二折 NOOP）、patch 形状（对 `/coordinates` 做 `replace`——已用
-trip.schema.json 的 poi/lodging `required` 含 `coordinates` 且值 `oneOf coordinates/null` 核实
-字段总是存在、只是值可能为 null，故用 `replace` 不是 `add`；`claim_ids` 按 `apply_locations` 同样
-去重方式合入；`trigger=provider_change`）、一次重组（`replace_trips_in_journey`、`JOURNEY_LOCATE_COMPLETE`，
-末句点出补住宿坐标后 `dining.py::anchor_for` 会选中它作为晚餐锚点）。验收：
-`/usr/bin/python3 -m unittest tests.test_design_docs -v` → `Ran 1 test`、OK（本书未新增/删除任何
-`.py`，54 计数不受影响）；`git grep -c` 逐一核对 7 个既存标识符在 `plugins` 命中（`poi-routine-meal`
-2 文件、`apply_locations` 2、`_poi_admin_matches` 2、`POI_NAME_SIMILARITY_MARGIN` 1、
-`POI_COORDINATE_CLUSTER_MAX_METERS` 1、`anchor_for` 3、`provider_change` 3）；`git grep -n` 逐一核对
-8 个新名字（`ctw locate`/`--locate-result`/`LOCATE_COMPLETE`/`JOURNEY_LOCATE_NOOP`/
-`JOURNEY_LOCATE_COMPLETE`/`locate_fold.py`/`MobilityBackend.locate`/`locate_no_result`）在本书改动的
-四个文件里逐字命中且与任务书原文一致；`git diff main -- README.md README.zh-CN.md docs plugins |
-grep -c -E "^\+.*(/Users/|0\.2[0-9]\.[0-9])"` = 0（无本机路径、无版本号字面值）。
-
-**收尾验收**：`/usr/bin/python3 -m unittest discover -s tests` 复跑 → `Ran 820 tests in 68.290s`、
-`OK`、0 skipped（未新增/未减少任何测试，因为本书不碰 `.py`）；`/usr/bin/python3 scripts/scan_secrets.py`
-→ `secret scan: 0 finding(s) across 420 file(s)`；`git status --porcelain -- demo` 空（本书不碰渲染
-产物）。`git diff main --name-only` 恰好四个实现文件——README.md、README.zh-CN.md、
-docs/design/06-pipeline.md、plugins/china-trip-weaver/skills/resolve-china-mobility/SKILL.md——加
-本文件与 BLOCKED.md，全部落在界限白名单内；未碰任何 `.py`、schema、demo、09-impl-map.md 或其它
-Skill。BLOCKED.md 本书追加「无」，任务 0 核对全部与任务书描述一致、没有非阻塞发现需要记录。只提交
-并 push 分支 `locate-docs`，不合并 main。
-
-## 第三十六波 AR1「住宿身份核对」（2026-09-18，worktree `.tmp/wt-ar1` 分支 `lodging-identity`）
-
-**任务 0**：仓库根建 worktree，全量 `Ran 846 tests`、`OK`、0 skipped，与书里数字一致。新建
-`tests/test_lodging_identity.py` 两条测试，在未改 `mobility.py` 前确认均红：①同品牌两家分店、
-名字相近、相距 800 m（复用 `_synthetic_ambiguous_cluster(800)` 的字符串与坐标构造，只把实体换成
-住宿）→ 断言 `assertNotIn` 失败，`lodging-bjs-central` 确实出现在 `result.locations` 里（旧代码住宿
-跳过身份核对直接走 geocode 拿到坐标）；②唯一身份住宿 → 断言 `["poi", "geocode"]` 失败，实际
-`transport.capabilities` 是 `["geocode", "route", "route"]`（旧代码从不查 `poi`，且用裸「城市+名称」
-直接查到坐标进而触发路由矩阵）。两条症状与任务书「现状」描述的机制一致，目标明确、无需停下写
-BLOCKED。
-
-目标：删掉 `_resolve_entity` 里「住宿跳过 `_resolve_poi_identity`」那道 `if not entity["lodging"]:`
-分叉，让住宿与景点共用同一条核对→编码路径。顺序：先跑通任务 0 两条新测试（已红，待分叉删除后转绿）
-→ 改 15 条既有测试的值（六条 `test_lodging_geocode_*` 要给传输层补一条唯一 POI 应答，让失败点后移到
-geocode 那一步）→ demo/夹具/假 Key 全量复跑零漂移 → 反向验证 → 实网 + 文档。最大风险：15 条既有
-测试里的传输层测试替身（`SyntheticAmapFailureTransport`、`EmptyGeocodeTransport` 等自定义类）目前只
-接受一种 capability，删分叉后住宿会先发 `poi` 请求，必须逐个补 POI 应答分支，稍有不慎会连带改掉
-`assertEqual` 之外的宽松断言（书里明令禁止）。
-
-**任务 1 完成**：`mobility.py::_resolve_entity` 删掉 `if not entity["lodging"]:` 分叉（diff 只有这
-8 行改动，`_resolve_poi_identity`/`_resolve_geocode`/`_poi_admin_matches`/`_poi_name_is_ambiguous`/
-`_complete_poi_address`/两个阈值常量/`FATAL_ERRORS` 一字未动）；`~/miniconda3/envs/core/bin/python -m
-pyflakes` 该文件 0 行。测试改法：`test_amap_live.py` 新增模块级 `lodging_poi_identity_body()`（给任意
-住宿实体回一条唯一匹配的 POI 应答），`SyntheticAmapFailureTransport` 加一条前置分支——`capability=
-"geocode"` 时先接一次 `poi` 请求走该应答再进入原有失败场景；`EmptyGeocodeTransport`/
-`AmbiguousGeocodeTransport`/`RateLimitedGeocodeTransport`/`MismatchTransport` 四个内联测试替身同样
-先应答 `poi` 再进各自的 geocode 场景；六条 `test_lodging_geocode_*` 的 `calls=`／能力序列／告警反馈
-JSON（`suggested_names`/`candidates`）改成实测的新值，失败点全部仍落在 geocode 一步、错误类别与健康
-状态字面量未动，`assertEqual` 一处未松动。另外 3 条（矩阵/全量规划/运行时不符）把场景夹具补一条唯一
-POI 候选后同样只改调用数与 JSON 反馈字面值。`test_journey.py` 3 条、`test_locate.py` 3 条全部只改
-`calls=`/调用总数（`RecordingJourneyAMapTransport`/`CapabilityRecordingTransport` 均继承既有
-`ScriptedAmapTransport`，无需改动，新增的 `poi` 请求走它原有的通用分支）；`test_locate.py` 一条测试名
-里嵌了旧调用数（`..._with_three_calls_per_trip`），实测变 4 次/趟后连方法名一并改成
-`..._with_four_calls_per_trip`（全仓 `git grep` 确认无第二处引用）。反向验证：把分叉加回
-`_resolve_entity`，`tests.test_lodging_identity` 两条应声转红（`lodging-bjs-central` 又出现在
-`result.locations`；能力序列变回 `['geocode', 'route']`）；删除分叉、`touch` 源文件后复跑转绿。
-全量验证：`/usr/bin/python3 -m unittest discover -s tests` → `Ran 848 tests`、`OK`、0 skipped
-（846+2 新）；带 `AMAP_WEBSERVICE_KEY`/`FLYAI_API_KEY`/`VARIFLIGHT_API_KEY`/`ANYSEARCH_API_KEY`=
-`ctw-canary-fake-*` 四个假 Key 复跑同样 848 OK；`pyflakes $(git ls-files '*.py')` 0 行；
-`scripts/scan_secrets.py` → `0 finding(s) across 428 file(s)`；`build_plan_fixtures.py`/
-`build_renderer_fixtures.py`/`build_provider_fixtures.py`/`build_scheduler_fixtures.py` 依次重生成后
-`git status --short -- demo tests/fixtures` 空、零字节漂移，`git status --short` 只剩本书改动的 5 个
-文件加新测试文件。
-
-**任务 2 完成**：实网只用公开店名，未碰真实行程目录。把
-[tests/fixtures/trips/schema/valid/weekend-live.json](tests/fixtures/trips/schema/valid/weekend-live.json)
-拷到 `.tmp/ar1-realnet/`，景点 `poi-bund` 与住宿 `lodging-nanjing-east` 的 `coordinates` 都置 null，
-住宿改名「如家酒店（南京东路步行街店）」，`ctw locate --progress ndjson --trip … --output-json …`：
-`LOCATE_COMPLETE`，住宿行 `status=located`，`gcj02=(121.477072, 31.234663)`，用
-`matrix.haversine_meters` 核实距 121.473667,31.230525 达 **563 m**（超过 500 m）；stderr 前两条
-`query` 事件依次是 `poi`、`geocode`。景点 `poi-bund`（外滩）同一轮 `unresolved`（
-`geocode_ambiguous`，与本书改动无关，是外滩地址本身在高德多义）。发现一处与任务书不符、判定非阻塞并
-记入 BLOCKED.md：任务书预期「实体按 ref_id 排序、住宿在前」，实测顺序是 `poi-bund` 在前、
-`lodging-nanjing-east` 在后——`locate.py::unlocated_entities` 一直是「先景点后住宿」而非按 ref_id 排
-序，该文件在本书界限之外未改动，完成条件本身也未把顺序列为验收项。换成「7天酒店（上海人民广场店）」
-再跑：住宿行 `status=unresolved`，`reason=identity_conflict:lodging-nanjing-east:geocode_ambiguous:
-{"candidates":[{"administrative_area":"上海市","name":"上海市宝山区大场镇鄂尔多斯路800号"},{...98弄}]}`
-——与管理者预判一致（unresolved，未 located，故不触发「若 located 记坐标到 BLOCKED」那条）；行政区正
-确但地址在宝山区（非目标的人民广场），是「让步顺序：宁可查不到也不给假坐标」生效的证据，不是本书判定
-的缺陷。文档：`plugins/.../resolve-china-mobility/SKILL.md` 第 11 行 `Resolve POI identity` 改
-`Resolve POI and lodging identity`，句末加 `A lodging is never geocoded by its bare city and
-name.`；`docs/design/06-pipeline.md` §7.8「判定口径」句末加「住宿与景点一样先核对名称身份，再对身份
-给出的完整地址编码」。`git grep` 确认旧文案 `Resolve POI identity`（不带 `and lodging`）全仓零残留。
-`/usr/bin/python3 -m unittest tests.test_skills` → `Ran 11 tests`、OK；`tests.test_design_docs` →
-`Ran 1 test`、OK。收尾复跑全量 `Ran 848 tests`、OK、0 skipped；`pyflakes`/`scan_secrets` 仍 0。
-`git diff main --name-only` 恰好八个文件（`BLOCKED.md`/`PROGRESS.md`/`docs/design/06-pipeline.md`/
-`plugins/.../resolve-china-mobility/SKILL.md`/`mobility.py`/三个测试文件）加新文件
-`tests/test_lodging_identity.py`，与「界限」白名单逐一对应；`git diff main -- mobility.py` 只有那 8
-行分叉删除，无旁的改动。两条完成条件均满足。只提交并推送分支 `lodging-identity`，不合并 main。
-
-## 书 AR2「amap-error-codes」（2026-09-18，第三十六波两本并行之一，worktree `.tmp/wt-ar2` 分支 `amap-error-codes`）
-
-任务 0 核对：main `f93455b` 全量 `Ran 846 tests`、0 skipped，`test_providers.py:118` fixture_count 89，
-与任务书基线一致。红测试写在 `tests/test_amap_error_codes.py::EngineErrorDoesNotStopOtherEntitiesTests`：
-两个取自 e2e demo 的真实 POI（`poi-bjs-bund`/`poi-bjs-museum`，均缺坐标），用包一层 `ScriptedAmapTransport`
-的假传输把排序更靠前的 `poi-bjs-bund` 的 geocode 调用换成高德 `infocode 30001
-ENGINE_RESPONSE_DATA_ERROR`；临时把 amap.py 还原到 HEAD 复跑，确认现状真红（`locations` 是空元组而非
-`('poi-bjs-museum',)`），随后恢复修复版转绿。
-目标：按「我替领导拍的板」给 `normalize()` 的非成功分支加 `infocode`/`errcode` 归类表，`invalid_request`/
-`upstream_5xx` 非致命、失败实体记警告后继续查下一个，其余码（含缺码/未知码）照旧走「info 含 LIMIT→
-rate_limited，否则 forbidden」的既有 fallback。顺序：任务 0（红测试+核对，已完成）→任务 1（实现+夹具+
-逐码测试）→任务 2（实网探针+文档）。最大风险：v4 骑行分支既有 fallback 同时认 "LIMIT"/"QUOTA"，status
-分支既有 fallback 只认 "LIMIT"，两者不统一、各自保留，避免动到任务书未描述的行为。
-
-**任务 1 完成**：[amap.py](plugins/china-trip-weaver/src/china_trip_weaver/providers/amap.py) 加三个模块级
-`frozenset`（`_RATE_LIMITED_INFOCODES`/`_UPSTREAM_5XX_INFOCODES`/`_INVALID_REQUEST_INFOCODES`，逐字照抄任务书
-码表）与 `_classify_amap_infocode(code)`（先查三张表，再判断「5 位且首位是 3」兜底 `invalid_request`，都不中
-返回 `None`）；`normalize()` 两处非成功分支（status 用 `infocode`、v4 骑行用 `errcode`）改成先查表、`None`
-时退回各自原有 fallback；错误文案从两句固定文案改成按最终 `error_class` 查 `_FAILURE_MESSAGES`（无测试断言
-具体文案字节，按分类给更准确的话）。`build_provider_fixtures.py` 在 `api_forbidden` 后加四行：`engine_error`
-（geocode 30001→`invalid_request`/`degraded`）、`invalid_params`（poi 20000→`invalid_request`/`degraded`）、
-`access_too_frequent`（geocode 10004→`rate_limited`）、`server_busy`（route-walking-v3 10016→`upstream_5xx`/
-`degraded`），复用既有 `geocode_req`/`amap_req`/`route_base`。重生成：`wrote 93 provider fixtures and 5 AMap
-scenarios`；`git diff -- tests/fixtures/providers/manifest.json` 只新增四条 `files` 记录与 `fixture_count`
-89→93，其余 89 条哈希逐字不变（零漂移）；`tests/test_providers.py:118` 的 `89` 改 `93`。
-验收：`tests.test_amap_error_codes` 单跑 3 个测试（含 13 个 status 子用例、4 个 riding 子用例）全绿；
-`tests.test_providers` 单跑 `Ran 124 tests` OK（含新增的 4 个动态夹具测试
-`test_fixture_amap_{engine_error,invalid_params,access_too_frequent,server_busy}`）；全量
-`unittest discover -s tests` → `Ran 853 tests`（846+3+4）OK、0 skipped；四个假 Key 全设
-（`AMAP_WEBSERVICE_KEY`/`FLYAI_API_KEY`/`VARIFLIGHT_API_KEY`/`ANYSEARCH_API_KEY` 均设
-`ctw-canary-fake-*`）复跑全量同样 853 OK；`pyflakes $(git ls-files '*.py') tests/test_amap_error_codes.py`
-0 行；`scripts/scan_secrets.py` → `secret scan: 0 finding(s) across 432 file(s)`；`git status --porcelain --
-demo` 空。反向验证：临时删掉 `_classify_amap_infocode` 里「5 位且首位 3」那条兜底分支，复跑
-`tests.test_amap_error_codes` → 4 个子用例转红（任务 0 那条主测试 `locations` 变回空元组；
-`engine_error_30001`/`engine_error_32000_other_3_prefix`/`riding_engine_error_30001` 三个逐码子用例期望
-`invalid_request` 实得 `forbidden`）；改回并 `touch` 源文件（避开 Python 3.9 按秒级 mtime+大小校验的字节码
-缓存）后复跑同一测试与全量 `discover`，均恢复 853 OK。
-
-**任务 2 完成**：实网 `plugins/china-trip-weaver/scripts/ctw doctor --probe` 高德行——
-`"amap":{"business":"passed","capabilities":{"poi":"passed","poi_around":"passed","weather":"passed"},
-"contract":"passed","credential":"configured","network":"passed"}`——三项业务层能力（`poi`/`poi_around`/
-`weather`）均 `passed`，证明成功路径没被本书的分类改动误伤。[04-providers.md](docs/design/04-providers.md)
-§1.2 表按拍板改两行：`invalid_request` 判定列补「，或 provider 明确拒绝这一条请求的参数/内容（如高德 2 开头、
-3 开头的错误码）」；`rate_limited` 判定列补「，如高德 10003/10004/10044 等限流码」。`git diff --
-docs/design/04-providers.md` 确认只改了这两行。验收：`tests.test_design_docs` 单跑 `Ran 1 test` OK（本书未新增
-/删除任何运行时或 scripts 目录下的 `.py`，impl-map 计数不受影响，`test_amap_error_codes.py` 在 `tests/` 目录
-下不计入该断言）；文案里提到的 10003/10004/10044 三个字面码逐一 `git grep` 命中
-`plugins/china-trip-weaver/src/china_trip_weaver/providers/amap.py`（均落在 `_RATE_LIMITED_INFOCODES` 里）。
-
-**收尾**：`git diff main --name-only` 加 `git status --porcelain` 里的未跟踪文件，合计 12 个改动路径——
-`providers/amap.py`、`scripts/build_provider_fixtures.py`、`tests/fixtures/providers/manifest.json`、
-四个新夹具 json、`tests/test_providers.py`、新建 `tests/test_amap_error_codes.py`、
-`docs/design/04-providers.md`、`PROGRESS.md`、`BLOCKED.md`——逐一核对全部落在任务书「界限」白名单内；
-`mobility.py`/`planning.py`/`errors.py`/`test_amap_live.py`/`test_journey.py`/`test_locate.py` 一字未改
-（`test_amap_live.py` 只被 `test_amap_error_codes.py` import 了 `ScriptedAmapTransport`/`credentials`/
-`request` 三个既有辅助函数）。BLOCKED.md 本书追加「无」，附两处非阻塞的工程判断记录（v4 骑行分支
-fallback 与 status 分支 fallback 不统一、错误文案改按分类取值）。只提交并 push 分支 `amap-error-codes`，
-不合并 main。
+  （分别在 2026-09-18 发 0.25.0、0.26.0 时从本文件整体迁出，一字未改，按合入顺序）。
