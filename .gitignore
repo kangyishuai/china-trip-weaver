@@ -8,3 +8,7 @@ credentials*
 !plugins/china-trip-weaver/src/china_trip_weaver/credentials.py
 !plugins/china-trip-weaver/references/credentials.md
 .coverage*
+
+# Trip artifacts written by the plugin when Codex runs inside this repository
+# (plans/<name>/): they carry real hotel names and provider responses.
+plans/
