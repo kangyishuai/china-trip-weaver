@@ -585,3 +585,63 @@ fix-names` 会把它们列为人工项。
   `tests/test_amap_live.py`、`tests/test_journey.py`、新增 `tests/test_planner_amap_calls.py`——
   严格落在任务书「只允许改」清单内。只提交并推 `amap-calls-total` 分支，未合并、未碰 CI、未动版本号
   （本书不涉及发版，不跑 `install_local_plugin.sh`）。
+## 书 AQ2（分支 `locate-query`，worktree `.tmp/wt-aq2`，2026-09-18）
+
+任务书目标：给 `mobility.py` 新增 `MobilityBackend.locate()`（`resolve` 的前半段，不查路线矩阵），
+再写新模块 `locate.py`（`unlocated_entities`/`locate_trips`）与 `ctw locate` 命令，为
+Journey/Trip 里缺 `gcj02`/`wgs84` 坐标的景点与住宿查高德坐标、产出结果信封；折回落盘是另一本书
+（AQ3）。第三十五波四本并行，本书只推 `locate-query` 分支，不合并、不改 CI。
+
+任务 0 核对：`git worktree add .tmp/wt-aq2 -b locate-query main` 建在 `03042f4` 上，全量
+`Ran 820 tests` OK 0 skipped、`git grep -n -E "def locate|locate_trips" -- plugins` 0 命中，
+与任务书基线一致。理解的目标/顺序/风险（≤10 行）：①`mobility.py` 只能新增——`locate()` 把
+`resolve()` 的候选校验/早退/POI-geocode 查找/语义检查逐字复用，只是不跑
+`_resolve_route_matrix`，空列表传给 `_finalize_result`；②`locate.py` 最大风险是 Trip 的
+`lodgings[]` 现代形状是 `#/$defs/stay`（多 `candidate_ref`/`selection_status`/
+`selected_nights` 三个字段），原样塞进候选文档会被 `validate_candidates` 拒收，必须按
+`#/$defs/lodging` 的 11 个字段逐一投影；③候选文档的 `claims` 必须精确等于这些实体
+`claim_ids`（含 `price.claim_id`/`opening_windows[].claim_id`）在 Trip 自己 `claims` 里的
+对应项，多一条触发 `C_ORPHAN_CLAIM`，少一条触发 `C_CLAIM_REF`；④`ctw locate` 照抄
+`_cmd_weather`/`_cmd_dining`/`_cmd_mobility` 的拼装方式（`MobilityBackend.from_spec` +
+`_attach_progress` + `read_json`）。
+
+任务 1（`tests/test_locate.py` 四例，全绿）：demo `journey-16d` 三段各 2 个真实体（1 景点 +
+1 住宿，10–12 个 `poi-routine-meal-*` 占位全跳过）共 6 行全 `located`、坐标含 gcj02/wgs84、
+claim 编号全在信封 `claims` 里、每段恰 3 次调用（POI 1 次 identity + 2 次 geocode）、记能力名
+的传输层子类断言零 `route`；全坐标已知的 Trip 0 行 0 次调用；`ScriptedAmapTransport
+(forbidden=True)` 全员 `provider_error`/`forbidden`；同一 Trip 传两次，第二次零新调用（4 行，
+2 条来自缓存）。反向验证：①在 `locate()` 里临时加回 `_resolve_route_matrix` 调用——
+`transport.calls` 从 9 变 15，断言转红；改回并 `touch` 后绿（`git diff main -- mobility.py`
+用 `grep -c "^-"` 核对为 0，只有新增行）。②去掉 `unlocated_entities` 里跳过
+`poi-routine-meal-` 前缀的 `continue`——单 Trip 从 2 行暴增到 12 行（含 10 个占位），
+`forbidden` 用例断言转红；改回并 `touch` 后绿。
+
+任务 2（`tests/test_locate_cli.py` 四例，全绿）：`--help` 退出 0；
+`tests/fixtures/trips/schema/valid/weekend-live.json`（坐标本就齐全，天然是"无可查"夹具，
+不用另造）直接跑退出 2 且 `entities=0`；坐标置空后子进程 `HOME` 指向空临时目录、环境不带
+`AMAP_WEBSERVICE_KEY`——退出 2，两行全 `credential_missing`；不存在的文件退出 1 且
+`LOCATE_FAILED` 落在 stderr。实网冒烟（本机 `ctw doctor` 显示 `amap: configured`）：复制
+`weekend-live.json` 到 `.tmp/`、景点与住宿坐标置 null，`ctw locate --trip ... --output-json`
+→ `LOCATE_COMPLETE output=... entities=2 located=1`；住宿"南京东路片区候选"真实
+`located`；景点"外滩"因高德 geocode 对同一地址返回 3 个候选而触发既有 `identity_conflict`
+严格口径，落成 `unresolved`，`reason` 精确等于命中的那条
+`identity_conflict:poi-bund:geocode_ambiguous:{...}` warning——印证「宁可查不到也不给假
+坐标」与 `_first_matching_warning` 的取值逻辑都对（这条路径四例单测未覆盖，靠实网冒烟补证）。
+
+设计取舍（任务书未拍板，本书自行决定，记录在案）：①信封顶层 `health` 在"整次调用零次
+`backend.locate()`"（例如 `--trip` 传入的 Trip 全部实体已有坐标）时没有真实探测可用，选择
+填 `{"status": "degraded", ...}` 而不是新造词汇，因为它复用了 `_finalize_result` 既有的
+"无 live_cells 即 degraded"语义，且不影响任何验收断言（只看 `entities`/退出码）。②候选
+文档里 `pois` 一旦为空会被 candidates schema 的 `minItems:1` 拒收——若某个 Trip 只有待定位
+的住宿、没有待定位的景点，本书未加"借一个已定位景点凑数"的兜底，因为 demo 与全部测试夹具
+都是"每段至少一个待定位景点"，加兜底属于没有测试覆盖的过度设计；真遇到"整段没有可查景点"
+的 Trip 会在 `backend.locate()` 里因 `validate_candidates` 报错而整段失败，留作已知限制，
+供 AQ3 或后续折回书注意。
+
+验收：全量 `Ran 828 tests`（820 基线 + 8 新）OK 0 skipped；`scripts/scan_secrets.py` 0；
+`~/miniconda3/envs/core/bin/python -m pyflakes $(git ls-files '*.py')` 0 行；
+`git status --short -- demo` 空；`git add -A` 后 `git diff main --cached --name-only` 恰为 7
+个白名单文件（`docs/design/09-impl-map.md`、`cli.py`、新建 `locate.py`、`mobility.py`、
+`tests/test_design_docs.py`、新建 `tests/test_locate.py`、新建 `tests/test_locate_cli.py`）；
+`mobility.py` 的 diff 用 `grep -E "^[-+]"|grep -v "^+++|^---"|grep -c "^-"` 核对为 0（零删除
+行）。只提交并 push `locate-query` 分支，未合并、未改 CI、未碰白名单外文件。

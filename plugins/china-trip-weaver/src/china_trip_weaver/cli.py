@@ -78,6 +78,7 @@ def _parser() -> argparse.ArgumentParser:
     _add_air_parser(commands)
     _add_weather_parser(commands)
     _add_dining_parser(commands)
+    _add_locate_parser(commands)
     _add_render_parser(commands)
     _add_validate_html_parser(commands)
     return parser
@@ -466,6 +467,16 @@ def _add_dining_parser(commands: Any) -> None:
     dining.add_argument("--output-json", type=Path, default=None)
 
 
+def _add_locate_parser(commands: Any) -> None:
+    locate = commands.add_parser("locate", help="query AMap coordinates for a journey/trip's unlocated POIs and lodgings")
+    _add_progress_argument(locate)
+    targets = locate.add_mutually_exclusive_group(required=True)
+    targets.add_argument("--journey", type=Path, default=None, help="Journey JSON; locates every trip's unlocated entities")
+    targets.add_argument("--trip", type=Path, default=None, help="Trip JSON; locates its unlocated entities")
+    locate.add_argument("--deadline", type=float, default=12.0)
+    locate.add_argument("--output-json", type=Path, default=None)
+
+
 def _add_render_parser(commands: Any) -> None:
     render = commands.add_parser("render", help="render a validated Trip as deterministic HTML")
     render.add_argument("trip", type=Path)
@@ -538,6 +549,7 @@ def main(
         "rail": lambda: _cmd_rail(args, progress),
         "weather": lambda: _cmd_weather(args, progress),
         "dining": lambda: _cmd_dining(args, progress),
+        "locate": lambda: _cmd_locate(args, progress),
         "research": lambda: _cmd_research(args, credential_path, progress),
         "replan": lambda: _cmd_replan(args),
         "render": lambda: _cmd_render(args),
@@ -1917,6 +1929,57 @@ def _cmd_dining(args: argparse.Namespace, progress: "_NDJSONProgress") -> int:
     except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
         _progress_failed(progress, "dining")
         print("DINING_FAILED %s" % exc, file=sys.stderr)
+        return 1
+
+
+def _format_locate_row(entity: Mapping[str, Any]) -> str:
+    label = "%s·%s(%s)" % (entity["kind"], entity["name"], entity["ref_id"])
+    if entity["status"] == "located":
+        point = entity["coordinates"]["gcj02"]
+        return "%s ← 已定位 %.6f,%.6f" % (label, point["lng"], point["lat"])
+    verb = {"unresolved": "无结果", "provider_error": "查询失败"}.get(entity["status"], entity["status"])
+    return "%s ← %s（%s）" % (label, verb, entity["reason"])
+
+
+def _cmd_locate(args: argparse.Namespace, progress: "_NDJSONProgress") -> int:
+    from .clock import SystemClock
+    from .locate import locate_trips
+    from .mobility import MobilityBackend
+
+    try:
+        if args.deadline <= 0:
+            raise ValueError("--deadline must be positive")
+        repo_root = _repo_root()
+        if args.journey is not None:
+            trips = [trip for trip in read_json(args.journey).get("trips", []) if isinstance(trip, dict)]
+        else:
+            trips = [read_json(args.trip)]
+
+        backend = MobilityBackend.from_spec("live", repo_root, deadline_seconds=args.deadline)
+        _attach_progress(backend, progress)
+        envelope = locate_trips(trips, backend, SystemClock())
+
+        located_count = sum(1 for entity in envelope["entities"] if entity["status"] == "located")
+        exit_code = 0 if located_count else 2
+
+        if args.output_json is not None:
+            args.output_json.parent.mkdir(parents=True, exist_ok=True)
+            write_canonical_json(args.output_json, envelope)
+            print("LOCATE_COMPLETE output=%s entities=%d located=%d" % (
+                args.output_json, len(envelope["entities"]), located_count,
+            ))
+        else:
+            for entity in envelope["entities"]:
+                print(_format_locate_row(entity))
+        progress.emit({
+            "event": "completion", "command": "locate",
+            "status": "ok" if located_count else "degraded",
+            "items": len(envelope["entities"]),
+        })
+        return exit_code
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        _progress_failed(progress, "locate")
+        print("LOCATE_FAILED %s" % exc, file=sys.stderr)
         return 1
 
 

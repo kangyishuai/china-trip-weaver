@@ -2405,3 +2405,16 @@ PROGRESS.md、BLOCKED.md」，逐字排他；唯一能让这 14 项转绿的改�
 ## 书 AQ1「高德健康行 calls= 真实调用数」（2026-09-18，第三十五波四本并行之一，worktree `.tmp/wt-aq1` 分支 `amap-calls-total`）：无
 
 无。全程没有遇到拿不准、需要管理者裁决的真实二义性。任务书「我替领导拍的板」一节把改写时机（`_plan_dining` 之后）、透传路径（经 `_plan_build_trip` 到 `_combined_amap_health`）、正则的排除规则（跳过 lodging 段 `poi_calls=`）都定死，照做即可闭合任务 0 那条复现测试。唯一需要现场决定的是一处纯粹的实现细节，不构成设计判断分叉：任务书写的 `mobility._transport_calls(active_mobility.transport)` 假定按模块限定名访问，但 `plan_trip`/`_plan_build_trip` 里已经各有一个同名局部变量 `mobility`（绑定 `MobilityResult`），若照抄 `from . import mobility` 会在整个函数作用域内被这个局部变量遮蔽（Python 的作用域规则：一个名字只要在函数里被赋值过，该名字在整个函数体内都指向局部变量）。改为按名直接 `from .mobility import _transport_calls` 导入后直接调用，功能与任务书描述完全等价，且仍只改了 planning.py 的 import 行与三处指定函数，没有触碰界限外的任何文件。详细完成记录、三条新测试的设计意图（含专门证伪"读到 Journey 共享传输层累计值"这一潜在缺陷的测试）、实网数字与反向验证的实际断言见 PROGRESS.md「第三十五波 AQ1」小节。
+## 书 AQ2「locate 查询方法与模块」（2026-09-18，第三十五波四本并行之一，worktree `.tmp/wt-aq2` 分支 `locate-query`）：无
+
+无。全程没有遇到拿不准、需要管理者裁决的真实二义性。任务书「我替领导拍的板」一节把
+`MobilityBackend.locate()` 的实现范围（`resolve()` 前半段、不查路线矩阵）、`locate.py`
+两个函数的行为、信封形状、CLI 参数与退出码都定死。实现时有两处任务书未覆盖的空白，判断为
+「更好路」而非违反「只允许/不许」，已记入 PROGRESS.md「书 AQ2」的「设计取舍」一节：①整次
+调用零次 `backend.locate()`（例如传入的 Trip 全部实体已有坐标）时信封顶层 `health` 没有
+真实探测可用，选择复用 `_finalize_result` 既有的「无 live_cells 即 degraded」语义，而不是
+新造一个状态词汇；②候选文档的 `pois` 一旦为空会被 candidates schema 的 `minItems:1` 拒收，
+若某个 Trip 只有待定位的住宿、没有待定位的景点，未加「借一个已定位景点凑数」的兜底——因为
+demo 与全部测试夹具都是「每段至少一个待定位景点」，加兜底属于没有测试覆盖的过度设计，真遇到
+这种 Trip 会在 `validate_candidates` 报错时整段失败，留作已知限制。详细实现、四项反向验证
+（红→绿）与实网冒烟证据见 PROGRESS.md「书 AQ2」条目。
