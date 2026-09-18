@@ -481,7 +481,10 @@ class JourneyAMapRuntimeTests(unittest.TestCase):
         ]
         self.assertEqual(3, len(reasons))
         self.assertTrue(all(reason.startswith("calls=5/80 ") for reason in reasons), reasons)
-        self.assertEqual(15, transport.calls)
+        # Mobility calls are unchanged; the planner's nearby-dining stage (ADR-0022)
+        # adds its own poi_around queries on top, two per Trip here.
+        self.assertEqual(15, transport.calls - transport.poi_around_calls)
+        self.assertEqual(6, transport.poi_around_calls)
         self.assertTrue(validate_journey(result.journey).ok)
 
     def test_tight_journey_total_is_fairly_split_and_truthfully_degraded(self):
@@ -673,7 +676,9 @@ class JourneyAMapRuntimeTests(unittest.TestCase):
             self.assertIsNotNone(coordinates[0]["gcj02"])
         for ref_id in repeated_lodgings:
             self.assertEqual(1, counts[("geocode", ref_id)])
-        self.assertEqual(57, transport.calls)
+        # Mobility calls are unchanged; the nearby-dining stage (ADR-0022) adds its own.
+        self.assertEqual(57, transport.calls - transport.poi_around_calls)
+        self.assertEqual(9, transport.poi_around_calls)
         visible_calls = Counter(
             item for item in result.business_calls if item.startswith("amap.")
         )
@@ -692,11 +697,14 @@ class JourneyAMapRuntimeTests(unittest.TestCase):
         first = plan_journey(
             case["request"], case["candidates"], self.clock, self.rail, backend,
         )
-        self.assertEqual(15, transport.calls)
+        self.assertEqual(15, transport.calls - transport.poi_around_calls)
+        self.assertEqual(6, transport.poi_around_calls)
         second = plan_journey(
             case["request"], case["candidates"], self.clock, self.rail, backend,
         )
-        self.assertEqual(30, transport.calls)
+        # Neither the mobility memo nor the dining queries carry over between invocations.
+        self.assertEqual(30, transport.calls - transport.poi_around_calls)
+        self.assertEqual(12, transport.poi_around_calls)
         self.assertTrue(validate_journey(first.journey).ok)
         self.assertTrue(validate_journey(second.journey).ok)
 

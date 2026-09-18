@@ -1129,7 +1129,9 @@ class KeylessE2ETests(unittest.TestCase):
             if item["field_path"].endswith("/coordinates")
         ]
         by_path = {item["field_path"]: item for item in coordinate_unknowns}
-        self.assertEqual(5, transport.calls)
+        # Mobility calls are unchanged; the nearby-dining stage (ADR-0022) adds one query.
+        self.assertEqual(5, transport.calls - transport.capabilities.count("poi_around"))
+        self.assertEqual(1, transport.capabilities.count("poi_around"))
         self.assertEqual(
             ["/pois/0/coordinates", "/pois/1/coordinates"],
             [item["field_path"] for item in coordinate_unknowns],
