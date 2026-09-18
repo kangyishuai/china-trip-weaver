@@ -2044,7 +2044,11 @@ class AMapMobilityTests(unittest.TestCase):
         amap = next(item for item in result.trip["provider_health"] if item["provider"] == "amap")
         self.assertEqual("ready", amap["status"])
         self.assertEqual("live", amap["mode"])
-        self.assertIn("calls=29/80", amap["reason"])
+        # 29 mobility calls (poi/geocode/route) plus 4 nearby-dining poi_around
+        # queries (ADR-0022): the health line must report the whole run, not just
+        # the mobility-resolve phase that finishes before dining starts.
+        self.assertIn("calls=33/80", amap["reason"])
+        self.assertEqual(transport.calls, 33)
         for item in result.trip["pois"] + result.trip["lodgings"]:
             self.assertIsNotNone(item["coordinates"]["gcj02"])
             self.assertIsNotNone(item["coordinates"]["wgs84"])

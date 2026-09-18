@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import re
 import urllib.parse
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -19,7 +20,7 @@ from .credentials import SUPPORTED_KEY_NAMES, resolve_credentials
 from .evidence import make_claim
 from .flyai_inventory import AMapLodgingBackend, FlyAIBackend
 from .matrix import haversine_meters, static_estimate_cell
-from .mobility import MobilityBackend, MobilityResult, apply_locations
+from .mobility import MobilityBackend, MobilityResult, _transport_calls, apply_locations
 from .pipeline import PipelineRun
 from .providers.amap import AMapAdapter
 from .providers.base import ProviderContext, ReplayTransport, stable_id
@@ -690,6 +691,7 @@ def _plan_build_trip(
     unknowns: Sequence[Mapping[str, Any]],
     weather_health: Optional[Mapping[str, int]] = None,
     dining_health: Optional[Mapping[str, int]] = None,
+    real_amap_calls: Optional[int] = None,
 ) -> Dict[str, Any]:
     transport_pricing = _transport_pricing(
         normalized_request, days, transport_legs,
@@ -721,6 +723,7 @@ def _plan_build_trip(
                 amap_lodging.health if amap_lodging is not None else None,
                 weather_health,
                 dining_health,
+                real_amap_calls,
             ),
             enrichment.health,
             anysearch_configured,
@@ -800,10 +803,14 @@ def plan_trip(
     )
     claims = list(claims) + dining_claims
     unknowns = list(unknowns) + dining_unknowns
+    real_amap_calls = (
+        _transport_calls(active_mobility.transport) if active_mobility.mode == "live" else None
+    )
     trip = _plan_build_trip(
         normalized_request, days, transport_legs, trip_id, now, budget_ledger,
         lodgings, pois, claims, rail_health, inventory, mobility, amap_lodging,
         enrichment, anysearch_configured, unknowns, weather_health, dining_health,
+        real_amap_calls=real_amap_calls,
     )
     html, html_digest = _plan_validate_and_render(trip, run, trip_id)
     return PlanResult(
@@ -3072,49 +3079,74 @@ def _combined_amap_health(
     lodging: Optional[Mapping[str, Any]],
     weather: Optional[Mapping[str, int]] = None,
     dining_health: Optional[Mapping[str, int]] = None,
+    real_amap_calls: Optional[int] = None,
 ) -> Mapping[str, Any]:
     if lodging is None:
         combined = dict(copy.deepcopy(dict(mobility)))
-        combined = _apply_weather_health(combined, weather)
-        return _apply_dining_health(combined, dining_health)
-    severity = {
-        "contract_mismatch": 7,
-        "forbidden": 6,
-        "rate_limited": 5,
-        "unavailable": 4,
-        "degraded": 3,
-        "expired": 2,
-        "missing": 1,
-        "ready": 0,
-    }
-    statuses = tuple(
-        _effective_amap_health_status(item)
-        for item in (mobility, lodging)
-    )
-    successful = any(item.get("status") == "ready" and item.get("mode") == "live" for item in (mobility, lodging))
-    if "rate_limited" in statuses:
-        status = "rate_limited"
-    elif successful:
-        status = "ready"
     else:
-        status = max(
-            statuses,
-            key=lambda value: severity.get(value, 3),
+        severity = {
+            "contract_mismatch": 7,
+            "forbidden": 6,
+            "rate_limited": 5,
+            "unavailable": 4,
+            "degraded": 3,
+            "expired": 2,
+            "missing": 1,
+            "ready": 0,
+        }
+        statuses = tuple(
+            _effective_amap_health_status(item)
+            for item in (mobility, lodging)
         )
-    capabilities = list(dict.fromkeys(
-        list(mobility.get("capabilities", ())) + list(lodging.get("capabilities", ()))
-    ))
-    combined = {
-        "provider": "amap",
-        "version": mobility["version"],
-        "mode": "live" if any(item.get("mode") == "live" for item in (mobility, lodging)) else "static",
-        "status": status,
-        "checked_at": max(str(mobility["checked_at"]), str(lodging["checked_at"])),
-        "capabilities": capabilities,
-        "reason": "lodging=%s; mobility=%s" % (lodging["reason"], mobility["reason"]),
-    }
+        successful = any(item.get("status") == "ready" and item.get("mode") == "live" for item in (mobility, lodging))
+        if "rate_limited" in statuses:
+            status = "rate_limited"
+        elif successful:
+            status = "ready"
+        else:
+            status = max(
+                statuses,
+                key=lambda value: severity.get(value, 3),
+            )
+        capabilities = list(dict.fromkeys(
+            list(mobility.get("capabilities", ())) + list(lodging.get("capabilities", ()))
+        ))
+        combined = {
+            "provider": "amap",
+            "version": mobility["version"],
+            "mode": "live" if any(item.get("mode") == "live" for item in (mobility, lodging)) else "static",
+            "status": status,
+            "checked_at": max(str(mobility["checked_at"]), str(lodging["checked_at"])),
+            "capabilities": capabilities,
+            "reason": "lodging=%s; mobility=%s" % (lodging["reason"], mobility["reason"]),
+        }
     combined = _apply_weather_health(combined, weather)
-    return _apply_dining_health(combined, dining_health)
+    combined = _apply_dining_health(combined, dining_health)
+    return _apply_real_amap_calls(combined, real_amap_calls)
+
+
+_AMAP_HEALTH_CALLS_PATTERN = re.compile(r"(?<![A-Za-z_])calls=\d+/")
+
+
+def _apply_real_amap_calls(
+    combined: Mapping[str, Any], real_amap_calls: Optional[int],
+) -> Mapping[str, Any]:
+    """Replace the mobility segment's frozen calls=<n>/ with the whole run's true AMap
+    call count: mobility.resolve() bakes its reason string before the later weather/dining
+    stages reuse the same transport, so the original count under-reports the total.
+    The lookbehind skips lodging's poi_calls=, which must stay untouched."""
+
+    if real_amap_calls is None:
+        return combined
+    reason = str(combined["reason"])
+    updated_reason = _AMAP_HEALTH_CALLS_PATTERN.sub(
+        "calls=%d/" % real_amap_calls, reason, count=1,
+    )
+    if updated_reason == reason:
+        return combined
+    updated = dict(combined)
+    updated["reason"] = updated_reason
+    return updated
 
 
 def _apply_weather_health(

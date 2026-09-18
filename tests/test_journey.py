@@ -480,11 +480,15 @@ class JourneyAMapRuntimeTests(unittest.TestCase):
             for trip in result.journey["trips"]
         ]
         self.assertEqual(3, len(reasons))
-        self.assertTrue(all(reason.startswith("calls=5/80 ") for reason in reasons), reasons)
+        # 5 mobility calls plus 2 nearby-dining poi_around queries (ADR-0022) per Trip:
+        # the health line reports the whole segment run, not just mobility-resolve.
+        self.assertTrue(all(reason.startswith("calls=7/80 ") for reason in reasons), reasons)
         # Mobility calls are unchanged; the planner's nearby-dining stage (ADR-0022)
         # adds its own poi_around queries on top, two per Trip here.
         self.assertEqual(15, transport.calls - transport.poi_around_calls)
         self.assertEqual(6, transport.poi_around_calls)
+        reported_calls = [int(re.match(r"calls=(\d+)/", reason).group(1)) for reason in reasons]
+        self.assertEqual(transport.calls, sum(reported_calls))
         self.assertTrue(validate_journey(result.journey).ok)
 
     def test_tight_journey_total_is_fairly_split_and_truthfully_degraded(self):
