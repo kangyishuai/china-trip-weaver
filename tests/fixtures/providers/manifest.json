@@ -1,6 +1,10 @@
 {
   "files": [
     {
+      "path": "amap/access_too_frequent.json",
+      "sha256": "323d695dcb53bde7fccce662b38be9304148660867ca7b9e142b27d89c1fd8f2"
+    },
+    {
       "path": "amap/api_forbidden.json",
       "sha256": "a0acfce31ff5b086a15d8da57b6576f61e6497588ac8a8df60aa0dcded2bfe08"
     },
@@ -29,6 +33,10 @@
       "sha256": "8776f1ba818f5d877ba3d16bb7274b8cd6b3423f7f2f70f598c8e2aba245dc87"
     },
     {
+      "path": "amap/engine_error.json",
+      "sha256": "30eaaa7008646c372032d394f3872c2703b6f6927272420fe0761bf356e26908"
+    },
+    {
       "path": "amap/geocode.json",
       "sha256": "31ae674a60992623c970853eb238b712c43978977733c34b9f77e6f98e4bdb8e"
     },
@@ -39,6 +47,10 @@
     {
       "path": "amap/http_unauthorized.json",
       "sha256": "734c47776190ef9439f1b6557f3180abea4d650a8bbd261e2ad223f7f9e5a372"
+    },
+    {
+      "path": "amap/invalid_params.json",
+      "sha256": "d0105851e23bc915935e66051a683bbca95fd4e4df11d4237fa85545e6682531"
     },
     {
       "path": "amap/malicious.json",
@@ -59,6 +71,10 @@
     {
       "path": "amap/schema_v3_drift.json",
       "sha256": "cb5b53b9e8b3a8f77adb191aa073dcbca03a8bec41837ea11eb09f37e0a4883d"
+    },
+    {
+      "path": "amap/server_busy.json",
+      "sha256": "e8d605c14003c078fb5d9556af466b6933b113fab0f3bba4b8a3a6130f629c0a"
     },
     {
       "path": "amap/success.json",
@@ -357,7 +373,7 @@
       "sha256": "46fd6e92dfa195da7d89386332f94ba20a9279229c78bec2ec1eaf2296321f2e"
     }
   ],
-  "fixture_count": 89,
+  "fixture_count": 93,
   "generated_by": "scripts/build_provider_fixtures.py",
   "manifest_version": 1
 }

@@ -12,6 +12,42 @@ from ..geo import Point, coordinate_record
 from .base import BaseAdapter, ContractMismatch, Normalization, ProviderFailure, sanitize_text, stable_id
 
 
+#: lbs.amap.com/api/webservice/guide/tools/info — codes AMap documents as quota/QPS
+#: limits, regardless of which endpoint returns them.
+_RATE_LIMITED_INFOCODES = frozenset((
+    "10003", "10004", "10010", "10014", "10015", "10019", "10020", "10021",
+    "10029", "10044", "10045", "40000", "40003",
+))
+#: Codes AMap documents as the engine or gateway itself failing, not the request.
+_UPSTREAM_5XX_INFOCODES = frozenset(("10016", "10017"))
+#: Codes AMap documents as the request's own parameters/content being rejected.
+#: Every 3xxxx code is engine-side data/params rejection for a single request, so
+#: the whole prefix is treated as invalid_request without enumerating each one.
+_INVALID_REQUEST_INFOCODES = frozenset((
+    "20000", "20001", "20002", "20003", "20011", "20012",
+    "20800", "20801", "20802", "20803",
+))
+
+
+def _classify_amap_infocode(code: str) -> Optional[str]:
+    if code in _RATE_LIMITED_INFOCODES:
+        return "rate_limited"
+    if code in _UPSTREAM_5XX_INFOCODES:
+        return "upstream_5xx"
+    if code in _INVALID_REQUEST_INFOCODES:
+        return "invalid_request"
+    if len(code) == 5 and code[0] == "3" and code.isdigit():
+        return "invalid_request"
+    return None
+
+
+_FAILURE_MESSAGES = {
+    "rate_limited": "AMap quota response",
+    "upstream_5xx": "AMap engine reported a temporary failure",
+    "invalid_request": "AMap rejected this request's parameters or content",
+}
+
+
 class AMapAdapter(BaseAdapter):
     provider = "amap"
     provider_version = "web-service-v5-v3-route"
@@ -26,14 +62,19 @@ class AMapAdapter(BaseAdapter):
         if api == "route-riding-v4" and "errcode" in body:
             if str(body.get("errcode")) != "0":
                 info = str(body.get("errmsg", "unknown"))
-                if "LIMIT" in info.upper() or "QUOTA" in info.upper():
-                    raise ProviderFailure("rate_limited", "AMap quota response")
-                raise ProviderFailure("forbidden", "AMap rejected the request")
+                error_class = _classify_amap_infocode(str(body.get("errcode")))
+                if error_class is None:
+                    error_class = (
+                        "rate_limited" if ("LIMIT" in info.upper() or "QUOTA" in info.upper())
+                        else "forbidden"
+                    )
+                raise ProviderFailure(error_class, _FAILURE_MESSAGES.get(error_class, "AMap rejected the request"))
         elif body.get("status") != "1":
             info = str(body.get("info", "unknown"))
-            if "LIMIT" in info.upper():
-                raise ProviderFailure("rate_limited", "AMap quota response")
-            raise ProviderFailure("forbidden", "AMap rejected the request")
+            error_class = _classify_amap_infocode(str(body.get("infocode", "")))
+            if error_class is None:
+                error_class = "rate_limited" if "LIMIT" in info.upper() else "forbidden"
+            raise ProviderFailure(error_class, _FAILURE_MESSAGES.get(error_class, "AMap rejected the request"))
         if api in ("poi-v5", "around-v5"):
             return self._pois(body, request, clock)
         if api == "geocode-v3":

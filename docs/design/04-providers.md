@@ -42,11 +42,11 @@ normalized_items[], claims[], health, warnings[], raw_ref?, response_hash?
 
 | `error_class` | 判定 | health | retry |
 |---|---|---|---|
-| `invalid_request` | 本地输入不符合 adapter contract | `degraded` | 不重试，回到 intake/候选过滤 |
+| `invalid_request` | 本地输入不符合 adapter contract，或 provider 明确拒绝这一条请求的参数/内容（如高德 2 开头、3 开头的错误码） | `degraded` | 不重试，回到 intake/候选过滤 |
 | `credential_missing` | 所需 env/file 值不存在 | `missing` | 不重试，走无 Key 分支 |
 | `credential_expired` | provider 明确返回过期 | `expired` | 不重试，不在对话索取值 |
 | `forbidden` | 401/403 且非明确 expired，或账户/余额禁用 | `forbidden` | 不重试 |
-| `rate_limited` | 429 或明确 quota 响应 | `rate_limited` | 只尊重 `Retry-After` 且不越过总 deadline；否则降级 |
+| `rate_limited` | 429 或明确 quota 响应，如高德 10003/10004/10044 等限流码 | `rate_limited` | 只尊重 `Retry-After` 且不越过总 deadline；否则降级 |
 | `timeout` | adapter/h宿主 deadline 到期 | `degraded` | 幂等请求最多 1 次 |
 | `network` | DNS/TLS/连接失败 | `degraded` | 最多 1 次，随后 cached/deep link |
 | `upstream_5xx` | 5xx 或 provider 明确临时故障 | `degraded` | 最多 1 次 |
