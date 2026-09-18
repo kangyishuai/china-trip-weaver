@@ -228,6 +228,7 @@ user_locked_refs[], optional allowed_changes[], now
 
 - **触发**：调用方拿到 `ctw dining --output-json` 的结果信封后，对单个 Trip 调 `fold_dining_into_trip`；对整个 Journey 调 `fold_dining_into_journey`（内部逐 Trip 调用前者）。命令 `ctw journey dining` 驱动后者对一份 Journey 文件工作，用法是先 `ctw dining --journey J --output-json W.json`，再 `ctw journey dining --journey J --dining-result W.json --base-revision N --output-json OUT`；`base_revision` 不等于 Journey 当前 revision 时抛 `revision_conflict`，退出码 1，`--journey` 原文件永不写回。
 - **匹配与覆盖判定**：逐时段比对查询结果里的候选与该时段当前的 `slot.dining`；结果与当前值相同（含两者都判定为无候选锚点）时算无变化。折同一个结果两次，第二次每个时段都落进「无变化」分支，函数返回 `None`；命令行层面对应 `JOURNEY_DINING_NOOP`，退出码 2，不写 `--output-json`。
+- **claim 归属**：`ctw dining` 对同一锚点只查一次，所以同一天锚在同一处的午餐与晚餐会共用一份结果；折回时每个时段拿到各自一份 identity claim 副本，`subject_ref` 为该时段，`claim_id` 由信封里的 claim 编号与时段编号确定性派生，选项的 `claim_id` 同步指向它——同一 Trip 里不会出现重复的 claim 编号，同一结果再折一次也仍然零改动。规划器 `_plan_dining` 同样为每个时段生成独立 claim。
 - **patch 形状**：有变化的时段在一个 patch 里对 `/days/<i>/slots/<j>/dining` 做 `add`/`replace`（并按需增删对应 `unknowns`/`claims`），patch 的 `trigger` 固定为 `dining`，`reverify_claim_ids` 恒为空；返回前用 `validate_trip`/`validate_journey` 复核，不过就抛错，折回从不产出无效 Trip/Journey。
 - **多 Trip 一次重组**：`fold_dining_into_journey` 把每个被改的子 Trip 交给 `journey.py` 的 `replace_trips_in_journey` 一次重组，不论有几个子 Trip 同时变化，Journey 的 revision 只加一。命令成功时打印 `JOURNEY_DINING_COMPLETE`，退出码 0。折回过程同样只读既有模块，不发起新的 provider 调用。
 

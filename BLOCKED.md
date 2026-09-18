@@ -22,6 +22,8 @@ plugins/china-trip-weaver/skills/plan-china-trip/SKILL.md
 plugins/china-trip-weaver/skills/resolve-china-mobility/SKILL.md` 无输出，exit 1）,与任务书本意
 （没人抢先写重复内容）相符。按此理解继续任务 1、任务 2。
 
+管理者裁决（2026-09-18，验收时补记）：任务 0 那 2 处命中是管理者写 ADR-0022 时已点名命令，判非阻塞正确；文档认可。合并后 18 个新字面串（命令名、参数、完成行、函数名、健康行格式、类型码）逐一在代码命中，`ctw dining --help` 与 `ctw journey dining --help` 退出 0，README 两份用法行逐字相同，新增行无本机路径、无版本号。06 §7.7 由管理者补「claim 归属」一条以对上 AP5b 的修正。已关闭。
+
 ## 书 AP1a「poi_around 综合排序与 distance_meters」（2026-09-17，第三十三波，worktree `.tmp/wt-ap1a` 分支 `around-sortrule`）：任务 0 数字一处不符（非阻塞）＋ distance_meters 与 schema 边界互斥（已裁决，已解决）
 
 **任务 0 核对，一处不符，非阻塞**：任务书「现状与任务 0」给出六类基线数字，五类精确核对一致——全量
@@ -2313,9 +2315,15 @@ validate` 要不要对游离 claim 报警，本条底部两个问题本身没有
 ## 书 AP5a「`ctw dining` 命令」（2026-09-17，第三十四波四本并行之一，worktree `.tmp/wt-ap5a` 分支 `dining-cli`）：无
 
 无。全程没有遇到拿不准、需要管理者裁决的真实二义性。任务书「我替领导拍的板」一节把 `meal_type_for` 的改动范围、命令的参数与去重口径、信封形状、退出码都定死，实现时唯一需要自行决断的是「无锚点时 `radius_m`/`keywords`/`search_url` 是否置 `null`」——任务书只标注了 `anchor|null` 与 `search_url|null` 两个字段允许为空，`radius_m`/`keywords` 没标 `|null`；但既然没有锚点就不会真的发起查询，`radius_m`/`keywords` 这两个「查询会用到的参数」在没有查询时置 `null` 更诚实（不编造一个「本可以用但没用上」的半真值），且四个验收用例都不检查这两个字段在 `no_anchor` 状态下的取值，判断为可走的「更好路」而非违反「只允许/不许」。详细实现与验收证据见 PROGRESS.md「书 AP5a」条目。
+
+管理者裁决（2026-09-18，验收时补记）：认可，无锚点行把 `radius_m`/`keywords` 置 null 的判断也认可。暗卷：实网对现役 16 天行程跑 `ctw dining`，22 个用餐时段全部识别（午晚餐各 11，含 3 个 kind `rest` 的「午餐与…」），19 个有参考、9/25 晚餐无锚点、9/27 与 9/28 两个景区午餐 1.5 km 内无结果；20 个不同锚点只发 20 次查询（9/26 午晚餐共用一次），option 的 claim 编号全部能在信封里找到。已关闭。
+
 ## 书 AP5b「dining 结果折回 Journey」（2026-09-18，第三十四波四本并行之一，worktree `.tmp/wt-ap5b` 分支 `dining-fold`）：无
 
 无。全程没有遇到拿不准、需要管理者裁决的真实二义性；实现严格按任务书已拍板的信封、patch、健康行、一次 Journey 重组与 CLI exit/output 契约执行。详细命令输出与反向验证红→绿证据见 PROGRESS.md「书 AP5b」小节。
+
+管理者裁决（2026-09-18，验收时补记）：执行者照书实现正确，但验收查出**管理者规格缺陷**——书只写了「复制后 `subject_ref` 改 slot_id」，没要求换 claim 编号；`ctw dining` 对同一锚点只查一次，同一 Trip 里两餐共用一份结果时，折回把同一个 claim 编号追加两次，`validate_trip` 报 `V_DUPLICATE_ID` 整体失败，真实行程 9/26 午晚餐必撞。管理者在分支上以提交 `80523cf` 修正：每个时段一份 claim 副本，编号为 `stable_id("claim-dining", 原编号, slot_id)`，选项的 `claim_id` 同步改指；补回归测试 `test_two_meals_sharing_one_query_result_get_their_own_claims`（修前红、修后绿、去掉换编号那一行再红）；06 §7.7 加「claim 归属」一条、09 的 dining_fold 行同步。暗卷：实网结果折回现役行程副本→revision 10、parent 9、三个子 Trip 各一个 `dining` 补丁（7/7/8 个时段）、零重复 claim、`journey validate` 与 `validate-html` 通过、22 个餐饮块（55 家、3 个「暂无」）、署名含高德；同一结果二折 `JOURNEY_DINING_NOOP` 退出 2 不写文件；篡改 claim 编号退出 1 报 `dining_fold_claim_missing` 不写文件；现役 journey.json sha 不变。已关闭。
+
 ## 书 AP6a「规划器餐饮阶段」（2026-09-18，第三十四波，worktree `.tmp/wt-ap6a` 分支 `planner-dining`）：真实阻塞，供裁决——`_plan_dining` 接入 `plan_trip` 后，白名单外三个测试文件的 14 项既有测试失败
 
 **现象**：`_plan_dining` 严格按任务书「我替领导拍的板」实现并在 `plan_trip` 里紧跟 `_plan_weather` 之后接入（`active_mobility.mode == "live"` 时才跑）。接入后本书自己新建的 `tests/test_planner_dining.py`（13 项）全绿，且全量从 790 变 803（790+13）；但白名单**之外**三个既有测试文件里，原本绿的 14 项转红，报错全部逐字相同：
@@ -2389,3 +2397,5 @@ PROGRESS.md、BLOCKED.md」，逐字排他；唯一能让这 14 项转绿的改�
 已诊断、非本书逻辑缺陷的技术债记入 PROGRESS「已知抖动」一类条目，等下一个真正需要碰这些测试文件的
 书顺手修；③本书直接扩大白名单重跑（需要管理者明确授权，因为原任务书"只允许"字面排他）。三条建议
 里我倾向①，改动量最小且完全复用已验证有效的 `WeatherScriptedTransport` 模式。
+
+管理者裁决（2026-09-18，验收时补记）：阻塞属实，根因是管理者书的白名单没开放测试替身所在文件，执行者拒绝加假门槛、拒绝吞异常、如实报红是对的。采纳建议①，由管理者在分支上以提交 `7227daa` 完成：`tests/test_amap_live.py` 的 `ScriptedAmapTransport` 与 `tests/test_providers.py` 的 `AMapScenarioTransport` 对 `poi_around` 回答合法的空 around-v5 页；6 处写死总调用数/能力列表的断言改为「原有调用数不变＋单独钉住餐饮调用数」——与各 Trip 健康行 `dining=N queried` 对账一致（16 天用例三段各 2 次、合计 6），拔掉 `_plan_dining` 接线后新断言 6≠0、9≠0、6≠0、1≠0 全红，还原后绿。`_plan_dining` 为每个时段复制独立 claim 的做法认可，AP5b 的修正即照此统一。暗卷：合并后全量 820 项绿、四个假 Key 同样 820、demo 与渲染夹具零漂移；demo 需求与候选平移到明天后实网从零规划：高德健康行同时含 `weather` 与 `poi_around`（reason 尾 `; weather=2 queried, 0 unknown; dining=2 queried, 2 unknown`）、6 个用餐时段 4 个各 3 家、2 个因当天景点坐标冲突记 `dining_no_anchor`、页面校验通过、零重复 claim。已关闭。
