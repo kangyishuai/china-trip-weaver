@@ -585,6 +585,7 @@ fix-names` 会把它们列为人工项。
   `tests/test_amap_live.py`、`tests/test_journey.py`、新增 `tests/test_planner_amap_calls.py`——
   严格落在任务书「只允许改」清单内。只提交并推 `amap-calls-total` 分支，未合并、未碰 CI、未动版本号
   （本书不涉及发版，不跑 `install_local_plugin.sh`）。
+
 ## 书 AQ2（分支 `locate-query`，worktree `.tmp/wt-aq2`，2026-09-18）
 
 任务书目标：给 `mobility.py` 新增 `MobilityBackend.locate()`（`resolve` 的前半段，不查路线矩阵），
@@ -645,6 +646,7 @@ claim 编号全在信封 `claims` 里、每段恰 3 次调用（POI 1 次 identi
 `tests/test_design_docs.py`、新建 `tests/test_locate.py`、新建 `tests/test_locate_cli.py`）；
 `mobility.py` 的 diff 用 `grep -E "^[-+]"|grep -v "^+++|^---"|grep -c "^-"` 核对为 0（零删除
 行）。只提交并 push `locate-query` 分支，未合并、未改 CI、未碰白名单外文件。
+
 ## 第三十五波 AQ3（locate-fold，worktree `.tmp/wt-aq3`，2026-09-18）
 
 任务 0：`git worktree add .tmp/wt-aq3 -b locate-fold main`（基于 `03042f4`）；全量 `Ran 820 tests` OK、0 skipped；`git grep -c -E "locate_fold|_cmd_journey_locate" -- plugins tests` 0 命中。核对通过。
@@ -662,6 +664,7 @@ claim 编号全在信封 `claims` 里、每段恰 3 次调用（POI 1 次 identi
 顺手补了 6 条之外的第 7 条：`test_provider_error_row_leaves_entity_untouched`（`provider_error` 行——书里三处写了「不动」但不在编号验收项里——折入后返回 None、entity 坐标仍 null、既有 unknown 原样保留一条不重复）。
 
 **全量验证**（补第 7 条后）：`/usr/bin/python3 -m unittest discover -s tests`→`Ran 830 tests`、`OK`、0 skipped（820 基线 + 10 新增：`test_locate_fold.py` 7 + `test_journey_locate_cli.py` 3）；`~/miniconda3/envs/core/bin/python -m pyflakes $(git ls-files '*.py')`→0 行；`/usr/bin/python3 scripts/scan_secrets.py`→`0 finding(s)`；`git status -- demo`→干净（本书全程只读 demo journey，从不写回）；`git diff main --name-only`→仅 `PROGRESS.md`、`BLOCKED.md`、`docs/design/09-impl-map.md`、`plugins/.../cli.py`、`tests/test_design_docs.py` 与三个新文件（`locate_fold.py`、`test_locate_fold.py`、`test_journey_locate_cli.py`），与「界限」白名单逐一对应；`tests.test_weather_fold`/`tests.test_dining_fold` 未改动、随全量一起绿。完成条件全部满足，已提交并推送分支 `locate-fold`，未合并。
+
 ## 书 AQ4「坐标折回文档」（2026-09-18，第三十五波四本并行之一，worktree `.tmp/wt-aq4` 分支 `locate-docs`）
 
 **任务 0 核对记录**：`git worktree add .tmp/wt-aq4 -b locate-docs main` 后核对与任务书一致——main

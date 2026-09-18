@@ -25,6 +25,8 @@ plugins/china-trip-weaver/src/china_trip_weaver/
 ├── geo.py
 ├── journey.py
 ├── keyless.py
+├── locate.py
+├── locate_fold.py
 ├── matrix.py
 ├── mobility.py
 ├── pipeline.py
@@ -182,7 +184,7 @@ tests/
 | 模块 | 一行职责 | 依赖 | 设计对应 | 完成定义 |
 |---|---|---|---|---|
 | `__init__.py` | 公开 package/version 常量 | stdlib | ADR-0002 | `0.1.0` 与 manifest 单源测试一致 |
-| `cli.py` | `doctor/plan/replan/render/validate/weather/dining/journey weather/journey dining/journey locate`（含 `_cmd_weather`、`_cmd_journey_weather`、`_cmd_journey_dining`、`_cmd_journey_locate`）参数与 JSON I/O | pipeline/validators | §02、§06 | argv 无 secrets；每命令 help/exit/golden tests |
+| `cli.py` | `doctor/plan/replan/render/validate/weather/dining/locate/journey weather/journey dining/journey locate`（含 `_cmd_weather`、`_cmd_locate`、`_cmd_journey_weather`、`_cmd_journey_dining`、`_cmd_journey_locate`）参数与 JSON I/O | pipeline/validators | §02、§06 | argv 无 secrets；每命令 help/exit/golden tests |
 | `contracts.py` | 构造/序列化 Trip、AdapterResult、matrix/patch plain data | stdlib dataclasses/json | §03；[决策 4](../research/04-design-insights.md#4-采用一个版本化-itineraryjson-是所有层的唯一事实源) | Python 3.9；canonical JSON；schema examples round-trip |
 | `validate_trip.py` | 无第三方依赖的 release-critical shape/语义校验 | contracts/geo | §03.8、§06.6 | 与 JSON Schema fixtures/invalid cases一致；cross-ref/time/mode/patch gates 完整 |
 | `errors.py` | 稳定 error/health taxonomy | stdlib | §04.1.2 | 每 class 映射、retry flag、public message 有 tests |
@@ -194,7 +196,7 @@ tests/
 | `matrix.py` | bounded route query plan、cell 合并与 coverage | geo/providers/evidence | §06.4；[决策 13](../research/04-design-insights.md#13-采用先真实-travel-time-matrix再排-time-windows不以直线连线冒充路线) | final hops covered；unreachable/estimate 不伪 live |
 | `pipeline.py` | P0–P6 状态机、checkpoint、取消与 stage invalidation；`planning.py` 的 `_plan_weather` 不占独立 checkpoint，夹在 SCHEDULED 与 VALIDATED 之间运行（§06.5.5），`_plan_dining` 紧跟其后运行在同一区间（§06.5.6） | all core | §06.1–2 | resume/hash/version tests；失败不越 stage boundary |
 | `journey.py` | 长行程拆分为多个 1–7 天子 Trip、`extract`/`assemble`/`--replace-trip`、`replace_trips_in_journey` 在一次调用里换入多个被改子 Trip 并只重组一次（供 `weather_fold.py` 等多 Trip 同时变化的调用方使用，Journey revision 只加一）、Journey 校验、按 `deadline_kind` 排序的预订/核验清单（`journey_booking_checklist`）；装配前由 `_with_missing_budget_ledgers` 只为缺失账本的子 Trip 按现有事实补算 `budget_ledger` | contracts/validate_trip | §01；[决策 4](../research/04-design-insights.md#4-采用一个版本化-itineraryjson-是所有层的唯一事实源) | 段拆分/连续性 golden；缺失账本补算；`ctw journey` 全子命令 tests |
-| `locate.py` | 为 Trip/Journey 里缺 `gcj02`/`wgs84` 坐标的景点与住宿查高德坐标，出结果信封（供后续折回书使用）：`unlocated_entities` 挑出缺坐标实体，跳过 `poi-routine-meal-` 用餐占位，住宿按 `#/$defs/lodging` 字段投影掉 `candidate_ref`/`selection_status`/`selected_nights`；`locate_trips` 逐 Trip 拼候选文档调用 `MobilityBackend.locate`（`mobility.py` 新增的公开方法，是 `resolve` 的前半段、不查路线矩阵），同一 `ref_id` 前面的 Trip 查过就复用不再发请求；每个实体按 `located`/`unresolved`/`provider_error` 三态之一入信封，坐标缺失时 `reason` 绝不编造，宁可留空（AQ2，2026-09-18） | candidates/mobility/providers.amap（全部只读 import） | 本任务书拍板（AQ2，2026-09-18）；无独立设计篇章，折回与 `ctw journey locate` 见后续波 | `test_locate.py` 四例（demo 16 天行程六实体全 `located` 且每段恰 3 次调用零 `route`、坐标已全齐的 Trip 零调用、`forbidden` 传输层全员 `provider_error`、同一 Trip 传两次第二次零新调用）与 `test_locate_cli.py` 四例（`--help`、无可查退出 2、凭据缺失全员 `credential_missing`、文件不存在退出 1）全过；反向验证：加回路线矩阵/去掉用餐占位跳过均转红，两处均已改回 |
+| `locate.py` | 为 Trip/Journey 里缺 `gcj02`/`wgs84` 坐标的景点与住宿查高德坐标，出结果信封（由 `locate_fold.py` 折回）：`unlocated_entities` 挑出缺坐标实体，跳过 `poi-routine-meal-` 用餐占位，住宿按 `#/$defs/lodging` 字段投影掉 `candidate_ref`/`selection_status`/`selected_nights`；`locate_trips` 逐 Trip 拼候选文档调用 `MobilityBackend.locate`（`mobility.py` 新增的公开方法，是 `resolve` 的前半段、不查路线矩阵），同一 `ref_id` 前面的 Trip 查过就复用不再发请求；某个 Trip 只缺住宿坐标时（手工补齐的行程常见），`_context_poi` 从同一 Trip 借一个已有坐标、claim 都指向自己的景点放进候选文档满足 `pois` 非空，它不发请求、不进信封（管理者验收修正，2026-09-18）；`unresolved` 的 `reason` 取法与规划器写坐标 unknown 相同（只认三段式告警、跳过 `nearby_name_candidates`、优先带 `suggested_names` 的那条）；每个实体按 `located`/`unresolved`/`provider_error` 三态之一入信封，坐标绝不编造，查不到就留空并写明 `reason`（AQ2，2026-09-18） | candidates/mobility/providers.amap（全部只读 import） | §06.7.8 | `test_locate.py` 五例加原因取法四例（只缺住宿的 Trip 仍能定位且只发 geocode；demo 16 天行程六实体全 `located` 且每段恰 3 次调用零 `route`、坐标已全齐的 Trip 零调用、`forbidden` 传输层全员 `provider_error`、同一 Trip 传两次第二次零新调用）与 `test_locate_cli.py` 四例（`--help`、无可查退出 2、凭据缺失全员 `credential_missing`、文件不存在退出 1）全过；反向验证：加回路线矩阵/去掉用餐占位跳过均转红，两处均已改回 |
 | `station_distance.py` | 铁路站点歧义候选的高德距离富化（`AMapStationDistanceEnricher`）：同城/跨城两遍 POI 查询、80 km 距离上限，以及站点全空时的 50 km 邻近车站回查（`find_nearby_stations`） | providers/amap、geo | §04.2 | 距离富化/邻近回查 fixtures 全过；无 Key 不发请求 |
 | `weather.py` | 天气纯函数：`forecast_available_on` 算可见窗口起点、`split_city_names` 拆复合地名、`advice_for` 按五条固定规则给出行提示、`location_key_vote` 做地点 adcode 多数票（并列取最小）、`result_reason` 把查询结果映到 unknown 原因 | stdlib | ADR-0021；§06.5.5 | 五条规则各一例＋无提示一例＋窗口/拆分各一例 tests 全过 |
 | `weather_fold.py` | 把 `ctw weather --output-json` 的结果信封折回既有 Trip/Journey：`fold_weather_into_trip` 逐天按（日期相同、`query` 精确等于 `split_city_names` 首段）匹配 `forecasts[]`，产出 `trigger=weather` 的 patch；`fold_weather_into_journey` 在其上用 `replace_trips_in_journey` 一次重组全部被改子 Trip，并把结果 `revision.created_by` 改回 `system`（AN8，2026-09-17） | contracts/validate_trip/journey/planning/replan/weather（全部只读 import） | §06.7 | `test_weather_fold.py` 六例（新增两天/同结果二折幂等/`reported_at` 更新覆盖替换/revision 冲突与 claim 不匹配报错/`no_forecast` 置空/复合地名靠 `query` 消歧）全过；折入后 demo Journey `validate_journey_html` 0 errors |

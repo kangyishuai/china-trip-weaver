@@ -175,11 +175,26 @@ def _entity_rows(
 
 
 def _first_matching_warning(warnings: Sequence[str], ref_id: str) -> Optional[str]:
+    """The warning a planner run would record as this entity's coordinate unknown.
+
+    Mirrors `planning._add_runtime_coordinate_unknowns`: only three-part
+    `kind:ref_id:detail` warnings count, the non-blocking
+    `identity_conflict:<ref>:nearby_name_candidates:…` note is skipped, and one
+    carrying `"suggested_names":` wins over the first match.
+    """
+
+    matches = []
     for warning in warnings:
         parts = warning.split(":", 2)
-        if len(parts) >= 2 and parts[1] == ref_id:
-            return warning
-    return None
+        if len(parts) != 3 or not all(parts) or parts[1] != ref_id:
+            continue
+        if parts[0] == "identity_conflict" and parts[2].startswith("nearby_name_candidates:"):
+            continue
+        matches.append(warning)
+    return next(
+        (warning for warning in matches if '"suggested_names":' in warning),
+        matches[0] if matches else None,
+    )
 
 
 def _candidates_document(
@@ -188,6 +203,10 @@ def _candidates_document(
 ) -> Dict[str, Any]:
     pois = [item["entity"] for item in pending if item["kind"] == "poi"]
     lodgings = [item["entity"] for item in pending if item["kind"] == "lodging"]
+    if not pois:
+        context = _context_poi(trip)
+        if context is not None:
+            pois = [context]
     referenced: Set[str] = set()
     for entity in pois + lodgings:
         referenced |= _referenced_claim_ids(entity)
@@ -200,6 +219,31 @@ def _candidates_document(
         "claims": claims,
         "unknowns": [],
     }
+
+
+def _context_poi(trip: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+    """An already-located POI that keeps a lodging-only candidates document valid.
+
+    The candidates schema requires at least one POI, but a hand-finished Trip
+    usually has every POI located and only its lodgings missing. An entity with
+    usable coordinates is never sent to AMap (`MobilityBackend._resolve_locations`
+    keeps it as-is), and only pending entities become envelope rows, so this POI
+    costs no call and never shows up in the result. Its own claims must all be
+    about it, or the candidates validator would reject the document.
+    """
+
+    claims_by_id = {claim["claim_id"]: claim for claim in trip["claims"]}
+    for poi in trip["pois"]:
+        if str(poi.get("poi_id", "")).startswith(_MEAL_PLACEHOLDER_PREFIX):
+            continue
+        if _usable_coordinates(poi.get("coordinates")) is None or not poi.get("claim_ids"):
+            continue
+        if all(
+            claims_by_id.get(claim_id, {}).get("subject_ref") == poi["poi_id"]
+            for claim_id in _referenced_claim_ids(poi)
+        ):
+            return copy.deepcopy(dict(poi))
+    return None
 
 
 def _referenced_claim_ids(entity: Mapping[str, Any]) -> Set[str]:

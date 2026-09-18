@@ -1,12 +1,3 @@
-## 书 AQ4「坐标折回文档」（2026-09-18，第三十五波，worktree `.tmp/wt-aq4` 分支 `locate-docs`）：无
-
-任务 0 核对的两项基线（全量 820 测试 0 skipped、`git grep -c "ctw locate"` 0 命中）与任务书描述逐字
-一致，没有不符项。全程未遇到需要管理者裁决的二义性：任务书「我替领导拍的板」把命令名、参数、退出码、
-状态值、新增标识符全部拍了板，本书按板逐字落笔；唯一需要自行判断的是 06-pipeline.md §7.8 里
-`patch` 是 `replace` 还是 `add`（任务书没有拍这一点），已用 `trip.schema.json` 的 `poi`/`lodging`
-`required` 字段核实 `coordinates` 恒定存在、只是值可能为 `null`，判定为 `replace`，不算需要管理者
-裁决的分叉。
-
 ## 书 AP6b「附近餐饮参考文档」（2026-09-17，第三十四波，worktree `.tmp/wt-ap6b` 分支 `dining-docs`）：任务 0 一处不符（非阻塞）
 
 **任务 0 核对，一处不符，非阻塞**：任务书「现状与任务 0」给出两类基线数字——全量 `Ran 790 tests` OK
@@ -2427,6 +2418,16 @@ PROGRESS.md、BLOCKED.md」，逐字排他；唯一能让这 14 项转绿的改�
 demo 与全部测试夹具都是「每段至少一个待定位景点」，加兜底属于没有测试覆盖的过度设计，真遇到
 这种 Trip 会在 `validate_candidates` 报错时整段失败，留作已知限制。详细实现、四项反向验证
 （红→绿）与实网冒烟证据见 PROGRESS.md「书 AQ2」条目。
+
 ## 书 AQ3「locate 结果折回 Journey」（2026-09-18，第三十五波四本并行之一，worktree `.tmp/wt-aq3` 分支 `locate-fold`）：无
 
 无。全程没有遇到拿不准、需要管理者裁决的真实二义性；实现严格按任务书已拍板的信封形状（`entities[]`/`claims[]`，行含 `trip_id/ref_id/kind/name/city/status/coordinates/claim_ids/reason`）、资格门槛（只补坐标为空或缺 `gcj02`/`wgs84` 的实体）、`located`/`unresolved`/`provider_error` 三态行为、`trigger=provider_change` 的 patch/health 记账与 CLI exit/output 契约执行，全部照 `weather_fold.py`/`dining_fold.py` 的成熟套路搬。详细命令输出与反向验证红→绿证据见 PROGRESS.md「第三十五波 AQ3」小节。
+
+## 书 AQ4「坐标折回文档」（2026-09-18，第三十五波，worktree `.tmp/wt-aq4` 分支 `locate-docs`）：无
+
+任务 0 核对的两项基线（全量 820 测试 0 skipped、`git grep -c "ctw locate"` 0 命中）与任务书描述逐字
+一致，没有不符项。全程未遇到需要管理者裁决的二义性：任务书「我替领导拍的板」把命令名、参数、退出码、
+状态值、新增标识符全部拍了板，本书按板逐字落笔；唯一需要自行判断的是 06-pipeline.md §7.8 里
+`patch` 是 `replace` 还是 `add`（任务书没有拍这一点），已用 `trip.schema.json` 的 `poi`/`lodging`
+`required` 字段核实 `coordinates` 恒定存在、只是值可能为 `null`，判定为 `replace`，不算需要管理者
+裁决的分叉。
