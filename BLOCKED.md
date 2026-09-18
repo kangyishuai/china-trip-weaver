@@ -2405,6 +2405,9 @@ PROGRESS.md、BLOCKED.md」，逐字排他；唯一能让这 14 项转绿的改�
 ## 书 AQ1「高德健康行 calls= 真实调用数」（2026-09-18，第三十五波四本并行之一，worktree `.tmp/wt-aq1` 分支 `amap-calls-total`）：无
 
 无。全程没有遇到拿不准、需要管理者裁决的真实二义性。任务书「我替领导拍的板」一节把改写时机（`_plan_dining` 之后）、透传路径（经 `_plan_build_trip` 到 `_combined_amap_health`）、正则的排除规则（跳过 lodging 段 `poi_calls=`）都定死，照做即可闭合任务 0 那条复现测试。唯一需要现场决定的是一处纯粹的实现细节，不构成设计判断分叉：任务书写的 `mobility._transport_calls(active_mobility.transport)` 假定按模块限定名访问，但 `plan_trip`/`_plan_build_trip` 里已经各有一个同名局部变量 `mobility`（绑定 `MobilityResult`），若照抄 `from . import mobility` 会在整个函数作用域内被这个局部变量遮蔽（Python 的作用域规则：一个名字只要在函数里被赋值过，该名字在整个函数体内都指向局部变量）。改为按名直接 `from .mobility import _transport_calls` 导入后直接调用，功能与任务书描述完全等价，且仍只改了 planning.py 的 import 行与三处指定函数，没有触碰界限外的任何文件。详细完成记录、三条新测试的设计意图（含专门证伪"读到 Journey 共享传输层累计值"这一潜在缺陷的测试）、实网数字与反向验证的实际断言见 PROGRESS.md「第三十五波 AQ1」小节。
+
+管理者裁决（2026-09-18，验收时补记）：认可；按名导入 `_transport_calls` 以避开局部变量 `mobility` 的遮蔽，是正确的偏离。暗卷：demo 需求平移到明天实网 `ctw plan --mobility live`，健康行 `calls=12/80`，stderr 高德 `query` 事件恰 12 条、全部 attempt 1；四个假 Key 全量与合并后全量同为 846；demo 与四类夹具重生成零漂移。
+
 ## 书 AQ2「locate 查询方法与模块」（2026-09-18，第三十五波四本并行之一，worktree `.tmp/wt-aq2` 分支 `locate-query`）：无
 
 无。全程没有遇到拿不准、需要管理者裁决的真实二义性。任务书「我替领导拍的板」一节把
@@ -2419,9 +2422,13 @@ demo 与全部测试夹具都是「每段至少一个待定位景点」，加兜
 这种 Trip 会在 `validate_candidates` 报错时整段失败，留作已知限制。详细实现、四项反向验证
 （红→绿）与实网冒烟证据见 PROGRESS.md「书 AQ2」条目。
 
+管理者裁决（2026-09-18，验收时补记）：实现照书正确，但执行者记成「已知限制」的那条正是**管理者规格缺陷**：书只用 demo（每段都有待定位景点）验证过候选文档，而手工补齐的真实行程恰恰是「景点全有坐标、只缺住宿」，`ctw locate --journey` 会因 `S_MIN_ITEMS /pois` 退出 1。验收时修（`9d36c46`）：`_context_poi` 从同一 Trip 借一个已有坐标、claim 都指向自己的景点凑足 `pois`，不发请求、不进信封；`unresolved` 的 `reason` 取法对齐规划器（只认三段式告警、跳过 `nearby_name_candidates`、优先带 `suggested_names`）。回归测试先红（`S_MIN_ITEMS`）后绿，去掉借用即红。暗卷：真实 16 天行程副本实网，9 家住宿 4 located、3 unresolved、2 provider_error，8 次调用；由此查出两处既有缺陷（见本波末条）。
+
 ## 书 AQ3「locate 结果折回 Journey」（2026-09-18，第三十五波四本并行之一，worktree `.tmp/wt-aq3` 分支 `locate-fold`）：无
 
 无。全程没有遇到拿不准、需要管理者裁决的真实二义性；实现严格按任务书已拍板的信封形状（`entities[]`/`claims[]`，行含 `trip_id/ref_id/kind/name/city/status/coordinates/claim_ids/reason`）、资格门槛（只补坐标为空或缺 `gcj02`/`wgs84` 的实体）、`located`/`unresolved`/`provider_error` 三态行为、`trigger=provider_change` 的 patch/health 记账与 CLI exit/output 契约执行，全部照 `weather_fold.py`/`dining_fold.py` 的成熟套路搬。详细命令输出与反向验证红→绿证据见 PROGRESS.md「第三十五波 AQ3」小节。
+
+管理者裁决（2026-09-18，验收时补记）：认可。暗卷：把上条真实结果折进行程副本，Journey revision 9→10、`created_by` system，三段各一个 `provider_change` 补丁，景点逐字节不变、只改原本缺坐标的住宿，`unresolved` 记成 unknown、`provider_error` 不动；`journey validate` 通过、页面 validate-html 0、署名含高德地图；二折 `JOURNEY_LOCATE_NOOP` 退出 2 不写文件；现役 journey.json 哈希不变。
 
 ## 书 AQ4「坐标折回文档」（2026-09-18，第三十五波，worktree `.tmp/wt-aq4` 分支 `locate-docs`）：无
 
@@ -2431,3 +2438,9 @@ demo 与全部测试夹具都是「每段至少一个待定位景点」，加兜
 `patch` 是 `replace` 还是 `add`（任务书没有拍这一点），已用 `trip.schema.json` 的 `poi`/`lodging`
 `required` 字段核实 `coordinates` 恒定存在、只是值可能为 `null`，判定为 `replace`，不算需要管理者
 裁决的分叉。
+
+管理者裁决（2026-09-18，验收时补记）：认可结构，四处文案与代码不符由管理者改（`9d36c46`）：退出码 1 只指输入读不了或不合法，服务商失败只把行标成 `provider_error`、退出 2；12 是每个子 Trip 的景点上限，住宿不限；`claim_ids` 去重追加与 `ctw plan` 相同（不是 `ctw mobility`）；§7.8「折回只消费 located」不对，`unresolved` 也折成带原因的 unknown，`provider_error` 行不动。SKILL 命令改成 r2→r3→r4 链，与「新版本只新增不覆盖」一致。字面串逐个 `git grep` 命中代码。
+
+## 第三十五波验收结论（2026-09-18，管理者）：合入 main 但暂不发版
+
+暗卷在真实行程副本上查出两处**既有**缺陷，规划器与新命令共用，出第三十六波两本书修完再发 0.26.0：①住宿只用「城市+名称」地理编码、不核对名称——一家真实住宿被编到同品牌另一分店（约 15 km 外）、另一家偏约 2.5 km，公开样例「7天酒店（上海人民广场店）」「如家酒店（上海南京东路步行街店）」都被编成上海市中心点；把住宿送进景点同款的名称核对后，同一批 9 家定位 4→7、错点 2→0（书 AR1）。②高德适配器把一切非成功状态（info 不含 LIMIT 时）当 `forbidden`，一家住宿名触发的 `infocode 30001 ENGINE_RESPONSE_DATA_ERROR`（单条引擎错误）让同段后面的实体全部不查（书 AR2）。另记一条不在本波处理的观察：名称核对只比第一、第二名的相对差，高德没有目标分店时会把最像的别家分店当身份（「7天酒店（上海人民广场店）」→上海大学店，相似度 0.70），这次靠地址编码歧义才没落错点。
