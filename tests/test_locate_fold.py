@@ -91,6 +91,20 @@ def unresolved_row(trip_id, kind, ref_id, name, city, reason):
     }
 
 
+def provider_error_row(trip_id, kind, ref_id, name, city, reason):
+    return {
+        "trip_id": trip_id,
+        "ref_id": ref_id,
+        "kind": kind,
+        "name": name,
+        "city": city,
+        "status": "provider_error",
+        "coordinates": None,
+        "claim_ids": [],
+        "reason": reason,
+    }
+
+
 def envelope(rows, claims, *, clock=CLOCK, provider_version="locate-v1-test"):
     return {
         "queried_at": isoformat_seconds(clock),
@@ -246,6 +260,18 @@ class LocateFoldTests(unittest.TestCase):
         ]
         self.assertEqual(1, len(matching))
         self.assertEqual("geocode_ambiguous", matching[0]["reason"])
+
+    def test_provider_error_row_leaves_entity_untouched(self):
+        trip = copy.deepcopy(self.trip)
+        row = provider_error_row(
+            trip["trip_id"], "poi", "poi-j16-shanghai", "上海合成建筑漫步", "上海", "amap_unavailable",
+        )
+        result = envelope([row], [])
+        self.assertIsNone(fold_locations_into_trip(copy.deepcopy(trip), result, CLOCK))
+        self.assertIsNone(trip["pois"][0]["coordinates"])
+        self.assertEqual(
+            1, len([u for u in trip["unknowns"] if u["field_path"] == "/pois/0/coordinates"]),
+        )
 
     def test_missing_claim_and_wrong_journey_revision_raise(self):
         result = self._poi_lodging_result()
