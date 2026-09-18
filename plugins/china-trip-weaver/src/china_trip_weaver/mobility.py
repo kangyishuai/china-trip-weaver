@@ -154,6 +154,40 @@ class MobilityBackend:
 
         return self._finalize_result(locations, cells, claims, calls, errors, warnings, fatal_status, now)
 
+    def locate(
+        self,
+        candidates: Mapping[str, Any],
+        clock: Clock,
+    ) -> MobilityResult:
+        """Resolve candidate coordinates only; never queries the route matrix.
+
+        This is the first half of :meth:`resolve` (candidate validation,
+        early-exit, POI/geocode lookups, semantic checks) finalized with an
+        empty route-cell set. ``resolve``'s own logic, the admin/name/cluster
+        judgment thresholds, and the route-matrix stage are untouched.
+        """
+
+        report = validate_candidates(candidates)
+        if not report.ok:
+            raise ValueError("invalid candidates: " + "; ".join(item.render() for item in report.errors))
+        now = isoformat_seconds(clock)
+        early_result = self._resolve_early_exit(now)
+        if early_result is not None:
+            return early_result
+        if self.transport is None:
+            raise ValueError("live mobility requires an AMap transport")
+
+        adapter = AMapAdapter()
+        context = ProviderContext(clock=clock, credentials=self.credentials, transport=self.transport)
+        locations, claims, calls, errors, warnings, fatal_status = self._resolve_locations(
+            candidates, adapter, context, now,
+        )
+
+        claims, semantic_warnings = _semantic_location_checks(locations, claims, candidates)
+        warnings.extend(semantic_warnings)
+
+        return self._finalize_result(locations, [], claims, calls, errors, warnings, fatal_status, now)
+
     def _resolve_locations(
         self,
         candidates: Mapping[str, Any],
