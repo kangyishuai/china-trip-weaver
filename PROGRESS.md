@@ -801,6 +801,7 @@ name.`；`docs/design/06-pipeline.md` §7.8「判定口径」句末加「住宿�
 `plugins/.../resolve-china-mobility/SKILL.md`/`mobility.py`/三个测试文件）加新文件
 `tests/test_lodging_identity.py`，与「界限」白名单逐一对应；`git diff main -- mobility.py` 只有那 8
 行分叉删除，无旁的改动。两条完成条件均满足。只提交并推送分支 `lodging-identity`，不合并 main。
+
 ## 书 AR2「amap-error-codes」（2026-09-18，第三十六波两本并行之一，worktree `.tmp/wt-ar2` 分支 `amap-error-codes`）
 
 任务 0 核对：main `f93455b` 全量 `Ran 846 tests`、0 skipped，`test_providers.py:118` fixture_count 89，

@@ -41,7 +41,8 @@ Facts established on 2026-09-17:
 2. **Which slots and where the circle is centred.** A slot is a meal when its
    `kind` is `meal`, or its `kind` is `free`/`rest` and its title contains
    「午餐」/「晚餐」. The anchor is the nearest same-day slot with a known GCJ02
-   coordinate — searching backwards first, then forwards — taken from the POI
+   coordinate — searching backwards first, then forwards, never across a
+   `transport` slot (amended 2026-09-18, see below) — taken from the POI
    or lodging it references; planner meal placeholders never anchor. A day with
    no such slot gets `dining: null` and an `unknown` whose reason is
    `dining_no_anchor`; nothing is guessed.
@@ -74,6 +75,25 @@ Facts established on 2026-09-17:
   says 「高德综合排序」 and nothing about 扫街榜 itself.
 - Deferred: cuisine-aware re-ranking, breakfast, and lodging geocoding for the
   curated journey (its dinners anchor on the preceding attraction instead).
+
+## Amendment — 2026-09-18
+
+- **A transfer bounds the anchor search.** The first rule let a meal anchor on
+  a slot on the far side of a `transport` slot, so once lodgings carried
+  coordinates a lunch eaten after a morning train was centred on the hotel the
+  traveller had just left (a live re-run of the 16-day journey recommended
+  Wuyishan restaurants for a Fuzhou lunch), and dinners after a ferry or a
+  long drive were centred on the island or the tulou cluster left behind.
+  `dining.anchor_for` now stops at the first `transport` slot in each
+  direction: a meal after a transfer is anchored only in the arrival city, one
+  before it only in the departure city; with nothing on the meal's side the
+  slot gets `dining_no_anchor` instead of a wrong-city reference. Regression
+  tests: `tests/test_dining.py` (`AnchorForTests`, the two transfer cases).
+- **Lodging coordinates for curated journeys.** The deferred "lodging
+  geocoding" item is covered by `ctw locate` and `ctw journey locate`
+  (06-pipeline §7.8): lodgings are resolved through the same POI identity check
+  as attractions and geocoded by the confirmed address, so an arrival-day
+  dinner can anchor on the hotel.
 
 ## Evidence
 

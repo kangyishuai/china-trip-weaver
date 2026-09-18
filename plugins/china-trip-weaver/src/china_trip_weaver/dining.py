@@ -70,22 +70,29 @@ def anchor_for(trip: Mapping[str, Any], day_index: int, slot_index: int) -> Opti
 
     Only a `poi` slot (via `pois[ref].coordinates`) or a `checkin`/`checkout`/
     `rest`/`lodging` slot (via `lodgings[ref].coordinates`) can anchor a meal; a
-    `meal` slot's own placeholder POI is never itself an anchor. Returns None
-    when the day has no such slot with a known `gcj02` point.
+    `meal` slot's own placeholder POI is never itself an anchor. A `transport`
+    slot bounds the search both ways: a meal after a transfer is eaten in the
+    arrival city, so nothing before the transfer may anchor it, and a meal
+    before one is eaten in the departure city. Returns None when no such slot
+    with a known `gcj02` point lies on the meal's side of every transfer.
     """
 
     slots = trip["days"][day_index]["slots"]
-    for index in _search_order(slot_index, len(slots)):
+    for index in _search_order(slots, slot_index):
         anchor = _anchor_from_slot(trip, slots[index])
         if anchor is not None:
             return anchor
     return None
 
 
-def _search_order(slot_index: int, slot_count: int) -> Iterator[int]:
+def _search_order(slots: Sequence[Mapping[str, Any]], slot_index: int) -> Iterator[int]:
     for index in range(slot_index - 1, -1, -1):
+        if slots[index].get("kind") == "transport":
+            break
         yield index
-    for index in range(slot_index + 1, slot_count):
+    for index in range(slot_index + 1, len(slots)):
+        if slots[index].get("kind") == "transport":
+            break
         yield index
 
 

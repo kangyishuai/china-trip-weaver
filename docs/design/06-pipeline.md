@@ -142,7 +142,7 @@ FlyAI 候选解析并经 VariFlight 增强后，`_validate_meeting_anchor` 才�
 
 - **触发条件**：只在 `active_mobility.mode == "live"` 时运行，复用同一份 AMap transport 与调用预算；mobility 为 `off` 时完全不调用，每个时段既不加 `dining` 键也不加 unknown，旧产物字节不变。
 - **时段判定**：`dining.meal_type_for`/`dining.meal_slots` 把 `kind=meal`，或 `kind` 为 `free`/`rest` 且标题含「午餐」「晚餐」的时段识别为一次用餐；其余 kind 永不算用餐。
-- **锚点**：`dining.anchor_for` 在同一天先向前再向后找最近一个有坐标的 `poi`/`checkin`/`checkout`/`rest`/`lodging` 时段作圆心，`meal` 自己的占位 POI 永不当锚点；同一个坐标在一次 `plan_trip` 内只查一次 AMap。
+- **锚点**：`dining.anchor_for` 在同一天先向前再向后找最近一个有坐标的 `poi`/`checkin`/`checkout`/`rest`/`lodging` 时段作圆心，遇到 `transport` 时段即停（换乘之后的一餐只在到达城市找圆心，换乘之前的只在出发城市找），`meal` 自己的占位 POI 永不当锚点；同一个坐标在一次 `plan_trip` 内只查一次 AMap。
 - **查询与选取**：以锚点为圆心，用 `dining.query_parameters` 拼出的参数对 AMap `poi_around` 发起一次综合排序（`sortrule=weight`）搜索，半径 1.5 km，`types=050100|050200|050400`；`dining.select_options` 按 AMap 原序保留前 3 家有评分、且名称/`tag`/`keytag`/`rectag` 不命中 `request.dining_preferences.avoid` 的候选，`request.dining_preferences.cuisine` 覆盖缺省关键词「餐厅」。
 - **无锚点**：当天没有可用锚点时段时，该时段的 `slot.dining` 记为 `null`，并加一条 `field_path` 指向该时段、原因为 `dining_no_anchor` 的 unknown。
 - **健康行**：只要这次运行实际发起过至少一次 `poi_around` 查询，`provider_health` 里 `provider=amap` 的合并健康行就在 `capabilities` 追加 `poi_around`，并在 `reason` 末尾追加 `; dining=<查询次数> queried, <unknown 时段数> unknown`；一次查询都没发起时健康行不受影响。`calls=<n>/<上限>` 记整次规划对高德的真实调用数，含天气与餐饮查询。

@@ -1,21 +1,3 @@
-## 书 AR1「住宿身份核对」（2026-09-18，第三十六波，worktree `.tmp/wt-ar1` 分支 `lodging-identity`）：任务 2 一处不符（非阻塞）
-
-**任务 2 实网核对，一处不符，非阻塞**：任务书写「实体按 ref_id 排序、住宿 `lodging-nanjing-east` 在前」。
-把 [tests/fixtures/trips/schema/valid/weekend-live.json](tests/fixtures/trips/schema/valid/weekend-live.json)
-拷到 `.tmp/`、景点 `poi-bund` 与住宿 `lodging-nanjing-east` 的 `coordinates` 都置 null、住宿改名「如家
-酒店（南京东路步行街店）」后跑 `ctw locate`，输出 `entities` 实测顺序是 `poi-bund` 在前、
-`lodging-nanjing-east` 在后——不是按 ref_id 排序，也不是住宿在前。读
-[locate.py](plugins/china-trip-weaver/src/china_trip_weaver/locate.py) 第 38-61 行
-`unlocated_entities()`：先遍历 `trip["pois"]` 再遍历 `trip["lodgings"]`，全程没有任何按 `ref_id` 的
-排序步骤，`locate_trips()`（第 84-110 行）原样按 `unlocated_entities()` 的顺序追加进 `entities`。这是
-`locate.py` 既有、与本书改动的 `mobility.py` 无关的行为，且 `locate.py` 在本书「界限」白名单之外（只
-允许改 `mobility.py` 的那道分叉），未改动它。
-
-判定非阻塞：任务书「完成条件」只写「实网如家那行 located 且离上海市中心点超过 500 m」，未把实体顺序
-列为验收项；该行为在真实运行里已确认（见 PROGRESS.md 本书「任务 2」小节，`lodging-nanjing-east`
-located，gcj02 (121.477072, 31.234663) 距 121.473667,31.230525 达 563 m，stderr 前两条 query 事件依次
-`poi`、`geocode`，均与任务书一致）。
-
 ## 书 AP6b「附近餐饮参考文档」（2026-09-17，第三十四波，worktree `.tmp/wt-ap6b` 分支 `dining-docs`）：任务 0 一处不符（非阻塞）
 
 **任务 0 核对，一处不符，非阻塞**：任务书「现状与任务 0」给出两类基线数字——全量 `Ran 790 tests` OK
@@ -2463,6 +2445,32 @@ demo 与全部测试夹具都是「每段至少一个待定位景点」，加兜
 
 暗卷在真实行程副本上查出两处**既有**缺陷，规划器与新命令共用，出第三十六波两本书修完再发 0.26.0：①住宿只用「城市+名称」地理编码、不核对名称——一家真实住宿被编到同品牌另一分店（约 15 km 外）、另一家偏约 2.5 km，公开样例「7天酒店（上海人民广场店）」「如家酒店（上海南京东路步行街店）」都被编成上海市中心点；把住宿送进景点同款的名称核对后，同一批 9 家定位 4→7、错点 2→0（书 AR1）。②高德适配器把一切非成功状态（info 不含 LIMIT 时）当 `forbidden`，一家住宿名触发的 `infocode 30001 ENGINE_RESPONSE_DATA_ERROR`（单条引擎错误）让同段后面的实体全部不查（书 AR2）。另记一条不在本波处理的观察：名称核对只比第一、第二名的相对差，高德没有目标分店时会把最像的别家分店当身份（「7天酒店（上海人民广场店）」→上海大学店，相似度 0.70），这次靠地址编码歧义才没落错点。
 
+## 书 AR1「住宿身份核对」（2026-09-18，第三十六波，worktree `.tmp/wt-ar1` 分支 `lodging-identity`）：任务 2 一处不符（非阻塞）
+
+**任务 2 实网核对，一处不符，非阻塞**：任务书写「实体按 ref_id 排序、住宿 `lodging-nanjing-east` 在前」。
+把 [tests/fixtures/trips/schema/valid/weekend-live.json](tests/fixtures/trips/schema/valid/weekend-live.json)
+拷到 `.tmp/`、景点 `poi-bund` 与住宿 `lodging-nanjing-east` 的 `coordinates` 都置 null、住宿改名「如家
+酒店（南京东路步行街店）」后跑 `ctw locate`，输出 `entities` 实测顺序是 `poi-bund` 在前、
+`lodging-nanjing-east` 在后——不是按 ref_id 排序，也不是住宿在前。读
+[locate.py](plugins/china-trip-weaver/src/china_trip_weaver/locate.py) 第 38-61 行
+`unlocated_entities()`：先遍历 `trip["pois"]` 再遍历 `trip["lodgings"]`，全程没有任何按 `ref_id` 的
+排序步骤，`locate_trips()`（第 84-110 行）原样按 `unlocated_entities()` 的顺序追加进 `entities`。这是
+`locate.py` 既有、与本书改动的 `mobility.py` 无关的行为，且 `locate.py` 在本书「界限」白名单之外（只
+允许改 `mobility.py` 的那道分叉），未改动它。
+
+判定非阻塞：任务书「完成条件」只写「实网如家那行 located 且离上海市中心点超过 500 m」，未把实体顺序
+列为验收项；该行为在真实运行里已确认（见 PROGRESS.md 本书「任务 2」小节，`lodging-nanjing-east`
+located，gcj02 (121.477072, 31.234663) 距 121.473667,31.230525 达 563 m，stderr 前两条 query 事件依次
+`poi`、`geocode`，均与任务书一致）。
+
+管理者裁决（2026-09-18，验收时补记）：认可。所记「不符」是管理者书的措辞歧义：「按 ref_id 排序、住宿在前」指 `MobilityBackend._candidate_entities` 的查询顺序（住宿 `lodging-nanjing-east` 先查，所以前两条 query 是它的 `poi`、`geocode`），不是信封 `entities` 的顺序，执行者观察到的事实正确、判非阻塞也正确。删掉分叉后三个默认值初始化随之成了死代码一并去掉，认可。执行者实网把店名写成「如家酒店（南京东路步行街店）」，管理者按书里原名复跑：located（121.48364,31.237328，离上海市中心点 1211 m），「7天酒店（上海人民广场店）」unresolved（`geocode_ambiguous`）。暗卷：现役行程副本实网 9 家住宿 7 located、2 unresolved、0 错点，7 家坐标与管理者上一轮探针逐个 0 m，18 次调用；折回副本 revision 9→10、validate-html 0、二折 NOOP；现役 journey.json 哈希不变。
+
 ## 书 AR2「amap-error-codes」（2026-09-18，第三十六波两本并行之一，worktree `.tmp/wt-ar2` 分支 `amap-error-codes`）：无
 
 无。全程没有遇到拿不准、需要管理者裁决的真实二义性。任务书「我替领导拍的板」一节把 `infocode`/`errcode` 归类表（哪些码进 `rate_limited`/`upstream_5xx`/`invalid_request`、3 开头五位码整体归 `invalid_request`）、其余码照旧走既有 fallback、`errors.py`/`mobility.py` 一字不动，全部定死，照做即可闭合任务 0 那条复现测试与任务 1 的逐码测试。唯一需要现场判断的是两处任务书未点名的实现细节，判断为工程惯例而非设计分叉：①v4 骑行分支原有 fallback 同时认 "LIMIT" 与 "QUOTA"，status 分支原有 fallback 只认 "LIMIT"——两分支未在归类表命中时保留各自原有 fallback、不统一，因为任务书的「照旧」只要求不新增行为，统一属于无测试覆盖的额外改动；②`ProviderFailure` 的错误文案从「AMap rejected the request」/「AMap quota response」两句固定文案改成按最终 `error_class` 取文案（新增 `_FAILURE_MESSAGES` 映射），因为没有测试断言具体文案字节，按分类结果给出更准确的文案是同一改动范围内的自然结果。
+
+管理者裁决（2026-09-18，验收时补记）：认可。暗卷：实网用触发 30001 的那条真实地址调适配器，得 `invalid_request`、健康 degraded（此前是致命的 `forbidden`）；`ctw doctor --probe` 高德 `capabilities` 三项仍 passed；`fixture_count` 93，其余夹具重生成零漂移。
+
+## 第三十六波验收时的管理者修正（2026-09-18）：餐饮锚点不越过换乘
+
+暗卷在折好坐标的行程副本上重跑 `ctw dining`，查出 ADR-0022 锚点规则（管理者所定）的缺陷：`dining.anchor_for` 先向前再向后找有坐标的时段时会越过 `transport` 时段。住宿有了坐标后，9/29「武夷山退房→G5023→福州午餐」的午餐锚在武夷山住宿、推荐武夷山的店，10/3「平潭退房→自驾→泉州午餐」锚在平潭；而 10/7 坐船离岛后的晚餐锚在岛上的日光岩、10/9 从土楼开回厦门后的晚餐锚在一百公里外的怀远楼——这两处在 0.25.0 已经存在，第三十四波实网验收只数了「19 个有参考」、没核对城市。修正：`_search_order` 在两个方向遇到 `transport` 即停；回归测试 `tests/test_dining.py` 两条换乘用例先红后绿，去掉向后边界即红。实网复跑：9/29、10/3 午餐回到到达城市，10/7、10/9 晚餐改记 `dining_no_anchor`（有推荐 19→17，宁缺不错；10/9 那家住宿补上坐标后会自动有参考）。同步 README×2、06 §5.6、09、mobility SKILL，ADR-0022 追加 2026-09-18 修订段。

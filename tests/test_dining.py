@@ -157,6 +157,43 @@ class AnchorForTests(unittest.TestCase):
 
         self.assertIsNone(dining.anchor_for(trip, 0, 5))
 
+    @staticmethod
+    def _transfer_day(slots):
+        """A one-day trip whose departure-city lodging and arrival-city POI both have coordinates."""
+
+        return {
+            "days": [{"slots": slots}],
+            "lodgings": [
+                {"lodging_id": "lodging-origin", "name": "出发城住宿", "coordinates": _coordinates(118.0, 27.6)},
+                {"lodging_id": "lodging-arrival", "name": "到达城住宿", "coordinates": _coordinates(119.3, 26.1)},
+            ],
+            "pois": [
+                {"poi_id": "poi-arrival", "name": "到达城景点", "coordinates": _coordinates(119.31, 26.09)},
+            ],
+        }
+
+    def test_meal_after_a_transfer_never_anchors_on_the_departure_city(self):
+        # 9/29-style day: check out, take the train, then lunch in the arrival city.
+        trip = self._transfer_day([
+            _slot("checkout", "退房", "2026-09-29T08:00:00+08:00", ref_id="lodging-origin"),
+            _slot("transport", "铁路", "2026-09-29T10:00:00+08:00", ref_id="leg-transfer"),
+            _slot("free", "寄存行李与午餐", "2026-09-29T11:43:00+08:00"),
+            _slot("poi", "到达城景点", "2026-09-29T14:13:00+08:00", ref_id="poi-arrival"),
+        ])
+
+        anchor = dining.anchor_for(trip, 0, 2)
+
+        self.assertEqual("poi-arrival", anchor["ref_id"])
+
+    def test_meal_before_a_transfer_never_anchors_on_the_arrival_city(self):
+        trip = self._transfer_day([
+            _slot("free", "午餐", "2026-09-29T11:00:00+08:00"),
+            _slot("transport", "铁路", "2026-09-29T12:30:00+08:00", ref_id="leg-transfer"),
+            _slot("checkin", "入住", "2026-09-29T15:00:00+08:00", ref_id="lodging-arrival"),
+        ])
+
+        self.assertIsNone(dining.anchor_for(trip, 0, 0))
+
 
 class SelectOptionsTests(unittest.TestCase):
     def setUp(self):
