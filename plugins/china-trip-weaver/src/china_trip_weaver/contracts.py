@@ -5,6 +5,8 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
@@ -41,8 +43,38 @@ def read_json(path: Path) -> Dict[str, Any]:
     return value
 
 
+def write_text_atomic(path: Path, text: str, encoding: str = "utf-8") -> None:
+    """Write ``text`` to ``path`` by staging it in a sibling temp file and renaming it into place.
+
+    ``os.replace`` is atomic on the same filesystem, so a reader never observes a
+    truncated or partially written file. If staging or the rename fails, the temp
+    file is removed and ``path`` is left exactly as it was.
+    """
+
+    mode = path.stat().st_mode & 0o7777 if path.exists() else 0o644
+    descriptor, raw_temp_path = tempfile.mkstemp(
+        dir=str(path.parent), prefix="." + path.name + ".", suffix=".tmp",
+    )
+    temp_path = Path(raw_temp_path)
+    try:
+        os.fchmod(descriptor, mode)
+        with os.fdopen(descriptor, "w", encoding=encoding) as handle:
+            handle.write(text)
+        os.replace(temp_path, path)
+    except Exception:
+        try:
+            os.close(descriptor)
+        except OSError:
+            pass
+        try:
+            temp_path.unlink()
+        except FileNotFoundError:
+            pass
+        raise
+
+
 def write_canonical_json(path: Path, value: JSONValue) -> None:
-    path.write_text(canonical_json(value) + "\n", encoding="utf-8")
+    write_text_atomic(path, canonical_json(value) + "\n")
 
 
 @dataclass(frozen=True)
