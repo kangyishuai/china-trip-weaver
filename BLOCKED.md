@@ -1,3 +1,27 @@
+## 书 AP6b「附近餐饮参考文档」（2026-09-17，第三十四波，worktree `.tmp/wt-ap6b` 分支 `dining-docs`）：任务 0 一处不符（非阻塞）
+
+**任务 0 核对，一处不符，非阻塞**：任务书「现状与任务 0」给出两类基线数字——全量 `Ran 790 tests` OK
+0 skipped（`/usr/bin/python3 -m unittest discover -s tests` 实测逐字一致，耗时 47.8s）；
+`git grep -c "ctw dining" -- README.md docs plugins/china-trip-weaver/skills` 期望 0 命中，实测
+**2 命中**，均在同一文件
+[docs/design/adr/0022-nearby-dining-references.md](docs/design/adr/0022-nearby-dining-references.md)：
+第 3 行「`ctw dining`/`ctw journey dining` 命令、折回与规划器接线在第三十四波」（Status 行，说明
+ADR-0022 本身就是本波四本书的设计决策记录，第三十三波随 AP1a/AP1b/AP2/AP3/AP4 一起合入 main 时写下）；
+第 60 行「`ctw dining` writes a result envelope」（ADR 正文第 5 条决策「Two entry points, same
+rules」，描述命令的既定设计）。
+
+判定非阻塞：这两处命中不是别人抢先写了本书要交付的文档内容，而是 ADR-0022 作为「决策记录」本就要在
+成文时把已定案的后续命令名写进自己的正文（任务书原文也说「决定与理由见 ADR-0022（已在 main，只引用不
+改）」，即预期它已经包含这些名字）。ADR 文件不在本书「界限」允许改动的白名单内，本书也不需要改它；
+`README.md`/`docs/design/04-providers.md`/`06-pipeline.md`/`09-impl-map.md`/
+`plugins/china-trip-weaver/references/provider-contracts.md`/两份 SKILL 正文——本书实际要落笔的七个
+文件——在同一 grep 范围内确认零命中（`git grep -c "ctw dining" -- README.md README.zh-CN.md
+docs/design/04-providers.md docs/design/06-pipeline.md docs/design/09-impl-map.md
+plugins/china-trip-weaver/references/provider-contracts.md
+plugins/china-trip-weaver/skills/plan-china-trip/SKILL.md
+plugins/china-trip-weaver/skills/resolve-china-mobility/SKILL.md` 无输出，exit 1）,与任务书本意
+（没人抢先写重复内容）相符。按此理解继续任务 1、任务 2。
+
 ## 书 AP1a「poi_around 综合排序与 distance_meters」（2026-09-17，第三十三波，worktree `.tmp/wt-ap1a` 分支 `around-sortrule`）：任务 0 数字一处不符（非阻塞）＋ distance_meters 与 schema 边界互斥（已裁决，已解决）
 
 **任务 0 核对，一处不符，非阻塞**：任务书「现状与任务 0」给出六类基线数字，五类精确核对一致——全量
