@@ -1,0 +1,45 @@
+{
+  "captured_at": "2026-09-04T00:00:00+08:00",
+  "case": "access_too_frequent",
+  "contains_personal_data": false,
+  "credential_state": "configured",
+  "expected": {
+    "error_class": "rate_limited",
+    "health_status": "rate_limited",
+    "item_count": 0,
+    "sanitized": false,
+    "schema_refs": [],
+    "transport_calls": 1
+  },
+  "fixture_version": 1,
+  "provider": "amap",
+  "provider_version": "web-service-v5-v3-route",
+  "redacted": false,
+  "request": {
+    "as_of": "2026-10-16",
+    "cache_policy": "bypass",
+    "capability": "geocode",
+    "deadline_ms": 1000,
+    "parameters": {
+      "address": "上海博物馆",
+      "city": "上海",
+      "subject_ref": "poi-a"
+    },
+    "request_id": "fixture-request",
+    "trace": {
+      "stage": "provider-fixture"
+    }
+  },
+  "source": "locally generated synthetic AMap-shaped response; contains no captured provider data; failure case is a labeled synthetic mutation",
+  "transport": {
+    "body": {
+      "api": "geocode-v3",
+      "info": "ACCESS_TOO_FREQUENT",
+      "infocode": "10004",
+      "status": "0"
+    },
+    "headers": {},
+    "kind": "response",
+    "status_code": 200
+  }
+}

@@ -801,3 +801,61 @@ name.`；`docs/design/06-pipeline.md` §7.8「判定口径」句末加「住宿�
 `plugins/.../resolve-china-mobility/SKILL.md`/`mobility.py`/三个测试文件）加新文件
 `tests/test_lodging_identity.py`，与「界限」白名单逐一对应；`git diff main -- mobility.py` 只有那 8
 行分叉删除，无旁的改动。两条完成条件均满足。只提交并推送分支 `lodging-identity`，不合并 main。
+## 书 AR2「amap-error-codes」（2026-09-18，第三十六波两本并行之一，worktree `.tmp/wt-ar2` 分支 `amap-error-codes`）
+
+任务 0 核对：main `f93455b` 全量 `Ran 846 tests`、0 skipped，`test_providers.py:118` fixture_count 89，
+与任务书基线一致。红测试写在 `tests/test_amap_error_codes.py::EngineErrorDoesNotStopOtherEntitiesTests`：
+两个取自 e2e demo 的真实 POI（`poi-bjs-bund`/`poi-bjs-museum`，均缺坐标），用包一层 `ScriptedAmapTransport`
+的假传输把排序更靠前的 `poi-bjs-bund` 的 geocode 调用换成高德 `infocode 30001
+ENGINE_RESPONSE_DATA_ERROR`；临时把 amap.py 还原到 HEAD 复跑，确认现状真红（`locations` 是空元组而非
+`('poi-bjs-museum',)`），随后恢复修复版转绿。
+目标：按「我替领导拍的板」给 `normalize()` 的非成功分支加 `infocode`/`errcode` 归类表，`invalid_request`/
+`upstream_5xx` 非致命、失败实体记警告后继续查下一个，其余码（含缺码/未知码）照旧走「info 含 LIMIT→
+rate_limited，否则 forbidden」的既有 fallback。顺序：任务 0（红测试+核对，已完成）→任务 1（实现+夹具+
+逐码测试）→任务 2（实网探针+文档）。最大风险：v4 骑行分支既有 fallback 同时认 "LIMIT"/"QUOTA"，status
+分支既有 fallback 只认 "LIMIT"，两者不统一、各自保留，避免动到任务书未描述的行为。
+
+**任务 1 完成**：[amap.py](plugins/china-trip-weaver/src/china_trip_weaver/providers/amap.py) 加三个模块级
+`frozenset`（`_RATE_LIMITED_INFOCODES`/`_UPSTREAM_5XX_INFOCODES`/`_INVALID_REQUEST_INFOCODES`，逐字照抄任务书
+码表）与 `_classify_amap_infocode(code)`（先查三张表，再判断「5 位且首位是 3」兜底 `invalid_request`，都不中
+返回 `None`）；`normalize()` 两处非成功分支（status 用 `infocode`、v4 骑行用 `errcode`）改成先查表、`None`
+时退回各自原有 fallback；错误文案从两句固定文案改成按最终 `error_class` 查 `_FAILURE_MESSAGES`（无测试断言
+具体文案字节，按分类给更准确的话）。`build_provider_fixtures.py` 在 `api_forbidden` 后加四行：`engine_error`
+（geocode 30001→`invalid_request`/`degraded`）、`invalid_params`（poi 20000→`invalid_request`/`degraded`）、
+`access_too_frequent`（geocode 10004→`rate_limited`）、`server_busy`（route-walking-v3 10016→`upstream_5xx`/
+`degraded`），复用既有 `geocode_req`/`amap_req`/`route_base`。重生成：`wrote 93 provider fixtures and 5 AMap
+scenarios`；`git diff -- tests/fixtures/providers/manifest.json` 只新增四条 `files` 记录与 `fixture_count`
+89→93，其余 89 条哈希逐字不变（零漂移）；`tests/test_providers.py:118` 的 `89` 改 `93`。
+验收：`tests.test_amap_error_codes` 单跑 3 个测试（含 13 个 status 子用例、4 个 riding 子用例）全绿；
+`tests.test_providers` 单跑 `Ran 124 tests` OK（含新增的 4 个动态夹具测试
+`test_fixture_amap_{engine_error,invalid_params,access_too_frequent,server_busy}`）；全量
+`unittest discover -s tests` → `Ran 853 tests`（846+3+4）OK、0 skipped；四个假 Key 全设
+（`AMAP_WEBSERVICE_KEY`/`FLYAI_API_KEY`/`VARIFLIGHT_API_KEY`/`ANYSEARCH_API_KEY` 均设
+`ctw-canary-fake-*`）复跑全量同样 853 OK；`pyflakes $(git ls-files '*.py') tests/test_amap_error_codes.py`
+0 行；`scripts/scan_secrets.py` → `secret scan: 0 finding(s) across 432 file(s)`；`git status --porcelain --
+demo` 空。反向验证：临时删掉 `_classify_amap_infocode` 里「5 位且首位 3」那条兜底分支，复跑
+`tests.test_amap_error_codes` → 4 个子用例转红（任务 0 那条主测试 `locations` 变回空元组；
+`engine_error_30001`/`engine_error_32000_other_3_prefix`/`riding_engine_error_30001` 三个逐码子用例期望
+`invalid_request` 实得 `forbidden`）；改回并 `touch` 源文件（避开 Python 3.9 按秒级 mtime+大小校验的字节码
+缓存）后复跑同一测试与全量 `discover`，均恢复 853 OK。
+
+**任务 2 完成**：实网 `plugins/china-trip-weaver/scripts/ctw doctor --probe` 高德行——
+`"amap":{"business":"passed","capabilities":{"poi":"passed","poi_around":"passed","weather":"passed"},
+"contract":"passed","credential":"configured","network":"passed"}`——三项业务层能力（`poi`/`poi_around`/
+`weather`）均 `passed`，证明成功路径没被本书的分类改动误伤。[04-providers.md](docs/design/04-providers.md)
+§1.2 表按拍板改两行：`invalid_request` 判定列补「，或 provider 明确拒绝这一条请求的参数/内容（如高德 2 开头、
+3 开头的错误码）」；`rate_limited` 判定列补「，如高德 10003/10004/10044 等限流码」。`git diff --
+docs/design/04-providers.md` 确认只改了这两行。验收：`tests.test_design_docs` 单跑 `Ran 1 test` OK（本书未新增
+/删除任何运行时或 scripts 目录下的 `.py`，impl-map 计数不受影响，`test_amap_error_codes.py` 在 `tests/` 目录
+下不计入该断言）；文案里提到的 10003/10004/10044 三个字面码逐一 `git grep` 命中
+`plugins/china-trip-weaver/src/china_trip_weaver/providers/amap.py`（均落在 `_RATE_LIMITED_INFOCODES` 里）。
+
+**收尾**：`git diff main --name-only` 加 `git status --porcelain` 里的未跟踪文件，合计 12 个改动路径——
+`providers/amap.py`、`scripts/build_provider_fixtures.py`、`tests/fixtures/providers/manifest.json`、
+四个新夹具 json、`tests/test_providers.py`、新建 `tests/test_amap_error_codes.py`、
+`docs/design/04-providers.md`、`PROGRESS.md`、`BLOCKED.md`——逐一核对全部落在任务书「界限」白名单内；
+`mobility.py`/`planning.py`/`errors.py`/`test_amap_live.py`/`test_journey.py`/`test_locate.py` 一字未改
+（`test_amap_live.py` 只被 `test_amap_error_codes.py` import 了 `ScriptedAmapTransport`/`credentials`/
+`request` 三个既有辅助函数）。BLOCKED.md 本书追加「无」，附两处非阻塞的工程判断记录（v4 骑行分支
+fallback 与 status 分支 fallback 不统一、错误文案改按分类取值）。只提交并 push 分支 `amap-error-codes`，
+不合并 main。
