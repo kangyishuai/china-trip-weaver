@@ -2,20 +2,32 @@
 
 唯一的当前进度记录：现状速览（0.8.0 起每个版本一条）、几条长期有效的实测结论，以及历史索引。逐轮任务书、实测证据与验收记录按时间段归档，见「历史索引」——本文件不再留存单轮过程记录。
 
-## 现状速览（2026-09-18 实测，0.26.0）
+## 现状速览（2026-09-18 实测，0.27.0）
 
-- 版本：`0.26.0`，唯一来源是
+- 版本：`0.27.0`，唯一来源是
   `plugins/china-trip-weaver/.codex-plugin/plugin.json` 与
   `src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
   代码与文档一律引用这两处之一；只有本节的逐版本条目和 git tag 以版本号作索引。
-- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 857 tests`，`OK`，0 skipped；
+- 测试：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 872 tests`，`OK`，0 skipped；
   `scripts/scan_secrets.py` 0 命中；
   `~/miniconda3/envs/core/bin/python -m pyflakes plugins/china-trip-weaver/src
   tests scripts` 0 行。带假 Key（`ANYSEARCH_API_KEY=... unittest`）跑全量同样
-  857 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。0.21.0 记过的
+  872 OK，README 的 demo 与全部夹具重生成在有无 Key 两种环境下都零差异。0.21.0 记过的
   「环境变量注入会让 `test_credentials` 红一项」已在 0.22.0 修好：那个文件现在于 `setUp`
   里按 `FILE_ALLOWLIST` 剥掉凭据环境变量，四个 Key 全设与一个不设两种跑法结果相同。
-- 覆盖率：`scripts/measure_coverage.py` 2026-09-18 发 0.26.0 前实测 12404 语句、miss 1344、**89%**（新模块 `locate.py` 95%、`locate_fold.py` 95%；0.25.0 时 12005/1299/89%，0.24.0 时 11354/1270/89%）。
+- 覆盖率：`scripts/measure_coverage.py` 2026-09-18 发 0.27.0 前实测 12443 语句、miss 1347、**89%**（`contracts.py` 97%、`dining.py` 95%；0.26.0 时 12404/1344/89%，0.25.0 时 12005/1299/89%）。
+- 0.27.0（第三十七波两本并行，2026-09-18，逐本验收合入）：**行程文件改为默认原地更新**——领导改了版本规矩：
+  重规划与各种折回默认在原文件上改（`--output-json` 就是 `--trip`/`--journey` 那个文件，页面原地重渲），只有
+  新的一趟行程或用户明确要求另存时才写 `journey-r<N>.json` 之类新文件、旧文件不动。代码本来就允许同路径
+  （旧版本号再跑报 `revision_conflict`、不写），这版补上**原子写入**：`write_canonical_json` 与新
+  `write_text_atomic` 先写同目录临时文件再 `os.replace`，失败时删临时文件、原文件不动，命令行四处写页面都改走
+  它；README 两份、plan/replan/mobility 三份 SKILL、02、06 §7.6–§7.8 全部改成原地约定（验收时管理者改正两处
+  措辞：另存时是「旧文件不动」，`--output-json` 必填、没有默认值）。**晚餐以当晚住处兜底**：`dining.anchor_for`
+  现有搜索找不到锚点时，晚餐、且之后当天没有 `transport`、且 `day.stay_id` 那家有坐标，就以当晚住处为圆心；
+  午餐不兜底（午饭多在外面）。`ctw locate` 信封在没有 `provider_error` 行时 `health.status` 记 `ready`。
+  现役行程已挪到调用方项目根的 `plans/福建中秋国庆16天/`，两份 `.gitignore` 挡住 `plans/`。验收：现役行程副本
+  按新约定原地串跑补坐标（11→12）与餐饮（12→13）折回，旧版本号重跑被拒且字节不变，10/7 离岛后的晚餐锚到
+  当晚住处、其余 21 个时段不变。测试 857→872。
 - 0.26.0（第三十五波四本＋第三十六波两本并行，2026-09-18，逐本验收合入）：**给缺坐标的景点与住宿补坐标**——
   新命令 `ctw locate`：mobility.py 新增 `MobilityBackend.locate`（`resolve` 的前半段，只解析坐标、不查路线），
   新模块 `locate.py` 跳过用餐占位、住宿按 `#/$defs/lodging` 投影、只缺住宿的 Trip 借一个已定位景点凑候选文档
@@ -476,24 +488,6 @@
   --failed` 即绿。0.11.0 起握手等 30 秒并重启一次，之后再出现请记在这里。
 - 本机 Codex 与源码的差距：以 `bash scripts/install_local_plugin.sh --check`
   实时输出为准；`ctw doctor` 的 `runtime_root` 是缓存所在目录，可随时删除。
-- **第三十七波 AS1「晚餐退住处兜底」已完成**（`.tmp/wt-as1`，分支 `dining-night-stay`，2026-09-18，待合入）：
-  `dining.anchor_for` 常规向前/向后搜索找不到锚点时，新增 `_night_stay_fallback`：这一时段是晚餐
-  （`meal_type_for` 为 `dinner`）、其后当天再没有 `transport` 时段、且 `day["stay_id"]` 指向的住宿已有
-  `gcj02`，三条同时成立才退而以住处为圆心，午餐不适用；现有搜索能命中的锚点一个字节不变。顺带修
-  `locate_trips` 信封的 `health.status`：locate 不查路线，此前只要发起过查询就恒 `degraded`，容易被误
-  读成出错，现在没有任何一行 `provider_error` 时改记 `ready`，否则照旧。任务 0 的 4 条核对（①换乘后无
-  坐标+住处有坐标须红，②晚餐后还有 transport、③住处无坐标、④是午餐须绿）与任务书预告逐字一致；`
-  AnchorForTests` 既有 5 例、`SelectOptionsTests`/`FormatOptionAndSearchUrlTests`/`MealSlotsTests` 一字
-  未改仍绿。`test_dining_cli.py` 两处 `assertEqual(2, len(anchored))` 按预告变 6（示例 Trip 第 2–5 天各
-  多一顿晚餐锚到住处），同一测试加了「多出的 4 个都是晚餐、`ref_id` 等于当天 `stay_id`」的核对，`claims`
-  仍 12 不变。`test_locate.py` 新增两例：demo 16 天行程全部 `located` → `ready`；
-  `ScriptedAmapTransport(forbidden=True)` → `forbidden`。全量与四个假 Key 全量同为 **863**（857+4 dining+2
-  locate）0 skipped；`scan_secrets` 0；pyflakes 0；`build_plan_fixtures.py`/`build_provider_fixtures.py`/
-  `build_scheduler_fixtures.py`/`build_renderer_fixtures.py` 与主 demo 重生成 `git status` 均空。反向验证：
-  去掉「只限晚餐」判断，④转红；还原并 `touch` 后转绿。`git diff main --name-only` 只含
-  `dining.py`/`locate.py`/`tests/test_dining.py`/`tests/test_dining_cli.py`/`tests/test_locate.py`/
-  三份设计文档（ADR-0022、06-pipeline.md、09-impl-map.md）/`PROGRESS.md`/`BLOCKED.md`，未碰 planning.py/
-  cli.py/schema/README/SKILL/demo。BLOCKED.md 记「无」，只推分支未合并，详见 BLOCKED.md「书 AS1」。
 
 ## 定位失败天花板
 
@@ -555,74 +549,10 @@ fix-names` 会把它们列为人工项。
   天气折回库函数与 `ctw journey weather` 命令，对应 0.23.0、0.24.0）：
   [docs/history/progress-2026-09-17.md](docs/history/progress-2026-09-17.md)
   （2026-09-17 发 0.24.0 时从本文件整体迁出，一字未改，按合入顺序）。
-- 2026-09-17 至 18 的执行者逐轮记录（第三十三波到第三十六波：高德周边搜索综合排序、`dining.py`、
+- 2026-09-17 至 18 的执行者逐轮记录（第三十三波到第三十七波：高德周边搜索综合排序、`dining.py`、
   `slot.dining` 与两页、天气折回健康行去重、`doctor --probe` 三能力、`plans/<可读名称>/` 约定、
   `ctw dining` 与 `ctw journey dining`、规划器 `_plan_dining`，对应 0.25.0；健康行真实调用数、
-  `ctw locate` 与 `ctw journey locate`、住宿名称核对、高德错误码归类，对应 0.26.0）：
+  `ctw locate` 与 `ctw journey locate`、住宿名称核对、高德错误码归类，对应 0.26.0；晚餐当晚住处兜底、
+  原子写入与原地更新约定，对应 0.27.0）：
   [docs/history/progress-2026-09-18.md](docs/history/progress-2026-09-18.md)
-  （分别在 2026-09-18 发 0.25.0、0.26.0 时从本文件整体迁出，一字未改，按合入顺序）。
-
-## 书 AS2「in-place-updates」（2026-09-18，第三十七波两本并行之一，worktree `.tmp/wt-as2` 分支 `in-place-updates`）
-
-**任务 0**：核对 main `2164841` 全量 857 项零跳过。`tests/test_in_place_updates.py` 写下
-`WriteCanonicalJsonAtomicityTests`：对已存在文件调 `write_canonical_json`，把
-`china_trip_weaver.contracts.os.replace` 打桩抛 `OSError`，断言原文件字节不变且目录里不留临时文件。
-现状确认红——不是断言失败，而是 `contracts.py` 当时根本没有 `import os`，补丁目标
-`china_trip_weaver.contracts.os` 不存在（`ModuleNotFoundError: No module named
-'china_trip_weaver.contracts.os'`），证明当时确实不是原子写。
-
-目标／顺序／风险（核对后先写，动工在后）：目标是让 `write_canonical_json` 与四处页面直写都变成「同目录
-临时文件 + `os.replace`」，失败时删临时文件、目标字节不动；顺序是先让任务 0 转绿，再补五个命令的原地
-更新／冲突／NOOP 子进程测试，最后改文案；最大风险是失败路径遗漏文件描述符清理导致 fd 泄漏，参照仓库
-已有 `candidates.py::_stage_bytes` 同款「同目录临时文件＋`os.fchmod`＋失败时先 `os.close` 再 `unlink`」
-写法照办，规避了这条风险。
-
-**任务 1**：`contracts.py` 新增 `write_text_atomic(path, text, encoding="utf-8")`——`tempfile.mkstemp`
-在同目录建临时文件、按目标已有权限或缺省 `0o644` 做 `os.fchmod`、写入后 `os.replace`；任何一步失败都
-清理临时文件并把原异常原样抛出，目标文件不动。`write_canonical_json` 改为调用它。`cli.py` 里
-`_cmd_journey_render`、`_cmd_plan`、`_cmd_replan`、`_cmd_render` 四处 `.write_text(...)` 全改调
-`write_text_atomic`（`grep -n '\.write_text('` 核对过全仓库页面直写点正好只有这四行）。
-
-新增 `tests/test_in_place_updates.py`，除任务 0 那条单测外另有 8 条子进程测试（`ctw journey
-weather/dining/locate` 用 subTest 循环覆盖三种折回，另加 `ctw journey assemble --replace-trip`、
-`ctw replan`、`ctw journey render` 各一条，测试方法数 9 与 `Ran 866 tests`＝857+9 对得上）：五个命令
-的 `--output-json`（`replan` 还有 `--output-html`）指向与输入相同路径时，成功一次 revision 升一、
-`ctw journey validate`/`ctw validate` 复核通过；用同一个旧 `--base-revision` 再跑一次，退出码 1 含
-`revision_conflict`，文件字节与上一次成功后完全相同；三种折回把同一份结果按新 `--base-revision`
-再折一次，退出码 2 含各自的 `NOOP` 标记，字节不变；`ctw journey render` 对同一路径连跑两次字节相同。
-造数全部复用现有 `tests/test_weather_fold.py`/`test_dining_fold.py`/`test_locate_fold.py` 的
-`envelope`/`forecast_row`/`options_row`/`located_row`，`assemble --replace-trip` 的替换 Trip 复用
-`test_journey.py::JourneyReplaceTripTests.replanned_trip` 同款做法（`extract_trip_from_journey` +
-对 `slot-poi-routine-meal-2acb635f18d4` 应用一个 `delay` 事件）。
-
-验收证据：worktree 全量 `Ran 866 tests` OK 零跳过；`AMAP_WEBSERVICE_KEY`/`FLYAI_API_KEY`/
-`VARIFLIGHT_API_KEY`/`ANYSEARCH_API_KEY` 四个假 Key 各自单独设值复跑全量，均同样 866 全绿；
-`scripts/scan_secrets.py` 0 命中（434 个文件）；`pyflakes`（含新文件）0 行；`git status -- demo` 空。
-反向验证：把 `write_canonical_json` 临时改回 `path.write_text(...)`，任务 0 那条测试变红
-（`AssertionError: OSError not raised`——退回旧实现后 `os.replace` 根本不会被调用，打桩没有效力）；
-用会话 scratchpad 里的原子版本备份还原并 `touch` 源文件排除字节码缓存干扰后，`test_in_place_updates.py`
-全部 9 条转绿，随后又跑了一次全量 866 确认没有连带回归。
-
-**任务 2**：按任务书「我替领导拍的板」逐条改文案——`plans/<name>/` 段（README×2、02、plan SKILL）与
-三段折回说明（README×2、06 §7.6–§7.8「触发」条、resolve-china-mobility SKILL）都从「每次新增文件／
-`--journey` 原文件永不写回」改成「`--output-json` 默认与输入同一个文件、原地更新；NOOP 与
-`revision_conflict` 都不写文件」；`ctw replan`/`ctw journey assemble --replace-trip` 的用法与示例行
-（README×2、replan SKILL、mobility SKILL）里 `TRIP-rN.json`/`trip-r2.json` 一律改成与输入同路径；
-顺带把另一本书（AS1 `dining-night-stay`）的规则写进用户文案——README×2 的 `ctw dining` 段与
-mobility SKILL 的 dining 条各补一句：晚餐找不到锚点、且当天晚餐之后再无 `transport` 时段时，改以
-当晚住处（`day.stay_id`）为圆心。
-
-验收证据：`tests.test_skills`（11 项）与 `tests.test_design_docs`（1 项）单跑全绿；
-`git grep -n -E "never modif|永不写回|永远不会被改写|renaming it themselves|改名接替|journey-r2|
-journey-r3|journey-r4|trip-r2|TRIP-rN" -- README.md README.zh-CN.md docs/design/02-plugin-skills.md
-docs/design/06-pipeline.md plugins/china-trip-weaver/skills` 空；
-`diff <(grep -E '^ctw (replan|journey)' README.md) <(grep -E '^ctw (replan|journey)' README.zh-CN.md)`
-空（exit 0）。仓库里另有 3 处历史/无关命中未动，均在任务书「界限」之外：ADR-0020 第 244 行是对已发生
-历史事实的记录（`journey.json` 经 `journey-r5.json`）；`tests/test_journey_dining_cli.py`/
-`test_journey_locate_cli.py` 里的 `journey-r2.json` 只是那条既有 NOOP 测试自己起的临时文件名，不是在
-断言约定，且这两个文件不在本书允许改动的范围内。
-
-`git diff main --name-only` 只有 9 个文件：`contracts.py`、`cli.py`、README×2、
-`02-plugin-skills.md`、`06-pipeline.md`、三份 SKILL；加上新建的 `tests/test_in_place_updates.py`，
-与任务书「界限」白名单一一对应，没有多改。已提交并推送分支 `in-place-updates`（未合并），排队等待
-与并行的 AS1 一起由管理者合并。
+  （分别在 2026-09-18 发 0.25.0、0.26.0、0.27.0 时从本文件整体迁出，一字未改，按合入顺序）。
