@@ -244,8 +244,47 @@ class ScriptedAmapTransport:
         raise AssertionError(capability)
 
 
+def lodging_poi_identity_body(provider_request):
+    """A single, uniquely-matching POI identity body for a lodging under test.
+
+    A lodging now clears the same POI-identity gate a POI does before it is
+    geocoded; the synthetic transports below use this to answer that
+    preceding ``poi`` call so their own scenario still lands on the geocode
+    step they each target.
+    """
+
+    city = provider_request.parameters["city"]
+    cityname = city if city.endswith("市") else city + "市"
+    return {
+        "status": "1",
+        "info": "OK",
+        "infocode": "10000",
+        "api": "poi-v5",
+        "page_num": provider_request.parameters["page_num"],
+        "page_size": provider_request.parameters["page_size"],
+        "pois": [{
+            "id": "SYNTHETIC-LODGING-IDENTITY",
+            "name": provider_request.parameters["keywords"],
+            "pname": cityname,
+            "cityname": cityname,
+            "adname": "示例区",
+            "address": "示例大道1号",
+            "adcode": "310101",
+            "type": "住宿服务;宾馆酒店;快捷酒店",
+            "business": {"opentime_today": "00:00-24:00"},
+            "location": "121.0000000,31.0000000",
+        }],
+    }
+
+
 class SyntheticAmapFailureTransport:
-    """One-capability synthetic failure used through ``MobilityBackend``."""
+    """One-capability synthetic failure used through ``MobilityBackend``.
+
+    When ``capability`` is ``"geocode"``, the resolved entity is a lodging,
+    which must first clear the POI-identity gate; this answers that
+    preceding ``poi`` call with a single, uniquely-matching candidate so the
+    synthetic failure still lands on the targeted geocode step.
+    """
 
     retry_rate_limits = False
 
@@ -256,7 +295,11 @@ class SyntheticAmapFailureTransport:
         self.capabilities = []
 
     def execute(self, provider, provider_request):
-        if provider != "amap" or provider_request.capability != self.capability:
+        if provider != "amap":
+            raise AssertionError("synthetic failure transport received an unexpected request")
+        if self.capability == "geocode" and provider_request.capability == "poi":
+            return self._lodging_identity_response(provider_request)
+        if provider_request.capability != self.capability:
             raise AssertionError("synthetic failure transport received an unexpected request")
         self.calls += 1
         self.capabilities.append(provider_request.capability)
@@ -285,6 +328,11 @@ class SyntheticAmapFailureTransport:
                 "geocodes": {},
             }
         return ProviderEnvelope(200, body, {})
+
+    def _lodging_identity_response(self, provider_request):
+        self.calls += 1
+        self.capabilities.append(provider_request.capability)
+        return ProviderEnvelope(200, lodging_poi_identity_body(provider_request), {})
 
 
 class AMapHTTPTransportTests(unittest.TestCase):
@@ -1427,16 +1475,18 @@ class AMapMobilityTests(unittest.TestCase):
         self.assertEqual((), result.locations)
         self.assertEqual("contract_mismatch", result.health["status"])
         self.assertEqual(
-            "calls=1/80 qps<=2; live_cells=0; locations=0; "
+            "calls=2/80 qps<=2; live_cells=0; locations=0; "
             "errors=contract_mismatch; warnings=contract_mismatch",
             result.health["reason"],
         )
         self.assertEqual(
             ('contract_mismatch:lodging-bjs-central:geocode_lookup:'
-             '{"candidates":[],"suggested_names":[]}',),
+             '{"candidates":[{"administrative_area":"合成云港市/示例区","name":'
+             '"合成旅舍候选"}],"suggested_names":["合成旅舍候选"]}',),
             result.warnings,
         )
-        self.assertEqual(["geocode"], transport.capabilities)
+        self.assertEqual(["poi", "geocode"], transport.capabilities)
+        self.assertEqual(2, transport.calls)
 
     def test_lodging_geocode_network_failure_retries_and_preserves_anchor(self):
         transport = SyntheticAmapFailureTransport("geocode", "network")
@@ -1447,16 +1497,18 @@ class AMapMobilityTests(unittest.TestCase):
         self.assertEqual(("poi-bjs-bund",), tuple(item.ref_id for item in result.locations))
         self.assertEqual("degraded", result.health["status"])
         self.assertEqual(
-            "calls=2/80 qps<=2; live_cells=0; locations=1; "
+            "calls=3/80 qps<=2; live_cells=0; locations=1; "
             "errors=network; warnings=network",
             result.health["reason"],
         )
         self.assertEqual(
             ('network:lodging-bjs-central:geocode_lookup:'
-             '{"candidates":[],"suggested_names":[]}',),
+             '{"candidates":[{"administrative_area":"合成云港市/示例区","name":'
+             '"合成旅舍候选"}],"suggested_names":["合成旅舍候选"]}',),
             result.warnings,
         )
-        self.assertEqual(["geocode", "geocode"], transport.capabilities)
+        self.assertEqual(["poi", "geocode", "geocode"], transport.capabilities)
+        self.assertEqual(3, transport.calls)
 
     def test_lodging_geocode_no_results_degrades_without_crashing(self):
         class EmptyGeocodeTransport:
@@ -1468,6 +1520,8 @@ class AMapMobilityTests(unittest.TestCase):
                 self.calls += 1
                 self.capabilities.append(provider_request.capability)
                 self.assert_request(provider, provider_request)
+                if provider_request.capability == "poi":
+                    return ProviderEnvelope(200, lodging_poi_identity_body(provider_request), {})
                 return ProviderEnvelope(200, {
                     "status": "1",
                     "info": "OK",
@@ -1477,15 +1531,15 @@ class AMapMobilityTests(unittest.TestCase):
 
             @staticmethod
             def assert_request(provider, provider_request):
-                if provider != "amap" or provider_request.capability != "geocode":
-                    raise AssertionError("lodging probe must only call AMap geocode")
+                if provider != "amap" or provider_request.capability not in ("poi", "geocode"):
+                    raise AssertionError("lodging probe must only call AMap poi/geocode")
 
         transport = EmptyGeocodeTransport()
         result = MobilityBackend("live", credentials(), transport).resolve(
             lodging_geocode_candidates(), self.clock, ("walking",),
         )
 
-        self.assertEqual(["geocode"], transport.capabilities)
+        self.assertEqual(["poi", "geocode"], transport.capabilities)
         self.assertNotIn(
             "lodging-bjs-central", {item.ref_id for item in result.locations},
         )
@@ -1500,11 +1554,15 @@ class AMapMobilityTests(unittest.TestCase):
         class AmbiguousGeocodeTransport:
             def __init__(self):
                 self.calls = 0
+                self.capabilities = []
 
             def execute(self, provider, provider_request):
                 self.calls += 1
-                if provider != "amap" or provider_request.capability != "geocode":
-                    raise AssertionError("lodging probe must only call AMap geocode")
+                self.capabilities.append(provider_request.capability)
+                if provider != "amap" or provider_request.capability not in ("poi", "geocode"):
+                    raise AssertionError("lodging probe must only call AMap poi/geocode")
+                if provider_request.capability == "poi":
+                    return ProviderEnvelope(200, lodging_poi_identity_body(provider_request), {})
                 return ProviderEnvelope(200, {
                     "status": "1",
                     "info": "OK",
@@ -1525,7 +1583,8 @@ class AMapMobilityTests(unittest.TestCase):
             lodging_geocode_candidates(), self.clock, ("walking",),
         )
 
-        self.assertEqual(1, transport.calls)
+        self.assertEqual(2, transport.calls)
+        self.assertEqual(["poi", "geocode"], transport.capabilities)
         self.assertNotIn(
             "lodging-bjs-central", {item.ref_id for item in result.locations},
         )
@@ -1544,11 +1603,15 @@ class AMapMobilityTests(unittest.TestCase):
 
             def __init__(self):
                 self.calls = 0
+                self.capabilities = []
 
             def execute(self, provider, provider_request):
                 self.calls += 1
-                if provider != "amap" or provider_request.capability != "geocode":
-                    raise AssertionError("lodging probe must only call AMap geocode")
+                self.capabilities.append(provider_request.capability)
+                if provider != "amap" or provider_request.capability not in ("poi", "geocode"):
+                    raise AssertionError("lodging probe must only call AMap poi/geocode")
+                if provider_request.capability == "poi":
+                    return ProviderEnvelope(200, lodging_poi_identity_body(provider_request), {})
                 return ProviderEnvelope(
                     429, {"error": "synthetic quota"}, {"Retry-After": "30"},
                 )
@@ -1558,7 +1621,8 @@ class AMapMobilityTests(unittest.TestCase):
             lodging_geocode_candidates(), self.clock, ("walking",),
         )
 
-        self.assertEqual(1, transport.calls)
+        self.assertEqual(2, transport.calls)
+        self.assertEqual(["poi", "geocode"], transport.capabilities)
         self.assertNotIn(
             "lodging-bjs-central", {item.ref_id for item in result.locations},
         )
@@ -1926,7 +1990,18 @@ class AMapMobilityTests(unittest.TestCase):
         }
         scenario = {"entities": [{
             "ref_id": "lodging-runtime-mismatch",
-            "poi_results": [],
+            "poi_results": [{
+                "id": "SYNTHETIC-LODGING-RUNTIME-MISMATCH",
+                "name": "合成住宿候选",
+                "pname": "广东省",
+                "cityname": "珠海市",
+                "adname": "示例区",
+                "address": "示例大道1号",
+                "adcode": "440400",
+                "type": "住宿服务;宾馆酒店;快捷酒店",
+                "business": {"opentime_today": "00:00-24:00"},
+                "location": "113.550000,22.260000",
+            }],
             "geocode": {
                 "location": "119.300000,26.080000",
                 "formatted_address": "另一座城合成住宿",
@@ -1961,15 +2036,15 @@ class AMapMobilityTests(unittest.TestCase):
             if item["field_path"] == "/lodgings/0/coordinates"
         ]
         # The trailing poi_around is the planner's nearby-dining stage (ADR-0022).
-        self.assertEqual(2, transport.calls)
-        self.assertEqual(["geocode", "poi_around"], transport.capabilities)
+        self.assertEqual(3, transport.calls)
+        self.assertEqual(["poi", "geocode", "poi_around"], transport.capabilities)
         self.assertIsNone(result.trip["lodgings"][0]["coordinates"])
         self.assertEqual(1, len(unknowns))
         self.assertEqual("amap", unknowns[0]["provider"])
         self.assertIsNone(unknowns[0]["claim_id"])
         self.assertIn("geocode_admin_mismatch", unknowns[0]["reason"])
         self.assertIn('"actual_administrative_area":"另一座城"', unknowns[0]["reason"])
-        self.assertIn('"suggested_names":[]', unknowns[0]["reason"])
+        self.assertIn('"suggested_names":["合成住宿候选"]', unknowns[0]["reason"])
 
     def test_demo_candidates_produce_bounded_two_mode_live_matrix(self):
         transport = ScriptedAmapTransport()
@@ -1977,10 +2052,10 @@ class AMapMobilityTests(unittest.TestCase):
         result = backend.resolve(self.candidates, self.clock, ("transit", "walking"))
         self.assertEqual(5, len(result.locations))
         self.assertEqual(40, len(result.cells))
-        self.assertEqual(49, transport.calls)
+        self.assertEqual(50, transport.calls)
         self.assertLessEqual(transport.calls, 80)
         self.assertEqual("ready", result.health["status"])
-        self.assertIn("calls=49/80 qps<=2", result.health["reason"])
+        self.assertIn("calls=50/80 qps<=2", result.health["reason"])
         self.assertEqual({"transit", "walk"}, {cell.travel_mode for cell in result.cells})
         for location in result.locations:
             self.assertIsNotNone(location.coordinates["gcj02"])
@@ -2044,11 +2119,12 @@ class AMapMobilityTests(unittest.TestCase):
         amap = next(item for item in result.trip["provider_health"] if item["provider"] == "amap")
         self.assertEqual("ready", amap["status"])
         self.assertEqual("live", amap["mode"])
-        # 29 mobility calls (poi/geocode/route) plus 4 nearby-dining poi_around
-        # queries (ADR-0022): the health line must report the whole run, not just
+        # 30 mobility calls (poi/geocode/route, including the lodging's own
+        # POI-identity lookup) plus 4 nearby-dining poi_around queries
+        # (ADR-0022): the health line must report the whole run, not just
         # the mobility-resolve phase that finishes before dining starts.
-        self.assertIn("calls=33/80", amap["reason"])
-        self.assertEqual(transport.calls, 33)
+        self.assertIn("calls=34/80", amap["reason"])
+        self.assertEqual(transport.calls, 34)
         for item in result.trip["pois"] + result.trip["lodgings"]:
             self.assertIsNotNone(item["coordinates"]["gcj02"])
             self.assertIsNotNone(item["coordinates"]["wgs84"])
@@ -2084,7 +2160,7 @@ class AMapMobilityTests(unittest.TestCase):
                 )
 
     def test_lodging_geocode_admin_mismatch_degrades_without_crashing(self):
-        """A lodging never runs POI lookup, so the mismatch path must not read POI state."""
+        """A lodging clears POI identity first; the admin mismatch is still caught at geocode."""
 
         class MismatchTransport:
             calls = 0
@@ -2092,6 +2168,8 @@ class AMapMobilityTests(unittest.TestCase):
             def execute(self, provider, provider_request):
                 del provider
                 MismatchTransport.calls += 1
+                if provider_request.capability == "poi":
+                    return ProviderEnvelope(200, lodging_poi_identity_body(provider_request), {})
                 if provider_request.capability != "geocode":
                     raise AssertionError("lodging must not trigger %s" % provider_request.capability)
                 return ProviderEnvelope(

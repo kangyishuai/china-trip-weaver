@@ -234,20 +234,14 @@ class MobilityBackend:
         errors: List[str],
         warnings: List[str],
     ) -> Tuple[Optional[MobilityLocation], Optional[str]]:
-        identity_claims: List[Mapping[str, Any]] = []
-        identity_candidates: Sequence[Mapping[str, Any]] = ()
-        identity_candidate_claims: Sequence[Mapping[str, Any]] = ()
-        provider_name: Optional[str] = None
-        geocode_address = "%s%s" % (entity["city"], entity["name"])
-        if not entity["lodging"]:
-            (
-                stop, fatal_status, geocode_address, identity_claims, provider_name,
-                identity_candidates, identity_candidate_claims,
-            ) = self._resolve_poi_identity(
-                entity, candidates, adapter, context, now, calls, claims, errors, warnings,
-            )
-            if stop:
-                return None, fatal_status
+        (
+            stop, fatal_status, geocode_address, identity_claims, provider_name,
+            identity_candidates, identity_candidate_claims,
+        ) = self._resolve_poi_identity(
+            entity, candidates, adapter, context, now, calls, claims, errors, warnings,
+        )
+        if stop:
+            return None, fatal_status
         return self._resolve_geocode(
             entity, adapter, context, now, calls, claims, errors, warnings,
             geocode_address, identity_claims, provider_name,

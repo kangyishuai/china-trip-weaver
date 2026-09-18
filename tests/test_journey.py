@@ -480,12 +480,14 @@ class JourneyAMapRuntimeTests(unittest.TestCase):
             for trip in result.journey["trips"]
         ]
         self.assertEqual(3, len(reasons))
-        # 5 mobility calls plus 2 nearby-dining poi_around queries (ADR-0022) per Trip:
-        # the health line reports the whole segment run, not just mobility-resolve.
-        self.assertTrue(all(reason.startswith("calls=7/80 ") for reason in reasons), reasons)
-        # Mobility calls are unchanged; the planner's nearby-dining stage (ADR-0022)
-        # adds its own poi_around queries on top, two per Trip here.
-        self.assertEqual(15, transport.calls - transport.poi_around_calls)
+        # 6 mobility calls (including the lodging's own POI-identity lookup)
+        # plus 2 nearby-dining poi_around queries (ADR-0022) per Trip: the
+        # health line reports the whole segment run, not just mobility-resolve.
+        self.assertTrue(all(reason.startswith("calls=8/80 ") for reason in reasons), reasons)
+        # Mobility calls now include one poi-identity lookup per Trip's lodging;
+        # the planner's nearby-dining stage (ADR-0022) adds its own poi_around
+        # queries on top, two per Trip here.
+        self.assertEqual(18, transport.calls - transport.poi_around_calls)
         self.assertEqual(6, transport.poi_around_calls)
         reported_calls = [int(re.match(r"calls=(\d+)/", reason).group(1)) for reason in reasons]
         self.assertEqual(transport.calls, sum(reported_calls))
@@ -680,13 +682,15 @@ class JourneyAMapRuntimeTests(unittest.TestCase):
             self.assertIsNotNone(coordinates[0]["gcj02"])
         for ref_id in repeated_lodgings:
             self.assertEqual(1, counts[("geocode", ref_id)])
-        # Mobility calls are unchanged; the nearby-dining stage (ADR-0022) adds its own.
-        self.assertEqual(57, transport.calls - transport.poi_around_calls)
+        # Mobility calls now include one poi-identity lookup per lodging (each
+        # lodging previously skipped straight to geocode); the nearby-dining
+        # stage (ADR-0022) adds its own poi_around queries on top.
+        self.assertEqual(66, transport.calls - transport.poi_around_calls)
         self.assertEqual(9, transport.poi_around_calls)
         visible_calls = Counter(
             item for item in result.business_calls if item.startswith("amap.")
         )
-        self.assertEqual(57, sum(visible_calls.values()))
+        self.assertEqual(66, sum(visible_calls.values()))
         for ref_id in repeated_pois:
             self.assertEqual(1, visible_calls["amap.poi:%s" % ref_id])
             self.assertEqual(1, visible_calls["amap.geocode:%s" % ref_id])
@@ -701,13 +705,13 @@ class JourneyAMapRuntimeTests(unittest.TestCase):
         first = plan_journey(
             case["request"], case["candidates"], self.clock, self.rail, backend,
         )
-        self.assertEqual(15, transport.calls - transport.poi_around_calls)
+        self.assertEqual(18, transport.calls - transport.poi_around_calls)
         self.assertEqual(6, transport.poi_around_calls)
         second = plan_journey(
             case["request"], case["candidates"], self.clock, self.rail, backend,
         )
         # Neither the mobility memo nor the dining queries carry over between invocations.
-        self.assertEqual(30, transport.calls - transport.poi_around_calls)
+        self.assertEqual(36, transport.calls - transport.poi_around_calls)
         self.assertEqual(12, transport.poi_around_calls)
         self.assertTrue(validate_journey(first.journey).ok)
         self.assertTrue(validate_journey(second.journey).ok)
