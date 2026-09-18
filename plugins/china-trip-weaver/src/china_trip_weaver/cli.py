@@ -341,6 +341,24 @@ def _add_journey_parser(commands: Any) -> None:
         help="reason recorded on the new Journey revision; defaults to the dining fold's own reason",
     )
     journey_dining.add_argument("--fixed-clock", default=None)
+    journey_locate = journey_commands.add_parser(
+        "locate", help="fold a `ctw locate --output-json` envelope into every Trip of a Journey",
+    )
+    journey_locate.add_argument("--journey", type=Path, required=True)
+    journey_locate.add_argument(
+        "--locate-result", type=Path, required=True, dest="locate_result",
+        help="path to a `ctw locate --output-json` result",
+    )
+    journey_locate.add_argument(
+        "--base-revision", type=int, required=True, dest="base_revision",
+        help="the Journey revision number this fold was built against",
+    )
+    journey_locate.add_argument("--output-json", type=Path, required=True)
+    journey_locate.add_argument(
+        "--reason", default=None,
+        help="reason recorded on the new Journey revision; defaults to the locate fold's own reason",
+    )
+    journey_locate.add_argument("--fixed-clock", default=None)
 
 
 def _add_replan_parser(commands: Any) -> None:
@@ -822,6 +840,8 @@ def _cmd_journey(args: argparse.Namespace, progress: "_NDJSONProgress") -> int:
         return _cmd_journey_weather(args)
     if args.journey_command == "dining":
         return _cmd_journey_dining(args)
+    if args.journey_command == "locate":
+        return _cmd_journey_locate(args)
     return _cmd_journey_plan(args, progress)
 
 
@@ -1063,6 +1083,49 @@ def _cmd_journey_dining(args: argparse.Namespace) -> int:
         return 0
     except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
         print("JOURNEY_DINING_FAILED %s" % exc, file=sys.stderr)
+        return 1
+
+
+def _cmd_journey_locate(args: argparse.Namespace) -> int:
+    import hashlib
+
+    from .clock import FixedClock, SystemClock
+    from .locate_fold import fold_locations_into_journey
+
+    try:
+        clock = FixedClock.from_iso(args.fixed_clock) if args.fixed_clock else SystemClock()
+        journey_value = read_json(args.journey)
+        locate_result = read_json(args.locate_result)
+        if "entities" not in locate_result or "claims" not in locate_result:
+            raise ValueError(
+                "--locate-result must be a `ctw locate --output-json` envelope "
+                "with entities and claims"
+            )
+        updated = fold_locations_into_journey(
+            journey_value, locate_result, args.base_revision, clock, reason=args.reason,
+        )
+        if updated is None:
+            print("JOURNEY_LOCATE_NOOP journey=%s revision=%d" % (args.journey, args.base_revision))
+            return 2
+        before_revisions = {item["trip_id"]: item["revision"]["number"] for item in journey_value["trips"]}
+        trips_changed = sum(
+            1 for item in updated["trips"]
+            if before_revisions.get(item["trip_id"]) != item["revision"]["number"]
+        )
+        args.output_json.parent.mkdir(parents=True, exist_ok=True)
+        write_canonical_json(args.output_json, updated)
+        print(
+            "JOURNEY_LOCATE_COMPLETE json=%s revision=%d trips_changed=%d journey_sha256=%s"
+            % (
+                args.output_json,
+                updated["revision"]["number"],
+                trips_changed,
+                hashlib.sha256(canonical_json(updated).encode("utf-8")).hexdigest(),
+            )
+        )
+        return 0
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        print("JOURNEY_LOCATE_FAILED %s" % exc, file=sys.stderr)
         return 1
 
 
