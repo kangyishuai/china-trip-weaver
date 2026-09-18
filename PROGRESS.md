@@ -476,6 +476,24 @@
   --failed` 即绿。0.11.0 起握手等 30 秒并重启一次，之后再出现请记在这里。
 - 本机 Codex 与源码的差距：以 `bash scripts/install_local_plugin.sh --check`
   实时输出为准；`ctw doctor` 的 `runtime_root` 是缓存所在目录，可随时删除。
+- **第三十七波 AS1「晚餐退住处兜底」已完成**（`.tmp/wt-as1`，分支 `dining-night-stay`，2026-09-18，待合入）：
+  `dining.anchor_for` 常规向前/向后搜索找不到锚点时，新增 `_night_stay_fallback`：这一时段是晚餐
+  （`meal_type_for` 为 `dinner`）、其后当天再没有 `transport` 时段、且 `day["stay_id"]` 指向的住宿已有
+  `gcj02`，三条同时成立才退而以住处为圆心，午餐不适用；现有搜索能命中的锚点一个字节不变。顺带修
+  `locate_trips` 信封的 `health.status`：locate 不查路线，此前只要发起过查询就恒 `degraded`，容易被误
+  读成出错，现在没有任何一行 `provider_error` 时改记 `ready`，否则照旧。任务 0 的 4 条核对（①换乘后无
+  坐标+住处有坐标须红，②晚餐后还有 transport、③住处无坐标、④是午餐须绿）与任务书预告逐字一致；`
+  AnchorForTests` 既有 5 例、`SelectOptionsTests`/`FormatOptionAndSearchUrlTests`/`MealSlotsTests` 一字
+  未改仍绿。`test_dining_cli.py` 两处 `assertEqual(2, len(anchored))` 按预告变 6（示例 Trip 第 2–5 天各
+  多一顿晚餐锚到住处），同一测试加了「多出的 4 个都是晚餐、`ref_id` 等于当天 `stay_id`」的核对，`claims`
+  仍 12 不变。`test_locate.py` 新增两例：demo 16 天行程全部 `located` → `ready`；
+  `ScriptedAmapTransport(forbidden=True)` → `forbidden`。全量与四个假 Key 全量同为 **863**（857+4 dining+2
+  locate）0 skipped；`scan_secrets` 0；pyflakes 0；`build_plan_fixtures.py`/`build_provider_fixtures.py`/
+  `build_scheduler_fixtures.py`/`build_renderer_fixtures.py` 与主 demo 重生成 `git status` 均空。反向验证：
+  去掉「只限晚餐」判断，④转红；还原并 `touch` 后转绿。`git diff main --name-only` 只含
+  `dining.py`/`locate.py`/`tests/test_dining.py`/`tests/test_dining_cli.py`/`tests/test_locate.py`/
+  三份设计文档（ADR-0022、06-pipeline.md、09-impl-map.md）/`PROGRESS.md`/`BLOCKED.md`，未碰 planning.py/
+  cli.py/schema/README/SKILL/demo。BLOCKED.md 记「无」，只推分支未合并，详见 BLOCKED.md「书 AS1」。
 
 ## 定位失败天花板
 

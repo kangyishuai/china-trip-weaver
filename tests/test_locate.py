@@ -143,6 +143,27 @@ class LocateMethodAndModuleTests(unittest.TestCase):
             self.assertEqual("located", row["status"])
 
 
+    def test_demo_journey_fully_located_reports_ready_health(self):
+        journey = load(JOURNEY_DEMO)
+        transport = CapabilityRecordingTransport()
+        backend = MobilityBackend("live", credentials(), transport)
+
+        envelope = locate_trips(journey["trips"], backend, CLOCK)
+
+        self.assertTrue(envelope["entities"])
+        self.assertTrue(all(row["status"] == "located" for row in envelope["entities"]))
+        self.assertEqual("ready", envelope["health"]["status"])
+
+    def test_forbidden_transport_reports_forbidden_health(self):
+        trip = load(JOURNEY_DEMO)["trips"][0]
+        transport = CapabilityRecordingTransport(forbidden=True)
+        backend = MobilityBackend("live", credentials(), transport)
+
+        envelope = locate_trips([trip], backend, CLOCK)
+
+        self.assertTrue(any(row["status"] == "provider_error" for row in envelope["entities"]))
+        self.assertEqual("forbidden", envelope["health"]["status"])
+
     def test_trip_missing_only_lodging_coordinates_still_locates_them(self):
         # A hand-finished itinerary usually has every POI located and only its
         # lodgings missing; the candidates schema still needs one POI, which an

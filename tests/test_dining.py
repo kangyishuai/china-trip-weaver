@@ -194,6 +194,61 @@ class AnchorForTests(unittest.TestCase):
 
         self.assertIsNone(dining.anchor_for(trip, 0, 0))
 
+    @staticmethod
+    def _night_stay_trip(meal_slot, trailing_slots, stay_has_coordinates):
+        """退房→换乘→`meal_slot`（可选 `trailing_slots`），换乘后没有别的带坐标时段；
+        `day["stay_id"]` 指向到达城的住处，`stay_has_coordinates` 控制它是否已定位。
+        """
+
+        lodgings = [
+            {"lodging_id": "lodging-origin", "name": "出发城住宿", "coordinates": _coordinates(118.0, 27.6)},
+            {"lodging_id": "lodging-arrival", "name": "到达城住宿"},
+        ]
+        if stay_has_coordinates:
+            lodgings[1]["coordinates"] = _coordinates(119.3, 26.1)
+        slots = [
+            _slot("checkout", "退房", "2026-10-02T08:00:00+08:00", ref_id="lodging-origin"),
+            _slot("transport", "轮渡", "2026-10-02T10:00:00+08:00", ref_id="leg-ferry"),
+            meal_slot,
+        ] + list(trailing_slots)
+        return {
+            "days": [{"slots": slots, "stay_id": "lodging-arrival"}],
+            "lodgings": lodgings,
+            "pois": [],
+        }
+
+    def test_dinner_after_transfer_with_nothing_later_anchors_on_the_night_stay(self):
+        dinner = _slot("meal", "晚餐（地点待定）", "2026-10-02T18:30:00+08:00")
+        trip = self._night_stay_trip(dinner, [], stay_has_coordinates=True)
+
+        anchor = dining.anchor_for(trip, 0, 2)
+
+        self.assertEqual(anchor, {
+            "ref_id": "lodging-arrival",
+            "name": "到达城住宿",
+            "lng": 119.3,
+            "lat": 26.1,
+        })
+
+    def test_dinner_with_a_later_transport_slot_does_not_fall_back_to_the_night_stay(self):
+        dinner = _slot("meal", "晚餐（地点待定）", "2026-10-02T18:30:00+08:00")
+        later_transport = _slot("transport", "轮渡", "2026-10-02T20:00:00+08:00", ref_id="leg-ferry-2")
+        trip = self._night_stay_trip(dinner, [later_transport], stay_has_coordinates=True)
+
+        self.assertIsNone(dining.anchor_for(trip, 0, 2))
+
+    def test_dinner_falls_back_only_when_the_night_stay_has_coordinates(self):
+        dinner = _slot("meal", "晚餐（地点待定）", "2026-10-02T18:30:00+08:00")
+        trip = self._night_stay_trip(dinner, [], stay_has_coordinates=False)
+
+        self.assertIsNone(dining.anchor_for(trip, 0, 2))
+
+    def test_lunch_after_transfer_does_not_fall_back_to_the_night_stay(self):
+        lunch = _slot("meal", "午餐（地点待定）", "2026-10-02T12:30:00+08:00")
+        trip = self._night_stay_trip(lunch, [], stay_has_coordinates=True)
+
+        self.assertIsNone(dining.anchor_for(trip, 0, 2))
+
 
 class SelectOptionsTests(unittest.TestCase):
     def setUp(self):

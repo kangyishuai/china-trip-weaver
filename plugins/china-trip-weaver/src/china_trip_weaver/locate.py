@@ -111,6 +111,8 @@ def locate_trips(
 
     if health is None:
         health = {"provider": "amap", "status": "degraded", "checked_at": queried_at}
+    if not any(entity["status"] == "provider_error" for entity in entities):
+        health = dict(health, status="ready")
 
     return {
         "provider": "amap",

@@ -73,16 +73,38 @@ def anchor_for(trip: Mapping[str, Any], day_index: int, slot_index: int) -> Opti
     `meal` slot's own placeholder POI is never itself an anchor. A `transport`
     slot bounds the search both ways: a meal after a transfer is eaten in the
     arrival city, so nothing before the transfer may anchor it, and a meal
-    before one is eaten in the departure city. Returns None when no such slot
-    with a known `gcj02` point lies on the meal's side of every transfer.
+    before one is eaten in the departure city. When that search finds nothing,
+    a dinner with no later `transport` slot that day falls back to the night's
+    lodging (`day["stay_id"]`) if it has a known point; lunch never falls back.
+    Returns None when neither the search nor the fallback finds a point.
     """
 
-    slots = trip["days"][day_index]["slots"]
+    day = trip["days"][day_index]
+    slots = day["slots"]
     for index in _search_order(slots, slot_index):
         anchor = _anchor_from_slot(trip, slots[index])
         if anchor is not None:
             return anchor
-    return None
+    return _night_stay_fallback(trip, day, slots, slot_index)
+
+
+def _night_stay_fallback(
+    trip: Mapping[str, Any], day: Mapping[str, Any], slots: Sequence[Mapping[str, Any]], slot_index: int,
+) -> Optional[Dict[str, Any]]:
+    if meal_type_for(slots[slot_index]) != "dinner":
+        return None
+    if any(slot.get("kind") == "transport" for slot in slots[slot_index + 1:]):
+        return None
+    stay_id = day.get("stay_id")
+    if not stay_id:
+        return None
+    lodging = _find_by_id(trip["lodgings"], "lodging_id", stay_id)
+    if lodging is None:
+        return None
+    point = _gcj02_point(lodging.get("coordinates"))
+    if point is None:
+        return None
+    return {"ref_id": stay_id, "name": lodging["name"], "lng": point["lng"], "lat": point["lat"]}
 
 
 def _search_order(slots: Sequence[Mapping[str, Any]], slot_index: int) -> Iterator[int]:
