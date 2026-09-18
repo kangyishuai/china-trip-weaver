@@ -8,7 +8,7 @@ description: Resolve mainland-China POIs, geocodes, coordinate provenance, and w
 Resolve only the candidate endpoints supplied by the parent Skill.
 
 - Preserve provider-native coordinates and explicitly derive WGS84/GCJ02 at most once. AMap requests always consume GCJ02.
-- Resolve POI identity with AMap v5 text search scoped by `city_limit=true` before geocoding. Preserve the provider POI id, matched name, formatted address, district, adcode, type, and business fields as claims; geocode only a complete address.
+- Resolve POI and lodging identity with AMap v5 text search scoped by `city_limit=true` before geocoding. Preserve the provider POI id, matched name, formatted address, district, adcode, type, and business fields as claims; geocode only a complete address. A lodging is never geocoded by its bare city and name.
 - Treat a first/second name-similarity margin below `0.15`, or any provider administrative city that disagrees with the candidate city, as `identity_conflict`. Keep coordinates unknown and never replace the provider's city with the candidate city. The conflict reason includes at most three sanitized provider candidate names, their city/district, and copyable suggested names; it never includes the raw response.
 - Before appending a human-written POI name, `ctw candidates add-poi ... --verify-name` may run one bounded AMap name-check step. Report `unique`, `ambiguous`, or `unavailable` with the same sanitized candidate projection. Missing credentials and lookup failures never block the candidate write or populate coordinates.
 - Build a bounded directed matrix for plausible adjacency, locked anchors, transport endpoints, and lodging; do not issue an unbounded all-pairs query.

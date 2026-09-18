@@ -1,3 +1,21 @@
+## 书 AR1「住宿身份核对」（2026-09-18，第三十六波，worktree `.tmp/wt-ar1` 分支 `lodging-identity`）：任务 2 一处不符（非阻塞）
+
+**任务 2 实网核对，一处不符，非阻塞**：任务书写「实体按 ref_id 排序、住宿 `lodging-nanjing-east` 在前」。
+把 [tests/fixtures/trips/schema/valid/weekend-live.json](tests/fixtures/trips/schema/valid/weekend-live.json)
+拷到 `.tmp/`、景点 `poi-bund` 与住宿 `lodging-nanjing-east` 的 `coordinates` 都置 null、住宿改名「如家
+酒店（南京东路步行街店）」后跑 `ctw locate`，输出 `entities` 实测顺序是 `poi-bund` 在前、
+`lodging-nanjing-east` 在后——不是按 ref_id 排序，也不是住宿在前。读
+[locate.py](plugins/china-trip-weaver/src/china_trip_weaver/locate.py) 第 38-61 行
+`unlocated_entities()`：先遍历 `trip["pois"]` 再遍历 `trip["lodgings"]`，全程没有任何按 `ref_id` 的
+排序步骤，`locate_trips()`（第 84-110 行）原样按 `unlocated_entities()` 的顺序追加进 `entities`。这是
+`locate.py` 既有、与本书改动的 `mobility.py` 无关的行为，且 `locate.py` 在本书「界限」白名单之外（只
+允许改 `mobility.py` 的那道分叉），未改动它。
+
+判定非阻塞：任务书「完成条件」只写「实网如家那行 located 且离上海市中心点超过 500 m」，未把实体顺序
+列为验收项；该行为在真实运行里已确认（见 PROGRESS.md 本书「任务 2」小节，`lodging-nanjing-east`
+located，gcj02 (121.477072, 31.234663) 距 121.473667,31.230525 达 563 m，stderr 前两条 query 事件依次
+`poi`、`geocode`，均与任务书一致）。
+
 ## 书 AP6b「附近餐饮参考文档」（2026-09-17，第三十四波，worktree `.tmp/wt-ap6b` 分支 `dining-docs`）：任务 0 一处不符（非阻塞）
 
 **任务 0 核对，一处不符，非阻塞**：任务书「现状与任务 0」给出两类基线数字——全量 `Ran 790 tests` OK

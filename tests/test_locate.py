@@ -67,7 +67,7 @@ class CapabilityRecordingTransport(ScriptedAmapTransport):
 
 
 class LocateMethodAndModuleTests(unittest.TestCase):
-    def test_demo_journey_locates_all_six_entities_with_three_calls_per_trip(self):
+    def test_demo_journey_locates_all_six_entities_with_four_calls_per_trip(self):
         journey = load(JOURNEY_DEMO)
         transport = CapabilityRecordingTransport()
         backend = MobilityBackend("live", credentials(), transport)
@@ -90,14 +90,14 @@ class LocateMethodAndModuleTests(unittest.TestCase):
         envelope_claim_ids = {claim["claim_id"] for claim in envelope["claims"]}
         self.assertTrue(referenced_claim_ids)
         self.assertLessEqual(referenced_claim_ids, envelope_claim_ids)
-        self.assertEqual(9, transport.calls)
+        self.assertEqual(12, transport.calls)
         self.assertNotIn("route", transport.capabilities)
 
         for trip in journey["trips"]:
             per_trip_transport = CapabilityRecordingTransport()
             per_trip_backend = MobilityBackend("live", credentials(), per_trip_transport)
             locate_trips([trip], per_trip_backend, CLOCK)
-            self.assertEqual(3, per_trip_transport.calls, trip["trip_id"])
+            self.assertEqual(4, per_trip_transport.calls, trip["trip_id"])
             self.assertNotIn("route", per_trip_transport.capabilities)
 
     def test_trip_with_every_coordinate_already_known_makes_zero_calls(self):
@@ -137,7 +137,7 @@ class LocateMethodAndModuleTests(unittest.TestCase):
 
         envelope = locate_trips([trip, trip], backend, CLOCK)
 
-        self.assertEqual(3, transport.calls)
+        self.assertEqual(4, transport.calls)
         self.assertEqual(4, len(envelope["entities"]))
         for row in envelope["entities"]:
             self.assertEqual("located", row["status"])
@@ -161,7 +161,7 @@ class LocateMethodAndModuleTests(unittest.TestCase):
         self.assertEqual([pending[0]["ref_id"]], [row["ref_id"] for row in envelope["entities"]])
         row = envelope["entities"][0]
         self.assertEqual("located", row["status"])
-        self.assertEqual(["geocode"], transport.capabilities)
+        self.assertEqual(["poi", "geocode"], transport.capabilities)
         self.assertTrue(row["claim_ids"])
         self.assertLessEqual(set(row["claim_ids"]), {claim["claim_id"] for claim in envelope["claims"]})
 

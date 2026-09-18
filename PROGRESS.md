@@ -731,3 +731,73 @@ docs/design/06-pipeline.md、plugins/china-trip-weaver/skills/resolve-china-mobi
 本文件与 BLOCKED.md，全部落在界限白名单内；未碰任何 `.py`、schema、demo、09-impl-map.md 或其它
 Skill。BLOCKED.md 本书追加「无」，任务 0 核对全部与任务书描述一致、没有非阻塞发现需要记录。只提交
 并 push 分支 `locate-docs`，不合并 main。
+
+## 第三十六波 AR1「住宿身份核对」（2026-09-18，worktree `.tmp/wt-ar1` 分支 `lodging-identity`）
+
+**任务 0**：仓库根建 worktree，全量 `Ran 846 tests`、`OK`、0 skipped，与书里数字一致。新建
+`tests/test_lodging_identity.py` 两条测试，在未改 `mobility.py` 前确认均红：①同品牌两家分店、
+名字相近、相距 800 m（复用 `_synthetic_ambiguous_cluster(800)` 的字符串与坐标构造，只把实体换成
+住宿）→ 断言 `assertNotIn` 失败，`lodging-bjs-central` 确实出现在 `result.locations` 里（旧代码住宿
+跳过身份核对直接走 geocode 拿到坐标）；②唯一身份住宿 → 断言 `["poi", "geocode"]` 失败，实际
+`transport.capabilities` 是 `["geocode", "route", "route"]`（旧代码从不查 `poi`，且用裸「城市+名称」
+直接查到坐标进而触发路由矩阵）。两条症状与任务书「现状」描述的机制一致，目标明确、无需停下写
+BLOCKED。
+
+目标：删掉 `_resolve_entity` 里「住宿跳过 `_resolve_poi_identity`」那道 `if not entity["lodging"]:`
+分叉，让住宿与景点共用同一条核对→编码路径。顺序：先跑通任务 0 两条新测试（已红，待分叉删除后转绿）
+→ 改 15 条既有测试的值（六条 `test_lodging_geocode_*` 要给传输层补一条唯一 POI 应答，让失败点后移到
+geocode 那一步）→ demo/夹具/假 Key 全量复跑零漂移 → 反向验证 → 实网 + 文档。最大风险：15 条既有
+测试里的传输层测试替身（`SyntheticAmapFailureTransport`、`EmptyGeocodeTransport` 等自定义类）目前只
+接受一种 capability，删分叉后住宿会先发 `poi` 请求，必须逐个补 POI 应答分支，稍有不慎会连带改掉
+`assertEqual` 之外的宽松断言（书里明令禁止）。
+
+**任务 1 完成**：`mobility.py::_resolve_entity` 删掉 `if not entity["lodging"]:` 分叉（diff 只有这
+8 行改动，`_resolve_poi_identity`/`_resolve_geocode`/`_poi_admin_matches`/`_poi_name_is_ambiguous`/
+`_complete_poi_address`/两个阈值常量/`FATAL_ERRORS` 一字未动）；`~/miniconda3/envs/core/bin/python -m
+pyflakes` 该文件 0 行。测试改法：`test_amap_live.py` 新增模块级 `lodging_poi_identity_body()`（给任意
+住宿实体回一条唯一匹配的 POI 应答），`SyntheticAmapFailureTransport` 加一条前置分支——`capability=
+"geocode"` 时先接一次 `poi` 请求走该应答再进入原有失败场景；`EmptyGeocodeTransport`/
+`AmbiguousGeocodeTransport`/`RateLimitedGeocodeTransport`/`MismatchTransport` 四个内联测试替身同样
+先应答 `poi` 再进各自的 geocode 场景；六条 `test_lodging_geocode_*` 的 `calls=`／能力序列／告警反馈
+JSON（`suggested_names`/`candidates`）改成实测的新值，失败点全部仍落在 geocode 一步、错误类别与健康
+状态字面量未动，`assertEqual` 一处未松动。另外 3 条（矩阵/全量规划/运行时不符）把场景夹具补一条唯一
+POI 候选后同样只改调用数与 JSON 反馈字面值。`test_journey.py` 3 条、`test_locate.py` 3 条全部只改
+`calls=`/调用总数（`RecordingJourneyAMapTransport`/`CapabilityRecordingTransport` 均继承既有
+`ScriptedAmapTransport`，无需改动，新增的 `poi` 请求走它原有的通用分支）；`test_locate.py` 一条测试名
+里嵌了旧调用数（`..._with_three_calls_per_trip`），实测变 4 次/趟后连方法名一并改成
+`..._with_four_calls_per_trip`（全仓 `git grep` 确认无第二处引用）。反向验证：把分叉加回
+`_resolve_entity`，`tests.test_lodging_identity` 两条应声转红（`lodging-bjs-central` 又出现在
+`result.locations`；能力序列变回 `['geocode', 'route']`）；删除分叉、`touch` 源文件后复跑转绿。
+全量验证：`/usr/bin/python3 -m unittest discover -s tests` → `Ran 848 tests`、`OK`、0 skipped
+（846+2 新）；带 `AMAP_WEBSERVICE_KEY`/`FLYAI_API_KEY`/`VARIFLIGHT_API_KEY`/`ANYSEARCH_API_KEY`=
+`ctw-canary-fake-*` 四个假 Key 复跑同样 848 OK；`pyflakes $(git ls-files '*.py')` 0 行；
+`scripts/scan_secrets.py` → `0 finding(s) across 428 file(s)`；`build_plan_fixtures.py`/
+`build_renderer_fixtures.py`/`build_provider_fixtures.py`/`build_scheduler_fixtures.py` 依次重生成后
+`git status --short -- demo tests/fixtures` 空、零字节漂移，`git status --short` 只剩本书改动的 5 个
+文件加新测试文件。
+
+**任务 2 完成**：实网只用公开店名，未碰真实行程目录。把
+[tests/fixtures/trips/schema/valid/weekend-live.json](tests/fixtures/trips/schema/valid/weekend-live.json)
+拷到 `.tmp/ar1-realnet/`，景点 `poi-bund` 与住宿 `lodging-nanjing-east` 的 `coordinates` 都置 null，
+住宿改名「如家酒店（南京东路步行街店）」，`ctw locate --progress ndjson --trip … --output-json …`：
+`LOCATE_COMPLETE`，住宿行 `status=located`，`gcj02=(121.477072, 31.234663)`，用
+`matrix.haversine_meters` 核实距 121.473667,31.230525 达 **563 m**（超过 500 m）；stderr 前两条
+`query` 事件依次是 `poi`、`geocode`。景点 `poi-bund`（外滩）同一轮 `unresolved`（
+`geocode_ambiguous`，与本书改动无关，是外滩地址本身在高德多义）。发现一处与任务书不符、判定非阻塞并
+记入 BLOCKED.md：任务书预期「实体按 ref_id 排序、住宿在前」，实测顺序是 `poi-bund` 在前、
+`lodging-nanjing-east` 在后——`locate.py::unlocated_entities` 一直是「先景点后住宿」而非按 ref_id 排
+序，该文件在本书界限之外未改动，完成条件本身也未把顺序列为验收项。换成「7天酒店（上海人民广场店）」
+再跑：住宿行 `status=unresolved`，`reason=identity_conflict:lodging-nanjing-east:geocode_ambiguous:
+{"candidates":[{"administrative_area":"上海市","name":"上海市宝山区大场镇鄂尔多斯路800号"},{...98弄}]}`
+——与管理者预判一致（unresolved，未 located，故不触发「若 located 记坐标到 BLOCKED」那条）；行政区正
+确但地址在宝山区（非目标的人民广场），是「让步顺序：宁可查不到也不给假坐标」生效的证据，不是本书判定
+的缺陷。文档：`plugins/.../resolve-china-mobility/SKILL.md` 第 11 行 `Resolve POI identity` 改
+`Resolve POI and lodging identity`，句末加 `A lodging is never geocoded by its bare city and
+name.`；`docs/design/06-pipeline.md` §7.8「判定口径」句末加「住宿与景点一样先核对名称身份，再对身份
+给出的完整地址编码」。`git grep` 确认旧文案 `Resolve POI identity`（不带 `and lodging`）全仓零残留。
+`/usr/bin/python3 -m unittest tests.test_skills` → `Ran 11 tests`、OK；`tests.test_design_docs` →
+`Ran 1 test`、OK。收尾复跑全量 `Ran 848 tests`、OK、0 skipped；`pyflakes`/`scan_secrets` 仍 0。
+`git diff main --name-only` 恰好八个文件（`BLOCKED.md`/`PROGRESS.md`/`docs/design/06-pipeline.md`/
+`plugins/.../resolve-china-mobility/SKILL.md`/`mobility.py`/三个测试文件）加新文件
+`tests/test_lodging_identity.py`，与「界限」白名单逐一对应；`git diff main -- mobility.py` 只有那 8
+行分叉删除，无旁的改动。两条完成条件均满足。只提交并推送分支 `lodging-identity`，不合并 main。
