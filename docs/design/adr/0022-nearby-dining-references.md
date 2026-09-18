@@ -94,6 +94,18 @@ Facts established on 2026-09-17:
   (06-pipeline §7.8): lodgings are resolved through the same POI identity check
   as attractions and geocoded by the confirmed address, so an arrival-day
   dinner can anchor on the hotel.
+- **A dinner with nothing nearby falls back to that night's lodging.** The
+  transfer boundary above still left dinners with `dining_no_anchor` on days
+  with no coordinate-bearing slot on the meal's side at all — a same-day
+  return by ferry, or a night continuing at a lodging with no `checkin` slot
+  that day. When the ordinary search finds nothing, `dining.anchor_for` now
+  falls back to that night's lodging (`day["stay_id"]`) if three conditions
+  all hold: the slot is a dinner (`meal_type_for` returns `dinner`), no
+  `transport` slot follows it later the same day, and that lodging has a
+  `gcj02` point. Lunch never falls back — most lunches are eaten out and
+  about, so centring one on the hotel risks a circle far from where the
+  traveller actually is. Regression tests: `tests/test_dining.py`
+  (`AnchorForTests`, the four night-stay cases).
 
 ## Evidence
 

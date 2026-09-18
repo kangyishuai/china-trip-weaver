@@ -49,7 +49,10 @@ def _trip_with_lodging_coordinates():
     """The demo's first Trip (5 days, 10 meal slots) with its one lodging
     given coordinates. The lunch and dinner slots on day 0 both anchor to
     that same checkin, via anchor_for's backward/forward search; every other
-    day has no coordinate-bearing slot at all, so their meals stay unanchored.
+    day has no coordinate-bearing slot at all, so their lunches stay
+    unanchored, but each day's `stay_id` names that same lodging, so each
+    day's dinner (last slot, nothing coordinate-bearing and no `transport`
+    after it) falls back to it too.
     """
 
     trip = load(DEMO_JOURNEY)["trips"][0]
@@ -69,8 +72,9 @@ class DiningCommandTests(unittest.TestCase):
     """
 
     def test_anchored_slots_return_three_rated_options_with_int_distance_and_matching_claims(self):
+        trip = _trip_with_lodging_coordinates()
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
-            trip_path = _write_json(temporary, "trip.json", _trip_with_lodging_coordinates())
+            trip_path = _write_json(temporary, "trip.json", trip)
             output_path = Path(temporary) / "dining.json"
             result = run_dining(
                 "--trip", str(trip_path),
@@ -83,7 +87,7 @@ class DiningCommandTests(unittest.TestCase):
             data = load(output_path)
 
         anchored = [slot for slot in data["slots"] if slot["anchor"] is not None]
-        self.assertEqual(2, len(anchored))
+        self.assertEqual(6, len(anchored))
         claim_ids = {claim["claim_id"] for claim in data["claims"]}
         for slot in anchored:
             self.assertEqual("options", slot["status"])
@@ -91,14 +95,24 @@ class DiningCommandTests(unittest.TestCase):
             for option in slot["options"]:
                 self.assertIsInstance(option["distance_m"], int)
                 self.assertIn(option["claim_id"], claim_ids)
+        # Days 2-5's dinners fall back to that night's lodging (day["stay_id"]);
+        # day 0's own two anchors (lunch + dinner) already came from the search.
+        stay_id_by_day = {day["day_id"]: day.get("stay_id") for day in trip["days"]}
+        fallback_rows = [slot for slot in anchored if slot["day_id"] != trip["days"][0]["day_id"]]
+        self.assertEqual(4, len(fallback_rows))
+        self.assertTrue(all(
+            row["meal_type"] == "dinner" and row["anchor"]["ref_id"] == stay_id_by_day[row["day_id"]]
+            for row in fallback_rows
+        ))
         # The lunch and dinner slots share the lodging's coordinates, so the
         # (location, keywords) dedup should fire the AMap query only once:
         # 6 fixture POIs x 2 claims (identity + business) = 12, not 24.
         self.assertEqual(12, len(data["claims"]))
 
     def test_avoid_word_excludes_matching_restaurant_from_every_anchored_slot(self):
+        trip = _trip_with_lodging_coordinates()
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
-            trip_path = _write_json(temporary, "trip.json", _trip_with_lodging_coordinates())
+            trip_path = _write_json(temporary, "trip.json", trip)
             output_path = Path(temporary) / "dining.json"
             result = run_dining(
                 "--trip", str(trip_path),
@@ -111,13 +125,22 @@ class DiningCommandTests(unittest.TestCase):
             data = load(output_path)
 
         anchored = [slot for slot in data["slots"] if slot["anchor"] is not None]
-        self.assertEqual(2, len(anchored))
+        self.assertEqual(6, len(anchored))
         for slot in anchored:
             self.assertEqual(3, len(slot["options"]))
             for option in slot["options"]:
                 self.assertNotIn("火锅", option["name"])
                 self.assertNotIn("火锅", option.get("tag") or "")
                 self.assertNotIn("火锅", option.get("cuisine") or "")
+        # Days 2-5's dinners fall back to that night's lodging (day["stay_id"]);
+        # day 0's own two anchors (lunch + dinner) already came from the search.
+        stay_id_by_day = {day["day_id"]: day.get("stay_id") for day in trip["days"]}
+        fallback_rows = [slot for slot in anchored if slot["day_id"] != trip["days"][0]["day_id"]]
+        self.assertEqual(4, len(fallback_rows))
+        self.assertTrue(all(
+            row["meal_type"] == "dinner" and row["anchor"]["ref_id"] == stay_id_by_day[row["day_id"]]
+            for row in fallback_rows
+        ))
 
     def test_journey_without_coordinates_reports_no_anchor_and_exits_two(self):
         result = run_dining(

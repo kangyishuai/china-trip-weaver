@@ -2474,3 +2474,21 @@ located，gcj02 (121.477072, 31.234663) 距 121.473667,31.230525 达 563 m，std
 ## 第三十六波验收时的管理者修正（2026-09-18）：餐饮锚点不越过换乘
 
 暗卷在折好坐标的行程副本上重跑 `ctw dining`，查出 ADR-0022 锚点规则（管理者所定）的缺陷：`dining.anchor_for` 先向前再向后找有坐标的时段时会越过 `transport` 时段。住宿有了坐标后，9/29「武夷山退房→G5023→福州午餐」的午餐锚在武夷山住宿、推荐武夷山的店，10/3「平潭退房→自驾→泉州午餐」锚在平潭；而 10/7 坐船离岛后的晚餐锚在岛上的日光岩、10/9 从土楼开回厦门后的晚餐锚在一百公里外的怀远楼——这两处在 0.25.0 已经存在，第三十四波实网验收只数了「19 个有参考」、没核对城市。修正：`_search_order` 在两个方向遇到 `transport` 即停；回归测试 `tests/test_dining.py` 两条换乘用例先红后绿，去掉向后边界即红。实网复跑：9/29、10/3 午餐回到到达城市，10/7、10/9 晚餐改记 `dining_no_anchor`（有推荐 19→17，宁缺不错；10/9 那家住宿补上坐标后会自动有参考）。同步 README×2、06 §5.6、09、mobility SKILL，ADR-0022 追加 2026-09-18 修订段。
+
+## 书 AS1「dining-night-stay」（2026-09-18，第三十七波两本并行之一，worktree `.tmp/wt-as1` 分支 `dining-night-stay`）：无
+
+无。全程没有遇到拿不准、需要管理者裁决的真实二义性。任务 0 核对的四条基线（①「退房→换乘→晚餐、住处
+有坐标」须红，②晚餐后还有 `transport`、③住处无坐标、④是午餐 须绿）与任务书描述逐字一致，没有不符
+项，证据见 PROGRESS.md「第三十七波 AS1」小节；随后按已拍板的三条件（晚餐、其后当天无 `transport`、
+`day["stay_id"]` 指向的住宿有 `gcj02`）在 `dining.anchor_for` 落地兜底分支，`locate_trips` 信封的
+`health.status` 改成「没有 `provider_error` 行就 `ready`」，均照书面規則直译，没有需要现场判断的空白。
+`test_dining_cli.py` 两处 `len(anchored)` 确认 2→6（示例 Trip 第 2–5 天各多一顿晚餐锚到住处，与任务书
+预告的行数一致）。`tests.test_planner_dining`、`tests.test_dining_fold`、`tests.test_locate_fold` 未改
+仍绿；全量与四个假 Key 全量同为 863（857+4 dining+2 locate）0 skipped；pyflakes/scan_secrets 0；demo 与
+四类夹具重生成零漂移（`build_plan_fixtures.py`/`build_provider_fixtures.py`/`build_scheduler_fixtures.py`/
+`build_renderer_fixtures.py` 逐一跑过 `git status` 均空；另外三个非文档化生成命令的 demo 子目录——
+`guangzhou-shenzhen`/`grouped-departures`/`multicity-5d`——README 未给出它们的 `trip.json`/`trip.html`
+重生成命令，手工按主 demo 的参数试跑后发现二者不匹配（`grouped-departures` 直接 `PLAN_FAILED`，
+`multicity-5d` 内容漂移到不同的车次占位 ID），判断是猜错了 `--fixed-clock`/命令参数、并非本书改动引入
+的真实回归，已用 `git checkout` 撤回试跑产生的改动，`git status -- demo` 确认为空）。反向验证：去掉
+`_night_stay_fallback` 里「只限晚餐」的判断，④转红；`git diff`/`touch` 还原后全部转绿。
