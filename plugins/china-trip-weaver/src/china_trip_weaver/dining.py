@@ -24,9 +24,9 @@ def meal_type_for(slot: Mapping[str, Any]) -> Optional[str]:
 
     A `meal` slot is classified by wording in its title first, falling back to
     `start_at` hour (before 15:00 is lunch) only when the title carries neither
-    word. A `free` slot is classified only when its title carries the wording;
-    an unworded `free` slot (e.g. a rest break) is not a meal. Every other kind
-    is never a meal.
+    word. A `free` or `rest` slot is classified only when its title carries the
+    wording; an unworded `free`/`rest` slot (e.g. a plain rest break) is not a
+    meal. Every other kind is never a meal.
     """
 
     kind = slot.get("kind")
@@ -36,7 +36,7 @@ def meal_type_for(slot: Mapping[str, Any]) -> Optional[str]:
         if worded is not None:
             return worded
         return "lunch" if _start_hour(slot) < _LUNCH_HOUR_CUTOFF else "dinner"
-    if kind == "free":
+    if kind in ("free", "rest"):
         return _worded_meal_type(title)
     return None
 
