@@ -522,3 +522,19 @@ fix-names` 会把它们列为人工项。
   `ctw dining` 与 `ctw journey dining`、规划器 `_plan_dining`，对应 0.25.0）：
   [docs/history/progress-2026-09-18.md](docs/history/progress-2026-09-18.md)
   （2026-09-18 发 0.25.0 时从本文件整体迁出，一字未改，按合入顺序）。
+
+## 第三十五波 AQ3（locate-fold，worktree `.tmp/wt-aq3`，2026-09-18）
+
+任务 0：`git worktree add .tmp/wt-aq3 -b locate-fold main`（基于 `03042f4`）；全量 `Ran 820 tests` OK、0 skipped；`git grep -c -E "locate_fold|_cmd_journey_locate" -- plugins tests` 0 命中。核对通过。
+
+理解：把 `ctw locate` 的结果信封（`entities[]`+`claims[]`）按 `trip_id`+`kind`+`ref_id` 折回既有 Trip/Journey，只补坐标为空或缺 `gcj02`/`wgs84` 的 POI/住宿，已有完整坐标的实体永不覆盖；`located` 写 `coordinates` 并按 `mobility.apply_locations` 的去重方式追加 `claim_ids`，缺的 claim 从信封补齐；`unresolved` 只记/换该路径的 typed unknown；`provider_error` 或无匹配行不动；patch `trigger=provider_change`，其余记账（health/scope/stability）照 `weather_fold.py`/`dining_fold.py` 的套路搬；Journey 侧走 `replace_trips_in_journey` 一次重组。
+
+顺序：先写 `locate_fold.py`+`test_locate_fold.py` 六条库验收，再接 `ctw journey locate`+`test_journey_locate_cli.py` 三条 CLI 验收，最后补 `test_design_docs.py` 计数（54→55）与 `09-impl-map.md` 一行。
+
+最大风险：demo `journey-16d` 里 `poi-j16-shanghai`/`lodging-j16-shanghai-central` 分别挂在 day-2/day-1 两天，验收①要求两天都进 `scope.day_ids` 且只出一个 patch；`unresolved`「reason 不同则删旧加新」需要显式等值判断兜底二折幂等，不能只靠「entity 是否已有坐标」的资格门槛。
+
+任务 1（`locate_fold.py` + `tests/test_locate_fold.py`）：六条验收首跑全绿。反向验证：把 `_needs_location` 临时改成恒 `return True`（去掉「已有坐标不动」判断），单跑 `test_entity_with_existing_full_coordinates_is_never_overwritten` 变红（`AssertionError: PatchResult(...)`，本该 None 却被覆盖）；`touch` 源文件后还原判断，六条复跑全绿。demo trip0 里 `poi-j16-shanghai`（`/pois/0`）与 `lodging-j16-shanghai-central`（`/lodgings/0`）分别挂在 day-2（slot 0，kind poi）与 day-1（slot 4，kind checkin），折入后 `scope.day_ids={day-1,day-2}`，`dining.anchor_for(trip,0,5)` 按预期从 None 变成该住宿；amap 健康行本就有 `poi`/`geocode`（demo 原始 capabilities 已含两者），只有 status/mode 从 missing/static 改 ready/live。
+
+任务 2（`ctw journey locate` + `tests/test_journey_locate_cli.py`）：仿 `_cmd_journey_dining` 原样实现，`cli.py` 只改 `_add_journey_parser`（新增 `journey_locate` 子解析器）、`_cmd_journey`（一行分派）、新函数 `_cmd_journey_locate`。三条子进程验收首跑全绿（`revision=2`+`journey validate`+`render`+`validate-html errors=0`；已折过再折→`JOURNEY_LOCATE_NOOP` 退出 2 无文件；`--base-revision 7`→退出 1 含 `revision_conflict`）。`tests/test_design_docs.py` 54→55、`docs/design/09-impl-map.md` 加 `locate_fold.py` 一行并把 `cli.py` 行的子命令列表补上 `journey locate`/`_cmd_journey_locate`，`09-impl-map.md` 的目录树（§0）未动。
+
+**全量验证**：`/usr/bin/python3 -m unittest discover -s tests`→`Ran 829 tests`、`OK`、0 skipped（820 基线 + 9 新增：`test_locate_fold.py` 6 + `test_journey_locate_cli.py` 3）；`~/miniconda3/envs/core/bin/python -m pyflakes $(git ls-files '*.py')`→0 行；`/usr/bin/python3 scripts/scan_secrets.py`→`0 finding(s)`；`git status -- demo`→干净（本书全程只读 demo journey，从不写回）；`git diff main --name-only`→仅 `PROGRESS.md`、`BLOCKED.md`、`docs/design/09-impl-map.md`、`plugins/.../cli.py`、`tests/test_design_docs.py` 与三个新文件（`locate_fold.py`、`test_locate_fold.py`、`test_journey_locate_cli.py`），与「界限」白名单逐一对应；`tests.test_weather_fold`/`tests.test_dining_fold` 未改动、随全量一起绿。完成条件全部满足，已提交并推送分支 `locate-fold`，未合并。

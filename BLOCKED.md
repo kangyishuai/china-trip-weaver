@@ -2401,3 +2401,7 @@ PROGRESS.md、BLOCKED.md」，逐字排他；唯一能让这 14 项转绿的改�
 里我倾向①，改动量最小且完全复用已验证有效的 `WeatherScriptedTransport` 模式。
 
 管理者裁决（2026-09-18，验收时补记）：阻塞属实，根因是管理者书的白名单没开放测试替身所在文件，执行者拒绝加假门槛、拒绝吞异常、如实报红是对的。采纳建议①，由管理者在分支上以提交 `7227daa` 完成：`tests/test_amap_live.py` 的 `ScriptedAmapTransport` 与 `tests/test_providers.py` 的 `AMapScenarioTransport` 对 `poi_around` 回答合法的空 around-v5 页；6 处写死总调用数/能力列表的断言改为「原有调用数不变＋单独钉住餐饮调用数」——与各 Trip 健康行 `dining=N queried` 对账一致（16 天用例三段各 2 次、合计 6），拔掉 `_plan_dining` 接线后新断言 6≠0、9≠0、6≠0、1≠0 全红，还原后绿。`_plan_dining` 为每个时段复制独立 claim 的做法认可，AP5b 的修正即照此统一。暗卷：合并后全量 820 项绿、四个假 Key 同样 820、demo 与渲染夹具零漂移；demo 需求与候选平移到明天后实网从零规划：高德健康行同时含 `weather` 与 `poi_around`（reason 尾 `; weather=2 queried, 0 unknown; dining=2 queried, 2 unknown`）、6 个用餐时段 4 个各 3 家、2 个因当天景点坐标冲突记 `dining_no_anchor`、页面校验通过、零重复 claim。已关闭。
+
+## 书 AQ3「locate 结果折回 Journey」（2026-09-18，第三十五波四本并行之一，worktree `.tmp/wt-aq3` 分支 `locate-fold`）：无
+
+无。全程没有遇到拿不准、需要管理者裁决的真实二义性；实现严格按任务书已拍板的信封形状（`entities[]`/`claims[]`，行含 `trip_id/ref_id/kind/name/city/status/coordinates/claim_ids/reason`）、资格门槛（只补坐标为空或缺 `gcj02`/`wgs84` 的实体）、`located`/`unresolved`/`provider_error` 三态行为、`trigger=provider_change` 的 patch/health 记账与 CLI exit/output 契约执行，全部照 `weather_fold.py`/`dining_fold.py` 的成熟套路搬。详细命令输出与反向验证红→绿证据见 PROGRESS.md「第三十五波 AQ3」小节。
