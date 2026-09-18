@@ -522,3 +522,70 @@ fix-names` 会把它们列为人工项。
   `ctw dining` 与 `ctw journey dining`、规划器 `_plan_dining`，对应 0.25.0）：
   [docs/history/progress-2026-09-18.md](docs/history/progress-2026-09-18.md)
   （2026-09-18 发 0.25.0 时从本文件整体迁出，一字未改，按合入顺序）。
+
+## 书 AQ4「坐标折回文档」（2026-09-18，第三十五波四本并行之一，worktree `.tmp/wt-aq4` 分支 `locate-docs`）
+
+**任务 0 核对记录**：`git worktree add .tmp/wt-aq4 -b locate-docs main` 后核对与任务书一致——main
+`03042f4` 全量 `/usr/bin/python3 -m unittest discover -s tests` → `Ran 820 tests in 59.852s`、`OK`、
+0 skipped；`git grep -c "ctw locate" -- README.md docs plugins/china-trip-weaver/skills` exit 1
+且无输出（0 命中）；README.md 第 195/207 行分别是 `ctw dining`/`ctw journey dining` 用法行；
+06-pipeline.md 已有 §7.6 天气折回、§7.7 餐饮折回。理解的目标：给并行开发中的 `ctw locate`／
+`ctw journey locate`（AQ2/AQ3，此刻两个 worktree 都还在 `03042f4`，零改动）补 README×2＋
+06-pipeline.md §7.8＋mobility SKILL 四处文档，并把 README 里 `ctw dining` 误标成必填的
+`--output-json` 改成可选（已用 `cli.py:466` 的 `dining.add_argument("--output-json", type=Path,
+default=None)` 与 `_cmd_dining` 里 `else: for row in rows: print(_format_row(row))` 分支核实
+"不带它逐行打印"属实）。顺序：先任务 1（README×2＋SKILL，互相之间用 `diff` 直接校验一致性），
+再任务 2（06-pipeline.md §7.8，需要先读完 §7.6/§7.7 的既有结构与既存标识符定义位置才能仿写）。
+最大风险：AQ2/AQ3 代码尚未落地，任务书「我替领导拍的板」没有拍板的内部字段名／函数名（比如
+`locate_fold.py` 内部单 Trip／整 Journey 折回函数叫什么、`--output-json` 信封里数组键名）一律不
+杜撰，只写任务书原文点名的标识符与可从既有代码（`mobility.py`／`dining.py`／`trip.schema.json`）
+交叉验证的行为（如 `coordinates` 字段必填但值可为 `null`，折回应是 `replace` 不是 `add`）。
+
+**任务 1 完成**：[README.md](README.md) 用法块里 `ctw dining` 行的 `--output-json dining.json` 去掉
+误标的必填方括号缺失（改成 `[--output-json dining.json]`），`ctw journey dining` 行后加两行
+`ctw locate (--journey JOURNEY.json | --trip TRIP.json) [--deadline SECONDS] [--output-json
+locate.json]` 与 `ctw journey locate --journey JOURNEY.json --locate-result LOCATE.json
+--base-revision N [--reason REASON] [--fixed-clock ISO] --output-json JOURNEY.json`；`ctw dining`
+说明段补半句「without `--output-json` it prints one line per slot instead」，段后新增一段讲
+`ctw locate`/`ctw journey locate`（实体范围、判定口径同规划器、`status`/`reason` 三态、退出码、
+两步折回法、`trigger=provider_change`、`JOURNEY_LOCATE_NOOP`/`COMPLETE`、`--journey` 永不改写、
+末句呼应"先补住宿坐标再跑 `ctw dining`"）。[README.zh-CN.md](README.zh-CN.md) 同步加逐字相同的
+两行命令与互译说明段。[resolve-china-mobility/SKILL.md](plugins/china-trip-weaver/skills/resolve-china-mobility/SKILL.md)
+在餐饮那条 bullet 后新增一条合并交代两条命令，命令代码块里 `ctw journey weather` 行后加
+`ctw locate`/`ctw journey locate` 两行（放在 `ctw dining` 之前，呼应"先补坐标再查餐饮"的因果顺序；
+`--base-revision`/输出文件名沿用既有代码块「每条 `journey xxx` 独立示例、非链式递进版本号」的既有
+风格，与 `ctw journey weather`/`ctw journey dining` 两行一样都是 `--base-revision 1` → `journey-r2.json`），
+frontmatter 未碰。验收：`/usr/bin/python3 -m unittest tests.test_skills -v` → `Ran 11 tests`、OK；
+`diff <(grep -E '^ctw (dining|locate|journey locate)' README.md) <(grep -E '^ctw (dining|locate|journey
+locate)' README.zh-CN.md)` 空；`git diff main -- plugins/.../resolve-china-mobility/SKILL.md` 确认
+改动行全部在第 19 行之后（frontmatter 是第 1-4 行），diff 为空。
+
+**任务 2 完成**：[docs/design/06-pipeline.md](docs/design/06-pipeline.md) 在 §7.7 后加
+`### 7.8 坐标折回`，仿 §7.6/§7.7 的开头句式点出 `locate_fold.py` 与 §7.1–7.5 局部重排合同的关系，
+按任务书七点结构写七条 bullet——触发（`ctw locate`/`ctw journey locate` 两步用法、
+`revision_conflict`）、实体范围（跳过 `poi-routine-meal-*`、已有坐标不动）、判定口径
+（`MobilityBackend.locate` 只解析坐标不查路线矩阵、`_poi_admin_matches`/
+`POI_NAME_SIMILARITY_MARGIN`(0.15)/`POI_COORDINATE_CLUSTER_MAX_METERS`(300 米) 与规划器共用一条不放宽）、
+信封状态（`status` 三态、`credential_missing`/`locate_no_result`、折回只消费 `located` 行）、
+覆盖规则（只补仍缺坐标的实体、二折 NOOP）、patch 形状（对 `/coordinates` 做 `replace`——已用
+trip.schema.json 的 poi/lodging `required` 含 `coordinates` 且值 `oneOf coordinates/null` 核实
+字段总是存在、只是值可能为 null，故用 `replace` 不是 `add`；`claim_ids` 按 `apply_locations` 同样
+去重方式合入；`trigger=provider_change`）、一次重组（`replace_trips_in_journey`、`JOURNEY_LOCATE_COMPLETE`，
+末句点出补住宿坐标后 `dining.py::anchor_for` 会选中它作为晚餐锚点）。验收：
+`/usr/bin/python3 -m unittest tests.test_design_docs -v` → `Ran 1 test`、OK（本书未新增/删除任何
+`.py`，54 计数不受影响）；`git grep -c` 逐一核对 7 个既存标识符在 `plugins` 命中（`poi-routine-meal`
+2 文件、`apply_locations` 2、`_poi_admin_matches` 2、`POI_NAME_SIMILARITY_MARGIN` 1、
+`POI_COORDINATE_CLUSTER_MAX_METERS` 1、`anchor_for` 3、`provider_change` 3）；`git grep -n` 逐一核对
+8 个新名字（`ctw locate`/`--locate-result`/`LOCATE_COMPLETE`/`JOURNEY_LOCATE_NOOP`/
+`JOURNEY_LOCATE_COMPLETE`/`locate_fold.py`/`MobilityBackend.locate`/`locate_no_result`）在本书改动的
+四个文件里逐字命中且与任务书原文一致；`git diff main -- README.md README.zh-CN.md docs plugins |
+grep -c -E "^\+.*(/Users/|0\.2[0-9]\.[0-9])"` = 0（无本机路径、无版本号字面值）。
+
+**收尾验收**：`/usr/bin/python3 -m unittest discover -s tests` 复跑 → `Ran 820 tests in 68.290s`、
+`OK`、0 skipped（未新增/未减少任何测试，因为本书不碰 `.py`）；`/usr/bin/python3 scripts/scan_secrets.py`
+→ `secret scan: 0 finding(s) across 420 file(s)`；`git status --porcelain -- demo` 空（本书不碰渲染
+产物）。`git diff main --name-only` 恰好四个实现文件——README.md、README.zh-CN.md、
+docs/design/06-pipeline.md、plugins/china-trip-weaver/skills/resolve-china-mobility/SKILL.md——加
+本文件与 BLOCKED.md，全部落在界限白名单内；未碰任何 `.py`、schema、demo、09-impl-map.md 或其它
+Skill。BLOCKED.md 本书追加「无」，任务 0 核对全部与任务书描述一致、没有非阻塞发现需要记录。只提交
+并 push 分支 `locate-docs`，不合并 main。

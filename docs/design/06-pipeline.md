@@ -232,6 +232,18 @@ user_locked_refs[], optional allowed_changes[], now
 - **patch 形状**：有变化的时段在一个 patch 里对 `/days/<i>/slots/<j>/dining` 做 `add`/`replace`（并按需增删对应 `unknowns`/`claims`），patch 的 `trigger` 固定为 `dining`，`reverify_claim_ids` 恒为空；返回前用 `validate_trip`/`validate_journey` 复核，不过就抛错，折回从不产出无效 Trip/Journey。
 - **多 Trip 一次重组**：`fold_dining_into_journey` 把每个被改的子 Trip 交给 `journey.py` 的 `replace_trips_in_journey` 一次重组，不论有几个子 Trip 同时变化，Journey 的 revision 只加一。命令成功时打印 `JOURNEY_DINING_COMPLETE`，退出码 0。折回过程同样只读既有模块，不发起新的 provider 调用。
 
+### 7.8 坐标折回
+
+`locate_fold.py` 把独立发起的 `ctw locate --output-json` 查询结果折回一个已存在的 Trip 或 Journey，是与 §7.6/§7.7 同构、同样独立于 §7.1–7.5 局部重排合同的另一条 patch 生成路径：它不经过 `base_trip + event + locks` 的影响分析，只比对查询结果与 Trip 里每个景点／住宿实体当前的 `coordinates`。
+
+- **触发**：调用方拿到 `ctw locate --output-json` 的结果信封后，用 `locate_fold.py` 对单个 Trip 或整个 Journey 折回；命令 `ctw journey locate` 驱动后者对一份 Journey 文件工作，用法是先 `ctw locate --journey J --output-json L.json`，再 `ctw journey locate --journey J --locate-result L.json --base-revision N --output-json OUT`；`base_revision` 不等于 Journey 当前 revision 时抛 `revision_conflict`，退出码 1，`--journey` 原文件永不写回。
+- **实体范围**：只覆盖 Trip 里坐标为空的景点（POI）与住宿，跳过规划器写下的用餐占位 `poi-routine-meal-*`；已经有坐标的实体不在折回范围内，一个字节不动。
+- **判定口径**：坐标解析走 `MobilityBackend.locate`（`mobility.py`，只解析坐标、不查路线矩阵，每次运行最多 12 个 POI），与规划器共用同一套判定——`_poi_admin_matches` 的行政区匹配、`POI_NAME_SIMILARITY_MARGIN`（0.15）的名称相似度阈值、`POI_COORDINATE_CLUSTER_MAX_METERS`（300 米）的坐标聚集半径——一条不放宽。
+- **信封状态**：`ctw locate --output-json` 里每个实体一行，`status` 为 `located`/`unresolved`/`provider_error`；`reason` 在凭据缺失时是 `credential_missing`，查过没能定位到且没有更具体说明时是 `locate_no_result`。折回只消费 `status` 为 `located` 的行。
+- **覆盖规则**：只给折回前仍然缺坐标的实体补上坐标；已有坐标的实体即使信封里也带着同一实体的定位结果，也不覆盖、不改动。折同一个结果两次，第二次每个实体都已有坐标，判定为无变化；命令行层面对应 `JOURNEY_LOCATE_NOOP`，退出码 2，不写 `--output-json`。
+- **patch 形状**：有变化的实体在一个 patch 里对该 POI／住宿的 `/coordinates` 做 `replace`，`claim_ids` 按 `apply_locations`（`mobility.py`）同样的去重追加方式合入查询结果里的 claim；查过仍未定位的实体记一条带 `locate_no_result`（或 `credential_missing`）原因的 unknown；patch 的 `trigger` 固定为 `provider_change`，`reverify_claim_ids` 恒为空；返回前用 `validate_trip`/`validate_journey` 复核，不过就抛错，折回从不产出无效 Trip/Journey。
+- **一次重组**：折整个 Journey 时，把每个被改的子 Trip 交给 `journey.py` 的 `replace_trips_in_journey` 一次重组，不论有几个子 Trip 同时变化，Journey 的 revision 只加一。命令成功时打印 `JOURNEY_LOCATE_COMPLETE`，退出码 0。折回过程同样只读既有模块，不发起新的 provider 调用；补上住宿坐标后，到达日晚餐会被 `dining.py` 的 `anchor_for` 选中作为锚点，`ctw dining` 就能给出参考。
+
 ## 8. Pipeline 可恢复性与确定性
 
 - 每阶段产生带 `trip_id/revision/stage/schema_version/input_hash/provider versions` 的 checkpoint；不保存 secret/raw personal data。

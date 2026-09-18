@@ -1,3 +1,12 @@
+## 书 AQ4「坐标折回文档」（2026-09-18，第三十五波，worktree `.tmp/wt-aq4` 分支 `locate-docs`）：无
+
+任务 0 核对的两项基线（全量 820 测试 0 skipped、`git grep -c "ctw locate"` 0 命中）与任务书描述逐字
+一致，没有不符项。全程未遇到需要管理者裁决的二义性：任务书「我替领导拍的板」把命令名、参数、退出码、
+状态值、新增标识符全部拍了板，本书按板逐字落笔；唯一需要自行判断的是 06-pipeline.md §7.8 里
+`patch` 是 `replace` 还是 `add`（任务书没有拍这一点），已用 `trip.schema.json` 的 `poi`/`lodging`
+`required` 字段核实 `coordinates` 恒定存在、只是值可能为 `null`，判定为 `replace`，不算需要管理者
+裁决的分叉。
+
 ## 书 AP6b「附近餐饮参考文档」（2026-09-17，第三十四波，worktree `.tmp/wt-ap6b` 分支 `dining-docs`）：任务 0 一处不符（非阻塞）
 
 **任务 0 核对，一处不符，非阻塞**：任务书「现状与任务 0」给出两类基线数字——全量 `Ran 790 tests` OK
