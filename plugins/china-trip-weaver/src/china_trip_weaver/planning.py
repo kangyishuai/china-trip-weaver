@@ -747,7 +747,7 @@ def _plan_validate_and_render(
         raise ValueError("Trip validation failed: " + "; ".join(item.render() for item in report.errors))
     run.advance("VALIDATED", {"errors": 0, "schema_version": "1.0.0"}, trip_id, 1)
 
-    html = render_trip(trip)
+    html = render_trip(trip, renderer_version="2")
     html_report = validate_html(html, trip)
     if not html_report.ok:
         raise ValueError("HTML validation failed: " + "; ".join(item.render() for item in html_report.errors))

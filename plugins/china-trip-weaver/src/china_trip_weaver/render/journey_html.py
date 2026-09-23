@@ -212,7 +212,7 @@ def render_journey(
 ) -> str:
     """Render one validated Journey with the shared renderer security boundary."""
 
-    if renderer_version != RENDERER_VERSION:
+    if renderer_version not in (RENDERER_VERSION, "2"):
         raise RendererError("unsupported renderer version")
     report = validate_journey(journey)
     if not report.ok:
@@ -221,7 +221,11 @@ def render_journey(
             + "; ".join(issue.render() for issue in report.errors)
         )
     try:
-        return _render_journey(journey)
+        legacy = _render_journey(journey)
+        if renderer_version == "2":
+            from .profile_html import render_profile
+            return render_profile(journey, legacy)
+        return legacy
     except ValueError as exc:
         raise RendererError(str(exc)) from exc
 

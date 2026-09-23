@@ -1675,7 +1675,7 @@ class JourneyContinuityTests(unittest.TestCase):
         journey = load(JOURNEY_DEMO / "journey.json")
         rendered = (JOURNEY_DEMO / "journey.html").read_text(encoding="utf-8")
         self.assertEqual(16, sum(len(item["days"]) for item in journey["trips"]))
-        self.assertEqual(render_journey(journey), rendered)
+        self.assertEqual(render_journey(journey, renderer_version="2"), rendered)
         report = validate_journey_html(rendered, journey)
         self.assertTrue(report.ok, [item.render() for item in report.errors])
 

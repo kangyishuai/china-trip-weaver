@@ -2,6 +2,8 @@
 
 本目录把已验收的 `research/` 结论冻结为阶段三实现合同。本阶段只有架构/数据/测试设计，不含产品代码；唯一可执行文件是用于验证示例的 [`schema/check_schema.py`](schema/check_schema.py)。决策冲突以 ADR 为准，未裁决项见 [`BLOCKED.md`](../../BLOCKED.md)。
 
+2026-09-23 的待审阅 v2 渲染候选另见[能力映射](renderer/v2-capability-map.md)和[ADR-0023](adr/0023-versioned-journey-profile.md)。下列 01–09 与 ADR-0006 仍描述已接受的 v1 合同；候选尚未通过视觉和生产安全迁移验收。
+
 ## 1. 阅读顺序与文件
 
 | 顺序 | 文件 | 用途 |
@@ -52,8 +54,9 @@
 | [`ADR-0020`](adr/0020-locked-service-assumption.md) | 「已购锁定车次」表达缺口：推荐加结构化锁定字段，报错定位为独立可做的低成本项，不隔离自由文本 |
 | [`ADR-0021`](adr/0021-weather-forecast-source.md) | 天气只用高德（现有 Key）、视野当天+3 天、歧义不选、规则表提示不改排程；预报作 claim 与 `day.weather` 进 Trip，两页各一行并由 E006/JH006 回读 |
 | [`ADR-0022`](adr/0022-nearby-dining-references.md) | 附近餐饮参考：扫街榜无接口，用高德周边搜索综合排序（评分/人均/菜系/营业时间/距离）＋深链跳 App；圆心是餐前最近有坐标的时段、1.5 km、前 3 家有评分的；存 `slot.dining`、E007/JH007 逐字回读；折回命令与规划器接线复用同一套规则 |
+| [`ADR-0023`](adr/0023-versioned-journey-profile.md) | v2 时间剖面及 v1 旧文件兼容的候选决定；仍待独立验收 |
 
-22 份均含 Status/Context/Decision/Consequences/Evidence。若阶段三 benchmark 或官方规范改变决定，新增/替代 ADR，不静默改实现常量。
+已接受的 ADR-0001–0022 与待审阅的 ADR-0023 分别标明状态。若阶段三 benchmark 或官方规范改变决定，新增/替代 ADR，不静默改实现常量。
 
 ## 3. 阶段三施工硬顺序
 
