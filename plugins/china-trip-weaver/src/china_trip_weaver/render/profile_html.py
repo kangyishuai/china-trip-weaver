@@ -19,7 +19,7 @@ ASSETS = Path(__file__).resolve().parents[3] / "assets"
 LABELS = {
     "zh-CN": {
         "skip": "跳到旅程剖面", "readonly": "只读行程 · 根据来源核验", "kicker": "路线、时间、决定，在同一视野",
-        "days": "天", "route": "按顺序经过的城市，非地理地图", "origin": "出发地", "first": "先确认这段交通",
+        "days": "天", "travelers": "人", "route": "按顺序经过的城市，非地理地图", "origin": "出发地", "first": "先确认这段交通",
         "stay": "当晚落点", "budget": "预算边界", "none_transport": "没有已排跨城交通", "verify_service": "按日期复核真实车次与价格",
         "no_stay": "这一天无过夜住宿", "known_cost": "可比较金额", "unknown_total": "总额仍未知；缺价不按零计算",
         "range": "总额范围已列出", "context": "一天的上下文", "overview": "时间与城市，一眼相连",
@@ -47,7 +47,7 @@ LABELS = {
     },
     "en": {
         "skip": "Skip to journey profile", "readonly": "Read-only plan · verify sources", "kicker": "Route, time, and decisions together",
-        "days": "days", "route": "Cities in visit order, not a geographic map", "origin": "Origin", "first": "Confirm this leg",
+        "days": "days", "travelers": "travelers", "route": "Cities in visit order, not a geographic map", "origin": "Origin", "first": "Confirm this leg",
         "stay": "Tonight's stay", "budget": "Budget boundary", "none_transport": "No scheduled intercity leg", "verify_service": "Verify the actual service and price for this date",
         "no_stay": "No overnight stay", "known_cost": "Comparable cost", "unknown_total": "Total still unknown; missing prices are not zero",
         "range": "Total range is stated", "context": "One day's context", "overview": "Time across the route",
@@ -280,7 +280,7 @@ def render_profile(source: Mapping[str, Any], legacy_html: str) -> str:
             '<div class="topline"></div><div class="shell"><a class="skip" href="#experience">%s</a>'
             '<header class="site-head"><span class="brand">China Trip Weaver</span><span class="dataset">%s · v2</span></header>'
             '<main id="experience"><section class="hero" aria-labelledby="title"><p class="kicker">%s</p>'
-            '<h1 id="title" aria-label="%s">%s</h1><p class="hero-sub">%s — %s · %s %s</p>'
+            '<h1 id="title" aria-label="%s">%s</h1><p class="hero-sub">%s — %s · %s %s · %s %s</p>'
             '<ol class="route" aria-label="%s">%s</ol><div class="decision-strip">%s</div></section>'
             '<noscript><p class="noscript">%s</p></noscript><div class="workspace">'
             '<section class="focus" id="focus-column" aria-labelledby="focus-title"><div class="focus-head">'
@@ -295,7 +295,10 @@ def render_profile(source: Mapping[str, Any], legacy_html: str) -> str:
             '<script id="source-document" type="application/json">%s</script><script>%s</script></body></html>\n' %
             (esc(locale), esc(csp), esc(model["title"]), renderer_css(), css, esc(labels["skip"]), esc(labels["readonly"]),
              esc(labels["kicker"]), esc(model["title"]), _route_heading(model["route"]), esc(model["start_date"]),
-             esc(model["end_date"]), esc(model["travelers"]), esc(labels["days"]), esc(labels["route"]), route_html,
+             esc(model["end_date"]), esc(model["travelers"]),
+             esc("traveler" if locale == "en" and model["travelers"] == 1 else labels["travelers"]),
+             esc(len(model["days"])), esc("day" if locale == "en" and len(model["days"]) == 1 else labels["days"]),
+             esc(labels["route"]), route_html,
              decision_html, esc(labels["noscript"]), esc(labels["context"]), esc(labels["context"]), esc(labels["prev"]),
              len(model["days"]), esc(labels["next"]), esc(labels["view_overview"]), details, _overview(model, labels),
              esc(labels["full"]), esc(labels["full_note"]), _legacy_record(legacy_html), esc(labels["foot"]),

@@ -34,6 +34,48 @@ def is_profile_document(html_text: str) -> bool:
     return parser.version
 
 
+def _expected_hero(source: Mapping[str, Any]) -> str:
+    if "trips" in source:
+        locale = source["trips"][0]["request"]["locale"]
+        start, end = source["start_date"], source["end_date"]
+        day_count = sum(len(trip["days"]) for trip in source["trips"])
+        groups = source.get("traveler_groups") or ()
+        travelers = sum(group["travelers"] for group in groups) if groups else source["travelers"]
+    else:
+        request = source["request"]
+        locale = request["locale"]
+        start, end = request["start_date"], request["end_date"]
+        day_count = len(source["days"])
+        groups = request.get("traveler_groups") or ()
+        travelers = sum(group["travelers"] for group in groups) if groups else request["travelers"]
+    if locale == "en":
+        person_unit = "traveler" if travelers == 1 else "travelers"
+        day_unit = "day" if day_count == 1 else "days"
+    else:
+        person_unit, day_unit = "人", "天"
+    return "%s — %s · %s %s · %s %s" % (start, end, travelers, person_unit, day_count, day_unit)
+
+
+class _HeroParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.texts: list[str] = []
+        self._parts: list[str] | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "p" and "hero-sub" in (dict(attrs).get("class") or "").split():
+            self._parts = []
+
+    def handle_data(self, data: str) -> None:
+        if self._parts is not None:
+            self._parts.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "p" and self._parts is not None:
+            self.texts.append("".join(self._parts).strip())
+            self._parts = None
+
+
 def validate_profile(html_text: str, source: Mapping[str, Any], legacy_html: str) -> HTMLValidationReport:
     issues = []
     parser = AuditParser()
@@ -46,6 +88,11 @@ def validate_profile(html_text: str, source: Mapping[str, Any], legacy_html: str
     marker = [m for m in parser.metas if m.get("name") == "ctw-renderer"]
     if html_attrs.get("data-renderer-version") != "2" or len(marker) != 1 or marker[0].get("content") != "2":
         issues.append(HTMLIssue("V201", "v2 renderer marker differs"))
+    hero = _HeroParser()
+    hero.feed(html_text)
+    hero.close()
+    if hero.texts != [_expected_hero(source)]:
+        issues.append(HTMLIssue("V206", "v2 visible dates, traveler count, or day count differ from source"))
     embedded = [s for s in parser.scripts if s["attrs"].get("id") == "source-document"]
     if len(embedded) != 1 or embedded[0]["attrs"].get("type") != "application/json":
         issues.append(HTMLIssue("V202", "v2 source document is missing or executable"))

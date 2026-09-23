@@ -6,6 +6,7 @@ import base64
 import copy
 import hashlib
 import json
+import re
 import unittest
 from pathlib import Path
 
@@ -43,6 +44,31 @@ class ProfileV2Tests(unittest.TestCase):
         legacy = render_trip(source, renderer_version='1')
         self.assertIn('data-renderer-version="2"', legacy)
         self.assertTrue(validate_html(legacy, source).ok)
+
+    def test_visible_header_counts_come_from_raw_trip_and_journey_facts(self):
+        trip_page = render_trip(self.trip, renderer_version='2')
+        trip_expected = '%s — %s · %d 人 · %d 天' % (
+            self.trip['request']['start_date'], self.trip['request']['end_date'],
+            self.trip['request']['travelers'], len(self.trip['days']))
+        self.assertEqual(trip_expected, re.search(r'<p class="hero-sub">([^<]+)</p>', trip_page).group(1))
+        self.assertIn('V206', {item.code for item in validate_html(
+            trip_page.replace(trip_expected, trip_expected.replace('3 天', '2 天'), 1), self.trip).errors})
+
+        journey_page = render_journey(self.journey, renderer_version='2')
+        journey_expected = '%s — %s · %d 人 · %d 天' % (
+            self.journey['start_date'], self.journey['end_date'], self.journey['travelers'],
+            sum(len(segment['days']) for segment in self.journey['trips']))
+        self.assertEqual(journey_expected, re.search(r'<p class="hero-sub">([^<]+)</p>', journey_page).group(1))
+        self.assertIn('V206', {item.code for item in validate_journey_html(
+            journey_page.replace(journey_expected, journey_expected.replace('16 天', '2 天'), 1), self.journey).errors})
+
+        one_day = json.loads((ROOT / 'demo/guangzhou-shenzhen/trip.json').read_text(encoding='utf-8'))
+        one_day['request']['locale'] = 'en'
+        english_page = render_trip(one_day, renderer_version='2')
+        self.assertEqual('%s — %s · %d travelers · 1 day' % (
+            one_day['request']['start_date'], one_day['request']['end_date'], one_day['request']['travelers']),
+            re.search(r'<p class="hero-sub">([^<]+)</p>', english_page).group(1))
+        self.assertTrue(validate_html(english_page, one_day).ok)
 
     def test_complete_record_keeps_existing_visible_capabilities(self):
         page = render_journey(self.journey, renderer_version="2")
