@@ -15,6 +15,8 @@ from .template import embedded_json, renderer_css
 
 VERSION = "2"
 ASSETS = Path(__file__).resolve().parents[3] / "assets"
+# Frozen for renderer v2. Any output-affecting asset change needs a new format.
+PROFILE_ASSET_SHA256 = "64036261736a937a1fcb509ce0fb8a394ce39e7bf2318a2da7d05caf37217c30"
 
 LABELS = {
     "zh-CN": {
@@ -86,6 +88,12 @@ def esc(value: Any) -> str:
 def assets() -> tuple[str, str]:
     return ((ASSETS / "profile.css").read_text(encoding="utf-8"),
             (ASSETS / "profile.js").read_text(encoding="utf-8"))
+
+
+def asset_digest() -> str:
+    css, script = assets()
+    payload = renderer_css().encode("utf-8") + b"\0" + css.encode("utf-8") + b"\0" + script.encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
 
 
 def _percent(value: int, axis: Mapping[str, int]) -> float:
@@ -241,6 +249,8 @@ def _legacy_record(legacy_html: str) -> str:
 
 
 def render_profile(source: Mapping[str, Any], legacy_html: str) -> str:
+    if asset_digest() != PROFILE_ASSET_SHA256:
+        raise ValueError("renderer v2 assets changed without a format upgrade")
     model = build_model(source)
     locale = source["trips"][0]["request"]["locale"] if model["kind"] == "journey" else source["request"]["locale"]
     labels = LABELS[locale]
@@ -275,7 +285,8 @@ def render_profile(source: Mapping[str, Any], legacy_html: str) -> str:
     details = ''.join(_day(day, model, labels) for day in model["days"])
     return ('<!doctype html>\n<html lang="%s" data-renderer-version="2"><head><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width, initial-scale=1">'
-            '<meta name="ctw-renderer" content="2"><meta http-equiv="Content-Security-Policy" content="%s">'
+            '<meta name="ctw-renderer" content="2"><meta name="ctw-profile-assets" content="%s">'
+            '<meta http-equiv="Content-Security-Policy" content="%s">'
             '<title>%s</title><style id="renderer-css">%s\n%s</style></head><body>'
             '<div class="topline"></div><div class="shell"><a class="skip" href="#experience">%s</a>'
             '<header class="site-head"><span class="brand">China Trip Weaver</span><span class="dataset">%s · v2</span></header>'
@@ -293,7 +304,8 @@ def render_profile(source: Mapping[str, Any], legacy_html: str) -> str:
             '<div class="live-note" id="selection-announcement" aria-live="polite"></div>'
             '<script id="prototype-model" type="application/json">%s</script>'
             '<script id="source-document" type="application/json">%s</script><script>%s</script></body></html>\n' %
-            (esc(locale), esc(csp), esc(model["title"]), renderer_css(), css, esc(labels["skip"]), esc(labels["readonly"]),
+            (esc(locale), PROFILE_ASSET_SHA256, esc(csp), esc(model["title"]), renderer_css(), css,
+             esc(labels["skip"]), esc(labels["readonly"]),
              esc(labels["kicker"]), esc(model["title"]), _route_heading(model["route"]), esc(model["start_date"]),
              esc(model["end_date"]), esc(model["travelers"]),
              esc("traveler" if locale == "en" and model["travelers"] == 1 else labels["travelers"]),

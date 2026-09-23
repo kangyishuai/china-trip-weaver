@@ -9,8 +9,11 @@ import json
 import re
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from china_trip_weaver.render import render_journey, render_trip, validate_html, validate_journey_html
+from china_trip_weaver.render import RendererError
+from china_trip_weaver.render import profile_html
 from china_trip_weaver.render.profile_model import _scenario, build_model, clock, relative_minute
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -69,6 +72,39 @@ class ProfileV2Tests(unittest.TestCase):
             one_day['request']['start_date'], one_day['request']['end_date'], one_day['request']['travelers']),
             re.search(r'<p class="hero-sub">([^<]+)</p>', english_page).group(1))
         self.assertTrue(validate_html(english_page, one_day).ok)
+
+    def test_v2_asset_revision_is_frozen_and_drift_is_explicit(self):
+        page = render_trip(self.trip, renderer_version='2')
+        self.assertIn('name="ctw-profile-assets" content="%s"' % profile_html.PROFILE_ASSET_SHA256, page)
+        css, script = profile_html.assets()
+        with mock.patch.object(profile_html, 'assets', return_value=(css + '\n', script)):
+            report = validate_html(page, self.trip)
+            self.assertIn('V207', {item.code for item in report.errors})
+            with self.assertRaisesRegex(RendererError, 'format upgrade'):
+                render_trip(self.trip, renderer_version='2')
+        self.assertIn('V207', {item.code for item in validate_html(
+            page.replace('<meta name="ctw-profile-assets" content="%s">' % profile_html.PROFILE_ASSET_SHA256, '', 1), self.trip).errors})
+
+    def test_v2_fixture_bytes_guard_template_and_legacy_record_changes(self):
+        expected = (
+            (self.trip, render_trip, 'demo/trip.html', 'ed65925717d4c52960207d0dae68e7decea90d09f10f95d975bfa444333c34d1'),
+            (self.journey, render_journey, 'demo/journey-16d/journey.html', '58254a9f20e6db78217d273e1f68e4af6188a0731f2355b126291383ec467e5a'),
+        )
+        for source, render, path, digest in expected:
+            with self.subTest(path=path):
+                actual = render(source, renderer_version='2').encode('utf-8')
+                self.assertEqual(digest, hashlib.sha256(actual).hexdigest())
+                self.assertEqual(actual, (ROOT / path).read_bytes())
+
+    def test_hidden_controls_have_state_specific_and_print_rules(self):
+        css = (ROOT / 'plugins/china-trip-weaver/assets/profile.css').read_text(encoding='utf-8')
+        self.assertIn('.focus-nav button,.try-action,.undo{display:none}', css)
+        self.assertIn('.js-ready .try-action:not([hidden])', css)
+        self.assertIn('.js-ready .try-action[hidden]', css)
+        self.assertIn('.js-ready .try-action[hidden],.js-ready .undo[hidden]{display:none}', css)
+        self.assertIn('.try-result[hidden]{display:none}', css)
+        self.assertIn('@media print{html,body{background:white}', css)
+        self.assertIn('.try,.try-action,.undo,.focus-nav{display:none!important}', css)
 
     def test_complete_record_keeps_existing_visible_capabilities(self):
         page = render_journey(self.journey, renderer_version="2")

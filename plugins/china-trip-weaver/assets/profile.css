@@ -110,7 +110,8 @@ details{border-top:1px solid var(--line);margin-top:.5rem}summary{cursor:pointer
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 @media print{html,body{background:white}.focus{max-height:none;overflow:visible}.day-detail[hidden]{display:block}.day-list a{color:var(--ink)}.try,.try-action,.undo,.focus-nav{display:none!important}.global details:not([open])>*:not(summary){display:block}.workspace{display:block}.overview,.focus{border:0}.day-detail{break-inside:avoid}.footer{padding-bottom:0}}
 .focus-nav button,.try-action,.undo{display:none}
-.js-ready .focus-nav button,.js-ready .try-action,.js-ready .undo{display:inline-flex}
+.js-ready .focus-nav button:not([hidden]),.js-ready .try-action:not([hidden]),.js-ready .undo:not([hidden]){display:inline-flex}
+.js-ready .focus-nav button[hidden],.js-ready .try-action[hidden],.js-ready .undo[hidden]{display:none}
 .record{margin:2rem 0 3rem;border-top:1px solid var(--line);padding-top:1rem}
 .record>details>summary{font-size:1.1rem;font-weight:750;min-height:44px;cursor:pointer}
 .record>details>p{color:var(--muted)}

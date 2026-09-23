@@ -7,7 +7,7 @@ from html.parser import HTMLParser
 from typing import Any, Mapping
 
 from ..contracts import canonical_json
-from .profile_html import assets, render_profile
+from .profile_html import PROFILE_ASSET_SHA256, asset_digest, assets, render_profile
 from .validate_html import AuditParser, HTMLIssue, HTMLValidationReport
 
 
@@ -88,6 +88,13 @@ def validate_profile(html_text: str, source: Mapping[str, Any], legacy_html: str
     marker = [m for m in parser.metas if m.get("name") == "ctw-renderer"]
     if html_attrs.get("data-renderer-version") != "2" or len(marker) != 1 or marker[0].get("content") != "2":
         issues.append(HTMLIssue("V201", "v2 renderer marker differs"))
+    installed_digest = asset_digest()
+    asset_markers = [m for m in parser.metas if m.get("name") == "ctw-profile-assets"]
+    if installed_digest != PROFILE_ASSET_SHA256:
+        issues.append(HTMLIssue("V207", "installed v2 assets changed; upgrade renderer format before generating or validating"))
+        return HTMLValidationReport(tuple(sorted(set(issues))))
+    if len(asset_markers) != 1 or asset_markers[0].get("content") != PROFILE_ASSET_SHA256:
+        issues.append(HTMLIssue("V207", "v2 page assets differ; use its matching plugin build or regenerate from source JSON"))
     hero = _HeroParser()
     hero.feed(html_text)
     hero.close()

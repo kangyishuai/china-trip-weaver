@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN" data-renderer-version="2"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="ctw-renderer" content="2"><meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;sha256-ula3AUF4DCL7IWt9HY4t5zmOVrBfHwodCPLY8hUBJIk=&#x27;; font-src data:; connect-src &#x27;none&#x27;; frame-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;"><title>北京 → 上海</title><style id="renderer-css">:root {
+<html lang="zh-CN" data-renderer-version="2"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="ctw-renderer" content="2"><meta name="ctw-profile-assets" content="64036261736a937a1fcb509ce0fb8a394ce39e7bf2318a2da7d05caf37217c30"><meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; img-src data:; style-src &#x27;unsafe-inline&#x27;; script-src &#x27;sha256-ula3AUF4DCL7IWt9HY4t5zmOVrBfHwodCPLY8hUBJIk=&#x27;; font-src data:; connect-src &#x27;none&#x27;; frame-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;"><title>北京 → 上海</title><style id="renderer-css">:root {
   color-scheme: light;
   --paper: #f7f3eb;
   --paper-raised: #fffdf8;
@@ -551,7 +551,8 @@ details{border-top:1px solid var(--line);margin-top:.5rem}summary{cursor:pointer
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 @media print{html,body{background:white}.focus{max-height:none;overflow:visible}.day-detail[hidden]{display:block}.day-list a{color:var(--ink)}.try,.try-action,.undo,.focus-nav{display:none!important}.global details:not([open])>*:not(summary){display:block}.workspace{display:block}.overview,.focus{border:0}.day-detail{break-inside:avoid}.footer{padding-bottom:0}}
 .focus-nav button,.try-action,.undo{display:none}
-.js-ready .focus-nav button,.js-ready .try-action,.js-ready .undo{display:inline-flex}
+.js-ready .focus-nav button:not([hidden]),.js-ready .try-action:not([hidden]),.js-ready .undo:not([hidden]){display:inline-flex}
+.js-ready .focus-nav button[hidden],.js-ready .try-action[hidden],.js-ready .undo[hidden]{display:none}
 .record{margin:2rem 0 3rem;border-top:1px solid var(--line);padding-top:1rem}
 .record>details>summary{font-size:1.1rem;font-weight:750;min-height:44px;cursor:pointer}
 .record>details>p{color:var(--muted)}
