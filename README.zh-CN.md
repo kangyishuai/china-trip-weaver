@@ -2,247 +2,56 @@
 
 [English](README.md) · **简体中文**
 
-旅织是一个 Codex 插件，为中国大陆境内的行程做**有据可查、只读**的规划。它把一份出行需求和一份调研候选，织成一个带版本的 Trip JSON；长行程则织成一个内含完整 Trip 的 Journey。它查询固定版本的 12306 铁路、高德路线矩阵、飞猪（FlyAI）住宿与航班库存，以及可选的飞常准状态与舒适度增强；排程时不会把「比较用的候选」混进「已选定的行程段」；最后渲染成确定性的、手机优先的单文件 HTML。
+准备规划中国大陆自由行？旅织把路线、日期和调研候选整理成适合手机查看的行程：带时间的逐日安排、已选住宿、预算状态，以及需要核验的事项。它是只读的 Codex 插件；所有预订都由你自己完成。
 
-它永远不会登录、提交身份信息、占位库存、下单、支付、取消或改签。服务商凭据只存在于各自的进程环境里，不会出现在命令行参数、日志、测试夹具、Trip、HTML 或 Git 中。
+## 在 Codex 中开始
+
+需要 Codex 桌面版或兼容的 Codex CLI，以及 Python 3.9 或更新版本。克隆仓库，从本地市场安装插件：
+
+```bash
+git clone https://github.com/kangyishuai/china-trip-weaver.git
+cd china-trip-weaver
+scripts/install_local_plugin.sh
+```
+
+脚本会在你的 Codex 安装中注册本地市场、安装或刷新插件，并完成校验。`scripts/install_local_plugin.sh --check` 只检查现有安装，不刷新。安装后**新建一个 Codex 任务**，让 Skill 生效。如果其他已启用插件也提供 `plan-china-trip`（尤其是 `china-travel-assistant`），先禁用冲突插件；`ctw doctor` 会报告冲突。
+
+在新任务中用一句话说明行程，例如：
+
+> 请用旅织规划两人从北京出发，2026 年 10 月 16 日至 20 日依次去上海、杭州、苏州的五天单向行程。我们喜欢建筑、园林和美食，每天节奏适中，以 8000 元为预算目标。把文件统一放在 `plans/江南五日/`。请展示生成的 HTML，并列出还需要我核验的费用、车次和预订。不要登录或代下单。
+
+打开 `plans/江南五日/` 中生成的 `.html` 文件，先查看来源标签和未知项，再自行预订。旁边的 JSON 是带版本的行程。可选的服务商实网查询可能需要你自己的凭据；来源不可用时，插件会标注降级或未知，不会把结果说成已确认。[规划 Skill](plugins/china-trip-weaver/skills/plan-china-trip/SKILL.md)说明 Codex 如何处理需求。
 
 ## 范围
 
-planner 继续支持既有的一日游与单城市行程，并支持 2–7 天的有序多城市行程。多个目的地严格按 `origin → D1 → D2 → …` 行进；默认单向，只有用户明确写往返，或最后一个目的地本来就是 origin，行程才包含返程。跨城当天归到到达城市，每个过夜日期都必须在该城市明确选中且仅选中一个 stay。调研得到的住宿候选不等于已选 stay；任一晚没有可覆盖的候选时，规划会返回结构化无解结果。
+一个 Trip 可覆盖一天或最多七天的有序路线，包括多城市。更长的路线会成为由多个完整 Trip 组成的 Journey，每段仍遵守七天上限。不同旅客组可以从不同城市出发，在指定地点和时间会合。每个过夜日期都必须有覆盖对应日期和目的地的已选住宿；缺少住宿会返回结构化无解结果。
 
-超过 7 天的请求会生成一个 Journey；其中每个完整、可独立使用的子 Trip 仍严格限制在 1–7 天。缺省拆分会在服从七天上限与已调研住宿链的前提下尽量减少子 Trip 数；`ctw journey plan --expected-segment-days N` 接受 1–7 的整数，优先把各段长度靠近 `N`，但不会突破这些硬约束。相邻日期、边界住宿、跨段交通和全程预算都会显式记录并校验。某个子 Trip 被 replan 后，Journey validator 会从完整子 Trip 重新核对段缝两侧，结构化报告住宿或跨段交通断裂，而不会静默顺延后段。Journey 总览页展示全程路线、各段日期、总预算区间、按截止时间排序的预订／核验清单，以及全部降级能力、冲突 claim 与未解决 unknown，同时不向可见文本暴露内部 id。清单每一项都带一个 `deadline_kind`：火车腿默认是 `presale_open`（12306 预售窗口在出发前 14 天打开，因此这一项的截止日是开售日而不是出发日），但 Trip 已经带有明确 `/booking_deadline` claim 时改记 `declared`；其余交通记 `departure`，住宿记 `check_in`。
+输出会区分已选方案与比较候选，列出支撑事实的证据，并标明静态估算、服务商失败和待核实信息。不会为了补齐空白而编造价格、车次或坐标。你自己的行程应把需求、候选、JSON、HTML 和后续结果统一放在调用插件的项目里的 `plans/<名称>/`。重规划以及天气、餐饮、定位折回通常对同一路径的 JSON 写入新修订，并把 HTML 原地重渲；只有希望另存时才使用新文件名。修订冲突会失败且不写文件。
 
-Journey 的高德调用额度按最终子 Trip 分配。缺省总额度是每个 Trip 80 次、且单个 Trip 仍封顶 80；`ctw journey plan --amap-total-max-calls N` 设置非负的全程总上限，并在最终各段之间尽可能均分。该上限不会反向扩大缺省额度。
+插件**绝不**登录、提交身份信息、占库存、下单、支付、取消或退改。它尚未在公开 Codex 市场上架。高德、FlyAI、飞常准、AnySearch 的实网能力都是可选的。凭据应放在启动进程的环境中，或当前用户拥有、权限为 `0600` 的 `~/.config/china-trip-weaver/credentials.env`，绝不能放进对话、命令参数、行程或仓库。运行 `plugins/china-trip-weaver/scripts/ctw doctor` 可查看配置状态和 Skill 冲突，但不会显示凭据值。[凭据说明](plugins/china-trip-weaver/references/credentials.md) · [服务商合同与降级规则](plugins/china-trip-weaver/references/provider-contracts.md)
 
-高德真正尝试定位 POI 却无法确认身份或坐标时，Trip 的 `unknowns` 会留下可照着改的坐标记录；可用时也会带经过脱敏的失败原因与候选名称。关闭 mobility 或没有高德 Key 时，不会凭空制造这类记录。
+## 复现合成结果（可选）
 
-POI 搜索与 geocode 采用同一套行政区匹配口径：调研候选写的是城市或区县，都可以与服务商返回的城市或区县相匹配。因此一边写区县、另一边写其所属地级市（或反过来）不会被误判成两个地点；真正无关的行政区仍会严格判为不匹配。
-
-旅客输入有两种互斥写法：既有 `origin + travelers`，或 `traveler_groups[] + meeting_anchor`。每组提供稳定的 `group_id`、本组人数与 origin，可另带 mobility profile；会合锚点提供地点和 `meet_by`，`buffer_minutes` 缺省为 60。任何一组无法留出足够缓冲都会得到结构化冲突。当到达最早的铁路候选无法满足这一缓冲时，汇合腿会改用同一次实时航班查询里到达最早的合规航班；只有当铁路和所有航班候选都无法满足缓冲时，才会得到结构化冲突。混合输入会被拒绝，输出 Trip 也只保留被选中的那一种写法。验证、渲染与 inventory 查询都会原生消费分组写法。分组交通腿必须有明确 `group_refs`；`transport_pricing` 分别给出每组交通总价与全团交通总价。
-
-`pace=slow` 先按严格慢节奏排程。只要无解，就累计尝试：降低每日 POI 上限、把 POI／餐点时长压到推荐值的 70%、最后把当日结束时间放宽到 balanced 的 21:30。排得出的第一步就停止，实际采用的每一步都会追加到 `request.assumptions`；三步无法改变的硬冲突保留原结构化冲突，并列出全部已尝试降配。
-
-## 运行环境
-
-- Codex 桌面版自带的命令行，或兼容的 Codex CLI。
-- 系统 Python 3.9 或更高版本作为运行时。
-- 只有真正调用固定版本的 MCP／CLI 服务商时才需要 Node 和 npm，且不会全局安装任何东西。
-- Google Chrome 仅供可选的渲染质检脚本使用，插件运行时不需要它。
-
-插件从一个指向本仓库克隆目录的本地市场安装。它没有发布到公开的 Codex 市场：服务商条款、数据缓存与再分发、地图署名和上架元数据都还没有结论。改变这一点之前请先读 [`BLOCKED.md`](BLOCKED.md)。
-
-本项目采用 [MIT 许可证](LICENSE)。该许可证只覆盖本仓库自己的代码和文档，不授予任何对高德、飞猪／FlyAI、飞常准或中国铁路返回数据的权利。这些服务商禁止缓存和再分发其数据，商业用途需另行购买许可或签订书面合同，因此除非你自行取得相应许可，本仓库仅供个人非商业使用；详见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
-
-## 本地凭据
-
-FlyAI 是可选的尽力而为来源。它是飞猪服务的非官方第三方包装器，命令接口曾经漂移过，因此 `--lodging` 默认为 `off`，FlyAI 的任何失败只降级住宿与航班库存，不会影响整份行程。
-
-`ctw doctor` 对高德、FlyAI、飞常准和 AnySearch 只报告 `configured`（已配置）或 `missing`（未配置），永远不打印值、前缀、后缀、哈希或长度。它同时报告 `skill_conflicts`：自动检测是否有另一个已启用插件暴露同名 Skill，发现冲突时退出码非零。
-
-凭据优先取自启动进程的环境变量，其次是 `~/.config/china-trip-weaver/credentials.env`。在 POSIX 系统上，该文件必须是当前用户拥有的普通文件，权限恰为 `0600`。不要把值写在命令行上，也不要粘贴进对话。
+这个确定性示例不需要服务商 Key，也不发起服务商实网查询。在仓库根运行，输出写入 Git 忽略的目录；只有调用固定版本的实网 MCP／CLI 服务商时才需要 Node/npm。
 
 ```bash
-plugins/china-trip-weaver/scripts/ctw doctor
-```
-
-实网路径使用 `AMAP_WEBSERVICE_KEY`、`FLYAI_API_KEY`、`VARIFLIGHT_API_KEY`（`X_VARIFLIGHT_KEY` 保留读取兼容）和 `ANYSEARCH_API_KEY`。AnySearch 只在显式调用 `ctw research` 命令与 `ctw doctor` 的探针时才会被访问；`ctw plan` 从不调用它。每个 Node 服务商都有独立的临时／配置／缓存目录与各自隔离的 `os.homedir()`；这些目录与 npm 缓存都建在含 `plugins/` 的那一级目录下（本地市场安装后即已装插件所在的缓存目录），`ctw doctor` 以 `runtime_root` 字段报出该位置，可随时删除，下次实网调用会自动重建。
-
-## 安装或刷新到本机 Codex（自动化）
-
-先克隆本仓库，下面所有路径都相对于克隆目录。
-
-每次迭代或版本更新，都应以「把本机 Codex 里已安装的插件刷新一遍」收尾。一个脚本完成全部动作：必要时注册本地市场，执行 `codex plugin add`（对本地市场插件是幂等的，会用仓库源码刷新缓存，版本号变了也会切到新版本），然后校验 `codex plugin list` 报告 `installed, enabled` 且版本与清单一致、缓存与源码逐字节相同。
-
-```bash
-scripts/install_local_plugin.sh          # 安装或刷新，然后校验
-scripts/install_local_plugin.sh --check  # 只校验，不改任何配置
-```
-
-如果 `codex` 不在 PATH 上，用 `CODEX_BIN` 指定（脚本会回退到 Codex 桌面版内嵌的命令行）。把 `CODEX_HOME` 指向临时目录，可以在隔离环境里试跑而不动真实配置。刷新之后，在 Codex 里新建一个任务才会加载新版本；如果 Skill 没出现，重启 Codex 桌面版。
-
-## 从本地市场安装（手动）
-
-在仓库根目录执行：
-
-```bash
-CODEX_HOME=/path/to/an/isolated/codex-home \
-  /Applications/ChatGPT.app/Contents/Resources/codex \
-  plugin marketplace add "$PWD"
-
-CODEX_HOME=/path/to/an/isolated/codex-home \
-  /Applications/ChatGPT.app/Contents/Resources/codex \
-  plugin add china-trip-weaver@china-trip-weaver-local
-
-CODEX_HOME=/path/to/an/isolated/codex-home \
-  /Applications/ChatGPT.app/Contents/Resources/codex \
-  plugin list
-```
-
-期望结果是 `china-trip-weaver@china-trip-weaver-local`、版本与 `plugin.json` 的 `version` 一致、状态 `installed, enabled`。安装或更新后请新建一个 Codex 任务，让它的 9 个 Skill 与 MCP 配置重新加载。
-
-用 Codex 桌面版界面安装时：把本仓库添加为本地市场，确认 `china-travel-assistant` 已禁用，安装 China Trip Weaver Local，重启，再新建任务。两个插件不能同时启用，因为它们都暴露 `plan-china-trip`。
-
-## 行程文件放哪
-
-同一趟行程的全部文件——出行需求、`candidates.json`、生成的 `trip.json`／`journey.json`、渲染出的 `.html`，以及 `weather-<日期>.json`、`dining-<日期>.json`、`*.progress.ndjson`——统一放进「调用这个插件的项目根目录」下的 `plans/<可读名称>/`，不要散落在项目根。`<可读名称>` 用中文短语或拼音，例如 `plans/福建中秋国庆16天/`；目录不存在就先建。重规划与折回默认原地更新：`--output-json` 与 `--trip`／`--journey` 是同一个文件，页面也原地重渲；只有新的一趟行程，或用户明确要求另存时，才改写到一个新文件名（例如 `plans/<可读名称>/journey-r<N>.json`），原来的文件保持不动。仓库自己的 [`demo/`](demo/) 与测试夹具不受此约定影响。
-
-## 候选输入
-
-`candidates.json` 恰好包含 `candidates_version`、`pois`、`lodgings`、`claims` 和 `unknowns` 五个字段，不包含交通段。它的实体形状复用冻结的 Trip `$defs`，每个实体、价格和开放时段的证据引用都必须能解析到。
-
-`ctw candidates add-poi ... --verify-name` 会在写入前用高德核对 POI 名称。它只报告经过脱敏的 `unique`、`ambiguous` 或 `unavailable` 结果并最多给出三个候选名称建议，不会凭这次核名写入坐标；缺 Key 或 provider 核名失败都不会阻断候选写入。
-
-`ctw candidates fix-names` 读取 Trip 或 Journey 为某个地点记下的高德 unknown——既包括坐标没能定下来的，也包括坐标已经定了、但名字仍然存疑的——把可采用的规范名报告给对应的调研候选。它默认只报告；只有加 `--apply` 才会把唯一确定的名称写回候选文件。歧义、冲突、同名或格式异常的建议都留给人工确认，绝不自动修改。
-
-处理这些人工项时，`--export-manual NAME-REVIEW.json` 会导出一份可填写的 JSON 清单，绝不修改候选文件。给任意条目的 `chosen` 填值后，再用 `--apply-manual NAME-REVIEW.json` 应用；每个非空值都必须与该条当前 `suggested_names` 中的一个名字逐字相等，空值或缺失值会跳过。只要出现未知 `ref_id` 或建议外名字，整次应用就失败，候选文件字节不变。若要使用完全自定义的名字，请直接编辑候选文件，再运行 `validate-candidates`。
-
-```bash
-plugins/china-trip-weaver/scripts/ctw validate-candidates demo/candidates.json
-plugins/china-trip-weaver/scripts/ctw candidates fix-names CANDIDATES.json --trip TRIP_OR_JOURNEY.json
-plugins/china-trip-weaver/scripts/ctw candidates fix-names CANDIDATES.json --trip TRIP_OR_JOURNEY.json --apply
-plugins/china-trip-weaver/scripts/ctw candidates fix-names CANDIDATES.json --trip TRIP_OR_JOURNEY.json --export-manual NAME-REVIEW.json
-plugins/china-trip-weaver/scripts/ctw candidates fix-names CANDIDATES.json --trip TRIP_OR_JOURNEY.json --apply-manual NAME-REVIEW.json
-```
-
-参见示例 [`candidates.example.json`](plugins/china-trip-weaver/references/candidates.example.json) 和机器合同 [`candidates.schema.json`](plugins/china-trip-weaver/schema/candidates.schema.json)。
-
-## 运行合成演示
-
-仓库内的北京→上海演示是确定性的合成输出。生成时关闭全部远程服务商；铁路夹具返回合成的空结果，因此成品只展示带明确标记的 12306 公开查询回退。
-
-```bash
+mkdir -p .tmp/first-trip
 plugins/china-trip-weaver/scripts/ctw plan \
   --request demo/request.json \
   --candidates demo/candidates.json \
   --rail fixture:tests/fixtures/providers/rail12306/empty.json \
-  --mobility off \
-  --lodging off \
-  --aviation off \
-  --offline-fixture \
-  --fixed-clock 2026-09-04T00:00:00+08:00 \
-  --output-json demo/trip.json \
-  --output-html demo/trip.html
-
-plugins/china-trip-weaver/scripts/ctw validate demo/trip.json
-plugins/china-trip-weaver/scripts/ctw validate-html demo/trip.html demo/trip.json
-/usr/bin/python3 scripts/scan_secrets.py demo/trip.json demo/trip.html
+  --mobility off --lodging off --aviation off \
+  --offline-fixture --fixed-clock 2026-09-04T00:00:00+08:00 \
+  --output-json .tmp/first-trip/trip.json \
+  --output-html .tmp/first-trip/trip.html
 ```
 
-用你自己的凭据运行同一条规划命令，把 provider 参数换成 `--rail live --mobility live --lodging live --aviation auto`，去掉两个仅夹具使用的参数，并把输出写到 `.tmp/`，即可得到当前实网结果而不把它重新放回 Git。带凭据的验收曾证明以下能力数量：2 条日期铁路行程、20 个路线单元、10 个住宿候选、20 个航班对比，以及状态与舒适度增强。这里仅保留数量说明，不再分发该次运行的任何服务商条目。
+在本地浏览器打开 `.tmp/first-trip/trip.html`。夹具刻意不提供车次库存，因此车次、价格和余票仍待核验。也可下载仓库中的[合成 Trip HTML 文件](demo/trip.html)后在本地打开；这个链接是文件入口，不是已部署的在线交互演示。对应数据是 [Trip JSON](demo/trip.json)，其他合成案例在 [`demo/`](demo/) 中。
 
-[`demo/guangzhou-shenzhen/`](demo/guangzhou-shenzhen/) 下的一日往返也由同一份合成空结果夹具生成。不过夜的请求不查询住宿，演示也不会编造服务商库存。
+## 深入了解
 
-[`demo/grouped-departures/`](demo/grouped-departures/) 下的分组出发示例让两组合成旅客分别从北京、广州前往上海会合点。提交的 Trip 保持严格的分组 request 形状，并可见地展示各组出发地、3 人总数、分组归属交通腿，以及分组/全团交通价格。
+- [CLI 入口](plugins/china-trip-weaver/scripts/ctw)：运行 `plugins/china-trip-weaver/scripts/ctw --help` 及相应子命令的 `--help`，查看规划、校验、渲染、Journey 更新和服务商查询。
+- [架构与数据合同](docs/design/00-README.md)、[Trip Schema](plugins/china-trip-weaver/schema/trip.schema.json)和[Journey Schema](plugins/china-trip-weaver/schema/journey.schema.json)：实现细节与精确的文档形状。
+- [维护者人工验收清单](docs/manual-acceptance.zh-CN.md)、[贡献指南](CONTRIBUTING.zh-CN.md)、[安全说明](SECURITY.zh-CN.md)和[当前状态](PROGRESS.md)。
 
-[`demo/multicity-5d/`](demo/multicity-5d/) 下的多城市示例让两名旅客从北京出发，依次经停上海、杭州、苏州三个目的地。提交的 Trip 交通腿严格按换乘顺序单向排列，不含回到北京的返程腿，且每天都精确对应一段覆盖当天、且限定在当前目的地的住宿。
-
-第五组示例位于 [`demo/journey-16d/`](demo/journey-16d/)：一份完全合成的上海→杭州→苏州 16 天 Journey，拆成三个完整 Trip。它的已提交文件由 `scripts/build_renderer_fixtures.py` 独占写入；该生成器固定使用 `2026-09-05T09:00:00+08:00`，有意不同于其余四组 demo 使用的 `2026-09-04T00:00:00+08:00`，不要单独手工重跑第五组。用 `/usr/bin/python3 scripts/build_renderer_fixtures.py` 可重复生成，再运行：
-
-```bash
-plugins/china-trip-weaver/scripts/ctw journey validate demo/journey-16d/journey.json
-plugins/china-trip-weaver/scripts/ctw journey validate-html demo/journey-16d/journey.html demo/journey-16d/journey.json
-```
-
-铁路、网络或服务商失败，永远不会变成假成功。每项能力保留自己的健康状态，要么使用带标记的降级方案，要么停在一个有类型的 unknown 上。高德对每个 Trip 最多调用 80 次、不超过 2 QPS；Journey 服从上文说明的总额度分配。FlyAI 的遮罩价（例如 `¥4xx`）一律是 `verify-on-click`，只有精确数字才是 `live`。FlyAI 的坐标始终是 `provider-unknown`，不做转换也不上图。
-
-飞常准的部分增强失败也会如实呈现：如果航班搜索或状态数据已经成功，但后续舒适度查询失败，可用的航班和状态证据仍会保留，同时飞常准健康状态变为 `degraded`，不会再显示为完全正常。
-
-当 12306 返回多个可能车站且高德可用时，插件会用城市中心与精确匹配的铁路车站 POI 附加直线距离信号。它保留全部候选，已知距离按近到远、未知距离排在最后，绝不替用户选站；距离无法取得也不会把原本成功的铁路结果降级。
-
-车站名解析本身最多走四层，从不替用户猜站：先精确站名，再城市代表站，再该城市 12306 收录的全部车站；三层都为空时，把城市名的行政区后缀（市／县／区等）剥掉重试一次。歧义结果仍需要距离信号且高德可用时，先按 `city_limit=true` 做同城 POI 搜索，再用 `city_limit=false` 的全国搜索、并把匹配点限制在城市中心 80 公里以内，补上一个实际位于邻近行政区、但站名逐字相同的车站。若 12306 侧四层查询仍全部为空且已配置高德 Key，还有最后一次尽力而为的调用会用高德的 `poi_around` 能力在该地点中心 50 公里内搜索真实火车站，并逐一与 12306 自己的车站表核对后才当作带距离的候选提供；结果会带上 `station_nearby_fallback` 这条 warning，12306 不认识的站名会被丢弃，绝不会被猜测出来。
-
-12306 的 `get-tickets` 按自己的城市分组返回结果，即使站名已经解析成功，仍可能混入到发站其实属于同城另一个车站的直达行。每一行只有在 `from_station`／`to_station` 与解析出的候选站名相符（没有站点解析信息时，退回到「以请求地名去掉末尾市／县／区后的词开头」）才会保留；不相符的行会被丢弃并计入 `station_rows_filtered:<n>` 这条 warning，全部被丢弃时还会再加一条 `station_rows_all_filtered`、走既有的无结果路径。`get-interline-tickets` 返回的中转行不受这条过滤影响。因为过滤发生在 12306 自身的条数上限之后，`ctw rail` 默认向服务商请求上限 30 行，但过滤后仍可能返回较少车次。
-
-## 不配任何 Key 也能跑
-
-无 Key 运行时，从启动环境里移除服务商变量，并确认本地凭据文件不存在。使用 `--mobility off --lodging off --aviation off`；铁路仍是公开的实网查询，也可以设为 `off`。静态估算和深链都会被明确标记。
-
-确定性的离线开发运行：
-
-```bash
-plugins/china-trip-weaver/scripts/ctw plan \
-  --request tests/fixtures/e2e/beijing-shanghai-3d/request.json \
-  --candidates tests/fixtures/e2e/beijing-shanghai-3d/candidates.json \
-  --rail fixture:tests/fixtures/e2e/beijing-shanghai-3d/rail.json \
-  --mobility off \
-  --lodging off \
-  --aviation off \
-  --offline-fixture \
-  --fixed-clock 2026-09-04T00:00:00+08:00 \
-  --output-json .tmp/trip.json \
-  --output-html .tmp/trip.html
-```
-
-这个模式只用于回归测试，会把预售期外和夹具结果标记为降级的静态数据，绝不会当作实时库存展示。另有夹具覆盖「上海本地两日、零铁路调用」和「北京→杭州四日」两种请求。
-
-## 其他命令
-
-```text
-ctw doctor
-ctw validate TRIP.json
-ctw validate-candidates CANDIDATES.json
-ctw candidates add-poi CANDIDATES.json --name NAME --city CITY --category CATEGORY --source-url URL [--verify-name]
-ctw candidates import CANDIDATES.json --items ITEMS.json [--queried-at ISO] [--dry-run]
-ctw candidates fix-names CANDIDATES.json --trip TRIP_OR_JOURNEY.json [--apply | --export-manual NAME-REVIEW.json | --apply-manual NAME-REVIEW.json]
-ctw canonicalize TRIP.json
-ctw rail --date YYYY-MM-DD --from CITY --to CITY --output-json rail-result.json
-ctw research --city CITY --query TEXT [--max-results N] --output-json research.json
-ctw mobility --candidates CANDIDATES.json --modes transit,walking --output-json mobility.json
-ctw lodging --city CITY --check-in YYYY-MM-DD --check-out YYYY-MM-DD --output-json lodging.json
-ctw air --origin CITY --destination CITY --date YYYY-MM-DD --output-json air.json
-ctw weather (--city CITY [--city CITY ...] | --adcode CODE [--adcode CODE ...] | --journey JOURNEY.json | --trip TRIP.json) [--output-json weather.json]
-ctw dining (--journey JOURNEY.json | --trip TRIP.json) [--radius METERS] [--limit N] [--cuisine TEXT] [--avoid WORD [--avoid WORD ...]] [--fixture FIXTURE.json --fixed-clock ISO] [--output-json dining.json]
-ctw replan --trip TRIP.json --event EVENT.json --base-revision N --output-json TRIP.json --output-html TRIP.html [--rail-result RAIL.json]
-ctw render TRIP.json --output TRIP.html
-ctw validate-html TRIP.html TRIP.json
-ctw journey plan --request REQUEST.json --candidates CANDIDATES.json [--expected-segment-days N] [--amap-total-max-calls N] --output-json JOURNEY.json
-ctw journey validate JOURNEY.json
-ctw journey render JOURNEY.json --output JOURNEY.html
-ctw journey validate-html JOURNEY.html JOURNEY.json
-ctw journey extract --journey JOURNEY.json --trip-id TRIP_ID --output-json TRIP.json
-ctw journey assemble --request REQUEST.json --trip TRIP.json [--trip TRIP.json ...] [--expected-segment-days N] [--fixed-clock ISO] --output-json JOURNEY.json
-ctw journey assemble --journey JOURNEY.json --replace-trip TRIP.json --base-revision N [--reason REASON] [--fixed-clock ISO] --output-json JOURNEY.json
-ctw journey weather --journey JOURNEY.json --weather-result WEATHER.json --base-revision N [--reason REASON] [--fixed-clock ISO] --output-json JOURNEY.json
-ctw journey dining --journey JOURNEY.json --dining-result DINING.json --base-revision N [--reason REASON] [--fixed-clock ISO] --output-json JOURNEY.json
-ctw locate (--journey JOURNEY.json | --trip TRIP.json) [--deadline SECONDS] [--output-json locate.json]
-ctw journey locate --journey JOURNEY.json --locate-result LOCATE.json --base-revision N [--reason REASON] [--fixed-clock ISO] --output-json JOURNEY.json
-```
-
-首次装配和 `--replace-trip` 时，缺少 `budget_ledger` 的子 Trip 会先根据该 Trip 已有事实现算账本，再推导连接与 Journey 总额；已有账本保持不变。
-
-运行时不使用任何第三方 Python 包。Trip 与 Journey renderer 都会拒绝无效输入；两套 HTML validator 都会拦截结构、CSP、远程资源、危险链接、密钥、事实映射、追溯缺口和交易动作等违规。
-
-`ctw weather` 查询高德对城市、行政区码，或某份 Journey/Trip 文件里每一天的天气预报，四选一：`--city`（可重复，会拆分「福州／平潭」这类复合名）、`--adcode`（可重复）、`--journey`、`--trip`。高德只返回「今天起 4 天」的预报；Journey/Trip 里超出这个窗口的日期会标为 `out_of_window` 并给出可查日期，绝不编造预报。查不到或有歧义的地点会标为 `no_forecast` 并给出原因，不会被静默丢弃。
-
-`ctw journey weather` 把 `ctw weather --output-json` 的结果折回既有 Journey，分两步：先跑 `ctw weather --journey JOURNEY.json --output-json WEATHER.json`，再跑 `ctw journey weather --journey JOURNEY.json --weather-result WEATHER.json --base-revision N --output-json JOURNEY.json`。`forecasts[]` 每行现在都带一个 `query` 键（实际查询用的名字）；折回按「日期相同，且 `query` 等于该天 `city` 经 `split_city_names` 拆出的第一段」把行匹配到天。`forecast` 行写入 `day.weather`；`no_forecast` 行把它置空并记一条 `weather_no_results` unknown；`out_of_window` 行或没有匹配行的天不动。没有任何一天被改——包括把同一个结果再折一次——命令打印 `JOURNEY_WEATHER_NOOP`、退出码 2、什么都不写；否则把全部被改的子 Trip 一次折完，Journey 的 revision 只加一（不论同时有几个子 Trip 被改），命令打印 `JOURNEY_WEATHER_COMPLETE`、退出码 0，把新版本写进 `--output-json`。`--base-revision` 与文件当前版本不符会报 `revision_conflict`、退出码 1，且什么都不写。命令只会写 `--output-json`；按约定它就是 `--journey` 那个文件本身，原地更新。
-
-`ctw dining` 为 Trip 或 Journey 里每个午/晚餐时段写一条附近餐饮参考：圆心是同一天里最近一个有坐标的时段——先向前找，再向后找，但不越过交通（`transport`）时段：换乘之后的一餐只在到达城市找圆心，换乘之前的只在出发城市找；以该点为中心做一次高德 `poi_around` 搜索（`sortrule=weight`，高德自身的综合排序），半径取 `--radius`（缺省 1500 米），按高德返回顺序保留最多 `--limit`（缺省 3）家有评分的餐厅，跳过没有 `rating`，或名字／`tag`／`keytag`／`rectag` 命中任一 `--avoid` 词（可重复）的候选；`--cuisine` 会替换缺省关键词「餐厅」。当天找不到锚点时段时记 `dining: null` 并加一条 `dining_no_anchor` unknown；晚餐时段找不到锚点、且当天晚餐之后再没有 `transport` 时段时，改以当晚住处（`day.stay_id`）为圆心——因为午饭通常不在当天出发点附近吃。JSON 模式下打印 `DINING_COMPLETE`，至少一个时段拿到参考时退出码 0，全部为空时退出码 2；不带 `--output-json` 时改为逐个时段打印一行。`ctw journey dining` 用与 `ctw journey weather` 相同的两步把结果折回既有 Journey：先跑 `ctw dining --journey JOURNEY.json --output-json DINING.json`，再跑 `ctw journey dining --journey JOURNEY.json --dining-result DINING.json --base-revision N --output-json JOURNEY.json`；每个被改的子 Trip 各写一条 `trigger=dining` 的 patch，不论改了几个子 Trip，Journey 的 revision 只加一；成功时打印 `JOURNEY_DINING_COMPLETE`，退出码 0；没有变化时打印 `JOURNEY_DINING_NOOP`，退出码 2，不写文件；`--base-revision` 过期会报 `revision_conflict`，退出码 1，且什么都不写。命令只会写 `--output-json`；按约定它就是 `--journey` 那个文件本身，原地更新。
-
-`ctw locate` 找出 Trip 或 Journey 里坐标仍为空的景点与住宿——跳过规划器写下的用餐占位 `poi-routine-meal-*`——交给高德解析（每个子 Trip 最多 12 个景点，住宿不限），判定口径与规划器完全相同。每个实体一行，`status` 为 `located`/`unresolved`/`provider_error`：`unresolved` 行的 `reason` 是规划器会为该实体记下的同一条告警，没有就是 `locate_no_result`；`provider_error` 行在凭据缺失时 `reason` 是 `credential_missing`。JSON 模式下打印 `LOCATE_COMPLETE`，至少一个实体定位成功时退出码 0，一个都没有时退出码 2（服务商出错只会把行标成 `provider_error`），输入文件读不了或格式不对时退出码 1。`ctw journey locate` 用与 `ctw journey weather` 相同的两步把结果折回既有 Journey：先跑 `ctw locate --journey JOURNEY.json --output-json LOCATE.json`，再跑 `ctw journey locate --journey JOURNEY.json --locate-result LOCATE.json --base-revision N --output-json JOURNEY.json`——只给折回时仍然缺坐标的实体补上坐标（已有坐标的实体原样不动，一个字节不改），`claim_ids` 按 `ctw plan` 同样的去重方式追加；`unresolved` 行记成带其 `reason` 的 unknown，`provider_error` 行不动；每个被改的子 Trip 各写一条 `trigger=provider_change` 的 patch，不论改了几个子 Trip，Journey 的 revision 只加一；成功时打印 `JOURNEY_LOCATE_COMPLETE`，退出码 0；没有变化时打印 `JOURNEY_LOCATE_NOOP`，退出码 2，不写文件；`--base-revision` 过期会报 `revision_conflict`，退出码 1，且什么都不写。命令只会写 `--output-json`；按约定它就是 `--journey` 那个文件本身，原地更新。先补上住宿坐标，到达日晚餐在 `ctw dining` 里就能以住宿为锚点。
-
-`ctw replan` 的 `refresh` 事件用新查到的车次原地换掉一条火车腿：先跑 `ctw rail --output-json`，再把输出文件路径传给 `--rail-result`。`refresh` 事件必须带 `--rail-result`，其余事件类型一律拒绝。刷新会先删除 `subject_ref` 等于被替换腿的全部旧 claim，再追加本次车次的 claim，因此重复刷新不会累积过期证据。事件不带 `service_number` 时，默认选车只在发车不早于前一时段结束的候选里取到达最早的一班，全部不可行才报 `refresh_overlap`（message 带候选数与前一时段结束时间）；带 `service_number` 却命中多行时会报 `refresh_service_ambiguous`，除非事件的 `arrive_at` 或 `depart_at`（均可为完整 ISO 时间戳或 `HH:MM`）能唯一挑出一行。`suspend` 事件在同一个 patch 里删掉停运的腿（列车停运、轮渡停航）及其时段、budget_ledger 条目与随之孤儿化的 claim，用 `kind` 为 `free` 或 `poi` 的 `replacement_slot` 换掉原时段；patch 的 `trigger` 是 `disruption`。刷新后时段 `title` 默认重写为「起点 → 终点 铁路 车次号」，事件可用非空 `title` 覆盖，空白则报 `refresh_title`。
-
-## 测试
-
-```bash
-/usr/bin/python3 -m unittest discover -s tests -v
-/usr/bin/python3 scripts/scan_secrets.py
-/usr/bin/python3 scripts/scan_secrets.py --credential-values
-/usr/bin/python3 scripts/scan_secrets.py --credential-values --git-history
-```
-
-装了 Codex 的本机不应出现任何跳过；没装 Codex 的 CI runner 会跳过三项 Codex 依赖测试。测试覆盖冻结的 Trip Schema、Journey 拆分与连续性、候选校验、凭据与进程／家目录隔离、精确值与抓取数据门禁、证据／坐标、带高德／FlyAI／飞常准合同形状的 93 个一眼可辨合成服务商夹具、20 个排程 golden、8 个无解用例、7 个局部重排 golden、Trip/Journey 渲染器对抗用例与离线浏览器视口、Skill 与打包元数据，以及确定性和实网两条集成路径。
-
-## 文档导航
-
-| 位置 | 语言 | 内容 |
-|---|---|---|
-| [`docs/design/`](docs/design/00-README.md) | 中文 | 架构设计与决策记录，是实现的权威依据 |
-| [`docs/design/adr/`](docs/design/adr/) | 中英混合 | 编号的架构决策记录（ADR-0001–0008 中文，0009 起英文）；与之冲突的改动要新增 ADR 取代，而不是悄悄改实现 |
-| [`docs/research/`](docs/research/00-README.md) | 中文 | 立项前对 11 个参考项目和 Codex 官方规范的调研与证据 |
-| [`docs/manual-acceptance.zh-CN.md`](docs/manual-acceptance.zh-CN.md) | 中文 | 在 Codex 桌面版用自然语言做人工验收的清单 |
-| [`BLOCKED.md`](BLOCKED.md) | 英文 | 仍未决的问题与演示／夹具合成数据边界 |
-
-## 参与贡献与安全
-
-提交 Pull Request 前请读 [`CONTRIBUTING.zh-CN.md`](CONTRIBUTING.zh-CN.md)；报告任何与凭据相关的问题前请读 [`SECURITY.zh-CN.md`](SECURITY.zh-CN.md)。只读的交易边界和凭据隔离规则由测试强制，不靠约定。
+[MIT 许可证](LICENSE)只覆盖本仓库自己的代码和文档，不授予第三方服务商数据的使用权。除非自行取得相应服务商许可，否则本仓库仅供个人、非商业用途；实网结果不能在此再分发。使用服务商数据或考虑商业用途前，请读[第三方权利说明](THIRD_PARTY_NOTICES.md)。
