@@ -117,3 +117,4 @@ details{border-top:1px solid var(--line);margin-top:.5rem}summary{cursor:pointer
 @media print{.record>details>*:not(summary){display:block}}
 html{overflow-x:visible}
 main#experience{display:block;max-width:none;width:auto;padding:0}
+a.day-index[href]{display:grid}
