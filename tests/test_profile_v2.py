@@ -37,6 +37,13 @@ class ProfileV2Tests(unittest.TestCase):
             self.assertEqual(page.count('<main'), 1)
             self.assertEqual(page.count('<h1'), 1)
 
+    def test_v1_visible_text_can_quote_v2_marker_without_changing_dispatch(self):
+        source = copy.deepcopy(self.trip)
+        source['request']['assumptions'].append('The literal data-renderer-version="2" is a note, not an HTML version.')
+        legacy = render_trip(source, renderer_version='1')
+        self.assertIn('data-renderer-version="2"', legacy)
+        self.assertTrue(validate_html(legacy, source).ok)
+
     def test_complete_record_keeps_existing_visible_capabilities(self):
         page = render_journey(self.journey, renderer_version="2")
         record = page.split('<details id="full-record">', 1)[1].split('</details></section>', 1)[0]

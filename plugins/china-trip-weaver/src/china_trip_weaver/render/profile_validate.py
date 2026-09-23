@@ -3,11 +3,35 @@
 from __future__ import annotations
 
 import json
+from html.parser import HTMLParser
 from typing import Any, Mapping
 
 from ..contracts import canonical_json
 from .profile_html import assets, render_profile
 from .validate_html import AuditParser, HTMLIssue, HTMLValidationReport
+
+
+def is_profile_document(html_text: str) -> bool:
+    """Inspect version attributes, never source text that may quote a marker."""
+    class VersionProbe(HTMLParser):
+        def __init__(self) -> None:
+            super().__init__()
+            self.version = False
+
+        def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+            values = dict(attrs)
+            if tag == "html" and values.get("data-renderer-version") == "2":
+                self.version = True
+            if tag == "meta" and values.get("name") == "ctw-renderer" and values.get("content") == "2":
+                self.version = True
+
+    parser = VersionProbe()
+    try:
+        parser.feed(html_text.partition("</head>")[0])
+        parser.close()
+    except Exception:
+        return False
+    return parser.version
 
 
 def validate_profile(html_text: str, source: Mapping[str, Any], legacy_html: str) -> HTMLValidationReport:

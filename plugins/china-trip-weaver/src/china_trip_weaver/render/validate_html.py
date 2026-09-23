@@ -152,7 +152,8 @@ class AuditParser(HTMLParser):
 
 
 def validate_html(html_text: str, trip: Mapping[str, Any]) -> HTMLValidationReport:
-    if 'data-renderer-version="2"' in html_text or 'name="ctw-renderer" content="2"' in html_text:
+    from .profile_validate import is_profile_document
+    if is_profile_document(html_text):
         from .html import RendererError, render_trip
         from .profile_validate import validate_profile
         try:
