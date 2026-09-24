@@ -18,6 +18,8 @@ from china_trip_weaver.render import profile_html
 from china_trip_weaver.render.profile_html import LABELS, _budget_summary, _duration
 from china_trip_weaver.journey import journey_booking_checklist, journey_risk_items
 from china_trip_weaver.render.profile_model import _scenario, build_model, clock, relative_minute
+from china_trip_weaver.planning import _budget_ledger
+from china_trip_weaver.validate_trip import validate_trip
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -90,8 +92,8 @@ class ProfileV2Tests(unittest.TestCase):
 
     def test_v2_fixture_bytes_guard_template_and_legacy_record_changes(self):
         expected = (
-            (self.trip, render_trip, 'demo/trip.html', '6c3cd51e6e14e0e5499be2841c3af7e49fdcc7e071f7604ba0d2a1557a0fe16f'),
-            (self.journey, render_journey, 'demo/journey-16d/journey.html', 'b99f823b7464774b344e0b3924c759f242abf3c70ea7b93d38f8e92fa0b1d823'),
+            (self.trip, render_trip, 'demo/trip.html', '66a0f057b8a80c83ec9b1cb7c7f676ffb73314d955f4dc00e24034d8507f8464'),
+            (self.journey, render_journey, 'demo/journey-16d/journey.html', '8ec90344e1e0e3a45608b7f7c0a85b4b05a7267dcae106aa653fbcf760bd6bab'),
         )
         for source, render, path, digest in expected:
             with self.subTest(path=path):
@@ -239,20 +241,83 @@ class ProfileV2Tests(unittest.TestCase):
         self.assertNotIn('data-day-support="0" hidden', page)
 
     def test_budget_state_distinguishes_missing_quotes_from_a_real_zero(self):
-        pending = {'budget': {'status': 'incomplete', 'known': 0, 'minimum': None, 'maximum': None}}
+        pending = {'budget': {'status': 'incomplete', 'known': 0, 'minimum': None, 'maximum': None, 'comparable_count': 0}}
         self.assertEqual('总额待核验', _budget_summary(pending, LABELS['zh-CN'])[0])
         self.assertIn('已知部分 ¥0', _budget_summary(pending, LABELS['zh-CN'])[1])
         self.assertEqual('Total to verify', _budget_summary(pending, LABELS['en'])[0])
-        partial = {'budget': {'status': 'incomplete', 'known': 4200, 'minimum': None, 'maximum': None}}
+        partial = {'budget': {'status': 'incomplete', 'known': 4200, 'minimum': None, 'maximum': None, 'comparable_count': 2}}
         self.assertIn('¥4200', _budget_summary(partial, LABELS['zh-CN'])[1])
-        complete_zero = {'budget': {'status': 'complete', 'known': 0, 'minimum': 0, 'maximum': 0}}
+        empty_ledger, _ = _budget_ledger({'budget_cny': 0}, [], [], [], [], [])
+        self.assertEqual('within_budget', empty_ledger['status'])
+        complete_zero = {'budget': {'status': empty_ledger['status'], 'known': empty_ledger['known_cost_cny'],
+                                    'minimum': empty_ledger['total_range_cny']['minimum'],
+                                    'maximum': empty_ledger['total_range_cny']['maximum'], 'comparable_count': 0}}
         self.assertEqual('已知总额 ¥0', _budget_summary(complete_zero, LABELS['zh-CN'])[0])
+        paid = copy.deepcopy(self.trip['pois'][0])
+        paid['price'] = {'amount': 100, 'currency': 'CNY', 'price_type': 'reference', 'unit': 'total',
+                         'includes_taxes': True, 'queried_at': '2026-09-04T00:00:00+08:00', 'claim_id': None}
+        for limit, status in ((0, 'over_budget'), (150, 'within_budget'), (None, 'unbudgeted')):
+            with self.subTest(limit=limit):
+                request = dict(self.trip['request'], budget_cny=limit)
+                ledger, _ = _budget_ledger(request, [{'slots': [{'ref_id': paid['poi_id']}]}], [], [], [paid], [])
+                self.assertEqual(status, ledger['status'])
+                shown = _budget_summary({'budget': {'status': status, 'known': ledger['known_cost_cny'],
+                        'minimum': ledger['total_range_cny']['minimum'], 'maximum': ledger['total_range_cny']['maximum'],
+                        'comparable_count': 1}}, LABELS['zh-CN'])
+                self.assertEqual('已知总额 ¥100', shown[0])
         trip = render_trip(self.trip, renderer_version='2')
         before_record = trip.split('<section class="record">', 1)[0]
         self.assertIn('<strong>总额待核验</strong>', before_record)
         self.assertNotIn('<strong>¥0</strong>', before_record)
         journey = render_journey(self.journey, renderer_version='2')
         self.assertIn('已可比较 ¥4200', journey.split('<script id="prototype-model"', 1)[0])
+
+    def test_legal_unbudgeted_and_zero_priced_partial_trip_do_not_invent_a_total(self):
+        no_limit = copy.deepcopy(self.trip)
+        no_limit['request']['budget_cny'] = None
+        ledger, budget_unknowns = _budget_ledger(no_limit['request'], no_limit['days'], no_limit['transport_legs'],
+                                                  no_limit['lodgings'], no_limit['pois'], no_limit['claims'])
+        no_limit['budget_ledger'] = ledger
+        no_limit['unknowns'] = [item for item in no_limit['unknowns'] if not item['field_path'].startswith('/budget_ledger/')] + budget_unknowns
+        self.assertEqual('unbudgeted', ledger['status'])
+        self.assertTrue(validate_trip(no_limit).ok)
+        for locale, pending_label, false_label in (('zh-CN', '总额待核验', '已知总额 ¥0'),
+                                                   ('en', 'Total to verify', 'Known total ¥0')):
+            source = copy.deepcopy(no_limit)
+            source['request']['locale'] = locale
+            page = render_trip(source, renderer_version='2')
+            self.assertTrue(validate_html(page, source).ok)
+            self.assertIn('<strong>%s</strong>' % pending_label, page)
+            self.assertNotIn('<strong>%s</strong>' % false_label, page)
+
+        free = copy.deepcopy(self.trip)
+        poi = free['pois'][0]
+        price = {'amount': 0, 'currency': 'CNY', 'price_type': 'reference', 'unit': 'per_person',
+                 'includes_taxes': True, 'queried_at': '2026-09-04T00:00:00+08:00', 'claim_id': 'claim-test-free-entry'}
+        poi['price'] = price
+        poi['claim_ids'].append('claim-test-free-entry')
+        claim = copy.deepcopy(free['claims'][0])
+        claim.update({'claim_id': 'claim-test-free-entry', 'subject_ref': poi['poi_id'], 'field_path': '/price',
+                      'value': price, 'source_url': 'https://example.test/free-entry', 'provider': 'synthetic-review',
+                      'queried_at': '2026-09-04T00:00:00+08:00', 'status': 'hypothesis', 'confidence': 0.5})
+        free['claims'].append(claim)
+        free_ledger, free_unknowns = _budget_ledger(free['request'], free['days'], free['transport_legs'],
+                                                     free['lodgings'], free['pois'], free['claims'])
+        free['budget_ledger'] = free_ledger
+        free['unknowns'] = [item for item in free['unknowns'] if not item['field_path'].startswith('/budget_ledger/')] + free_unknowns
+        self.assertTrue(validate_trip(free).ok)
+        self.assertEqual(0, free_ledger['known_cost_cny'])
+        self.assertEqual(1, build_model(free)['budget']['comparable_count'])
+        free_page = render_trip(free, renderer_version='2')
+        self.assertTrue(validate_html(free_page, free).ok)
+        self.assertIn('已有 1 项零元可比报价', free_page)
+        self.assertNotIn('尚无可比较报价', free_page)
+        english_free = copy.deepcopy(free)
+        english_free['request']['locale'] = 'en'
+        english_free_page = render_trip(english_free, renderer_version='2')
+        self.assertTrue(validate_html(english_free_page, english_free).ok)
+        self.assertIn('1 comparable zero-priced item', english_free_page)
+        self.assertNotIn('No comparable quote yet', english_free_page)
 
     def test_issues_are_summarized_but_every_raw_record_remains_readable(self):
         model = build_model(self.trip)
@@ -261,7 +326,7 @@ class ProfileV2Tests(unittest.TestCase):
         panel = rendered.split('data-day-detail="0"', 1)[1].split('</article>', 1)[0]
         raw = rendered.split('data-day-support="0"', 1)[1].split('</article>', 1)[0]
         self.assertIn('出发前要核对', panel)
-        self.assertIn('核对实际车次与余票', panel)
+        self.assertIn('核对交通服务信息', panel)
         self.assertIn('href="#support-day-0"', panel)
         self.assertNotIn('no_results:leg-', panel)
         self.assertIn('<details class="issue-details">', raw)
@@ -280,6 +345,43 @@ class ProfileV2Tests(unittest.TestCase):
         english_panel = english_page.split('data-day-detail="0"', 1)[1].split('</article>', 1)[0]
         self.assertIn('Check before travel', english_panel)
         self.assertIn('View 11 source records', english_panel)
+
+    def test_rail_and_ferry_service_unknowns_use_neutral_transport_language(self):
+        rail = render_trip(self.trip, renderer_version='2')
+        rail_panel = rail.split('data-day-detail="0"', 1)[1].split('</article>', 1)[0]
+        self.assertIn('核对交通服务信息', rail_panel)
+        ferry = json.loads((ROOT / 'tests/fixtures/trips/schema/valid/rental-ferry.json').read_text(encoding='utf-8'))
+        ferry['unknowns'].append({'field_path': '/transport_legs/0/service_number',
+                                  'reason': 'Synthetic ferry sailing identifier still unverified',
+                                  'provider': 'gulangyu-ferry.example.invalid', 'claim_id': None})
+        self.assertTrue(validate_trip(ferry).ok)
+        for locale, topic in (('zh-CN', '核对交通服务信息'), ('en', 'Verify transport service details')):
+            source = copy.deepcopy(ferry)
+            source['request']['locale'] = locale
+            page = render_trip(source, renderer_version='2')
+            self.assertTrue(validate_html(page, source).ok)
+            first_day = page.split('data-day-detail="0"', 1)[1].split('</article>', 1)[0]
+            self.assertIn(topic, first_day)
+            self.assertNotIn('车次与余票', first_day)
+            self.assertNotIn('service and seats', first_day)
+            support = page.split('data-day-support="0"', 1)[1].split('</article>', 1)[0]
+            self.assertIn('Synthetic ferry sailing identifier still unverified', support)
+            self.assertNotIn('车次', support)
+
+    def test_only_the_moving_slot_has_a_preview_replacement_clock(self):
+        page = render_trip(self.trip, renderer_version='2')
+        first_day = page.split('data-day-detail="0"', 1)[1].split('</article>', 1)[0]
+        self.assertEqual(7, first_day.count('data-original-time="true"'))
+        self.assertEqual(1, first_day.count('data-scenario-original="true"'))
+        self.assertEqual(1, first_day.count('data-shifted-time="true"'))
+        self.assertIn('data-scenario-original="true"', first_day.split('data-role="transport"', 1)[1].split('</li>', 1)[0])
+        locked = copy.deepcopy(self.trip)
+        locked['days'][0]['slots'][0]['locked'] = True
+        locked['transport_legs'][0]['locked'] = True
+        locked_page = render_trip(locked, renderer_version='2')
+        locked_day = locked_page.split('data-day-detail="0"', 1)[1].split('</article>', 1)[0]
+        self.assertNotIn('data-scenario-original="true"', locked_day)
+        self.assertNotIn('data-shifted-time="true"', locked_day)
 
     def test_every_day_keeps_its_original_unknown_reasons_and_claim_ids(self):
         for source, render in ((self.trip, render_trip), (self.journey, render_journey)):

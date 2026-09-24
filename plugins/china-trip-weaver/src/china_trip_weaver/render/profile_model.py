@@ -16,7 +16,7 @@ ROLE = {
     "free": "free", "checkin": "stay", "checkout": "stay", "lodging": "stay",
 }
 FIELD_LABEL = {
-    "service_number": "车次仍待核验", "price": "费用仍待核验", "amount": "金额仍待核验",
+    "service_number": "交通服务编号仍待核验", "price": "费用仍待核验", "amount": "金额仍待核验",
     "coordinates": "位置仍待核验", "opening_windows": "开放时间仍待核验",
     "dining": "餐饮仍待核验", "weather": "天气仍待核验",
 }
@@ -320,6 +320,14 @@ def build_model(source: Mapping[str, Any]) -> Dict[str, Any]:
     axis_end = max([1380] + ends)
     ledger = source.get("budget_ledger") or {}
     cost_range = ledger.get("total_range_cny") or {}
+    child_ledgers = [trip.get("budget_ledger") for trip in trips if trip.get("budget_ledger")] if is_journey else []
+    quote_ledgers = child_ledgers or ([ledger] if ledger else [])
+    comparable_count = (sum(
+        item.get("amount_max_cny") is not None
+        and item.get("price_type") not in (None, "unknown")
+        and (bool(item.get("included_in_scheduler")) or bool(item.get("included_in_total")))
+        for book in quote_ledgers for item in book.get("items", ())
+    ) if quote_ledgers else None)
     return {
         "kind": "journey" if is_journey else "trip",
         "title": " → ".join(route), "route": route,
@@ -328,7 +336,8 @@ def build_model(source: Mapping[str, Any]) -> Dict[str, Any]:
         "days": days,
         "axis": {"start": axis_start, "end": axis_end},
         "budget": {"limit": ledger.get("budget_cny"), "known": ledger.get("known_cost_cny"), "minimum": cost_range.get("minimum"),
-                   "maximum": cost_range.get("maximum"), "status": ledger.get("status", "incomplete")},
+                   "maximum": cost_range.get("maximum"), "status": ledger.get("status", "incomplete"),
+                   "comparable_count": comparable_count},
         "unknown_total": sum(len(trip["unknowns"]) for trip in trips),
         "all_unknowns": all_unknowns,
         "all_claims": all_claims,

@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict');
-const { transition } = require('../plugins/china-trip-weaver/assets/profile.js');
+const { transition, timeVisibility } = require('../plugins/china-trip-weaver/assets/profile.js');
 
 const model = { days: [
   { scenario: { available: true } },
@@ -15,4 +15,12 @@ assert.deepEqual(transition({ day: 1, preview: false }, { type: 'try' }, model),
 assert.deepEqual(transition(baseline, { type: 'select', index: -1 }, model), baseline);
 assert.deepEqual(transition(baseline, { type: 'select', index: 3 }, model), baseline);
 assert.deepEqual(transition(baseline, { type: 'unknown' }, model), baseline);
-console.log('8 profile state transitions passed');
+assert.deepEqual(timeVisibility(true, false), { originalHidden: false, shiftedHidden: true });
+assert.deepEqual(timeVisibility(true, true), { originalHidden: true, shiftedHidden: false });
+assert.deepEqual(timeVisibility(false, false), { originalHidden: false, shiftedHidden: true });
+assert.deepEqual(timeVisibility(false, true), { originalHidden: false, shiftedHidden: true });
+assert.deepEqual(timeVisibility(true, transition({ day: 0, preview: true }, { type: 'undo' }, model).preview),
+  { originalHidden: false, shiftedHidden: true });
+assert.deepEqual(timeVisibility(true, transition({ day: 0, preview: true }, { type: 'select', index: 1 }, model).preview),
+  { originalHidden: false, shiftedHidden: true });
+console.log('8 profile state transitions and 6 clock visibility checks passed');

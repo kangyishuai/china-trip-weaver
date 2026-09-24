@@ -12,7 +12,10 @@
     if (action.type === "undo") return { day: state.day, preview: false };
     return state;
   }
-  if (typeof module !== "undefined" && module.exports) module.exports = { transition };
+  function timeVisibility(hasAlternative, preview) {
+    return { originalHidden: !!(hasAlternative && preview), shiftedHidden: !hasAlternative || !preview };
+  }
+  if (typeof module !== "undefined" && module.exports) module.exports = { transition, timeVisibility };
   if (typeof document === "undefined") return;
 
   const source = document.getElementById("prototype-model");
@@ -37,15 +40,16 @@
     });
     panels.forEach((panel, index) => {
       panel.hidden = index !== state.day;
+      const activePreview = index === state.day && state.preview;
       const preview = panel.querySelector("[data-try-result]");
       const tryButton = panel.querySelector("[data-try]");
-      if (preview) preview.hidden = !(index === state.day && state.preview);
-      if (tryButton) tryButton.hidden = index === state.day && state.preview;
+      if (preview) preview.hidden = !activePreview;
+      if (tryButton) tryButton.hidden = activePreview;
       panel.querySelectorAll("[data-shifted-time]").forEach((node) => {
-        node.hidden = !(index === state.day && state.preview);
+        node.hidden = timeVisibility(true, activePreview).shiftedHidden;
       });
       panel.querySelectorAll("[data-original-time]").forEach((node) => {
-        node.hidden = index === state.day && state.preview;
+        node.hidden = timeVisibility(node.hasAttribute("data-scenario-original"), activePreview).originalHidden;
       });
     });
     supportPanels.forEach((panel, index) => { panel.hidden = index !== state.day; });

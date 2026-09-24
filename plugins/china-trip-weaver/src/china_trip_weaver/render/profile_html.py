@@ -16,14 +16,14 @@ from .template import embedded_json, renderer_css
 VERSION = "2"
 ASSETS = Path(__file__).resolve().parents[3] / "assets"
 # Frozen for renderer v2. Any output-affecting asset change needs a new format.
-PROFILE_ASSET_SHA256 = "2451d812341152e9a3cc300368162a36baeed1aee39715d09a939e33c58dbb71"
+PROFILE_ASSET_SHA256 = "5ff3c728cfd948b8f7d4b02a0a32aac814ea08cd34a33c38997635e9433e540c"
 
 LABELS = {
     "zh-CN": {
         "locale": "zh-CN",
         "skip": "跳到当天安排", "readonly": "只读行程", "kicker": "路线、时间、决定，在同一视野",
         "days": "天", "travelers": "人", "route": "按顺序经过的城市，非地理地图", "origin": "出发地", "first": "先确认这段交通",
-        "stay": "当晚落点", "budget": "预算边界", "none_transport": "没有已排跨城交通", "verify_service": "按日期复核真实车次与价格",
+        "stay": "当晚落点", "budget": "预算边界", "none_transport": "没有已排跨城交通", "verify_service": "按日期复核实际交通服务与价格",
         "no_stay": "这一天无过夜住宿", "known_cost": "可比较金额", "unknown_total": "总额仍未知；缺价不按零计算",
         "range": "总额范围已列出", "context": "当天安排", "overview": "全程时间图",
         "overview_note": "同一刻度展示已排占用；留白是未安排时间。选一天看具体安排。",
@@ -51,13 +51,14 @@ LABELS = {
         "first_action": "先核对", "other_decisions": "住宿与预算", "route_details": "城市与停留日期",
         "no_leg_action": "查看当天安排与未定事项",
         "budget_pending": "总额待核验", "budget_empty": "尚无可比较报价；已知部分 ¥0，缺价不按零计算",
-        "budget_unavailable": "尚无可核验报价；总额不能按零计算",
+        "budget_unavailable": "可比较金额尚待核对；总费用不能按零计算",
+        "budget_zero_quoted": "已有 %d 项零元可比报价；已知部分 ¥0，其他费用仍待核验",
         "budget_partial": "已可比较 ¥%s；仍有缺价，不能当作总额", "budget_final": "已知总额 ¥%s",
         "budget_complete_range": "总额区间 ¥%s–¥%s",
         "issue_heading": "出发前要核对", "issue_all": "查看全部 %d 条原始记录与来源",
         "issue_jump": "查看 %d 条核验依据 ↓", "issue_none": "当天没有关联的未知记录",
         "issue_more": "另有 %d 条可展开", "issue_urgent": "其中 %d 条来源冲突、失效或不可用",
-        "topic_service": "核对实际车次与余票", "topic_transport": "核对交通费用与衔接",
+        "topic_service": "核对交通服务信息", "topic_transport": "核对交通费用与衔接",
         "topic_stay": "核对住宿报价与条件", "topic_budget": "补齐预算缺价",
         "topic_place": "核对地点与用餐信息", "topic_other": "核对其他未定信息",
         "issue_origin": "原始记录", "page_format": "页面格式 v2",
@@ -66,7 +67,7 @@ LABELS = {
         "locale": "en",
         "skip": "Skip to today's plan", "readonly": "Read-only plan", "kicker": "Route, time, and decisions together",
         "days": "days", "travelers": "travelers", "route": "Cities in visit order, not a geographic map", "origin": "Origin", "first": "Confirm this leg",
-        "stay": "Tonight's stay", "budget": "Budget boundary", "none_transport": "No scheduled intercity leg", "verify_service": "Verify the actual service and price for this date",
+        "stay": "Tonight's stay", "budget": "Budget boundary", "none_transport": "No scheduled intercity leg", "verify_service": "Verify dated transport service and price",
         "no_stay": "No overnight stay", "known_cost": "Comparable cost", "unknown_total": "Total still unknown; missing prices are not zero",
         "range": "Total range is stated", "context": "Today's plan", "overview": "Whole-route time",
         "overview_note": "One scale shows scheduled occupied time; blank space is unplanned. Select a day for details.",
@@ -96,13 +97,14 @@ LABELS = {
         "first_action": "Confirm first", "other_decisions": "Stay and budget", "route_details": "Cities and stay dates",
         "no_leg_action": "Review this day's plan and open details",
         "budget_pending": "Total to verify", "budget_empty": "No comparable quote yet; known part ¥0, missing prices are not zero",
-        "budget_unavailable": "No verified quote yet; the total is not zero",
+        "budget_unavailable": "Comparable amount needs checking; the total cannot be treated as zero",
+        "budget_zero_quoted": "%d comparable zero-priced %s; known part ¥0, other costs remain unverified",
         "budget_partial": "Comparable part ¥%s; missing prices prevent a total", "budget_final": "Known total ¥%s",
         "budget_complete_range": "Total range ¥%s–¥%s",
         "issue_heading": "Check before travel", "issue_all": "View all %d source records",
         "issue_jump": "View %d source records ↓", "issue_none": "No related unknown records for this day",
         "issue_more": "%d more records available", "issue_urgent": "%d conflicting, stale, or unavailable sources",
-        "topic_service": "Verify service and seats", "topic_transport": "Verify transport cost and connection",
+        "topic_service": "Verify transport service details", "topic_transport": "Verify transport cost and connection",
         "topic_stay": "Verify stay price and terms", "topic_budget": "Fill budget price gaps",
         "topic_place": "Verify place and dining details", "topic_other": "Verify other open details",
         "issue_origin": "Raw record", "page_format": "Page format v2",
@@ -164,21 +166,25 @@ def _duration(minutes: int, locale: str, compact: bool = False) -> str:
 def _budget_summary(model: Mapping[str, Any], labels: Mapping[str, str]) -> tuple[str, str]:
     budget = model['budget']
     known = budget['known']
-    if budget['status'] == 'incomplete':
+    minimum, maximum = budget['minimum'], budget['maximum']
+    if minimum is None or maximum is None:
+        comparable_count = budget.get('comparable_count')
         if known is None:
             detail = labels['budget_unavailable']
         elif known == 0:
-            detail = labels['budget_empty']
+            if comparable_count is None:
+                detail = labels['budget_unavailable']
+            elif comparable_count:
+                detail = (labels['budget_zero_quoted'] % comparable_count) if labels['locale'] == 'zh-CN' else (
+                    labels['budget_zero_quoted'] % (comparable_count, 'item' if comparable_count == 1 else 'items'))
+            else:
+                detail = labels['budget_empty']
         else:
             detail = labels['budget_partial'] % known
         return labels['budget_pending'], detail
-    minimum, maximum = budget['minimum'], budget['maximum']
-    if minimum is not None and maximum is not None and minimum != maximum:
+    if minimum != maximum:
         return labels['range'], labels['budget_complete_range'] % (minimum, maximum)
-    amount = maximum if maximum is not None else known
-    if amount is None:
-        return labels['budget_pending'], labels['budget_unavailable']
-    return labels['budget_final'] % amount, labels['range']
+    return labels['budget_final'] % maximum, labels['range']
 
 
 def _link(url: str | None, label: str) -> str:
@@ -323,10 +329,12 @@ def _day(day: Mapping[str, Any], model: Mapping[str, Any], labels: Mapping[str, 
             status = {"tentative": "tentative", "skipped": "skipped", "unknown": "status_unknown"}[slot["status"]]
             inactive.append('<li>%s · %s–%s · %s</li>' % (esc(slot["title"]), slot["start_label"], slot["end_label"], esc(labels[status])))
             continue
-        original = ('<span data-original-time="true"><time datetime="%s">%s</time><small>–%s</small></span>' %
-                    (esc(slot["start_at"]), slot["start_label"], slot["end_label"]))
+        moving = slot["id"] == scenario_id
+        original = ('<span data-original-time="true"%s><time datetime="%s">%s</time><small>–%s</small></span>' %
+                    (' data-scenario-original="true"' if moving else '',
+                     esc(slot["start_at"]), slot["start_label"], slot["end_label"]))
         shifted = ''
-        if slot["id"] == scenario_id:
+        if moving:
             shifted = ('<span data-shifted-time="true" hidden><time datetime="%sT%s:00+08:00">%s</time><small>–%s</small></span>' %
                        (esc(day["date"]), day["scenario"]["preview"]["depart"],
                         day["scenario"]["preview"]["depart"], day["scenario"]["preview"]["arrive"]))
