@@ -16,7 +16,7 @@ from .template import embedded_json, renderer_css
 VERSION = "2"
 ASSETS = Path(__file__).resolve().parents[3] / "assets"
 # Frozen for renderer v2. Any output-affecting asset change needs a new format.
-PROFILE_ASSET_SHA256 = "31e8da016f74aea8b08aa665bd8c4c2ecd6ff7b183547c5bd3b2f10ba20a2c84"
+PROFILE_ASSET_SHA256 = "d1ab44cdae4f27908671d41135746128bb35bbd177622cb89238144564e663a4"
 
 LABELS = {
     "zh-CN": {

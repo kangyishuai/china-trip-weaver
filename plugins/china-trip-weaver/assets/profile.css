@@ -226,12 +226,12 @@ main#experience[data-route-size="short"]>.record{max-width:1000px;margin-left:au
   .legend i,.bar{background:transparent!important;background-image:none!important;box-shadow:none!important;
     border:2px solid currentColor!important;border-radius:0!important}
   .legend i{width:1rem;height:.75rem;vertical-align:middle}
-  .bar[data-role="transport"],.legend i:not(.place):not(.stay):not(.meal):not(.rest):not(.uncertain):not(.alert){color:var(--teal);border-style:solid!important}
-  .bar[data-role="place"],.legend i.place{color:var(--violet);border-style:dashed!important}
-  .bar[data-role="stay"],.legend i.stay{color:var(--gold);border-style:double!important;border-width:3px!important}
-  .bar[data-role="meal"],.legend i.meal{color:var(--ink);border-style:dotted!important}
-  .bar[data-role="rest"],.legend i.rest{color:var(--muted);border-style:solid!important;border-width:1px!important}
-  .bar[data-certainty="reference"],.legend i.uncertain{border-top-style:dashed!important;border-bottom-style:dashed!important}
+  .bar[data-role="transport"],.legend i:not(.place):not(.stay):not(.meal):not(.rest):not(.uncertain):not(.alert){color:var(--teal)}
+  .bar[data-role="place"],.legend i.place{color:var(--violet)}
+  .bar[data-role="stay"],.legend i.stay{color:var(--gold)}
+  .bar[data-role="meal"],.legend i.meal{color:var(--ink)}
+  .bar[data-role="rest"],.legend i.rest{color:var(--muted)}
+  .bar[data-certainty="reference"],.legend i.uncertain{border-style:dashed!important}
   .bar[data-certainty="needs-check"],.legend i.alert{outline:1px solid var(--coral)!important;outline-offset:1px}
   .day-detail,.issue-support,.record,.overview,.focus,#full-record .panel{break-inside:auto!important;page-break-inside:auto!important}
   .day-detail[hidden],.issue-support[hidden]{display:block!important}

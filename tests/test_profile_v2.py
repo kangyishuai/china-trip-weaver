@@ -92,8 +92,8 @@ class ProfileV2Tests(unittest.TestCase):
 
     def test_v2_fixture_bytes_guard_template_and_legacy_record_changes(self):
         expected = (
-            (self.trip, render_trip, 'demo/trip.html', '6eb6dcdddfd96e0a18e04778178d8d664e5c31991bbe96070ee1c0eed14f24af'),
-            (self.journey, render_journey, 'demo/journey-16d/journey.html', 'e6d6a895eb1f7ef56f0e0835bc4b2ac426b92ca2ce9a93e3eb89207c43318482'),
+            (self.trip, render_trip, 'demo/trip.html', '1f7495cacd51f0909c7b5669198c562a949cc45c4fdf984d31787c578c4d2c54'),
+            (self.journey, render_journey, 'demo/journey-16d/journey.html', '3c770c0bc66ce92a2d94f56d1dd63e7101404e8ef17c6483a52c033cdfa83d20'),
         )
         for source, render, path, digest in expected:
             with self.subTest(path=path):
@@ -302,6 +302,33 @@ class ProfileV2Tests(unittest.TestCase):
                                                            role_label, labels[certainty_keys[slot['certainty']]])), interval)
             self.assertIn(labels['print_reference'], page)
             self.assertIn(labels['print_unknown'], page)
+
+    def test_print_legend_cannot_confuse_role_with_evidence_status(self):
+        css = (ROOT / 'plugins/china-trip-weaver/assets/profile.css').read_text(encoding='utf-8')
+        print_css = css[css.rfind('@media print{'):]
+        self.assertIn('border:2px solid currentColor!important', print_css)
+        for role in ('transport', 'place', 'stay', 'meal', 'rest'):
+            rule = re.search(r'\.bar\[data-role="%s"\][^{]*\{([^}]+)\}' % role, print_css).group(1)
+            self.assertIn('color:', rule)
+            self.assertNotIn('border-', rule, (role, rule))
+            self.assertNotIn('outline:', rule, (role, rule))
+        reference_rule = re.search(r'\.bar\[data-certainty="reference"\][^{]*\{([^}]+)\}', print_css).group(1)
+        unknown_rule = re.search(r'\.bar\[data-certainty="needs-check"\][^{]*\{([^}]+)\}', print_css).group(1)
+        self.assertIn('.legend i.uncertain', print_css)
+        self.assertIn('border-style:dashed!important', reference_rule)
+        self.assertIn('.legend i.alert', print_css)
+        self.assertIn('outline:1px solid', unknown_rule)
+
+        verified_place = copy.deepcopy(self.trip)
+        claim = next(item for item in verified_place['claims'] if item['claim_id'] == 'claim-bjs-bund-hours')
+        claim.update({'status': 'verified', 'mode': 'live', 'as_of': claim['queried_at'], 'confidence': 1})
+        self.assertTrue(validate_trip(verified_place).ok)
+        page = render_trip(verified_place, renderer_version='2')
+        self.assertTrue(validate_html(page, verified_place).ok)
+        self.assertIn('data-role="place" data-certainty="verified"', page)
+        self.assertIn('16:00–18:00 · 地点 · 有来源', page)
+        journey = render_journey(self.journey, renderer_version='2')
+        self.assertIn('data-role="stay" data-certainty="reference"', journey)
 
     def test_budget_state_distinguishes_missing_quotes_from_a_real_zero(self):
         pending = {'budget': {'status': 'incomplete', 'known': 0, 'minimum': None, 'maximum': None, 'comparable_count': 0}}
