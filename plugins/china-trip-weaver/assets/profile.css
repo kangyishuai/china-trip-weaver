@@ -154,7 +154,7 @@ a.day-index[href]{display:grid}
 .issue-remaining,.issue-urgent{font-size:.75rem;margin:.35rem 0;color:var(--muted)}
 .issue-urgent{color:var(--coral);font-weight:700}
 .issue-details{margin-top:.45rem}.issue-details>summary{font-size:.78rem}
-.issue-group{padding:.5rem 0;border-top:1px solid var(--line-soft)}.issue-group h5{font-size:.79rem;margin:.2rem 0;color:var(--ink)}
+.issue-group{padding:.5rem 0;border-top:1px solid var(--line-soft)}.issue-group h3{font-size:.79rem;margin:.2rem 0;color:var(--ink)}
 .issue-details .issue-list{list-style:none;margin:0;padding:0}
 .issue-details .issue-list li{padding:.7rem 0;border-top:1px solid var(--line-soft)}
 .issue-details .issue-list strong,.issue-provider,.issue-reason,.issue-trace{display:block}

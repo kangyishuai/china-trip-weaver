@@ -92,8 +92,8 @@ class ProfileV2Tests(unittest.TestCase):
 
     def test_v2_fixture_bytes_guard_template_and_legacy_record_changes(self):
         expected = (
-            (self.trip, render_trip, 'demo/trip.html', '2dcd19fd0e3806fbccefafe6e615c9564a4d15c7bfda2f6f4acbdecd86b172e5'),
-            (self.journey, render_journey, 'demo/journey-16d/journey.html', 'd4536f5fa634c1ee2e5ac24074c2e6bae995d83afe7cdf538e8b402e140f76d9'),
+            (self.trip, render_trip, 'demo/trip.html', '42f8286762283ed29463e8a475440db37a4f20c35d8d6cf8e5f82726b7ad6d45'),
+            (self.journey, render_journey, 'demo/journey-16d/journey.html', '250df995867613aa63331ee4719e4eb32027ae31e5770715f85820b08b36d6e1'),
         )
         for source, render, path, digest in expected:
             with self.subTest(path=path):
@@ -248,6 +248,17 @@ class ProfileV2Tests(unittest.TestCase):
             self.assertEqual(expected_days, len(headings))
             self.assertNotIn('tabindex="0"', page)
             self.assertIn('id="full-record"', page)
+
+    def test_expanded_day_evidence_uses_heading_level_below_its_parent(self):
+        for source, render in ((self.trip, render_trip), (self.journey, render_journey)):
+            page = render(source, renderer_version='2')
+            supports = re.findall(r'<article class="issue-support"[^>]*>.*?</article>', page, re.S)
+            self.assertEqual(len(build_model(source)['days']), len(supports))
+            self.assertGreater(sum('class="issue-group"' in item for item in supports), 0)
+            for support in supports:
+                levels = re.findall(r'<h([1-6])(?:\s|>)', support)
+                self.assertEqual('2', levels[0])
+                self.assertTrue(all(level == '3' for level in levels[1:]), levels)
 
     def test_budget_state_distinguishes_missing_quotes_from_a_real_zero(self):
         pending = {'budget': {'status': 'incomplete', 'known': 0, 'minimum': None, 'maximum': None, 'comparable_count': 0}}

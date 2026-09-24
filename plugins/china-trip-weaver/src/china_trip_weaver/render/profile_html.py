@@ -16,7 +16,7 @@ from .template import embedded_json, renderer_css
 VERSION = "2"
 ASSETS = Path(__file__).resolve().parents[3] / "assets"
 # Frozen for renderer v2. Any output-affecting asset change needs a new format.
-PROFILE_ASSET_SHA256 = "3e7bc6f8b768f242e085eb5495aa8cd3bf32e721cbee47c26d89c5f12c13426d"
+PROFILE_ASSET_SHA256 = "9d1e201562b2f532d43b3caf1f3eb2dddcaa6a421837fc64dda0aa9fb5cacf86"
 
 LABELS = {
     "zh-CN": {
@@ -315,7 +315,7 @@ def _issues(day: Mapping[str, Any], labels: Mapping[str, str]) -> tuple[str, str
                             esc(item['id']), esc(item['claim_status']), esc(item['title']),
                             esc(item['provider']), esc(item['reason']), esc(trace),
                             '<div class="issue-source">%s</div>' % source if source else ''))
-        sections.append('<section class="issue-group" data-issue-topic="%s"><h5>%s · %d</h5>'
+        sections.append('<section class="issue-group" data-issue-topic="%s"><h3>%s · %d</h3>'
                         '<ol class="issue-list">%s</ol></section>' % (
                             esc(topic), esc(labels['topic_' + topic]), len(groups[topic]), ''.join(rows)))
     summary = ('<section class="issues" aria-label="%s"><div class="issues-head"><h4>%s</h4>'
