@@ -92,8 +92,8 @@ class ProfileV2Tests(unittest.TestCase):
 
     def test_v2_fixture_bytes_guard_template_and_legacy_record_changes(self):
         expected = (
-            (self.trip, render_trip, 'demo/trip.html', '53d00b432cbf6e97f8cac1493b92f4f4f491d71dd11c7368891aa7652bb573bf'),
-            (self.journey, render_journey, 'demo/journey-16d/journey.html', 'a45d3a9c56b5fccc9851c9d04ce0eab76a115d9eca89dc83a9a4b4bf612c4ba7'),
+            (self.trip, render_trip, 'demo/trip.html', '2dcd19fd0e3806fbccefafe6e615c9564a4d15c7bfda2f6f4acbdecd86b172e5'),
+            (self.journey, render_journey, 'demo/journey-16d/journey.html', 'd4536f5fa634c1ee2e5ac24074c2e6bae995d83afe7cdf538e8b402e140f76d9'),
         )
         for source, render, path, digest in expected:
             with self.subTest(path=path):
@@ -239,6 +239,15 @@ class ProfileV2Tests(unittest.TestCase):
         self.assertIn('class="noscript"', page)
         self.assertNotIn('data-day-detail="0" hidden', page)
         self.assertNotIn('data-day-support="0" hidden', page)
+
+    def test_each_selected_day_has_a_programmatic_focus_target(self):
+        for source, render in ((self.trip, render_trip), (self.journey, render_journey)):
+            page = render(source, renderer_version='2')
+            expected_days = len(source['days']) if 'days' in source else sum(len(trip['days']) for trip in source['trips'])
+            headings = re.findall(r'<article class="day-detail"[^>]*>.*?<h3 tabindex="-1">([^<]+)</h3>', page, re.S)
+            self.assertEqual(expected_days, len(headings))
+            self.assertNotIn('tabindex="0"', page)
+            self.assertIn('id="full-record"', page)
 
     def test_budget_state_distinguishes_missing_quotes_from_a_real_zero(self):
         pending = {'budget': {'status': 'incomplete', 'known': 0, 'minimum': None, 'maximum': None, 'comparable_count': 0}}

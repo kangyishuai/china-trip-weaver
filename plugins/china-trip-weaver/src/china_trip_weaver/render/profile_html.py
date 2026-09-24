@@ -16,7 +16,7 @@ from .template import embedded_json, renderer_css
 VERSION = "2"
 ASSETS = Path(__file__).resolve().parents[3] / "assets"
 # Frozen for renderer v2. Any output-affecting asset change needs a new format.
-PROFILE_ASSET_SHA256 = "02d7fc73814ab7fcc70d4e731cd1153e510fee9dc2994d7531b17e4056ca6db4"
+PROFILE_ASSET_SHA256 = "3e7bc6f8b768f242e085eb5495aa8cd3bf32e721cbee47c26d89c5f12c13426d"
 
 LABELS = {
     "zh-CN": {
@@ -46,7 +46,7 @@ LABELS = {
         "caveat": "只移动这段草案时间块；不代表存在另一班车，不重排后续时段，也不推断票价或实时衔接。",
         "unsupported": "这一天没有有依据的可移动交通试探。", "full": "完整行程与来源记录",
         "full_note": "展开交通、车站与余票、住宿与锁定、天气、餐饮、位置、预算、核验期限、未知项、来源和数据源状态。",
-        "noscript": "脚本未启用：以下全部日程及完整记录仍可阅读；时间试探不可用。",
+        "noscript": "脚本未启用：以下全部日程及完整记录仍可阅读；时间试探不可用。若浏览器打印时未自动展开来源，请先手动展开再打印。",
         "foot": "只读；不登录、提交身份、占库存、下单、支付、取消或退改。出行前复核官方来源。",
         "first_action": "先核对", "other_decisions": "住宿与预算", "route_details": "城市与停留日期",
         "no_leg_action": "查看当天安排与未定事项",
@@ -92,7 +92,7 @@ LABELS = {
         "caveat": "Only this proposed time block moves. This does not assert another service, rearrange later slots, or infer fares or real connections.",
         "unsupported": "No supported movable transport probe for this day.", "full": "Complete itinerary and source record",
         "full_note": "Expand transport, stations and seats, stays and fixed choices, weather, dining, locations, budget, deadlines, unknowns, evidence, and provider status.",
-        "noscript": "Scripts are off: every day and the complete record remain readable; the time probe is unavailable.",
+        "noscript": "Scripts are off: every day and the complete record remain readable; the time probe is unavailable. If your browser does not expand sources for print, open them before printing.",
         "foot": "Read-only. No login, identity submission, inventory hold, order, payment, cancellation, or changes. Verify official sources before travel.",
         "first_action": "Confirm first", "other_decisions": "Stay and budget", "route_details": "Cities and stay dates",
         "no_leg_action": "Review this day's plan and open details",
@@ -360,7 +360,7 @@ def _day(day: Mapping[str, Any], model: Mapping[str, Any], labels: Mapping[str, 
     price = _quote(day["stay_price"], labels) + separator + labels["checkout"] if day["stay_name"] else labels["no_overnight"]
     budget_title, budget_detail = _budget_summary(model, labels)
     return ('<article class="day-detail" id="focus-day-%d" data-day-detail="%d"><div class="day-identity">'
-            '<span class="number">%02d</span><div><h3>%s</h3><p>%s</p></div></div>'
+            '<span class="number">%02d</span><div><h3 tabindex="-1">%s</h3><p>%s</p></div></div>'
             '<div class="focus-metrics"><span><strong>%s</strong> %s</span><span><strong>%s</strong> %s</span>'
             '<span><strong>%d</strong> %s</span></div><ol class="agenda">%s</ol>%s'
             '<div class="context"><div class="context-item"><span class="section-id">%s</span><strong>%s</strong><small>%s %s</small></div>'

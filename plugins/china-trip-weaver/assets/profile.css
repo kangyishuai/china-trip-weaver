@@ -195,3 +195,28 @@ main#experience[data-route-size="short"]>.record{max-width:1000px;margin-left:au
   background:transparent;border:0;border-bottom:1px solid var(--line-soft);padding:.32rem 0;font-size:.78rem;line-height:1.4}
 .issue-highlights li::before{content:"";width:.25rem;height:.25rem;border-radius:50%;background:var(--muted);align-self:center}
 .issue-highlights li small{color:var(--muted);font-size:.73rem;white-space:nowrap;font-variant-numeric:tabular-nums}
+
+/* Programmatic day focus is visible without adding another Tab stop. */
+.day-identity h3:focus{outline:3px solid var(--coral);outline-offset:3px;border-radius:2px}
+
+@media print{
+  html,body{background:#fff!important;overflow:visible!important}
+  main#experience[data-route-size="short"]>.hero,
+  main#experience[data-route-size="short"]>.workspace,
+  main#experience[data-route-size="short"]>.support-collection,
+  main#experience[data-route-size="short"]>.record{max-width:none!important;margin-left:0!important;margin-right:0!important}
+  .workspace,.workspace[data-route-size="short"]{display:block!important;max-width:none!important;margin:0!important}
+  .workspace .focus,.workspace .overview{width:auto!important;margin:0 0 .75rem!important}
+  .day-detail,.issue-support,.record,.overview,.focus,#full-record .panel{break-inside:auto!important;page-break-inside:auto!important}
+  .day-detail[hidden],.issue-support[hidden]{display:block!important}
+  .day-identity,.issue-support h2,.record-context h2,.panel h2{break-after:avoid-page;page-break-after:avoid}
+  .agenda li,.issue-details li,.day-list li{break-inside:avoid-page;page-break-inside:avoid}
+  details,details::details-content{display:block!important;content-visibility:visible!important;height:auto!important}
+  details:not([open])>*:not(summary){display:block!important}
+  details summary::after{content:none!important}
+  [data-original-time][hidden]{display:block!important}
+  [data-shifted-time],.day-index.is-preview .preview-bar{display:none!important}
+  .day-index.is-preview .bar[data-scenario-source]{opacity:1!important}
+  .record{margin-bottom:.35rem!important;break-after:avoid-page}
+  .footer,.page-footer{break-before:avoid-page;padding-top:.4rem}
+}
