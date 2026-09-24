@@ -1675,7 +1675,7 @@ class JourneyContinuityTests(unittest.TestCase):
         journey = load(JOURNEY_DEMO / "journey.json")
         rendered = (JOURNEY_DEMO / "journey.html").read_text(encoding="utf-8")
         self.assertEqual(16, sum(len(item["days"]) for item in journey["trips"]))
-        self.assertEqual(render_journey(journey), rendered)
+        self.assertEqual(render_journey(journey, renderer_version="2"), rendered)
         report = validate_journey_html(rendered, journey)
         self.assertTrue(report.ok, [item.render() for item in report.errors])
 
@@ -1732,7 +1732,7 @@ class JourneyContinuityTests(unittest.TestCase):
                 [
                     sys.executable, str(ROOT / "scripts" / "qa_renderer_browser.py"),
                     str(JOURNEY_DEMO / "journey.html"), "--output", str(Path(temporary) / "qa"),
-                    "--viewports", "375x812,1440x900", "--sections", "16",
+                    "--viewports", "375x812,1440x900", "--sections", "15",
                 ],
                 text=True,
                 capture_output=True,

@@ -875,7 +875,7 @@ def _cmd_journey_render(args: argparse.Namespace) -> int:
 
     try:
         journey_value = read_json(args.journey)
-        rendered = render_journey(journey_value)
+        rendered = render_journey(journey_value, renderer_version="2")
         report = validate_journey_html(rendered, journey_value)
         if not report.ok:
             for issue in report.errors:
@@ -2171,7 +2171,7 @@ def _cmd_replan(args: argparse.Namespace) -> int:
         report = validate_trip(result.trip)
         if not report.ok:
             raise ValueError("replanned Trip is invalid: " + "; ".join(item.render() for item in report.errors))
-        rendered = render_trip(result.trip)
+        rendered = render_trip(result.trip, renderer_version="2")
         html_report = validate_html(rendered, result.trip)
         if not html_report.ok:
             raise ValueError("replanned HTML is invalid: " + "; ".join(item.render() for item in html_report.errors))
@@ -2205,7 +2205,7 @@ def _cmd_render(args: argparse.Namespace) -> int:
 
     try:
         trip = read_json(args.trip)
-        rendered = render_trip(trip)
+        rendered = render_trip(trip, renderer_version="2")
         report = validate_html(rendered, trip)
         if not report.ok:
             for issue in report.errors:

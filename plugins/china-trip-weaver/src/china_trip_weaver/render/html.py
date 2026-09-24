@@ -226,13 +226,17 @@ def _request_places(request: Mapping[str, Any]) -> List[Mapping[str, Any]]:
 
 
 def render_trip(trip: Mapping[str, Any], renderer_version: str = RENDERER_VERSION) -> str:
-    if renderer_version != RENDERER_VERSION:
+    if renderer_version not in (RENDERER_VERSION, "2"):
         raise RendererError("unsupported renderer version")
     report = validate_trip(trip)
     if not report.ok:
         raise RendererError("Trip is not validated: " + "; ".join(issue.render() for issue in report.errors))
     try:
-        return _render(trip)
+        legacy = _render(trip)
+        if renderer_version == "2":
+            from .profile_html import render_profile
+            return render_profile(trip, legacy)
+        return legacy
     except ValueError as exc:
         raise RendererError(str(exc)) from exc
 

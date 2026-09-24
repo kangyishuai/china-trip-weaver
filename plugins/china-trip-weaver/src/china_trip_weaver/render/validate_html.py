@@ -152,6 +152,18 @@ class AuditParser(HTMLParser):
 
 
 def validate_html(html_text: str, trip: Mapping[str, Any]) -> HTMLValidationReport:
+    from .profile_validate import is_profile_document
+    if is_profile_document(html_text):
+        from .html import RendererError, render_trip
+        from .profile_validate import validate_profile
+        try:
+            legacy = render_trip(trip, renderer_version="1")
+            legacy_report = validate_html(legacy, trip)
+            if not legacy_report.ok:
+                return legacy_report
+            return validate_profile(html_text, trip, legacy)
+        except (RendererError, ValueError, KeyError, TypeError) as exc:
+            return HTMLValidationReport((HTMLIssue("V204", "cannot derive v2 document: %s" % exc),))
     issues: List[HTMLIssue] = []
     parser = AuditParser()
     try:

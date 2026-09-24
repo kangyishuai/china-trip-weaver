@@ -93,6 +93,8 @@ class PackagingTests(unittest.TestCase):
             PLUGIN / "schema" / "trip.schema.json",
             PLUGIN / "schema" / "candidates.schema.json",
             PLUGIN / "assets" / "renderer.css",
+            PLUGIN / "assets" / "profile.css",
+            PLUGIN / "assets" / "profile.js",
             PLUGIN / "references" / "credentials.md",
             PLUGIN / "references" / "provider-contracts.md",
             PLUGIN / "references" / "candidates.example.json",

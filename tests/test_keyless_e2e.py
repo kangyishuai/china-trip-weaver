@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -360,7 +361,8 @@ class KeylessE2ETests(unittest.TestCase):
             {"minimum": 900, "maximum": 900},
             trip["transport_pricing"]["party_total_cny"],
         )
-        self.assertIn("<span>人数 3</span>", rendered)
+        record = rendered.split('<section class="record-context"', 1)[1].split('</section>', 1)[0]
+        self.assertIn('3 人', record)
         self.assertIn("北京（2 人）、广州（1 人）", rendered)
         trip_report = validate_trip(trip)
         html_report = validate_html(rendered, trip)
@@ -1634,8 +1636,16 @@ class KeylessE2ETests(unittest.TestCase):
 
     def test_html_has_no_transaction_controls(self):
         html = self.run_direct().html.lower()
-        for fragment in ("<form", "<button", "<input", "javascript:", "立即购买", "提交订单"):
+        for fragment in ("<form", "<input", "javascript:", "立即购买", "提交订单"):
             self.assertNotIn(fragment, html)
+        buttons = re.findall(r'<button\b([^>]*)>', html)
+        self.assertTrue(buttons)
+        for attrs in buttons:
+            self.assertIn('type="button"', attrs)
+            self.assertTrue(any(marker in attrs for marker in (
+                'data-prev-day="true"', 'data-next-day="true"',
+                'data-try="true"', 'data-undo="true"',
+            )), attrs)
 
 
 if __name__ == "__main__":

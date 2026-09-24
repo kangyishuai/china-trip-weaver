@@ -31,6 +31,20 @@ def validate_journey_html(
 ) -> HTMLValidationReport:
     """Validate a Journey page against its source and the shared offline shell."""
 
+    from .profile_validate import is_profile_document
+    if is_profile_document(html_text):
+        from .html import RendererError
+        from .journey_html import render_journey
+        from .profile_validate import validate_profile
+        try:
+            legacy = render_journey(journey, renderer_version="1")
+            legacy_report = validate_journey_html(legacy, journey)
+            if not legacy_report.ok:
+                return legacy_report
+            return validate_profile(html_text, journey, legacy)
+        except (RendererError, ValueError, KeyError, TypeError) as exc:
+            return HTMLValidationReport((HTMLIssue("V204", "cannot derive v2 document: %s" % exc),))
+
     parser = AuditParser()
     try:
         parser.feed(html_text)

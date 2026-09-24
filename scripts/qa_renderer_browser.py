@@ -12,6 +12,7 @@ import shutil
 import struct
 import subprocess
 import time
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
@@ -32,13 +33,48 @@ def default_chrome() -> Path:
 
 
 DEFAULT_VIEWPORTS = ((320, 812), (375, 812), (430, 900), (1440, 900))
+SECTION_COUNTS = {("1", "trip"): 12, ("1", "journey"): 16,
+                  ("2", "trip"): 11, ("2", "journey"): 15}
+
+
+class _PageIdentity(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.version: Optional[str] = None
+        self.kind: Optional[str] = None
+
+    def handle_starttag(self, tag: str, attributes: List[Tuple[str, Optional[str]]]) -> None:
+        values = dict(attributes)
+        if tag == "html":
+            self.version = values.get("data-renderer-version") or "1"
+        if values.get("data-section") in ("day-nav", "journey-nav"):
+            self.kind = "journey" if values["data-section"] == "journey-nav" else "trip"
+
+
+def expected_section_count(html_text: str) -> int:
+    """Select the exact v1/v2 Trip/Journey structure from parsed markup."""
+    identity = _PageIdentity()
+    identity.feed(html_text)
+    key = (identity.version, identity.kind)
+    if key not in SECTION_COUNTS:
+        raise ValueError("unknown renderer structure: %s" % (key,))
+    return SECTION_COUNTS[key]
 
 
 AUDIT_EXPRESSION = r"""(() => {
   scrollTo(0,0);
   const root=document.documentElement;
   const bodyStyle=getComputedStyle(document.body);
-  const links=[...document.querySelectorAll('a[href]')];
+  const operable=el => {
+    if (el.disabled || el.getAttribute('aria-disabled') === 'true' || el.closest('[hidden],[inert]')) return false;
+    for (let detail=el.closest('details:not([open])'); detail; detail=detail.parentElement && detail.parentElement.closest('details:not([open])')) {
+      const summary=detail.querySelector(':scope > summary');
+      if (!summary || !summary.contains(el)) return false;
+    }
+    if (getComputedStyle(el).visibility !== 'visible') return false;
+    return [...el.getClientRects()].some(rect => rect.width > 0 && rect.height > 0);
+  };
+  const targets=[...document.querySelectorAll('a[href],button,summary')].filter(operable);
   const headings=[...document.querySelectorAll('h1,h2,h3,h4,h5,h6')].map(node => Number(node.tagName.slice(1)));
   const headingJumps=headings.filter((level,index) => index && level > headings[index-1] + 1).length;
   const resources=performance.getEntriesByType('resource').map(entry => entry.name);
@@ -62,7 +98,8 @@ AUDIT_EXPRESSION = r"""(() => {
     internalOverflow,
     bodyFontPx:parseFloat(bodyStyle.fontSize),
     bodyLineHeightPx:parseFloat(bodyStyle.lineHeight),
-    minLinkHeight:links.length ? Math.min(...links.map(link => link.getBoundingClientRect().height)) : 999,
+    minTargetHeight:targets.length ? Math.min(...targets.map(target => target.getBoundingClientRect().height)) : 0,
+    visibleTargetCount:targets.length,
     sectionCount:sections.length,
     nonEmptySections:sections.filter(section => section.textContent.trim().length > 0).length,
     headingJumps,
@@ -185,7 +222,7 @@ def validate_report(report: Mapping[str, Any], width: int, errors: Sequence[str]
         "horizontal overflow": report.get("horizontalOverflow", 999) <= 1,
         "body font": report.get("bodyFontPx", 0) >= 16,
         "line height": report.get("bodyLineHeightPx", 0) / max(report.get("bodyFontPx", 1), 1) >= 1.45,
-        "touch targets": report.get("minLinkHeight", 0) >= 44,
+        "touch targets": report.get("visibleTargetCount", 0) > 0 and report.get("minTargetHeight", 0) >= 44,
         "%d sections" % sections: report.get("sectionCount") == sections and report.get("nonEmptySections") == sections,
         "heading order": report.get("headingJumps") == 0,
         "zero resource requests": report.get("resourceRequests") == [],
@@ -208,7 +245,9 @@ def console_errors(events: Sequence[Mapping[str, Any]]) -> List[str]:
     return errors
 
 
-def run_qa(html_path: Path, output: Path, chrome: Path, viewports: Sequence[Tuple[int, int]], sections: int = 12, handshake_timeout: float = 30.0) -> Mapping[str, Any]:
+def run_qa(html_path: Path, output: Path, chrome: Path, viewports: Sequence[Tuple[int, int]], sections: Optional[int] = None, handshake_timeout: float = 30.0) -> Mapping[str, Any]:
+    if sections is None:
+        sections = expected_section_count(html_path.read_text(encoding="utf-8"))
     if not chrome.is_file():
         raise RuntimeError("Chrome executable is absent: %s" % chrome)
     output.mkdir(parents=True, exist_ok=True)
@@ -311,11 +350,14 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--chrome", type=Path, default=None)
     parser.add_argument("--viewports", default=",".join("%dx%d" % item for item in DEFAULT_VIEWPORTS))
-    parser.add_argument("--sections", type=int, default=12, help="expected [data-section] count for this page (Trip: 12, Journey: 16)")
+    parser.add_argument("--sections", type=int, default=None, help="optional exact [data-section] count; checked against the parsed v1/v2 Trip/Journey contract")
     parser.add_argument("--handshake-timeout", type=float, default=30.0, help="seconds to wait for the first CDP handshake (Target.createTarget) before retrying once")
     args = parser.parse_args()
+    expected_sections = expected_section_count(args.html.read_text(encoding="utf-8"))
+    if args.sections is not None and args.sections != expected_sections:
+        parser.error("--sections %d disagrees with the page's %d-section renderer contract" % (args.sections, expected_sections))
     chrome = args.chrome or default_chrome()
-    result = run_qa(args.html.resolve(), args.output.resolve(), chrome, parse_viewports(args.viewports), args.sections, args.handshake_timeout)
+    result = run_qa(args.html.resolve(), args.output.resolve(), chrome, parse_viewports(args.viewports), expected_sections, args.handshake_timeout)
     print(json.dumps(result, ensure_ascii=False, sort_keys=True))
     return 1 if result["failures"] else 0
 
