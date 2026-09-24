@@ -199,6 +199,7 @@ main#experience[data-route-size="short"]>.record{max-width:1000px;margin-left:au
 /* Programmatic day focus is visible without adding another Tab stop. */
 .day-identity h3:focus{outline:3px solid var(--coral);outline-offset:3px;border-radius:2px}
 .print-row-axis,.print-intervals,.print-only,.print-legend-note{display:none}
+.print-issue-opening{display:none}
 
 @media print{
   html,body{background:#fff!important;overflow:visible!important}
@@ -235,19 +236,29 @@ main#experience[data-route-size="short"]>.record{max-width:1000px;margin-left:au
   .bar[data-certainty="needs-check"],.legend i.alert{outline:1px solid var(--coral)!important;outline-offset:1px}
   .day-detail,.issue-support,.record,.overview,.focus,#full-record .panel{break-inside:auto!important;page-break-inside:auto!important}
   .day-detail[hidden],.issue-support[hidden]{display:block!important}
-  .day-identity,.issue-support h2,.issue-details>summary,.issue-group h3,.record-context h2,.panel h2{
+  .day-identity,.issue-group h3,.record-context h2,.panel h2{
     break-after:avoid-page;page-break-after:avoid}
   .issue-group .issue-list{break-before:avoid-page;page-break-before:avoid}
   .issue-group .issue-list>li:first-child{break-before:avoid-page;page-break-before:avoid;
     break-inside:avoid-page;page-break-inside:avoid}
-  /* Flatten only the evidence opening across native details' print content box. */
-  .issue-support .issue-details,
-  .issue-support .issue-details::details-content,
-  .issue-support .issue-details>.issue-groups,
-  .issue-support .issue-groups>.issue-group:first-child,
-  .issue-support .issue-groups>.issue-group:first-child>.issue-list{display:contents!important}
-  .issue-support .issue-groups>.issue-group:first-child>h3{
+  .issue-support[data-print-opening]>.print-issue-opening{display:block!important;
+    break-inside:avoid-page!important;page-break-inside:avoid!important}
+  .issue-support[data-print-opening]>.print-issue-opening.is-long{
+    break-inside:auto!important;page-break-inside:auto!important}
+  .issue-support[data-print-opening]>h2,
+  .issue-support[data-print-opening] .issue-details>summary,
+  .issue-support[data-print-opening] .issue-groups>.issue-group:first-child>h3,
+  .issue-support[data-print-opening] .issue-groups>.issue-group:first-child>.issue-list>li:first-child{
+    display:none!important}
+  .issue-support[data-print-opening] .issue-groups>.issue-group:first-child{
+    border-top:0;padding-top:0}
+  .print-issue-opening>.print-issue-summary{font-size:.78rem;font-weight:700;color:var(--teal);
+    border-top:1px solid var(--line);padding-top:.4rem;margin:.4rem 0}
+  .print-issue-opening>h3{font-size:.79rem;margin:.2rem 0;color:var(--ink);
     border-top:1px solid var(--line-soft);padding-top:.5rem}
+  .print-issue-opening>.issue-list{list-style:none;margin:0;padding:0}
+  .print-issue-opening>.issue-list>li{padding:.7rem 0;border-top:1px solid var(--line-soft)}
+  .print-issue-opening>.issue-list strong{display:block;font-size:.83rem;color:var(--ink)}
   .agenda li,.day-list li{break-inside:avoid-page;page-break-inside:avoid}
   details,details::details-content{display:block!important;content-visibility:visible!important;height:auto!important}
   details:not([open])>*:not(summary){display:block!important}

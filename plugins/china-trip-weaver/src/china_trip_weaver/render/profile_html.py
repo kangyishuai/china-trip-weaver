@@ -16,7 +16,7 @@ from .template import embedded_json, renderer_css
 VERSION = "2"
 ASSETS = Path(__file__).resolve().parents[3] / "assets"
 # Frozen for renderer v2. Any output-affecting asset change needs a new format.
-PROFILE_ASSET_SHA256 = "3d1b53acf979e8dbd181d3f62c01267704ba4585840581caf6e8161388309faa"
+PROFILE_ASSET_SHA256 = "ebe38dae6d5723b055435c20370c8b673de2a23d4c116a19b815833da71d4fae"
 
 LABELS = {
     "zh-CN": {
@@ -311,13 +311,26 @@ def _issue_count(value: int, locale: str, full: bool = False) -> str:
     return '%d %s%s' % (value, 'source ' if full else '', 'record' if value == 1 else 'records')
 
 
+def _issue_row(item: Mapping[str, Any], labels: Mapping[str, str], print_copy: bool = False) -> str:
+    trace = ' · '.join(str(value) for value in (item['id'], item['field_path'], item['claim_id'], item['claim_status']) if value)
+    source = _link(item['source_href'], labels['source'])
+    marker = 'data-print-issue-id' if print_copy else 'data-issue-id'
+    return ('<li %s="%s" data-claim-status="%s"><strong>%s</strong>'
+            '<small class="issue-provider">%s</small><p class="issue-reason">%s</p>'
+            '<code class="issue-trace">%s</code>%s</li>' % (
+                marker, esc(item['id']), esc(item['claim_status']), esc(item['title']),
+                esc(item['provider']), esc(item['reason']), esc(trace),
+                '<div class="issue-source">%s</div>' % source if source else ''))
+
+
 def _issues(day: Mapping[str, Any], labels: Mapping[str, str]) -> tuple[str, str]:
     issues = day['issues']
     heading = '%s · %s' % (day['date'], day['city'])
-    support_start = '<article class="issue-support" id="support-day-%d" data-day-support="%d"><h2>%s</h2>' % (
-        day['index'], day['index'], esc(heading))
+    support_start = '<article class="issue-support" id="support-day-%d" data-day-support="%d"%s>' % (
+        day['index'], day['index'], ' data-print-opening="true"' if issues else '')
+    screen_heading = '<h2>%s</h2>' % esc(heading)
     if not issues:
-        return '', support_start + '<p>%s</p></article>' % esc(labels['issue_none'])
+        return '', support_start + screen_heading + '<p>%s</p></article>' % esc(labels['issue_none'])
     ordered = ('service', 'stay', 'transport', 'budget', 'place', 'other')
     groups = {topic: [item for item in issues if _issue_topic(item) == topic] for topic in ordered}
     present = [topic for topic in ordered if groups[topic]]
@@ -330,26 +343,26 @@ def _issues(day: Mapping[str, Any], labels: Mapping[str, str]) -> tuple[str, str
     urgent_text = ('<p class="issue-urgent">%s</p>' % esc(labels['issue_urgent'] % urgent)) if urgent else ''
     sections = []
     for topic in present:
-        rows = []
-        for item in groups[topic]:
-            trace = ' · '.join(str(value) for value in (item['id'], item['field_path'], item['claim_id'], item['claim_status']) if value)
-            source = _link(item['source_href'], labels['source'])
-            rows.append('<li data-issue-id="%s" data-claim-status="%s"><strong>%s</strong>'
-                        '<small class="issue-provider">%s</small><p class="issue-reason">%s</p>'
-                        '<code class="issue-trace">%s</code>%s</li>' % (
-                            esc(item['id']), esc(item['claim_status']), esc(item['title']),
-                            esc(item['provider']), esc(item['reason']), esc(trace),
-                            '<div class="issue-source">%s</div>' % source if source else ''))
+        rows = [_issue_row(item, labels) for item in groups[topic]]
         sections.append('<section class="issue-group" data-issue-topic="%s"><h3>%s · %d</h3>'
                         '<ol class="issue-list">%s</ol></section>' % (
                             esc(topic), esc(labels['topic_' + topic]), len(groups[topic]), ''.join(rows)))
+    first_topic = present[0]
+    first_item = groups[first_topic][0]
+    first_length = sum(len(str(first_item.get(key) or '')) for key in ('title', 'provider', 'reason', 'field_path', 'claim_id'))
+    print_opening = ('<div class="print-issue-opening%s" data-print-day="%d"><h2>%s</h2>'
+                     '<p class="print-issue-summary">%s</p><h3>%s · %d</h3>'
+                     '<ol class="issue-list">%s</ol></div>' % (
+                         ' is-long' if first_length > 900 else '', day['index'], esc(heading),
+                         esc(labels['issue_all'] % len(issues)), esc(labels['topic_' + first_topic]),
+                         len(groups[first_topic]), _issue_row(first_item, labels, print_copy=True)))
     summary = ('<section class="issues" aria-label="%s"><div class="issues-head"><h4>%s</h4>'
             '<span>%s</span></div><ul class="issue-highlights">%s</ul>%s%s'
             '<a class="issue-jump" href="#support-day-%d">%s</a></section>' % (
                 esc(labels['issue_heading']), esc(labels['issue_heading']),
                 esc(_issue_count(len(issues), labels['locale'], True)), highlights,
                 remaining_text, urgent_text, day['index'], esc(labels['issue_jump'] % len(issues))))
-    evidence = support_start + ('<details class="issue-details"><summary>%s</summary>'
+    evidence = support_start + print_opening + screen_heading + ('<details class="issue-details"><summary>%s</summary>'
                                 '<div class="issue-groups">%s</div></details></article>' % (
                                     esc(labels['issue_all'] % len(issues)), ''.join(sections)))
     return summary, evidence

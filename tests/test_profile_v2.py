@@ -92,8 +92,8 @@ class ProfileV2Tests(unittest.TestCase):
 
     def test_v2_fixture_bytes_guard_template_and_legacy_record_changes(self):
         expected = (
-            (self.trip, render_trip, 'demo/trip.html', 'ec153184666784ad76f8d799af3c8aae71d532c7021b13cffe075b8ebaef32c1'),
-            (self.journey, render_journey, 'demo/journey-16d/journey.html', '763568b4856d2c521c07b489c5d09ae8de0b85dfde98aceb582a9a79e795ffcb'),
+            (self.trip, render_trip, 'demo/trip.html', 'b1591f14152ffce4f6e58fad463e3e9a5a1467f00e7b9a5aa9f5ba8dedbc4cb5'),
+            (self.journey, render_journey, 'demo/journey-16d/journey.html', '214fc9a661f490f5f72468667e9d5c76e2f9d08a1e9750ce43f5ceafe8780764'),
         )
         for source, render, path, digest in expected:
             with self.subTest(path=path):
@@ -256,7 +256,8 @@ class ProfileV2Tests(unittest.TestCase):
             self.assertEqual(len(build_model(source)['days']), len(supports))
             self.assertGreater(sum('class="issue-group"' in item for item in supports), 0)
             for support in supports:
-                levels = re.findall(r'<h([1-6])(?:\s|>)', support)
+                screen = '<h2>' + support.split('</div><h2>', 1)[1] if 'class="print-issue-opening' in support else support
+                levels = re.findall(r'<h([1-6])(?:\s|>)', screen)
                 self.assertEqual('2', levels[0])
                 self.assertTrue(all(level == '3' for level in levels[1:]), levels)
 
@@ -339,7 +340,7 @@ class ProfileV2Tests(unittest.TestCase):
                 if '<details class="issue-details">' not in support:
                     self.assertIn('<h2>', support)
                     continue
-                opening = re.search(r'<h2>[^<]+</h2><details class="issue-details"><summary>[^<]+</summary>'
+                opening = re.search(r'</div><h2>[^<]+</h2><details class="issue-details"><summary>[^<]+</summary>'
                                     r'<div class="issue-groups"><section class="issue-group"[^>]*><h3>[^<]+</h3>'
                                     r'<ol class="issue-list"><li data-issue-id="[^"]+"', support)
                 self.assertIsNotNone(opening, support[:500])
@@ -354,12 +355,60 @@ class ProfileV2Tests(unittest.TestCase):
 
         css = (ROOT / 'plugins/china-trip-weaver/assets/profile.css').read_text(encoding='utf-8')
         print_css = css[css.rfind('@media print{'):]
-        for selector in ('.issue-support .issue-details::details-content',
-                         '.issue-support .issue-groups>.issue-group:first-child>.issue-list'):
+        for selector in ('.issue-support[data-print-opening]>.print-issue-opening',
+                         '.issue-support[data-print-opening] .issue-groups>.issue-group:first-child>.issue-list>li:first-child'):
             self.assertIn(selector, print_css)
-        self.assertIn('display:contents!important', print_css)
+        self.assertIn('break-inside:avoid-page!important', print_css)
         self.assertIn('#full-record .day-nav ul{display:flex!important;flex-wrap:wrap!important', print_css)
         self.assertIn('#full-record .day-nav{display:block!important;overflow:visible!important', print_css)
+
+    def test_print_opening_has_one_complete_first_record_per_mode(self):
+        topics = ('service', 'stay', 'transport', 'budget', 'place', 'other')
+        for source, render in ((self.trip, render_trip), (self.journey, render_journey)):
+            model = build_model(source)
+            page = render(source, renderer_version='2')
+            supports = re.findall(r'<article class="issue-support"[^>]*>.*?</article>', page, re.S)
+            for day, support in zip(model['days'], supports):
+                expected = [item['id'] for topic in topics for item in day['issues']
+                            if profile_html._issue_topic(item) == topic]
+                screen_ids = re.findall(r'data-issue-id="([^"]+)"', support)
+                self.assertEqual(expected, screen_ids)
+                if not expected:
+                    self.assertNotIn('class="print-issue-opening', support)
+                    self.assertNotIn('data-print-issue-id=', support)
+                    continue
+                self.assertEqual(1, support.count('class="print-issue-opening'))
+                opening, screen = support.split('</ol></div><h2>', 1)
+                screen = '<h2>' + screen
+                self.assertNotRegex(opening.split('<div class="print-issue-opening', 1)[1],
+                                    r'(?:^|[\s<])id="')
+                self.assertIn('data-print-day="%d"' % day['index'], opening)
+                self.assertEqual([expected[0]], re.findall(r'data-print-issue-id="([^"]+)"', opening))
+                self.assertEqual(expected, [expected[0]] + screen_ids[1:])
+                first_print = re.search(r'<li data-print-issue-id="[^"]+".*?</li>', opening, re.S).group(0)
+                first_screen = re.search(r'<li data-issue-id="[^"]+".*?</li>', screen, re.S).group(0)
+                self.assertEqual(first_screen, first_print.replace('data-print-issue-id', 'data-issue-id', 1))
+                self.assertEqual(re.search(r'<h2>([^<]+)</h2>', opening).group(1),
+                                 re.search(r'<h2>([^<]+)</h2>', screen).group(1))
+                self.assertEqual(re.search(r'<p class="print-issue-summary">([^<]+)</p>', opening).group(1),
+                                 re.search(r'<summary>([^<]+)</summary>', screen).group(1))
+                self.assertEqual(re.search(r'<h3>([^<]+)</h3>', opening).group(1),
+                                 re.search(r'<h3>([^<]+)</h3>', screen).group(1))
+
+        day = copy.deepcopy(build_model(self.trip)['days'][0])
+        day['issues'] = []
+        _, empty = profile_html._issues(day, LABELS['zh-CN'])
+        self.assertNotIn('print-issue-opening', empty)
+        day['issues'] = build_model(self.trip)['days'][0]['issues'][:1]
+        _, single = profile_html._issues(day, LABELS['zh-CN'])
+        self.assertEqual(1, single.count('data-print-issue-id='))
+        self.assertEqual(1, single.count('data-issue-id='))
+        day['issues'][0]['reason'] = 'long source explanation ' * 200
+        _, long_first = profile_html._issues(day, LABELS['zh-CN'])
+        self.assertIn('class="print-issue-opening is-long"', long_first)
+        css = (ROOT / 'plugins/china-trip-weaver/assets/profile.css').read_text(encoding='utf-8')
+        self.assertIn('.print-issue-opening.is-long{', css)
+        self.assertIn('break-inside:auto!important;page-break-inside:auto!important', css)
 
     def test_budget_state_distinguishes_missing_quotes_from_a_real_zero(self):
         pending = {'budget': {'status': 'incomplete', 'known': 0, 'minimum': None, 'maximum': None, 'comparable_count': 0}}
