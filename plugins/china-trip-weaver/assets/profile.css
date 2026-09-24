@@ -240,6 +240,14 @@ main#experience[data-route-size="short"]>.record{max-width:1000px;margin-left:au
   .issue-group .issue-list{break-before:avoid-page;page-break-before:avoid}
   .issue-group .issue-list>li:first-child{break-before:avoid-page;page-break-before:avoid;
     break-inside:avoid-page;page-break-inside:avoid}
+  /* Flatten only the evidence opening across native details' print content box. */
+  .issue-support .issue-details,
+  .issue-support .issue-details::details-content,
+  .issue-support .issue-details>.issue-groups,
+  .issue-support .issue-groups>.issue-group:first-child,
+  .issue-support .issue-groups>.issue-group:first-child>.issue-list{display:contents!important}
+  .issue-support .issue-groups>.issue-group:first-child>h3{
+    border-top:1px solid var(--line-soft);padding-top:.5rem}
   .agenda li,.day-list li{break-inside:avoid-page;page-break-inside:avoid}
   details,details::details-content{display:block!important;content-visibility:visible!important;height:auto!important}
   details:not([open])>*:not(summary){display:block!important}
@@ -248,5 +256,11 @@ main#experience[data-route-size="short"]>.record{max-width:1000px;margin-left:au
   [data-shifted-time],.day-index.is-preview .preview-bar{display:none!important}
   .day-index.is-preview .bar[data-scenario-source]{opacity:1!important}
   .record{margin-bottom:.35rem!important;break-after:avoid-page}
+  #full-record .day-nav{display:block!important;overflow:visible!important;max-width:100%!important}
+  #full-record .day-nav ul{display:flex!important;flex-wrap:wrap!important;max-width:100%!important;
+    min-width:0!important;gap:.35rem .5rem!important}
+  #full-record .day-nav li{max-width:100%;min-width:0;break-inside:avoid-page;page-break-inside:avoid}
+  #full-record .day-nav a{display:inline-block;max-width:100%;white-space:normal!important;
+    overflow-wrap:anywhere}
   .footer,.page-footer{break-before:avoid-page;padding-top:.4rem}
 }

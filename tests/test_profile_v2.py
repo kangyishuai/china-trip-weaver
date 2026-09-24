@@ -92,8 +92,8 @@ class ProfileV2Tests(unittest.TestCase):
 
     def test_v2_fixture_bytes_guard_template_and_legacy_record_changes(self):
         expected = (
-            (self.trip, render_trip, 'demo/trip.html', '1f7495cacd51f0909c7b5669198c562a949cc45c4fdf984d31787c578c4d2c54'),
-            (self.journey, render_journey, 'demo/journey-16d/journey.html', '3c770c0bc66ce92a2d94f56d1dd63e7101404e8ef17c6483a52c033cdfa83d20'),
+            (self.trip, render_trip, 'demo/trip.html', 'ec153184666784ad76f8d799af3c8aae71d532c7021b13cffe075b8ebaef32c1'),
+            (self.journey, render_journey, 'demo/journey-16d/journey.html', '763568b4856d2c521c07b489c5d09ae8de0b85dfde98aceb582a9a79e795ffcb'),
         )
         for source, render, path, digest in expected:
             with self.subTest(path=path):
@@ -329,6 +329,37 @@ class ProfileV2Tests(unittest.TestCase):
         self.assertIn('16:00–18:00 · 地点 · 有来源', page)
         journey = render_journey(self.journey, renderer_version='2')
         self.assertIn('data-role="stay" data-certainty="reference"', journey)
+
+    def test_print_evidence_openings_and_full_record_nav_are_complete(self):
+        for source, render in ((self.trip, render_trip), (self.journey, render_journey)):
+            page = render(source, renderer_version='2')
+            supports = re.findall(r'<article class="issue-support"[^>]*>.*?</article>', page, re.S)
+            self.assertEqual(len(build_model(source)['days']), len(supports))
+            for support in supports:
+                if '<details class="issue-details">' not in support:
+                    self.assertIn('<h2>', support)
+                    continue
+                opening = re.search(r'<h2>[^<]+</h2><details class="issue-details"><summary>[^<]+</summary>'
+                                    r'<div class="issue-groups"><section class="issue-group"[^>]*><h3>[^<]+</h3>'
+                                    r'<ol class="issue-list"><li data-issue-id="[^"]+"', support)
+                self.assertIsNotNone(opening, support[:500])
+
+        page = render_journey(self.journey, renderer_version='2')
+        nav = re.search(r'<nav class="day-nav" data-section="journey-nav"[^>]*>.*?</nav>', page, re.S).group(0)
+        hrefs = re.findall(r'<a href="#([^"]+)"', nav)
+        self.assertEqual(10 + len(build_model(self.journey)['days']), len(hrefs))
+        self.assertEqual(len(hrefs), len(set(hrefs)))
+        ids = set(re.findall(r'\bid="([^"]+)"', page))
+        self.assertTrue(set(hrefs).issubset(ids))
+
+        css = (ROOT / 'plugins/china-trip-weaver/assets/profile.css').read_text(encoding='utf-8')
+        print_css = css[css.rfind('@media print{'):]
+        for selector in ('.issue-support .issue-details::details-content',
+                         '.issue-support .issue-groups>.issue-group:first-child>.issue-list'):
+            self.assertIn(selector, print_css)
+        self.assertIn('display:contents!important', print_css)
+        self.assertIn('#full-record .day-nav ul{display:flex!important;flex-wrap:wrap!important', print_css)
+        self.assertIn('#full-record .day-nav{display:block!important;overflow:visible!important', print_css)
 
     def test_budget_state_distinguishes_missing_quotes_from_a_real_zero(self):
         pending = {'budget': {'status': 'incomplete', 'known': 0, 'minimum': None, 'maximum': None, 'comparable_count': 0}}
