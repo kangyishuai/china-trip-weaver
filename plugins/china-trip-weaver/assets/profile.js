@@ -22,6 +22,7 @@
   const english = document.documentElement.lang === "en";
   const rows = Array.from(document.querySelectorAll("[data-select-day]"));
   const panels = Array.from(document.querySelectorAll("[data-day-detail]"));
+  const supportPanels = Array.from(document.querySelectorAll("[data-day-support]"));
   const previous = document.querySelector("[data-prev-day]");
   const next = document.querySelector("[data-next-day]");
   const position = document.querySelector("[data-day-position]");
@@ -47,6 +48,7 @@
         node.hidden = index === state.day && state.preview;
       });
     });
+    supportPanels.forEach((panel, index) => { panel.hidden = index !== state.day; });
     const selected = model.days[state.day];
     if (previous) previous.disabled = state.day === 0;
     if (next) next.disabled = state.day === model.days.length - 1;

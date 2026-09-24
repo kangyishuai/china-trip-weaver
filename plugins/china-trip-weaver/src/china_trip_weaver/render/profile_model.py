@@ -108,6 +108,7 @@ def _related_unknowns(trip: Mapping[str, Any], day_index: int, refs: set[str], n
             "reason": item["reason"],
             "field_path": pointer,
             "provider": item.get("provider") or ("Not supplied" if trip["request"]["locale"] == "en" else "未提供"),
+            "claim_id": item.get("claim_id"),
             "claim_status": claim["status"] if claim else "unknown",
             "source_href": safe_href(claim.get("source_url")) if claim else None,
         })

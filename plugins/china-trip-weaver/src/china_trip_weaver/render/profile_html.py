@@ -16,17 +16,19 @@ from .template import embedded_json, renderer_css
 VERSION = "2"
 ASSETS = Path(__file__).resolve().parents[3] / "assets"
 # Frozen for renderer v2. Any output-affecting asset change needs a new format.
-PROFILE_ASSET_SHA256 = "64036261736a937a1fcb509ce0fb8a394ce39e7bf2318a2da7d05caf37217c30"
+PROFILE_ASSET_SHA256 = "2451d812341152e9a3cc300368162a36baeed1aee39715d09a939e33c58dbb71"
 
 LABELS = {
     "zh-CN": {
-        "skip": "跳到旅程剖面", "readonly": "只读行程 · 根据来源核验", "kicker": "路线、时间、决定，在同一视野",
+        "locale": "zh-CN",
+        "skip": "跳到当天安排", "readonly": "只读行程", "kicker": "路线、时间、决定，在同一视野",
         "days": "天", "travelers": "人", "route": "按顺序经过的城市，非地理地图", "origin": "出发地", "first": "先确认这段交通",
         "stay": "当晚落点", "budget": "预算边界", "none_transport": "没有已排跨城交通", "verify_service": "按日期复核真实车次与价格",
         "no_stay": "这一天无过夜住宿", "known_cost": "可比较金额", "unknown_total": "总额仍未知；缺价不按零计算",
-        "range": "总额范围已列出", "context": "一天的上下文", "overview": "时间与城市，一眼相连",
-        "overview_note": "同一刻度只画已排占用；自由时段留白。选一天，看时间与关联事实。",
-        "transport": "交通", "place": "地点", "lodging": "住宿", "reference": "斜纹＝静态/待证",
+        "range": "总额范围已列出", "context": "当天安排", "overview": "全程时间图",
+        "overview_note": "同一刻度展示已排占用；留白是未安排时间。选一天看具体安排。",
+        "transport": "交通", "place": "地点", "lodging": "住宿", "meal": "用餐", "rest": "休息", "open_legend": "留白＝未安排",
+        "reference": "斜纹＝静态/待证",
         "unknown": "红框＝具体未知", "excluded": "备选／未采用不计入横带", "day": "第 %d 天", "excluded_n": "另有 %d 条未纳入图带",
         "open": "空档", "scheduled": "已排", "prev": "← 前一天", "next": "后一天 →", "view_overview": "查看全程图 ↓",
         "first_day": "旅程起点", "last_day": "旅程终点", "adjacent_prev": "前一天", "adjacent_next": "后一天",
@@ -46,15 +48,30 @@ LABELS = {
         "full_note": "展开交通、车站与余票、住宿与锁定、天气、餐饮、位置、预算、核验期限、未知项、来源和数据源状态。",
         "noscript": "脚本未启用：以下全部日程及完整记录仍可阅读；时间试探不可用。",
         "foot": "只读；不登录、提交身份、占库存、下单、支付、取消或退改。出行前复核官方来源。",
+        "first_action": "先核对", "other_decisions": "住宿与预算", "route_details": "城市与停留日期",
+        "no_leg_action": "查看当天安排与未定事项",
+        "budget_pending": "总额待核验", "budget_empty": "尚无可比较报价；已知部分 ¥0，缺价不按零计算",
+        "budget_unavailable": "尚无可核验报价；总额不能按零计算",
+        "budget_partial": "已可比较 ¥%s；仍有缺价，不能当作总额", "budget_final": "已知总额 ¥%s",
+        "budget_complete_range": "总额区间 ¥%s–¥%s",
+        "issue_heading": "出发前要核对", "issue_all": "查看全部 %d 条原始记录与来源",
+        "issue_jump": "查看 %d 条核验依据 ↓", "issue_none": "当天没有关联的未知记录",
+        "issue_more": "另有 %d 条可展开", "issue_urgent": "其中 %d 条来源冲突、失效或不可用",
+        "topic_service": "核对实际车次与余票", "topic_transport": "核对交通费用与衔接",
+        "topic_stay": "核对住宿报价与条件", "topic_budget": "补齐预算缺价",
+        "topic_place": "核对地点与用餐信息", "topic_other": "核对其他未定信息",
+        "issue_origin": "原始记录", "page_format": "页面格式 v2",
     },
     "en": {
-        "skip": "Skip to journey profile", "readonly": "Read-only plan · verify sources", "kicker": "Route, time, and decisions together",
+        "locale": "en",
+        "skip": "Skip to today's plan", "readonly": "Read-only plan", "kicker": "Route, time, and decisions together",
         "days": "days", "travelers": "travelers", "route": "Cities in visit order, not a geographic map", "origin": "Origin", "first": "Confirm this leg",
         "stay": "Tonight's stay", "budget": "Budget boundary", "none_transport": "No scheduled intercity leg", "verify_service": "Verify the actual service and price for this date",
         "no_stay": "No overnight stay", "known_cost": "Comparable cost", "unknown_total": "Total still unknown; missing prices are not zero",
-        "range": "Total range is stated", "context": "One day's context", "overview": "Time across the route",
-        "overview_note": "One scale shows scheduled occupied time; free time stays open. Select a day for its facts.",
-        "transport": "Transport", "place": "Place", "lodging": "Stay", "reference": "Hatching = reference/unverified",
+        "range": "Total range is stated", "context": "Today's plan", "overview": "Whole-route time",
+        "overview_note": "One scale shows scheduled occupied time; blank space is unplanned. Select a day for details.",
+        "transport": "Transport", "place": "Place", "lodging": "Stay", "meal": "Meal", "rest": "Rest", "open_legend": "Blank = unplanned",
+        "reference": "Hatching = reference/unverified",
         "unknown": "Red outline = specific unknown", "excluded": "Alternatives and skipped items are outside the bars", "day": "Day %d",
         "excluded_n": "%d other items outside bars", "open": "open", "scheduled": "scheduled", "prev": "← Previous day",
         "next": "Next day →", "view_overview": "View whole route ↓", "first_day": "Journey start", "last_day": "Journey end",
@@ -76,6 +93,19 @@ LABELS = {
         "full_note": "Expand transport, stations and seats, stays and fixed choices, weather, dining, locations, budget, deadlines, unknowns, evidence, and provider status.",
         "noscript": "Scripts are off: every day and the complete record remain readable; the time probe is unavailable.",
         "foot": "Read-only. No login, identity submission, inventory hold, order, payment, cancellation, or changes. Verify official sources before travel.",
+        "first_action": "Confirm first", "other_decisions": "Stay and budget", "route_details": "Cities and stay dates",
+        "no_leg_action": "Review this day's plan and open details",
+        "budget_pending": "Total to verify", "budget_empty": "No comparable quote yet; known part ¥0, missing prices are not zero",
+        "budget_unavailable": "No verified quote yet; the total is not zero",
+        "budget_partial": "Comparable part ¥%s; missing prices prevent a total", "budget_final": "Known total ¥%s",
+        "budget_complete_range": "Total range ¥%s–¥%s",
+        "issue_heading": "Check before travel", "issue_all": "View all %d source records",
+        "issue_jump": "View %d source records ↓", "issue_none": "No related unknown records for this day",
+        "issue_more": "%d more records available", "issue_urgent": "%d conflicting, stale, or unavailable sources",
+        "topic_service": "Verify service and seats", "topic_transport": "Verify transport cost and connection",
+        "topic_stay": "Verify stay price and terms", "topic_budget": "Fill budget price gaps",
+        "topic_place": "Verify place and dining details", "topic_other": "Verify other open details",
+        "issue_origin": "Raw record", "page_format": "Page format v2",
     },
 }
 
@@ -120,6 +150,37 @@ def _quote(price: Mapping[str, Any] | None, labels: Mapping[str, str]) -> str:
     return "%s %s%s · %s" % (labels[kind], currency, price["amount"], labels[unit])
 
 
+def _duration(minutes: int, locale: str, compact: bool = False) -> str:
+    hours, rest = divmod(minutes, 60)
+    if locale == 'zh-CN':
+        if hours:
+            return ('%d时%d分' if compact else '%d小时%d分钟') % (hours, rest) if rest else '%d小时' % hours
+        return ('%d分' if compact else '%d分钟') % rest
+    if hours:
+        return '%dh %dm' % (hours, rest) if rest else '%dh' % hours
+    return '%dm' % rest
+
+
+def _budget_summary(model: Mapping[str, Any], labels: Mapping[str, str]) -> tuple[str, str]:
+    budget = model['budget']
+    known = budget['known']
+    if budget['status'] == 'incomplete':
+        if known is None:
+            detail = labels['budget_unavailable']
+        elif known == 0:
+            detail = labels['budget_empty']
+        else:
+            detail = labels['budget_partial'] % known
+        return labels['budget_pending'], detail
+    minimum, maximum = budget['minimum'], budget['maximum']
+    if minimum is not None and maximum is not None and minimum != maximum:
+        return labels['range'], labels['budget_complete_range'] % (minimum, maximum)
+    amount = maximum if maximum is not None else known
+    if amount is None:
+        return labels['budget_pending'], labels['budget_unavailable']
+    return labels['budget_final'] % amount, labels['range']
+
+
 def _link(url: str | None, label: str) -> str:
     href = safe_href(url)
     return '<a href="%s" rel="noopener noreferrer" target="_blank">%s</a>' % (esc(href), esc(label)) if href else ""
@@ -145,7 +206,7 @@ def _bar(day: Mapping[str, Any], axis: Mapping[str, int]) -> str:
     return '<span class="track" aria-hidden="true">%s</span>' % "".join(spans)
 
 
-def _overview(model: Mapping[str, Any], labels: Mapping[str, str]) -> str:
+def _overview(model: Mapping[str, Any], labels: Mapping[str, str], route_html: str) -> str:
     axis = model["axis"]
     ticks = [axis["start"]] + list(range((axis["start"] // 360 + 1) * 360, axis["end"], 360)) + [axis["end"]]
     marks = ''.join('<span class="axis-tick%s" style="left:%.3f%%">%s</span>' %
@@ -156,17 +217,21 @@ def _overview(model: Mapping[str, Any], labels: Mapping[str, str]) -> str:
         side = labels["excluded_n"] % day["inactive_count"] if day["inactive_count"] else ""
         rows.append('<li><a class="day-index" href="#focus-day-%d" data-select-day="%d"%s>'
                     '<span class="day-label"><strong>%s · %s</strong><small>%s %s</small></span>%s'
-                    '<span class="day-meter"><strong>%dm</strong><span>%s %dm</span></span></a></li>' %
+                    '<span class="day-meter"><strong>%s</strong><span>%s %s</span></span></a></li>' %
                     (day["index"], day["index"], ' aria-current="date"' if day["index"] == 0 else '',
                      esc(day["date"]), esc(day["city"]), esc(labels["day"] % (day["index"]+1)), esc(side),
-                     _bar(day, axis), day["occupied_minutes"], esc(labels["open"]), day["open_minutes"]))
+                     _bar(day, axis), esc(_duration(day["occupied_minutes"], labels["locale"], True)),
+                     esc(labels["open"]), esc(_duration(day["open_minutes"], labels["locale"], True))))
     legend = ''.join('<span><i class="%s"></i>%s</span>' % (cls, esc(labels[key])) for cls, key in
-                     (("", "transport"), ("place", "place"), ("stay", "lodging"), ("uncertain", "reference"), ("alert", "unknown")))
-    return ('<section class="overview" aria-labelledby="overview-title"><div class="overview-head"><span class="section-id">WHOLE ROUTE</span>'
+                     (("", "transport"), ("place", "place"), ("stay", "lodging"), ("meal", "meal"),
+                      ("rest", "rest"), ("uncertain", "reference"), ("alert", "unknown")))
+    return ('<section class="overview" aria-labelledby="overview-title"><div class="overview-head">'
             '<h2 id="overview-title">%s</h2><p class="section-note">%s</p></div>'
+            '<details class="route-details"><summary>%s</summary>%s</details>'
             '<div class="axis-row"><span class="axis-spacer"></span><div class="axis-track">%s</div><span class="axis-spacer"></span></div>'
-            '<div class="legend">%s<span class="legend-exception">%s</span></div><ol class="day-list">%s</ol></section>' %
-            (esc(labels["overview"]), esc(labels["overview_note"]), marks, legend, esc(labels["excluded"]), ''.join(rows)))
+            '<div class="legend">%s<span class="legend-exception">%s · %s</span></div><ol class="day-list">%s</ol></section>' %
+            (esc(labels["overview"]), esc(labels["overview_note"]), esc(labels["route_details"]), route_html,
+             marks, legend, esc(labels["open_legend"]), esc(labels["excluded"]), ''.join(rows)))
 
 
 def _scenario(day: Mapping[str, Any], labels: Mapping[str, str]) -> str:
@@ -196,6 +261,60 @@ def _scenario(day: Mapping[str, Any], labels: Mapping[str, str]) -> str:
              esc(labels["try"]), esc(impact), preview["depart"], preview["arrive"], esc(baseline), esc(labels["caveat"]), esc(labels["undo"])))
 
 
+def _issue_topic(item: Mapping[str, Any]) -> str:
+    path = item['field_path']
+    if '/transport_legs/' in path:
+        return 'service' if path.endswith(('/service_number', '/availability')) else 'transport'
+    if '/lodgings/' in path:
+        return 'stay'
+    if '/budget_ledger/' in path:
+        return 'budget'
+    if '/pois/' in path:
+        return 'place'
+    return 'other'
+
+
+def _issues(day: Mapping[str, Any], labels: Mapping[str, str]) -> tuple[str, str]:
+    issues = day['issues']
+    heading = '%s · %s' % (day['date'], day['city'])
+    support_start = '<article class="issue-support" id="support-day-%d" data-day-support="%d"><h2>%s</h2>' % (
+        day['index'], day['index'], esc(heading))
+    if not issues:
+        return '', support_start + '<p>%s</p></article>' % esc(labels['issue_none'])
+    ordered = ('service', 'stay', 'transport', 'budget', 'place', 'other')
+    groups = {topic: [item for item in issues if _issue_topic(item) == topic] for topic in ordered}
+    present = [topic for topic in ordered if groups[topic]]
+    highlights = ''.join('<li>%s</li>' % esc(labels['topic_' + topic]) for topic in present[:3])
+    remaining = len(issues) - sum(len(groups[topic]) for topic in present[:3])
+    remaining_text = ('<p class="issue-remaining">%s</p>' % esc(labels['issue_more'] % remaining)) if remaining else ''
+    urgent = sum(item['claim_status'] in ('conflict', 'stale', 'unavailable') for item in issues)
+    urgent_text = ('<p class="issue-urgent">%s</p>' % esc(labels['issue_urgent'] % urgent)) if urgent else ''
+    sections = []
+    for topic in present:
+        rows = []
+        for item in groups[topic]:
+            trace = ' · '.join(str(value) for value in (item['id'], item['field_path'], item['claim_id'], item['claim_status']) if value)
+            source = _link(item['source_href'], labels['source'])
+            rows.append('<li data-issue-id="%s" data-claim-status="%s"><strong>%s</strong>'
+                        '<small class="issue-provider">%s</small><p class="issue-reason">%s</p>'
+                        '<code class="issue-trace">%s</code>%s</li>' % (
+                            esc(item['id']), esc(item['claim_status']), esc(item['title']),
+                            esc(item['provider']), esc(item['reason']), esc(trace),
+                            '<div class="issue-source">%s</div>' % source if source else ''))
+        sections.append('<section class="issue-group" data-issue-topic="%s"><h5>%s · %d</h5>'
+                        '<ol class="issue-list">%s</ol></section>' % (
+                            esc(topic), esc(labels['topic_' + topic]), len(groups[topic]), ''.join(rows)))
+    summary = ('<section class="issues" aria-label="%s"><div class="issues-head"><h4>%s</h4>'
+            '<span>%d</span></div><ul class="issue-highlights">%s</ul>%s%s'
+            '<a class="issue-jump" href="#support-day-%d">%s</a></section>' % (
+                esc(labels['issue_heading']), esc(labels['issue_heading']), len(issues), highlights,
+                remaining_text, urgent_text, day['index'], esc(labels['issue_jump'] % len(issues))))
+    evidence = support_start + ('<details class="issue-details"><summary>%s</summary>'
+                                '<div class="issue-groups">%s</div></details></article>' % (
+                                    esc(labels['issue_all'] % len(issues)), ''.join(sections)))
+    return summary, evidence
+
+
 def _day(day: Mapping[str, Any], model: Mapping[str, Any], labels: Mapping[str, str]) -> str:
     scheduled, inactive = [], []
     scenario_id = day["scenario"].get("slot_id")
@@ -219,22 +338,22 @@ def _day(day: Mapping[str, Any], model: Mapping[str, Any], labels: Mapping[str, 
     alternatives = ('<details class="inactive-slots"><summary>%s</summary><ul class="global-list">%s</ul></details>' %
                     (esc(labels["alternatives"] % len(inactive)), ''.join(inactive))) if inactive else ''
     issues = day["issues"]
-    related = '<section class="issues"><h4>%d %s</h4><ul class="issue-list">%s</ul></section>' % (
-        len(issues), esc(labels["related"]), ''.join('<li><strong>%s</strong><small>%s · %s</small>%s</li>' %
-        (esc(item["title"]), esc(item["provider"]), esc(item["reason"]), _link(item["source_href"], labels["source"])) for item in issues)) if issues else ''
-    price = _quote(day["stay_price"], labels) + "; " + labels["checkout"] if day["stay_name"] else labels["no_overnight"]
-    known_cost = ('¥%s' % model["budget"]["known"]) if model["budget"]["known"] is not None else labels["price_unknown"]
+    related, _ = _issues(day, labels)
+    separator = '；' if labels['locale'] == 'zh-CN' else '; '
+    price = _quote(day["stay_price"], labels) + separator + labels["checkout"] if day["stay_name"] else labels["no_overnight"]
+    budget_title, budget_detail = _budget_summary(model, labels)
     return ('<article class="day-detail" id="focus-day-%d" data-day-detail="%d"><div class="day-identity">'
             '<span class="number">%02d</span><div><h3>%s</h3><p>%s</p></div></div>'
-            '<div class="focus-metrics"><span><strong>%dm</strong> %s</span><span><strong>%dm</strong> %s</span>'
+            '<div class="focus-metrics"><span><strong>%s</strong> %s</span><span><strong>%s</strong> %s</span>'
             '<span><strong>%d</strong> %s</span></div><ol class="agenda">%s</ol>%s'
             '<div class="context"><div class="context-item"><span class="section-id">%s</span><strong>%s</strong><small>%s %s</small></div>'
             '<div class="context-item unknown"><span class="section-id">%s</span><strong>%s</strong><small>%s</small></div></div>%s%s</article>' %
             (day["index"], day["index"], day["index"]+1, esc(day["city"]), esc(day["date"]),
-             day["occupied_minutes"], esc(labels["scheduled"]), day["open_minutes"], esc(labels["open"]),
+             esc(_duration(day["occupied_minutes"], labels['locale'])), esc(labels["scheduled"]),
+             esc(_duration(day["open_minutes"], labels['locale'])), esc(labels["open"]),
              len(issues), esc(labels["related"]), ''.join(scheduled) or '<li>%s</li>' % esc(labels["no_slots"]), alternatives,
              esc(labels["tonight"]), esc(day["stay_name"] or labels["no_overnight"]), esc(price), _link(day["stay_href"], labels["source"]),
-             esc(labels["budget"]), esc(known_cost), esc(labels["unknown_total"] if model["budget"]["status"] == "incomplete" else labels["range"]),
+             esc(labels["budget"]), esc(budget_title), esc(budget_detail),
              related, _scenario(day, labels)))
 
 
@@ -319,13 +438,18 @@ def render_profile(source: Mapping[str, Any], legacy_html: str) -> str:
            "font-src data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'") % digest
     first = model["days"][0]
     leg = next((slot for slot in first["slots"] if slot["effective"] and slot["kind"] == "transport"), None)
-    known_cost = ('¥%s' % model["budget"]["known"]) if model["budget"]["known"] is not None else labels["price_unknown"]
-    decisions = ((labels["first"], leg["title"] if leg else labels["none_transport"], labels["verify_service"]),
-                 (labels["stay"], first["stay_name"] or labels["no_stay"], _quote(first["stay_price"], labels) + "; " + labels["checkout"]),
-                 (labels["budget"], labels["known_cost"] + " " + known_cost,
-                  labels["unknown_total"] if model["budget"]["status"] == "incomplete" else labels["range"]))
-    decision_html = ''.join('<div><span>%s</span><strong>%s</strong><small>%s</small></div>' %
-                            (esc(label), esc(value), esc(note)) for label, value, note in decisions)
+    budget_title, budget_detail = _budget_summary(model, labels)
+    separator = '；' if locale == 'zh-CN' else '; '
+    decisions = ((labels["stay"], first["stay_name"] or labels["no_stay"],
+                  _quote(first["stay_price"], labels) + separator + labels["checkout"]),
+                 (labels["budget"], budget_title, budget_detail))
+    decision_html = ('<div class="primary-decision"><span>%s</span><strong>%s</strong><small>%s</small></div>'
+                     '<details class="decision-details"><summary>%s</summary><div class="decision-strip">%s</div></details>' % (
+                         esc(labels["first_action"]), esc(leg["title"] if leg else labels["none_transport"]),
+                         esc(labels["verify_service"] if leg else labels["no_leg_action"]),
+                         esc(labels["other_decisions"]),
+                         ''.join('<div><span>%s</span><strong>%s</strong><small>%s</small></div>' %
+                                 (esc(label), esc(value), esc(note)) for label, value, note in decisions)))
     runs = []
     for day in model["days"]:
         if not runs or runs[-1][0] != day["city"]:
@@ -342,36 +466,39 @@ def render_profile(source: Mapping[str, Any], legacy_html: str) -> str:
                            (esc(city), esc(label)))
     route_html = ''.join(route_parts)
     details = ''.join(_day(day, model, labels) for day in model["days"])
+    supports = ''.join(_issues(day, labels)[1] for day in model['days'])
     return ('<!doctype html>\n<html lang="%s" data-renderer-version="2"><head><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width, initial-scale=1">'
             '<meta name="ctw-renderer" content="2"><meta name="ctw-profile-assets" content="%s">'
             '<meta http-equiv="Content-Security-Policy" content="%s">'
             '<title>%s</title><style id="renderer-css">%s\n%s</style></head><body>'
             '<div class="topline"></div><div class="shell"><a class="skip" href="#experience">%s</a>'
-            '<header class="site-head"><span class="brand">China Trip Weaver</span><span class="dataset">%s · v2</span></header>'
-            '<main id="experience"><section class="hero" aria-labelledby="title"><p class="kicker">%s</p>'
+            '<header class="site-head"><span class="brand">China Trip Weaver</span><span class="dataset">%s</span></header>'
+            '<main id="experience"><section class="hero" aria-labelledby="title">'
             '<h1 id="title" aria-label="%s">%s</h1><p class="hero-sub">%s — %s · %s %s · %s %s</p>'
-            '<ol class="route" aria-label="%s">%s</ol><div class="decision-strip">%s</div></section>'
-            '<noscript><p class="noscript">%s</p></noscript><div class="workspace">'
+            '%s</section><noscript><p class="noscript">%s</p></noscript><div class="workspace" data-route-size="%s">'
             '<section class="focus" id="focus-column" aria-labelledby="focus-title"><div class="focus-head">'
-            '<span class="section-id">SELECTED DAY</span><h2 id="focus-title">%s</h2></div>'
+            '<h2 id="focus-title">%s</h2></div>'
             '<nav class="focus-nav" aria-label="%s"><button type="button" data-prev-day="true" disabled>%s</button>'
             '<span data-day-position="true">1 / %d</span><button type="button" data-next-day="true">%s</button>'
             '<a href="#overview-title">%s</a></nav>%s</section>%s</div>'
+            '<section class="support-collection" aria-label="%s">%s</section>'
             '<section class="record"><details id="full-record"><summary>%s</summary><p>%s</p>%s%s</details></section>'
-            '</main><footer class="footer">%s</footer></div>'
+            '</main><footer class="footer">%s <small>%s</small></footer></div>'
             '<div class="live-note" id="selection-announcement" aria-live="polite"></div>'
             '<script id="prototype-model" type="application/json">%s</script>'
             '<script id="source-document" type="application/json">%s</script><script>%s</script></body></html>\n' %
             (esc(locale), PROFILE_ASSET_SHA256, esc(csp), esc(model["title"]), renderer_css(), css,
              esc(labels["skip"]), esc(labels["readonly"]),
-             esc(labels["kicker"]), esc(model["title"]), _route_heading(model["route"]), esc(model["start_date"]),
+             esc(model["title"]), _route_heading(model["route"]), esc(model["start_date"]),
              esc(model["end_date"]), esc(model["travelers"]),
              esc("traveler" if locale == "en" and model["travelers"] == 1 else labels["travelers"]),
              esc(len(model["days"])), esc("day" if locale == "en" and len(model["days"]) == 1 else labels["days"]),
-             esc(labels["route"]), route_html,
-             decision_html, esc(labels["noscript"]), esc(labels["context"]), esc(labels["context"]), esc(labels["prev"]),
-             len(model["days"]), esc(labels["next"]), esc(labels["view_overview"]), details, _overview(model, labels),
+             decision_html, esc(labels["noscript"]), 'short' if len(model['days']) <= 5 else 'long',
+             esc(labels["context"]), esc(labels["context"]), esc(labels["prev"]),
+             len(model["days"]), esc(labels["next"]), esc(labels["view_overview"]), details,
+             _overview(model, labels, '<ol class="route" aria-label="%s">%s</ol>' % (esc(labels["route"]), route_html)),
+             esc(labels['issue_heading']), supports,
              esc(labels["full"]), esc(labels["full_note"]), _record_context(source, model, locale),
-             _legacy_record(legacy_html), esc(labels["foot"]),
+             _legacy_record(legacy_html), esc(labels["foot"]), esc(labels["page_format"]),
              embedded_json(model), embedded_json(source), script))

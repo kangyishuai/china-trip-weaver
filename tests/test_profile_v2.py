@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import copy
 import hashlib
+import html as html_lib
 import json
 import re
 import unittest
@@ -14,6 +15,7 @@ from unittest import mock
 from china_trip_weaver.render import render_journey, render_trip, validate_html, validate_journey_html
 from china_trip_weaver.render import RendererError
 from china_trip_weaver.render import profile_html
+from china_trip_weaver.render.profile_html import LABELS, _budget_summary, _duration
 from china_trip_weaver.journey import journey_booking_checklist, journey_risk_items
 from china_trip_weaver.render.profile_model import _scenario, build_model, clock, relative_minute
 
@@ -88,8 +90,8 @@ class ProfileV2Tests(unittest.TestCase):
 
     def test_v2_fixture_bytes_guard_template_and_legacy_record_changes(self):
         expected = (
-            (self.trip, render_trip, 'demo/trip.html', '7fbaf1dffbbd346fdff43262c97a0a8bdfc7e0d9f3dfef0fe450891b83c37ead'),
-            (self.journey, render_journey, 'demo/journey-16d/journey.html', '651ebcc0d923db9c27aef32a55d5c7233c0e62c1eb467a4beb2f74129e2753bf'),
+            (self.trip, render_trip, 'demo/trip.html', '6c3cd51e6e14e0e5499be2841c3af7e49fdcc7e071f7604ba0d2a1557a0fe16f'),
+            (self.journey, render_journey, 'demo/journey-16d/journey.html', 'b99f823b7464774b344e0b3924c759f242abf3c70ea7b93d38f8e92fa0b1d823'),
         )
         for source, render, path, digest in expected:
             with self.subTest(path=path):
@@ -230,9 +232,91 @@ class ProfileV2Tests(unittest.TestCase):
     def test_no_script_has_all_days_and_no_dead_controls(self):
         page = render_journey(self.journey, renderer_version="2")
         self.assertEqual(16, page.count('data-day-detail="'))
+        self.assertEqual(list(range(16)), [int(value) for value in re.findall(r'data-day-support="(\d+)"', page)])
         self.assertIn('.focus-nav button,.try-action,.undo{display:none}', page)
         self.assertIn('class="noscript"', page)
         self.assertNotIn('data-day-detail="0" hidden', page)
+        self.assertNotIn('data-day-support="0" hidden', page)
+
+    def test_budget_state_distinguishes_missing_quotes_from_a_real_zero(self):
+        pending = {'budget': {'status': 'incomplete', 'known': 0, 'minimum': None, 'maximum': None}}
+        self.assertEqual('总额待核验', _budget_summary(pending, LABELS['zh-CN'])[0])
+        self.assertIn('已知部分 ¥0', _budget_summary(pending, LABELS['zh-CN'])[1])
+        self.assertEqual('Total to verify', _budget_summary(pending, LABELS['en'])[0])
+        partial = {'budget': {'status': 'incomplete', 'known': 4200, 'minimum': None, 'maximum': None}}
+        self.assertIn('¥4200', _budget_summary(partial, LABELS['zh-CN'])[1])
+        complete_zero = {'budget': {'status': 'complete', 'known': 0, 'minimum': 0, 'maximum': 0}}
+        self.assertEqual('已知总额 ¥0', _budget_summary(complete_zero, LABELS['zh-CN'])[0])
+        trip = render_trip(self.trip, renderer_version='2')
+        before_record = trip.split('<section class="record">', 1)[0]
+        self.assertIn('<strong>总额待核验</strong>', before_record)
+        self.assertNotIn('<strong>¥0</strong>', before_record)
+        journey = render_journey(self.journey, renderer_version='2')
+        self.assertIn('已可比较 ¥4200', journey.split('<script id="prototype-model"', 1)[0])
+
+    def test_issues_are_summarized_but_every_raw_record_remains_readable(self):
+        model = build_model(self.trip)
+        issues = model['days'][0]['issues']
+        rendered = render_trip(self.trip, renderer_version='2')
+        panel = rendered.split('data-day-detail="0"', 1)[1].split('</article>', 1)[0]
+        raw = rendered.split('data-day-support="0"', 1)[1].split('</article>', 1)[0]
+        self.assertIn('出发前要核对', panel)
+        self.assertIn('核对实际车次与余票', panel)
+        self.assertIn('href="#support-day-0"', panel)
+        self.assertNotIn('no_results:leg-', panel)
+        self.assertIn('<details class="issue-details">', raw)
+        self.assertEqual(len(issues), raw.count('data-issue-id="'))
+        for issue in issues:
+            self.assertIn('data-issue-id="%s"' % issue['id'], raw)
+            self.assertIn(issue['field_path'], raw)
+            if issue['claim_id']:
+                self.assertIn(issue['claim_id'], raw)
+            self.assertIn(html_lib.escape(issue['reason'], quote=True), raw)
+        self.assertIn('class="issue-source"', raw)
+        self.assertTrue(validate_html(rendered, self.trip).ok)
+        english = copy.deepcopy(self.trip)
+        english['request']['locale'] = 'en'
+        english_page = render_trip(english, renderer_version='2')
+        english_panel = english_page.split('data-day-detail="0"', 1)[1].split('</article>', 1)[0]
+        self.assertIn('Check before travel', english_panel)
+        self.assertIn('View 11 source records', english_panel)
+
+    def test_every_day_keeps_its_original_unknown_reasons_and_claim_ids(self):
+        for source, render in ((self.trip, render_trip), (self.journey, render_journey)):
+            model = build_model(source)
+            page = render(source, renderer_version='2')
+            for day in model['days']:
+                support = page.split('data-day-support="%d"' % day['index'], 1)[1].split('</article>', 1)[0]
+                self.assertEqual(len(day['issues']), support.count('data-issue-id="'))
+                for issue in day['issues']:
+                    self.assertIn('data-issue-id="%s"' % issue['id'], support)
+                    self.assertIn(html_lib.escape(issue['reason'], quote=True), support)
+                    if issue['claim_id']:
+                        self.assertIn(issue['claim_id'], support)
+
+    def test_duration_and_legend_use_human_units_for_every_bar_role(self):
+        self.assertEqual('9小时30分钟', _duration(570, 'zh-CN'))
+        self.assertEqual('9时30分', _duration(570, 'zh-CN', True))
+        self.assertEqual('50分钟', _duration(50, 'zh-CN'))
+        self.assertEqual('9h 30m', _duration(570, 'en'))
+        page = render_journey(self.journey, renderer_version='2').split('<script id="prototype-model"', 1)[0]
+        self.assertIn('9小时30分钟', page)
+        self.assertIn('9时30分', page)
+        self.assertNotIn('570m', page)
+        for label in ('交通', '地点', '住宿', '用餐', '休息', '留白＝未安排', '斜纹＝静态/待证'):
+            self.assertIn(label, page)
+
+    def test_mobile_reading_order_places_one_decision_then_day_before_route_detail(self):
+        trip = render_trip(self.trip, renderer_version='2')
+        self.assertLess(trip.index('class="primary-decision"'), trip.index('id="focus-column"'))
+        self.assertLess(trip.index('data-day-detail="0"'), trip.index('id="overview-title"'))
+        self.assertLess(trip.index('id="overview-title"'), trip.index('id="support-day-0"'))
+        self.assertIn('class="decision-details"', trip)
+        self.assertIn('class="route-details"', trip)
+        self.assertNotIn('<ol class="route"', trip.split('</section><noscript>', 1)[0])
+        self.assertIn('data-route-size="short"', trip)
+        journey = render_journey(self.journey, renderer_version='2')
+        self.assertIn('data-route-size="long"', journey)
 
     def test_english_ui_is_not_chinese_only(self):
         trip = copy.deepcopy(self.trip)
@@ -241,7 +325,7 @@ class ProfileV2Tests(unittest.TestCase):
         self.assertTrue(validate_html(page, trip).ok)
         visible = page.split('<details id="full-record">', 1)[0]
         self.assertIn('lang="en"', page)
-        self.assertIn('Time across the route', visible)
+        self.assertIn('Whole-route time', visible)
         self.assertIn('Show consequence', visible)
         self.assertIn('Complete itinerary and source record', page)
         self.assertNotIn('参考价', visible)
@@ -279,6 +363,40 @@ class ProfileV2Tests(unittest.TestCase):
         existing = copy.deepcopy(day)
         existing['slots'][1]['start_at'] = '2026-10-16T12:50:00+08:00'
         self.assertEqual(10, _scenario(existing, legs)['baseline']['overlap_minutes'])
+
+    def test_skipped_and_locked_slots_keep_their_distinct_meaning(self):
+        skipped = copy.deepcopy(self.trip)
+        skipped['days'][0]['slots'][1]['status'] = 'skipped'
+        skipped_model = build_model(skipped)
+        self.assertEqual(0, skipped_model['days'][0]['scenario']['preview']['overlap_minutes'])
+        skipped_page = render_trip(skipped, renderer_version='2')
+        self.assertTrue(validate_html(skipped_page, skipped).ok)
+        first_bar = skipped_page.split('data-select-day="0"', 1)[1].split('</a>', 1)[0]
+        self.assertNotIn('title="午餐（地点待定）', first_bar)
+        self.assertIn('未采用', skipped_page.split('data-day-detail="0"', 1)[1].split('</article>', 1)[0])
+
+        locked = copy.deepcopy(self.trip)
+        locked['days'][0]['slots'][0]['locked'] = True
+        locked['transport_legs'][0]['locked'] = True
+        locked_page = render_trip(locked, renderer_version='2')
+        self.assertTrue(validate_html(locked_page, locked).ok)
+        first_day = locked_page.split('data-day-detail="0"', 1)[1].split('</article>', 1)[0]
+        self.assertIn('锁定', first_day)
+        self.assertNotIn('data-try="true"', first_day)
+
+    def test_conflicting_claims_are_flagged_before_raw_evidence(self):
+        source = copy.deepcopy(self.trip)
+        source['claims'][0]['status'] = 'conflict'
+        model = build_model(source)
+        urgent = sum(item['claim_status'] == 'conflict' for item in model['days'][0]['issues'])
+        self.assertGreater(urgent, 0)
+        page = render_trip(source, renderer_version='2')
+        self.assertTrue(validate_html(page, source).ok)
+        panel = page.split('data-day-detail="0"', 1)[1].split('</article>', 1)[0]
+        self.assertIn('其中 %d 条来源冲突' % urgent, panel)
+        self.assertNotIn(source['claims'][0]['claim_id'], panel)
+        support = page.split('data-day-support="0"', 1)[1].split('</article>', 1)[0]
+        self.assertIn(source['claims'][0]['claim_id'], support)
 
     def test_scenario_excludes_disjoint_group_and_cross_date(self):
         day = {'slots': [
