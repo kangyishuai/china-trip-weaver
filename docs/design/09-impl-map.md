@@ -1,6 +1,6 @@
 # 阶段三实现地图
 
-**2026-09-23 候选增补：**下方 §0 是历史快照，不作静默改写。当前分支新加 `render/profile_model.py`、`profile_html.py`、`profile_validate.py` 与 `assets/profile.css`、`profile.js`；CLI 的 Trip/Journey render 生成 v2，v1 文件继续按原合同验证。完整能力落点和范围见 [v2 能力映射](renderer/v2-capability-map.md) 与 [ADR-0023](adr/0023-versioned-journey-profile.md)。此处是待验收候选，并非已发布状态。
+**2026-09-24 现役补注：**下方 §0 是 2026-09-08 的历史目录快照，不作静默改写。当前插件已包含 `render/profile_model.py`、`profile_html.py`、`profile_validate.py` 与 `assets/profile.css`、`profile.js`；CLI 的 Trip/Journey render 生成 v2，v1 文件继续按原合同验证。已验收的能力落点与边界见 [v2 能力映射](renderer/v2-capability-map.md) 和 [ADR-0023](adr/0023-versioned-journey-profile.md)，源码发行状态以 [`PROGRESS.md`](../../PROGRESS.md) 与正式标签／Release 为准。
 
 本文档记录仓库/插件 package 的目录与完成定义；§1「未来目录树」写在实现之前，实际目录树见下方 §0。核心使用系统 Python 3.9 标准库，Node 只承载固定版本 MCP/CLI；默认路径不依赖手动 venv（当初避免的是 OR-Tools 需要的 venv，OR-Tools 现已整体删除，见 [ADR-0014](adr/0014-remove-ortools-bridge.md)，venv-free 结论不受影响）。[依据：官方插件布局](../research/01-codex-spec.md#2-插件目录与-pluginjson)、[运行时研究取舍](../research/04-design-insights.md#14-采用or-tools-作为复杂日程可选引擎不作为无条件依赖)
 

@@ -19,7 +19,7 @@ python3 scripts/scan_secrets.py
 python3 -m pyflakes $(git ls-files '*.py')
 ```
 
-测试必须以 `OK` 结束、零失败。CI 在 Python 3.9 与 3.13 上跑的正是这三步。覆盖率不进 CI、也不是合并门槛，需要时用 `python3 scripts/measure_coverage.py` 单独量：它会建一个一次性虚拟环境、追踪子进程，并在这一轮没真正跑满整个套件时拒绝给出百分比。有三项测试依赖本机的 Codex（自带的 Skill 与插件校验器，以及经 `scripts/install_local_plugin.sh --skill-smoke` 跑的 Skill 解析 smoke）：机器上没装 Codex 时它们跳过，装了就必须通过。
+完整测试必须以 `OK` 结束、零失败。CI 在 Python 3.9 与 3.13 上跑的正是这三步。本机策略若禁止某些调用浏览器的测试，先列出精确方法 ID，只显式运行获准方法，并分别报告选中与排除数；不得删测试、加跳过、称本机已跑全量，或用本机子集替代目标提交的 CI。覆盖率不进 CI、也不是合并门槛，需要时用 `python3 scripts/measure_coverage.py` 单独量：它会建一个一次性虚拟环境、追踪子进程，并在这一轮没真正跑满整个套件时拒绝给出百分比。有三项测试依赖本机的 Codex（自带的 Skill 与插件校验器，以及经 `scripts/install_local_plugin.sh --skill-smoke` 跑的 Skill 解析 smoke）：机器上没装 Codex 时它们跳过，装了就必须通过。
 
 ## 一个改动需要带上什么
 
@@ -42,13 +42,13 @@ python3 -m pyflakes $(git ls-files '*.py')
 `plugins/china-trip-weaver/src/china_trip_weaver/__init__.py` 的
 `__version__`。仓库里其余代码与文档一律引用 `__version__`，不得再写第三处字面量；只有 `PROGRESS.md` 的逐版本条目和 git tag 以版本号作索引。
 
-1. 把这两处的版本号同时改成新版本。
-2. 跑一遍上面[本地检查](#本地检查)里的全量检查，确认以 `OK` 结束、零失败。
-3. 跑 `bash scripts/install_local_plugin.sh`，把新版本装进/刷新到你自己真实的
-   Codex；再跑 `bash scripts/install_local_plugin.sh --check`，确认已装缓存与
-   源码一致（exit 0、零差异）。
-4. 提交版本号改动，然后打标签：`git tag -a v<版本号> -m "Release <版本号>"`。
-5. 推送提交，再按名字只推这一个标签：`git push origin main && git push origin v<版本号>`。不要 `--tags`：本地备份标签不能推到 GitHub。
-6. 从标签发布 GitHub Release：`gh release create v<版本号> --generate-notes`。
+1. 同时更新两处版本源，准备已审阅的 Release notes。
+2. 运行本机适用检查；若当前本机策略限制浏览器方法，记录精确排除项，不削弱仓库 CI。
+3. 提交发行候选并正常推送 `main`，不强推。等待**该精确提交**的 Python 3.9 和 3.13 既有 CI 均成功，包含测试、secret scan 与 pyflakes。
+4. 从最终 `main` 检出运行 `bash scripts/install_local_plugin.sh`，再运行
+   `bash scripts/install_local_plugin.sh --check`（exit 0、缓存与源码零差异）；核对安装缓存的 CLI 版本及合成渲染。
+5. 在同一 CI 通过的提交上创建注解标签：`git tag -a v<版本号> -m "Release <版本号>"`；只按名字推这一个标签：`git push origin v<版本号>`。不要 `--tags`，以免把本地备份标签带到 GitHub。
+6. 用审阅过的说明文件从远端标签创建正式非草稿 Release：
+   `gh release create v<版本号> --notes-file <路径> --verify-tag`。完成前读回远端 `main`、标签解引用提交、Release 状态与 URL，以及本机安装一致性。
 
-只有升版本号的改动才需要第 3–6 步；不涉及版本号字面值的改动跳过这一整节。
+只有升版本的发行才执行打标签、Release 和安装步骤。其它改动仍需运行适用检查，推送时也要通过项目既有 CI 门。

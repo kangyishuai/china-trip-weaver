@@ -1,13 +1,13 @@
-# ADR-0023：版本化旅程剖面候选
+# ADR-0023：版本化旅程剖面
 
-- **Status:** Adopted in local `main` after scoped independent experience acceptance on 2026-09-24. Publication is determined by the exact git tag and GitHub Release.
+- **Status:** Accepted after scoped independent experience acceptance on 2026-09-24; source distribution is published. Exact release and installation markers are recorded in [PROGRESS.md](../../../PROGRESS.md).
 - **Date:** 2026-09-23
 
 ## Context
 
 [ADR-0006](0006-single-deterministic-renderer.md) 定义了 v1 的无执行脚本单文件 Trip 页面。长 Journey 的日期、交通、住宿和核验项在旧页分散；隔离的 Victor 原型把路线、共同时间尺度、所选日上下文及可撤回的局部 +30 分钟试探放在同一阅读路径。用户早期真实截图揭示标题断字、焦点内部滚动和价格枚举外露；这些问题已按源数据修正，并在限定合成样本的后续体验验收中复核。
 
-## Candidate decision
+## Decision
 
 同一 `ctw render`／`ctw journey render` CLI 入口生成带 `data-renderer-version="2"` 和 `ctw-renderer` meta 的 v2。旧 v1 HTML 继续由原校验器按原合同验证。Python `render_trip(..., renderer_version="1")`／`render_journey(..., renderer_version="1")` 保留原公开调用与字节行为；v2 可显式传入 `renderer_version="2"`。CLI 与规划/重规划输出选 v2。没有第二个面向用户的 `explore` 命令。
 

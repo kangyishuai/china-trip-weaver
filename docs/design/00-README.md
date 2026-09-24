@@ -1,8 +1,8 @@
 # ChinaTripWeaver 阶段二设计索引
 
-本目录把已验收的 `research/` 结论冻结为阶段三实现合同。本阶段只有架构/数据/测试设计，不含产品代码；唯一可执行文件是用于验证示例的 [`schema/check_schema.py`](schema/check_schema.py)。决策冲突以 ADR 为准，未裁决项见 [`BLOCKED.md`](../../BLOCKED.md)。
+本目录把阶段二已验收的研究结论冻结为阶段三设计合同；下列 01–09 保留当时的 v1 设计语境，唯一的设计期可执行文件是 [`schema/check_schema.py`](schema/check_schema.py)。当前源码与发行状态见 [`PROGRESS.md`](../../PROGRESS.md)，决策冲突以各 ADR 的现役状态为准；[`BLOCKED.md`](../../BLOCKED.md) 是已关闭事项的历史入口。
 
-2026-09-23 的待审阅 v2 渲染候选另见[能力映射](renderer/v2-capability-map.md)和[ADR-0023](adr/0023-versioned-journey-profile.md)。下列 01–09 与 ADR-0006 仍描述已接受的 v1 合同；候选尚未通过视觉和生产安全迁移验收。
+已独立验收并随源码发行的 v2 时间剖面见[能力映射](renderer/v2-capability-map.md)和 [ADR-0023](adr/0023-versioned-journey-profile.md)。下列 01–09 与 ADR-0006 的 v1 合同仍用于理解旧文件与显式 v1 渲染；v2 的受信资产、校验和验收边界以这两份现役文档为准。
 
 ## 1. 阅读顺序与文件
 
@@ -54,11 +54,13 @@
 | [`ADR-0020`](adr/0020-locked-service-assumption.md) | 「已购锁定车次」表达缺口：推荐加结构化锁定字段，报错定位为独立可做的低成本项，不隔离自由文本 |
 | [`ADR-0021`](adr/0021-weather-forecast-source.md) | 天气只用高德（现有 Key）、视野当天+3 天、歧义不选、规则表提示不改排程；预报作 claim 与 `day.weather` 进 Trip，两页各一行并由 E006/JH006 回读 |
 | [`ADR-0022`](adr/0022-nearby-dining-references.md) | 附近餐饮参考：扫街榜无接口，用高德周边搜索综合排序（评分/人均/菜系/营业时间/距离）＋深链跳 App；圆心是餐前最近有坐标的时段、1.5 km、前 3 家有评分的；存 `slot.dining`、E007/JH007 逐字回读；折回命令与规划器接线复用同一套规则 |
-| [`ADR-0023`](adr/0023-versioned-journey-profile.md) | v2 时间剖面及 v1 旧文件兼容的候选决定；仍待独立验收 |
+| [`ADR-0023`](adr/0023-versioned-journey-profile.md) | 已采纳的 v2 时间剖面及 v1 旧文件兼容决定；限定合成样本已独立验收 |
 
-已接受的 ADR-0001–0022 与待审阅的 ADR-0023 分别标明状态。若阶段三 benchmark 或官方规范改变决定，新增/替代 ADR，不静默改实现常量。
+各 ADR 的现役状态以其正文为准；ADR-0023 已完成限定样本验收，发行状态见 `PROGRESS.md` 与正式标签／Release。若后续 benchmark 或官方规范改变决定，新增/替代 ADR，不静默改实现常量。
 
-## 3. 阶段三施工硬顺序
+## 3. 阶段三施工硬顺序（历史设计顺序）
+
+当前实现已经发行；以下保留当时的施工先后约束，不是现役待办清单。
 
 1. 复制并锁定 Schema/fixtures；实现 Python 3.9 contracts 与固定 v1 semantic validator。
 2. 实现 credentials/evidence/cache/geo 安全边界及 canary tests。
@@ -69,9 +71,9 @@
 
 不得从 prompt 直接拼 HTML、先装 OR-Tools、复活 `12306-skill`/AMap `travelPlanner`，或把 unresolved provider shape 当实测。[依据：核心研究取舍](../research/04-design-insights.md#设计决策)
 
-## 4. 当前设计验收命令
+## 4. 阶段二设计验收命令（历史记录）
 
-在项目根运行。`PY` 是任务书指定且任务 0 已验证的现有解释器；不安装任何依赖。
+以下保留设计期的原始命令与当时期望，不作为现役发布操作清单。特别是 §4.4 的 `research/`、`design/` 指当时仓库外工作区原件，不能在当前仓库照抄执行；仓库内脱敏副本位于 `docs/research/`、`docs/design/`。当前检查与发版步骤见 [`CONTRIBUTING.md`](../../CONTRIBUTING.md)，已执行的发行结果见 [`PROGRESS.md`](../../PROGRESS.md)。
 
 ### 4.1 前提与 Schema 正向
 
@@ -122,7 +124,7 @@ done
 
 期望：10 份顶层设计文档、8 份 ADR、checker ≤60 行、除 checker 外无 `.py/.js/.ts`、每 ADR 五段齐全。
 
-### 4.4 边界与完整性审计
+### 4.4 当时的边界与完整性审计（不可作为现役命令照抄）
 
 ```bash
 find research -type f -newer design/evidence/task0-runtime.txt -print
@@ -134,8 +136,8 @@ rg -n '12306-skill|travelPlanner|下单|实名|支付|mock_notice|price_type|sou
 
 期望：第一条无输出（本阶段开始后没有修改 research）；顶层只是在原有 `research/`、`PROGRESS.md`、`BLOCKED.md` 旁新增 `design/`；路由文档明确 1 个 implicit + 8 个 false；已证伪方案只以禁止语境出现，交易/证据/Schema 硬词均可抽查。
 
-## 5. 阶段三最终发布门（尚未执行）
+## 5. 现役发布门与历史设计标准
 
-实现完成后以 [`08-testing.md`](08-testing.md) 的四层标准为准：Provider fixture 全错误矩阵、scheduler 20+ golden/8+ no-solution/4 replan、renderer E001–E204 + offline/mobile/a11y、固定无 Key 请求完整 P0–P6。只跑 smoke 或只生成文件不能验收。[依据：研究决策 21](../research/04-design-insights.md#21-采用四层测试不把能启动能打印当测试)
+[`08-testing.md`](08-testing.md) 记录设计期四层标准：Provider 错误矩阵、scheduler golden/no-solution/replan、renderer 事实与安全校验、固定无 Key E2E。当前发行的实际门是 [`CONTRIBUTING.md`](../../CONTRIBUTING.md) 的完整 CI、secret scan、pyflakes、精确标签／Release 和安装校验；结果与限定视觉验收范围见 [`PROGRESS.md`](../../PROGRESS.md) 及 [ADR-0023](adr/0023-versioned-journey-profile.md)。只跑 smoke 或只生成文件仍不能验收。[依据：研究决策 21](../research/04-design-insights.md#21-采用四层测试不把能启动能打印当测试)
 
-公开 marketplace 还需先裁决 `BLOCKED.md` 的 provider ToS/license/metadata；同名 Skill 自动检测仍需隔离 Codex home/UI 实测。它们不阻塞本地按本设计施工，但禁止提前声称已解决。
+公开 marketplace 已由 [ADR-0013](adr/0013-stay-off-the-public-marketplace.md) 裁决为不采用；本项目从 GitHub 源码经本地市场安装。历史问题见已关闭的 [`BLOCKED.md`](../../BLOCKED.md) 及其归档，权利与服务商边界见 [`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md)；不要把关闭的历史账本重新当作发布阻塞清单。

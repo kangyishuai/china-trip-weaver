@@ -25,9 +25,13 @@ python3 scripts/scan_secrets.py
 python3 -m pyflakes $(git ls-files '*.py')
 ```
 
-The suite must end with `OK` and zero failures. CI runs these same three steps
-on Python 3.9 and 3.13. Coverage is not part of CI and not a merge gate; measure
-it on demand with `python3 scripts/measure_coverage.py`, which builds a
+The full suite must end with `OK` and zero failures. CI runs these same three steps
+on Python 3.9 and 3.13. If a local host policy bars a browser-backed test, collect
+the exact method IDs, run an explicit selection of the allowed methods, and report
+both the selected and excluded counts; do not delete or skip the tests, call that
+a full local run, or treat it as a replacement for the target commit's CI.
+Coverage is not part of CI and not a merge gate; measure it on demand with
+`python3 scripts/measure_coverage.py`, which builds a
 throwaway virtualenv, tracks subprocesses, and refuses to print a percentage
 unless the run actually exercised the whole suite. Three tests depend on a local
 Codex install (the bundled Skill and plugin validators, and the Skill parser
@@ -65,20 +69,24 @@ Every other reference in the repository imports `__version__` rather than
 repeating the literal; only the per-version entries in `PROGRESS.md` and the
 git tags carry version numbers as an index.
 
-1. Bump the version in both files to the same new value.
-2. Run the full check suite from [Running the checks](#running-the-checks)
-   above and confirm it ends `OK` with zero failures.
-3. Run `bash scripts/install_local_plugin.sh` to install/refresh the new
-   version into your own real Codex installation, then
-   `bash scripts/install_local_plugin.sh --check` to confirm the installed
-   cache and the source tree now agree (exit 0, zero differences).
-4. Commit the version bump, then tag it:
-   `git tag -a v<version> -m "Release <version>"`.
-5. Push the commit, then push that one tag by name:
-   `git push origin main && git push origin v<version>`. Never `--tags`: a
-   local-only backup tag must not reach GitHub.
-6. Publish the GitHub Release from the tag:
-   `gh release create v<version> --generate-notes`.
+1. Bump both version sources together and prepare reviewed Release notes.
+2. Run the applicable local checks. Record any browser methods excluded by the
+   current host policy; do not weaken the repository's CI workflow.
+3. Commit the release candidate and push `main` without force. Wait for the
+   **exact pushed commit** to pass the unchanged Python 3.9 and 3.13 CI jobs,
+   including tests, secret scan, and pyflakes.
+4. From the final `main` checkout, run `bash scripts/install_local_plugin.sh`
+   and then `bash scripts/install_local_plugin.sh --check` (exit 0, zero cache
+   differences). Confirm the installed-cache CLI version and synthetic renders.
+5. Create an annotated tag at that same CI-approved commit:
+   `git tag -a v<version> -m "Release <version>"`. Push **only** that tag by name:
+   `git push origin v<version>`. Never use `--tags`; it could publish a local
+   backup tag.
+6. Publish the formal, non-draft GitHub Release from the remote tag with the
+   reviewed notes file: `gh release create v<version> --notes-file <path> --verify-tag`.
+   Read back remote `main`, the tag's peeled commit, Release status and URL,
+   and installation parity before reporting completion.
 
-Only a change that bumps the version needs steps 3–6. A change that does not
-touch the version literal skips this whole section.
+Only a release that bumps the version uses the tagging, Release, and installation
+steps. Other changes still run their applicable checks and follow the project's
+normal CI gate when pushed.

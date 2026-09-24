@@ -6,7 +6,7 @@
 
 - 版本：`0.28.0`，源码版本由下列两处共同确定；正式发行以精确 git tag 与 GitHub Release 为准，本机安装状态以安装脚本 `--check` 为准。版本的唯一来源是
   `plugins/china-trip-weaver/.codex-plugin/plugin.json` 与
-  `src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
+  `plugins/china-trip-weaver/src/china_trip_weaver/__init__.py` 的 `__version__`，两处一致，仓库内其余
   代码与文档一律引用这两处之一；只有本节的逐版本条目和 git tag 以版本号作索引。
 - 测试（0.27.0 当时测量）：仓库根 `/usr/bin/python3 -m unittest discover -s tests` 全量 `Ran 872 tests`，`OK`，0 skipped；
   `scripts/scan_secrets.py` 0 命中；
@@ -16,7 +16,7 @@
   「环境变量注入会让 `test_credentials` 红一项」已在 0.22.0 修好：那个文件现在于 `setUp`
   里按 `FILE_ALLOWLIST` 剥掉凭据环境变量，四个 Key 全设与一个不设两种跑法结果相同。
 - 覆盖率（0.27.0 当时测量）：`scripts/measure_coverage.py` 2026-09-18 发版前实测 12443 语句、miss 1347、**89%**（`contracts.py` 97%、`dining.py` 95%；0.26.0 时 12404/1344/89%，0.25.0 时 12005/1299/89%）。
-- 0.28.0（2026-09-24）：**版本化 Trip/Journey 时间剖面**——现有 CLI 默认渲染 v2 单文件 HTML，将路线、优先决定、全程共同时间轴、当天安排和按主题归组的原始核验依据串成一条阅读路径；局部 +30 分钟交通试探可撤回，未知价格/服务仍按来源如实标注。完整 v1 事实正文、深链、条件署名和显式 v1 渲染/校验合同保留；固定资产摘要、CSP 与源 JSON 的规范化校验继续封闭。用户提供的限定合成 Trip 3 天/Journey 16 天中英屏幕与操作证据、中文 A4/Letter PDF 经独立核对，键盘焦点、无 JS 阅读、打印前后状态、时间条/刻度、完整来源和分页导航通过。本机逐方法选定 905/905 OK、0 skipped；四项真实浏览器测试未在本机执行，远端CI结果须按具体提交的Checks另行核对。真实触控、全部浏览器及自动网络/控制台探针未通测；不能把上版872项或89%冒充本版测量。
+- 0.28.0（2026-09-24）：**版本化 Trip/Journey 时间剖面**——现有 CLI 默认渲染 v2 单文件 HTML，将路线、优先决定、全程共同时间轴、当天安排和按主题归组的原始核验依据串成一条阅读路径；局部 +30 分钟交通试探可撤回，未知价格/服务仍按来源如实标注。完整 v1 事实正文、深链、条件署名和显式 v1 渲染/校验合同保留；固定资产摘要、CSP 与源 JSON 的规范化校验继续封闭。用户提供的限定合成 Trip 3 天/Journey 16 天中英屏幕与操作证据、中文 A4/Letter PDF 经独立核对，键盘焦点、无 JS 阅读、打印前后状态、时间条/刻度、完整来源和分页导航通过。本机逐方法选定 905/905 OK、0 skipped，四项真实浏览器测试未在本机执行；发行提交 `d8a732e` 的 [GitHub CI](https://github.com/kangyishuai/china-trip-weaver/actions/runs/36006046331) 在 Python 3.9/3.13 两矩阵均成功。本版已由精确标签和正式 GitHub Release 发行，本机安装缓存与主检出一致；真实触控、全部浏览器及自动网络/控制台探针未通测，不能把上版872项或89%冒充本版测量。
 - 0.27.0（第三十七波两本并行，2026-09-18，逐本验收合入）：**行程文件改为默认原地更新**——领导改了版本规矩：
   重规划与各种折回默认在原文件上改（`--output-json` 就是 `--trip`/`--journey` 那个文件，页面原地重渲），只有
   新的一趟行程或用户明确要求另存时才写 `journey-r<N>.json` 之类新文件、旧文件不动。代码本来就允许同路径
@@ -474,9 +474,7 @@
   extract/assemble`、设计文档与 schedule Skill 对齐 ADR-0014/0012/0010/0011、
   站点距离城市匹配接受 district、CONTRIBUTING 发版流程；tag 自 `v0.7.0`
   起，GitHub Release 自 0.8.0 起。
-- 并行惯例：一波里只有一份书在主检出 `main` 直改，其余各在 `.tmp/wt-<名>`
-  的 worktree 分支上干、只推分支，合并与冲突（PROGRESS/BLOCKED 末尾追加）
-  由管理者解决；worktree 里不跑 `install_local_plugin.sh`。发版只推具体
+- 协作与发布惯例（2026-09-24）：仓库实施先在独立 worktree 分支完成并由主任务独立验收，再按明确授权合入 `main`；不再把“一份书可直接改 main”当作现役规则。发布与本机安装从最终主检出执行，worktree 里不跑 `install_local_plugin.sh`。发版只推具体
   标签名，不用 `git push --tags`。本机若 `git push` 报 `SSL_ERROR_SYSCALL`，
   先 `curl --noproxy '*' https://github.com` 探直连，通就用
   `env -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy -u https_proxy git push`。
