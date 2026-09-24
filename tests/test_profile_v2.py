@@ -14,6 +14,7 @@ from unittest import mock
 from china_trip_weaver.render import render_journey, render_trip, validate_html, validate_journey_html
 from china_trip_weaver.render import RendererError
 from china_trip_weaver.render import profile_html
+from china_trip_weaver.journey import journey_booking_checklist, journey_risk_items
 from china_trip_weaver.render.profile_model import _scenario, build_model, clock, relative_minute
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -87,8 +88,8 @@ class ProfileV2Tests(unittest.TestCase):
 
     def test_v2_fixture_bytes_guard_template_and_legacy_record_changes(self):
         expected = (
-            (self.trip, render_trip, 'demo/trip.html', 'ed65925717d4c52960207d0dae68e7decea90d09f10f95d975bfa444333c34d1'),
-            (self.journey, render_journey, 'demo/journey-16d/journey.html', '58254a9f20e6db78217d273e1f68e4af6188a0731f2355b126291383ec467e5a'),
+            (self.trip, render_trip, 'demo/trip.html', '7fbaf1dffbbd346fdff43262c97a0a8bdfc7e0d9f3dfef0fe450891b83c37ead'),
+            (self.journey, render_journey, 'demo/journey-16d/journey.html', '651ebcc0d923db9c27aef32a55d5c7233c0e62c1eb467a4beb2f74129e2753bf'),
         )
         for source, render, path, digest in expected:
             with self.subTest(path=path):
@@ -119,6 +120,88 @@ class ProfileV2Tests(unittest.TestCase):
                      'data-section="days"', 'data-section="location-overview"',
                      'data-section="evidence"', 'data-section="provider-health"'):
             self.assertIn(term, trip_record)
+
+    def test_c03_four_locales_keep_body_navigation_footer_and_source_facts(self):
+        cases = []
+        for source, render, validate in ((self.trip, render_trip, validate_html),
+                                         (self.journey, render_journey, validate_journey_html)):
+            cases.append((source, render, validate))
+            english = copy.deepcopy(source)
+            if 'trips' in english:
+                for segment in english['trips']:
+                    segment['request']['locale'] = 'en'
+            else:
+                english['request']['locale'] = 'en'
+            cases.append((english, render, validate))
+        for source, render, validate in cases:
+            with self.subTest(kind='journey' if 'trips' in source else 'trip', locale=source.get('request', {}).get('locale', 'en')):
+                old = render(source, renderer_version='1')
+                new = render(source, renderer_version='2')
+                self.assertTrue(validate(new, source).ok)
+                record = new.split('<details id="full-record">', 1)[1].split('</details></section>', 1)[0]
+                self.assertNotIn('<header class="page-header"', record)
+                self.assertNotIn('<aside class="truth-banner"', record)
+                self.assertIn('<h2 id="truth-heading">', record)
+                old_body = old.split('<main id="main-content">', 1)[1].split('</main>', 1)[0]
+                new_body = new.split('<div id="full-main">', 1)[1].split('</div>\n<footer class="page-footer"', 1)[0]
+                self.assertEqual(old_body, new_body)
+                for tag, cls in (('nav', 'day-nav'), ('footer', 'page-footer')):
+                    pattern = r'<%s class="%s".*?</%s>' % (tag, cls, tag)
+                    self.assertEqual(re.search(pattern, old, re.S).group(0), re.search(pattern, new, re.S).group(0))
+                summary = re.search(r'<section class="record-context".*?</section>', record, re.S).group(0)
+                self.assertIn(str(source['revision']['number']), summary)
+                self.assertIn(source['generated_at'][:16].replace('T', ' '), summary)
+                if 'trips' in source:
+                    self.assertIn(str(len(source['trips'])), summary)
+                    self.assertIn(str(len(journey_booking_checklist(source))), summary)
+                    self.assertIn(str(len(journey_risk_items(source))), summary)
+                else:
+                    self.assertIn(str(len(source['unknowns'])), summary)
+                    self.assertIn(str(len(source['days'])), summary)
+                    self.assertIn('飞常准' if source['request']['locale'] == 'zh-CN' else 'VariFlight', summary)
+                    self.assertIn('未配置' if source['request']['locale'] == 'zh-CN' else 'Not configured', summary)
+
+    def test_c03_mock_mixed_modes_attribution_and_grouped_party(self):
+        synthetic = copy.deepcopy(self.trip)
+        synthetic['mode'] = 'mock'
+        synthetic['mock_notice'] = 'Synthetic <b>not live</b> inventory'
+        rendered = render_trip(synthetic, renderer_version='2')
+        self.assertTrue(validate_html(rendered, synthetic).ok)
+        self.assertIn('data-mock-notice="true"', rendered)
+        self.assertIn('Synthetic &lt;b&gt;not live&lt;/b&gt; inventory', rendered)
+        self.assertNotIn('Synthetic <b>', rendered)
+        self.assertFalse(validate_html(rendered.replace('Synthetic &lt;b&gt;not live&lt;/b&gt; inventory', 'live inventory', 1), synthetic).ok)
+
+        mixed = copy.deepcopy(self.journey)
+        mixed['trips'][0]['mode'] = 'mock'
+        mixed['trips'][0]['mock_notice'] = 'Synthetic segment'
+        mixed_html = render_journey(mixed, renderer_version='2')
+        self.assertTrue(validate_journey_html(mixed_html, mixed).ok)
+        summary = re.search(r'<section class="record-context".*?</section>', mixed_html, re.S).group(0)
+        self.assertIn('演示数据 / 静态参考资料', summary)
+
+        live = json.loads((ROOT / 'tests/fixtures/trips/schema/valid/weekend-live.json').read_text(encoding='utf-8'))
+        live_html = render_trip(live, renderer_version='2')
+        self.assertTrue(validate_html(live_html, live).ok)
+        self.assertIn('data-attribution="1"', live_html)
+        self.assertIn('地图与路线数据来源于高德地图', live_html)
+        self.assertFalse(validate_html(live_html.replace('data-attribution="1"', 'data-attribution="0"', 1), live).ok)
+
+        grouped = json.loads((ROOT / 'demo/grouped-departures/trip.json').read_text(encoding='utf-8'))
+        self.assertNotIn('travelers', grouped['request'])
+        grouped_html = render_trip(grouped, renderer_version='2')
+        self.assertTrue(validate_html(grouped_html, grouped).ok)
+        grouped_summary = re.search(r'<section class="record-context".*?</section>', grouped_html, re.S).group(0)
+        self.assertIn('3 人', grouped_summary)
+
+    def test_c03_forged_record_summary_or_navigation_target_is_rejected(self):
+        for source, render, validate in ((self.trip, render_trip, validate_html),
+                                         (self.journey, render_journey, validate_journey_html)):
+            page = render(source, renderer_version='2')
+            self.assertFalse(validate(page.replace('id="truth-heading"', 'id="removed-truth"', 1), source).ok)
+            self.assertFalse(validate(page.replace('data-section="record-context"', 'data-section="removed"', 1), source).ok)
+            anchor = re.search(r'<nav class="day-nav".*?href="#([^"]+)"', page, re.S).group(1)
+            self.assertFalse(validate(page.replace('id="%s"' % anchor, 'id="removed-target"', 1), source).ok)
 
     def test_script_and_csp_cannot_be_replaced_together(self):
         page = render_trip(self.trip, renderer_version="2")

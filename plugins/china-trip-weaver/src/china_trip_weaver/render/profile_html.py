@@ -243,9 +243,68 @@ def _legacy_record(legacy_html: str) -> str:
     body = legacy_html.split('<body>', 1)[1].split('</body>', 1)[0]
     body = re.sub(r'^\s*<a class="skip-link"[^>]*>.*?</a>\s*', '', body, count=1, flags=re.S)
     body = body.split('<script id="trip-data"', 1)[0].split('<script id="journey-data"', 1)[0]
+    for pattern in (r'<header class="page-header" data-section="header">.*?</header>\s*',
+                    r'<aside class="truth-banner" data-section="truth-banner"[^>]*>.*?</aside>\s*'):
+        body, removed = re.subn(pattern, '', body, count=1, flags=re.S)
+        if removed != 1:
+            raise ValueError('v1 record shell cannot be reduced safely')
     body = body.replace('<main id="main-content">', '<div id="full-main">', 1).replace('</main>', '</div>', 1)
-    body = body.replace('<h1>', '<h2>', 1).replace('</h1>', '</h2>', 1)
     return body
+
+
+def _record_context(source: Mapping[str, Any], model: Mapping[str, Any], locale: str) -> str:
+    """Keep the unique v1 header/banner facts readable before the retained record."""
+    from .html import HEALTH_RISK_ORDER, _enum_label, _labels, _provider_label, _time
+
+    labels = _labels(locale)
+    copy = {
+        'zh-CN': ('记录范围与真实性', '记录', '人', '天', '段', '修订', '生成于', '数据口径',
+                  '未知记录', '当前最弱数据源', '预订与核验清单', '风险记录', '演示数据提示'),
+        'en': ('Record scope and source limits', 'Record', 'traveler', 'day', 'segment', 'Revision',
+               'Generated', 'Data modes', 'unresolved records', 'Most limited source',
+               'booking/verification entries', 'risk records', 'Demo notice'),
+    }[locale]
+    (heading, record, person, day, segment, revision, generated, mode,
+     unknown, weakest, checklist, risk, mock) = copy
+    travelers, day_count = model['travelers'], len(model['days'])
+    person_unit = person + ('s' if locale == 'en' and travelers != 1 else '')
+    day_unit = day + ('s' if locale == 'en' and day_count != 1 else '')
+    if locale == 'zh-CN':
+        scope = '记录：%s · %s — %s · %d 人／%d 天' % (
+            model['title'], model['start_date'], model['end_date'], travelers, day_count)
+    else:
+        scope = '%s: %s · %s — %s · %d %s / %d %s' % (
+            record, model['title'], model['start_date'], model['end_date'],
+            travelers, person_unit, day_count, day_unit)
+    if model['kind'] == 'journey':
+        count = len(source['trips'])
+        segment_unit = segment + ('s' if locale == 'en' and count != 1 else '')
+        scope += ('／%d 段' % count) if locale == 'zh-CN' else (' / %d %s' % (count, segment_unit))
+        modes = list(dict.fromkeys(trip['mode'] for trip in source['trips']))
+        mode_text = ' / '.join(_enum_label(labels, 'mode', item) for item in modes)
+        exception = ('预订与核验清单 %d 条；风险记录 %d 条' %
+                     (len(model['checklist']), len(model['risk_items']))) if locale == 'zh-CN' else (
+                     '%d %s; %d %s' % (len(model['checklist']), checklist, len(model['risk_items']), risk))
+    else:
+        mode_text = _enum_label(labels, 'mode', source['mode'])
+        if locale == 'en':
+            mode = 'Data mode'
+        worst = max(source['provider_health'], key=lambda item: (
+            HEALTH_RISK_ORDER.get(item['status'], 99), item['provider']))
+        provider = _provider_label(labels, worst['provider'])
+        status = _enum_label(labels, 'health_status', worst['status'])
+        exception = ('未知记录 %d 条；当前最弱数据源：%s（%s）' %
+                     (len(source['unknowns']), provider, status)) if locale == 'zh-CN' else (
+                     '%d %s; %s: %s (%s)' % (len(source['unknowns']), unknown, weakest, provider, status))
+    notice = ('<p data-mock-notice="true"><strong>%s:</strong> %s</p>' %
+              (esc(mock), esc(source['mock_notice']))) if model['kind'] == 'trip' and source['mode'] == 'mock' else ''
+    metadata = ('%s %s · %s %s · %s%s %s' % (
+        revision, source['revision']['number'], generated, _time(source['generated_at']),
+        mode, '：' if locale == 'zh-CN' else ':', esc(mode_text)))
+    return ('<section class="record-context" data-section="record-context" aria-labelledby="truth-heading">'
+            '<h2 id="truth-heading">%s</h2><p>%s</p>'
+            '<p>%s</p><p>%s</p>%s</section>' % (
+                esc(heading), esc(scope), metadata, esc(exception), notice))
 
 
 def render_profile(source: Mapping[str, Any], legacy_html: str) -> str:
@@ -299,7 +358,7 @@ def render_profile(source: Mapping[str, Any], legacy_html: str) -> str:
             '<nav class="focus-nav" aria-label="%s"><button type="button" data-prev-day="true" disabled>%s</button>'
             '<span data-day-position="true">1 / %d</span><button type="button" data-next-day="true">%s</button>'
             '<a href="#overview-title">%s</a></nav>%s</section>%s</div>'
-            '<section class="record"><details id="full-record"><summary>%s</summary><p>%s</p>%s</details></section>'
+            '<section class="record"><details id="full-record"><summary>%s</summary><p>%s</p>%s%s</details></section>'
             '</main><footer class="footer">%s</footer></div>'
             '<div class="live-note" id="selection-announcement" aria-live="polite"></div>'
             '<script id="prototype-model" type="application/json">%s</script>'
@@ -313,5 +372,6 @@ def render_profile(source: Mapping[str, Any], legacy_html: str) -> str:
              esc(labels["route"]), route_html,
              decision_html, esc(labels["noscript"]), esc(labels["context"]), esc(labels["context"]), esc(labels["prev"]),
              len(model["days"]), esc(labels["next"]), esc(labels["view_overview"]), details, _overview(model, labels),
-             esc(labels["full"]), esc(labels["full_note"]), _legacy_record(legacy_html), esc(labels["foot"]),
+             esc(labels["full"]), esc(labels["full_note"]), _record_context(source, model, locale),
+             _legacy_record(legacy_html), esc(labels["foot"]),
              embedded_json(model), embedded_json(source), script))

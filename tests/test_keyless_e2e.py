@@ -361,7 +361,8 @@ class KeylessE2ETests(unittest.TestCase):
             {"minimum": 900, "maximum": 900},
             trip["transport_pricing"]["party_total_cny"],
         )
-        self.assertIn("<span>人数 3</span>", rendered)
+        record = rendered.split('<section class="record-context"', 1)[1].split('</section>', 1)[0]
+        self.assertIn('3 人', record)
         self.assertIn("北京（2 人）、广州（1 人）", rendered)
         trip_report = validate_trip(trip)
         html_report = validate_html(rendered, trip)
