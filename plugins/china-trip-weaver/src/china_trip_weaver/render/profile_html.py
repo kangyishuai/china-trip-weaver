@@ -16,7 +16,7 @@ from .template import embedded_json, renderer_css
 VERSION = "2"
 ASSETS = Path(__file__).resolve().parents[3] / "assets"
 # Frozen for renderer v2. Any output-affecting asset change needs a new format.
-PROFILE_ASSET_SHA256 = "5ff3c728cfd948b8f7d4b02a0a32aac814ea08cd34a33c38997635e9433e540c"
+PROFILE_ASSET_SHA256 = "02d7fc73814ab7fcc70d4e731cd1153e510fee9dc2994d7531b17e4056ca6db4"
 
 LABELS = {
     "zh-CN": {
@@ -57,10 +57,10 @@ LABELS = {
         "budget_complete_range": "总额区间 ¥%s–¥%s",
         "issue_heading": "出发前要核对", "issue_all": "查看全部 %d 条原始记录与来源",
         "issue_jump": "查看 %d 条核验依据 ↓", "issue_none": "当天没有关联的未知记录",
-        "issue_more": "另有 %d 条可展开", "issue_urgent": "其中 %d 条来源冲突、失效或不可用",
-        "topic_service": "核对交通服务信息", "topic_transport": "核对交通费用与衔接",
-        "topic_stay": "核对住宿报价与条件", "topic_budget": "补齐预算缺价",
-        "topic_place": "核对地点与用餐信息", "topic_other": "核对其他未定信息",
+        "issue_more": "其他主题还有 %d 条", "issue_urgent": "其中 %d 条来源冲突、失效或不可用",
+        "topic_service": "交通服务信息", "topic_transport": "交通费用与衔接",
+        "topic_stay": "住宿报价与条件", "topic_budget": "预算缺价",
+        "topic_place": "地点与用餐信息", "topic_other": "其他未定信息",
         "issue_origin": "原始记录", "page_format": "页面格式 v2",
     },
     "en": {
@@ -103,10 +103,10 @@ LABELS = {
         "budget_complete_range": "Total range ¥%s–¥%s",
         "issue_heading": "Check before travel", "issue_all": "View all %d source records",
         "issue_jump": "View %d source records ↓", "issue_none": "No related unknown records for this day",
-        "issue_more": "%d more records available", "issue_urgent": "%d conflicting, stale, or unavailable sources",
-        "topic_service": "Verify transport service details", "topic_transport": "Verify transport cost and connection",
-        "topic_stay": "Verify stay price and terms", "topic_budget": "Fill budget price gaps",
-        "topic_place": "Verify place and dining details", "topic_other": "Verify other open details",
+        "issue_more": "%d more records in other topics", "issue_urgent": "%d conflicting, stale, or unavailable sources",
+        "topic_service": "Transport service details", "topic_transport": "Transport cost and connection",
+        "topic_stay": "Stay price and terms", "topic_budget": "Budget price gaps",
+        "topic_place": "Place and dining details", "topic_other": "Other open details",
         "issue_origin": "Raw record", "page_format": "Page format v2",
     },
 }
@@ -280,6 +280,12 @@ def _issue_topic(item: Mapping[str, Any]) -> str:
     return 'other'
 
 
+def _issue_count(value: int, locale: str, full: bool = False) -> str:
+    if locale == 'zh-CN':
+        return '%d 条%s' % (value, '原始记录' if full else '')
+    return '%d %s%s' % (value, 'source ' if full else '', 'record' if value == 1 else 'records')
+
+
 def _issues(day: Mapping[str, Any], labels: Mapping[str, str]) -> tuple[str, str]:
     issues = day['issues']
     heading = '%s · %s' % (day['date'], day['city'])
@@ -290,7 +296,9 @@ def _issues(day: Mapping[str, Any], labels: Mapping[str, str]) -> tuple[str, str
     ordered = ('service', 'stay', 'transport', 'budget', 'place', 'other')
     groups = {topic: [item for item in issues if _issue_topic(item) == topic] for topic in ordered}
     present = [topic for topic in ordered if groups[topic]]
-    highlights = ''.join('<li>%s</li>' % esc(labels['topic_' + topic]) for topic in present[:3])
+    highlights = ''.join('<li><span>%s</span><small>%s</small></li>' % (
+        esc(labels['topic_' + topic]), esc(_issue_count(len(groups[topic]), labels['locale'])))
+        for topic in present[:3])
     remaining = len(issues) - sum(len(groups[topic]) for topic in present[:3])
     remaining_text = ('<p class="issue-remaining">%s</p>' % esc(labels['issue_more'] % remaining)) if remaining else ''
     urgent = sum(item['claim_status'] in ('conflict', 'stale', 'unavailable') for item in issues)
@@ -311,9 +319,10 @@ def _issues(day: Mapping[str, Any], labels: Mapping[str, str]) -> tuple[str, str
                         '<ol class="issue-list">%s</ol></section>' % (
                             esc(topic), esc(labels['topic_' + topic]), len(groups[topic]), ''.join(rows)))
     summary = ('<section class="issues" aria-label="%s"><div class="issues-head"><h4>%s</h4>'
-            '<span>%d</span></div><ul class="issue-highlights">%s</ul>%s%s'
+            '<span>%s</span></div><ul class="issue-highlights">%s</ul>%s%s'
             '<a class="issue-jump" href="#support-day-%d">%s</a></section>' % (
-                esc(labels['issue_heading']), esc(labels['issue_heading']), len(issues), highlights,
+                esc(labels['issue_heading']), esc(labels['issue_heading']),
+                esc(_issue_count(len(issues), labels['locale'], True)), highlights,
                 remaining_text, urgent_text, day['index'], esc(labels['issue_jump'] % len(issues))))
     evidence = support_start + ('<details class="issue-details"><summary>%s</summary>'
                                 '<div class="issue-groups">%s</div></details></article>' % (
@@ -475,6 +484,7 @@ def render_profile(source: Mapping[str, Any], legacy_html: str) -> str:
     route_html = ''.join(route_parts)
     details = ''.join(_day(day, model, labels) for day in model["days"])
     supports = ''.join(_issues(day, labels)[1] for day in model['days'])
+    route_size = 'short' if len(model['days']) <= 5 else 'long'
     return ('<!doctype html>\n<html lang="%s" data-renderer-version="2"><head><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width, initial-scale=1">'
             '<meta name="ctw-renderer" content="2"><meta name="ctw-profile-assets" content="%s">'
@@ -482,7 +492,7 @@ def render_profile(source: Mapping[str, Any], legacy_html: str) -> str:
             '<title>%s</title><style id="renderer-css">%s\n%s</style></head><body>'
             '<div class="topline"></div><div class="shell"><a class="skip" href="#experience">%s</a>'
             '<header class="site-head"><span class="brand">China Trip Weaver</span><span class="dataset">%s</span></header>'
-            '<main id="experience"><section class="hero" aria-labelledby="title">'
+            '<main id="experience" data-route-size="%s"><section class="hero" aria-labelledby="title">'
             '<h1 id="title" aria-label="%s">%s</h1><p class="hero-sub">%s — %s · %s %s · %s %s</p>'
             '%s</section><noscript><p class="noscript">%s</p></noscript><div class="workspace" data-route-size="%s">'
             '<section class="focus" id="focus-column" aria-labelledby="focus-title"><div class="focus-head">'
@@ -497,12 +507,12 @@ def render_profile(source: Mapping[str, Any], legacy_html: str) -> str:
             '<script id="prototype-model" type="application/json">%s</script>'
             '<script id="source-document" type="application/json">%s</script><script>%s</script></body></html>\n' %
             (esc(locale), PROFILE_ASSET_SHA256, esc(csp), esc(model["title"]), renderer_css(), css,
-             esc(labels["skip"]), esc(labels["readonly"]),
+             esc(labels["skip"]), esc(labels["readonly"]), route_size,
              esc(model["title"]), _route_heading(model["route"]), esc(model["start_date"]),
              esc(model["end_date"]), esc(model["travelers"]),
              esc("traveler" if locale == "en" and model["travelers"] == 1 else labels["travelers"]),
              esc(len(model["days"])), esc("day" if locale == "en" and len(model["days"]) == 1 else labels["days"]),
-             decision_html, esc(labels["noscript"]), 'short' if len(model['days']) <= 5 else 'long',
+             decision_html, esc(labels["noscript"]), route_size,
              esc(labels["context"]), esc(labels["context"]), esc(labels["prev"]),
              len(model["days"]), esc(labels["next"]), esc(labels["view_overview"]), details,
              _overview(model, labels, '<ol class="route" aria-label="%s">%s</ol>' % (esc(labels["route"]), route_html)),

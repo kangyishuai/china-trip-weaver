@@ -92,8 +92,8 @@ class ProfileV2Tests(unittest.TestCase):
 
     def test_v2_fixture_bytes_guard_template_and_legacy_record_changes(self):
         expected = (
-            (self.trip, render_trip, 'demo/trip.html', '66a0f057b8a80c83ec9b1cb7c7f676ffb73314d955f4dc00e24034d8507f8464'),
-            (self.journey, render_journey, 'demo/journey-16d/journey.html', '8ec90344e1e0e3a45608b7f7c0a85b4b05a7267dcae106aa653fbcf760bd6bab'),
+            (self.trip, render_trip, 'demo/trip.html', '53d00b432cbf6e97f8cac1493b92f4f4f491d71dd11c7368891aa7652bb573bf'),
+            (self.journey, render_journey, 'demo/journey-16d/journey.html', 'a45d3a9c56b5fccc9851c9d04ce0eab76a115d9eca89dc83a9a4b4bf612c4ba7'),
         )
         for source, render, path, digest in expected:
             with self.subTest(path=path):
@@ -326,7 +326,7 @@ class ProfileV2Tests(unittest.TestCase):
         panel = rendered.split('data-day-detail="0"', 1)[1].split('</article>', 1)[0]
         raw = rendered.split('data-day-support="0"', 1)[1].split('</article>', 1)[0]
         self.assertIn('出发前要核对', panel)
-        self.assertIn('核对交通服务信息', panel)
+        self.assertIn('交通服务信息', panel)
         self.assertIn('href="#support-day-0"', panel)
         self.assertNotIn('no_results:leg-', panel)
         self.assertIn('<details class="issue-details">', raw)
@@ -349,13 +349,13 @@ class ProfileV2Tests(unittest.TestCase):
     def test_rail_and_ferry_service_unknowns_use_neutral_transport_language(self):
         rail = render_trip(self.trip, renderer_version='2')
         rail_panel = rail.split('data-day-detail="0"', 1)[1].split('</article>', 1)[0]
-        self.assertIn('核对交通服务信息', rail_panel)
+        self.assertIn('交通服务信息', rail_panel)
         ferry = json.loads((ROOT / 'tests/fixtures/trips/schema/valid/rental-ferry.json').read_text(encoding='utf-8'))
         ferry['unknowns'].append({'field_path': '/transport_legs/0/service_number',
                                   'reason': 'Synthetic ferry sailing identifier still unverified',
                                   'provider': 'gulangyu-ferry.example.invalid', 'claim_id': None})
         self.assertTrue(validate_trip(ferry).ok)
-        for locale, topic in (('zh-CN', '核对交通服务信息'), ('en', 'Verify transport service details')):
+        for locale, topic in (('zh-CN', '交通服务信息'), ('en', 'Transport service details')):
             source = copy.deepcopy(ferry)
             source['request']['locale'] = locale
             page = render_trip(source, renderer_version='2')
@@ -367,6 +367,34 @@ class ProfileV2Tests(unittest.TestCase):
             support = page.split('data-day-support="0"', 1)[1].split('</article>', 1)[0]
             self.assertIn('Synthetic ferry sailing identifier still unverified', support)
             self.assertNotIn('车次', support)
+
+    def test_static_issue_checklist_counts_match_original_record_groups(self):
+        cases = (
+            (self.trip, render_trip, ('交通服务信息', '住宿报价与条件', '交通费用与衔接'), (1, 1, 1), 8, 11),
+            (self.journey, render_journey, ('交通服务信息', '交通费用与衔接', '预算缺价'), (1, 1, 3), 2, 7),
+        )
+        for source, render, labels, counts, remaining, total in cases:
+            page = render(source, renderer_version='2')
+            first_day = page.split('data-day-detail="0"', 1)[1].split('</article>', 1)[0]
+            highlights = re.search(r'<ul class="issue-highlights">(.*?)</ul>', first_day, re.S).group(1)
+            self.assertEqual(total, len(build_model(source)['days'][0]['issues']))
+            self.assertEqual(3, highlights.count('<li>'))
+            for label, count in zip(labels, counts):
+                self.assertIn('<span>%s</span><small>%d 条</small>' % (label, count), highlights)
+            self.assertEqual(total, sum(counts) + remaining)
+            self.assertIn('其他主题还有 %d 条' % remaining, first_day)
+            self.assertNotIn('<button', highlights)
+            self.assertNotIn('<a ', highlights)
+            self.assertEqual(1, first_day.count('class="issue-jump"'))
+
+        english = copy.deepcopy(self.trip)
+        english['request']['locale'] = 'en'
+        page = render_trip(english, renderer_version='2')
+        first_day = page.split('data-day-detail="0"', 1)[1].split('</article>', 1)[0]
+        highlights = re.search(r'<ul class="issue-highlights">(.*?)</ul>', first_day, re.S).group(1)
+        self.assertIn('<span>Transport service details</span><small>1 record</small>', highlights)
+        self.assertIn('8 more records in other topics', first_day)
+        self.assertIn('11 source records', first_day)
 
     def test_only_the_moving_slot_has_a_preview_replacement_clock(self):
         page = render_trip(self.trip, renderer_version='2')
@@ -417,8 +445,10 @@ class ProfileV2Tests(unittest.TestCase):
         self.assertIn('class="route-details"', trip)
         self.assertNotIn('<ol class="route"', trip.split('</section><noscript>', 1)[0])
         self.assertIn('data-route-size="short"', trip)
+        self.assertIn('<main id="experience" data-route-size="short">', trip)
         journey = render_journey(self.journey, renderer_version='2')
         self.assertIn('data-route-size="long"', journey)
+        self.assertIn('<main id="experience" data-route-size="long">', journey)
 
     def test_english_ui_is_not_chinese_only(self):
         trip = copy.deepcopy(self.trip)

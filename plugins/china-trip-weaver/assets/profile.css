@@ -182,3 +182,16 @@ a.day-index[href]{display:grid}
   .issue-support{padding:.8rem 1rem}
 }
 @media print{.issue-details>*:not(summary),.route-details>*:not(summary),.decision-details>*:not(summary),.issue-support[hidden]{display:block}}
+
+/* Short routes share one reading edge; the brand bar remains page-wide. */
+main#experience[data-route-size="short"]>.hero,
+main#experience[data-route-size="short"]>.workspace,
+main#experience[data-route-size="short"]>.support-collection,
+main#experience[data-route-size="short"]>.record{max-width:1000px;margin-left:auto;margin-right:auto}
+
+/* These are facts in a checklist, with one separate link to the full evidence. */
+.issue-highlights{display:block;margin:.4rem 0 .5rem}
+.issue-highlights li{display:grid;grid-template-columns:.45rem minmax(0,1fr) auto;align-items:baseline;gap:.45rem;
+  background:transparent;border:0;border-bottom:1px solid var(--line-soft);padding:.32rem 0;font-size:.78rem;line-height:1.4}
+.issue-highlights li::before{content:"";width:.25rem;height:.25rem;border-radius:50%;background:var(--muted);align-self:center}
+.issue-highlights li small{color:var(--muted);font-size:.73rem;white-space:nowrap;font-variant-numeric:tabular-nums}
