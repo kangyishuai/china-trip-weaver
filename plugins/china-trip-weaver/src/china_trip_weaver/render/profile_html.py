@@ -16,7 +16,7 @@ from .template import embedded_json, renderer_css
 VERSION = "2"
 ASSETS = Path(__file__).resolve().parents[3] / "assets"
 # Frozen for renderer v2. Any output-affecting asset change needs a new format.
-PROFILE_ASSET_SHA256 = "9d1e201562b2f532d43b3caf1f3eb2dddcaa6a421837fc64dda0aa9fb5cacf86"
+PROFILE_ASSET_SHA256 = "31e8da016f74aea8b08aa665bd8c4c2ecd6ff7b183547c5bd3b2f10ba20a2c84"
 
 LABELS = {
     "zh-CN": {
@@ -30,6 +30,8 @@ LABELS = {
         "transport": "交通", "place": "地点", "lodging": "住宿", "meal": "用餐", "rest": "休息", "open_legend": "留白＝未安排",
         "reference": "斜纹＝静态/待证",
         "unknown": "红框＝具体未知", "excluded": "备选／未采用不计入横带", "day": "第 %d 天", "excluded_n": "另有 %d 条未纳入图带",
+        "print_reference": "虚线＝静态/待证", "print_unknown": "双框＝具体未知",
+        "print_legend_note": "每行下方重复刻度，并列出原时刻、类别与依据状态。",
         "open": "空档", "scheduled": "已排", "prev": "← 前一天", "next": "后一天 →", "view_overview": "查看全程图 ↓",
         "first_day": "旅程起点", "last_day": "旅程终点", "adjacent_prev": "前一天", "adjacent_next": "后一天",
         "related": "关联未知", "source": "查看来源 ↗", "no_slots": "尚无已排时段。", "alternatives": "备选／未采用／状态未知 · %d",
@@ -74,6 +76,8 @@ LABELS = {
         "transport": "Transport", "place": "Place", "lodging": "Stay", "meal": "Meal", "rest": "Rest", "open_legend": "Blank = unplanned",
         "reference": "Hatching = reference/unverified",
         "unknown": "Red outline = specific unknown", "excluded": "Alternatives and skipped items are outside the bars", "day": "Day %d",
+        "print_reference": "Dashed outline = reference/unverified", "print_unknown": "Double outline = specific unknown",
+        "print_legend_note": "Each row repeats the scale and lists original times, categories, and evidence status.",
         "excluded_n": "%d other items outside bars", "open": "open", "scheduled": "scheduled", "prev": "← Previous day",
         "next": "Next day →", "view_overview": "View whole route ↓", "first_day": "Journey start", "last_day": "Journey end",
         "adjacent_prev": "Previous", "adjacent_next": "Next", "related": "related unknowns", "source": "Open source ↗",
@@ -194,9 +198,7 @@ def _link(url: str | None, label: str) -> str:
 
 def _bar(day: Mapping[str, Any], axis: Mapping[str, int]) -> str:
     spans = []
-    for slot in day["slots"]:
-        if not slot["effective"] or slot["kind"] == "free":
-            continue
+    for slot in _charted_slots(day):
         left = _percent(slot["start"], axis)
         width = max(.2, _percent(slot["end"], axis) - left)
         scenario_source = ' data-scenario-source="true"' if day["scenario"].get("slot_id") == slot["id"] else ''
@@ -212,6 +214,23 @@ def _bar(day: Mapping[str, Any], axis: Mapping[str, int]) -> str:
     return '<span class="track" aria-hidden="true">%s</span>' % "".join(spans)
 
 
+def _charted_slots(day: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    return [slot for slot in day["slots"] if slot["effective"] and slot["kind"] != "free"]
+
+
+def _print_intervals(day: Mapping[str, Any], labels: Mapping[str, str]) -> str:
+    certainty_labels = {"needs-check": "claim_unknown", "reference": "claim_reference",
+                        "verified": "claim_verified", "plan-only": "plan_only"}
+    spans = []
+    for slot in _charted_slots(day):
+        role = "lodging" if slot["role"] == "stay" else slot["role"]
+        spans.append('<span class="print-interval" data-slot-id="%s" data-role="%s" data-certainty="%s">%s–%s · %s · %s</span>' % (
+            esc(slot["id"]), esc(slot["role"]), esc(slot["certainty"]),
+            esc(slot["start_label"]), esc(slot["end_label"]),
+            esc(labels.get(role, slot["role"])), esc(labels[certainty_labels[slot["certainty"]]])))
+    return '<span class="print-intervals">%s</span>' % ''.join(spans)
+
+
 def _overview(model: Mapping[str, Any], labels: Mapping[str, str], route_html: str) -> str:
     axis = model["axis"]
     ticks = [axis["start"]] + list(range((axis["start"] // 360 + 1) * 360, axis["end"], 360)) + [axis["end"]]
@@ -223,21 +242,27 @@ def _overview(model: Mapping[str, Any], labels: Mapping[str, str], route_html: s
         side = labels["excluded_n"] % day["inactive_count"] if day["inactive_count"] else ""
         rows.append('<li><a class="day-index" href="#focus-day-%d" data-select-day="%d"%s>'
                     '<span class="day-label"><strong>%s · %s</strong><small>%s %s</small></span>%s'
+                    '<span class="print-row-axis" aria-hidden="true">%s</span>%s'
                     '<span class="day-meter"><strong>%s</strong><span>%s %s</span></span></a></li>' %
                     (day["index"], day["index"], ' aria-current="date"' if day["index"] == 0 else '',
                      esc(day["date"]), esc(day["city"]), esc(labels["day"] % (day["index"]+1)), esc(side),
-                     _bar(day, axis), esc(_duration(day["occupied_minutes"], labels["locale"], True)),
+                     _bar(day, axis), marks, _print_intervals(day, labels),
+                     esc(_duration(day["occupied_minutes"], labels["locale"], True)),
                      esc(labels["open"]), esc(_duration(day["open_minutes"], labels["locale"], True))))
-    legend = ''.join('<span><i class="%s"></i>%s</span>' % (cls, esc(labels[key])) for cls, key in
-                     (("", "transport"), ("place", "place"), ("stay", "lodging"), ("meal", "meal"),
-                      ("rest", "rest"), ("uncertain", "reference"), ("alert", "unknown")))
+    legend = ''.join('<span><i class="%s"></i>%s</span>' % (
+        cls, ('<span class="screen-legend">%s</span><span class="print-only">%s</span>' % (
+            esc(labels[key]), esc(labels['print_' + key])) if key in ('reference', 'unknown') else esc(labels[key])))
+        for cls, key in (("", "transport"), ("place", "place"), ("stay", "lodging"), ("meal", "meal"),
+                         ("rest", "rest"), ("uncertain", "reference"), ("alert", "unknown")))
     return ('<section class="overview" aria-labelledby="overview-title"><div class="overview-head">'
             '<h2 id="overview-title">%s</h2><p class="section-note">%s</p></div>'
             '<details class="route-details"><summary>%s</summary>%s</details>'
             '<div class="axis-row"><span class="axis-spacer"></span><div class="axis-track">%s</div><span class="axis-spacer"></span></div>'
-            '<div class="legend">%s<span class="legend-exception">%s · %s</span></div><ol class="day-list">%s</ol></section>' %
+            '<div class="legend">%s<span class="legend-exception">%s · %s</span>'
+            '<span class="print-legend-note">%s</span></div><ol class="day-list">%s</ol></section>' %
             (esc(labels["overview"]), esc(labels["overview_note"]), esc(labels["route_details"]), route_html,
-             marks, legend, esc(labels["open_legend"]), esc(labels["excluded"]), ''.join(rows)))
+             marks, legend, esc(labels["open_legend"]), esc(labels["excluded"]),
+             esc(labels["print_legend_note"]), ''.join(rows)))
 
 
 def _scenario(day: Mapping[str, Any], labels: Mapping[str, str]) -> str:

@@ -198,6 +198,7 @@ main#experience[data-route-size="short"]>.record{max-width:1000px;margin-left:au
 
 /* Programmatic day focus is visible without adding another Tab stop. */
 .day-identity h3:focus{outline:3px solid var(--coral);outline-offset:3px;border-radius:2px}
+.print-row-axis,.print-intervals,.print-only,.print-legend-note{display:none}
 
 @media print{
   html,body{background:#fff!important;overflow:visible!important}
@@ -207,10 +208,39 @@ main#experience[data-route-size="short"]>.record{max-width:1000px;margin-left:au
   main#experience[data-route-size="short"]>.record{max-width:none!important;margin-left:0!important;margin-right:0!important}
   .workspace,.workspace[data-route-size="short"]{display:block!important;max-width:none!important;margin:0!important}
   .workspace .focus,.workspace .overview{width:auto!important;margin:0 0 .75rem!important}
+  .axis-row,.day-index{display:grid!important;grid-template-columns:7.1rem minmax(0,1fr) 7.2rem!important;
+    gap:.65rem!important;padding-inline:1.25rem!important}
+  .axis-spacer{display:block!important}
+  .axis-track,.track{width:100%!important;min-width:0!important;grid-column:2!important}
+  .day-label{grid-column:1!important;grid-row:1!important;align-self:start}
+  .track{grid-row:1!important;background:none!important}
+  .day-meter{grid-column:3!important;grid-row:1!important;align-self:start}
+  .print-row-axis{display:block;position:relative;grid-column:2;grid-row:2;height:1.2rem;
+    border-bottom:1px solid var(--line)}
+  .print-intervals{display:flex;flex-wrap:wrap;gap:.1rem .6rem;grid-column:2;grid-row:3;
+    font-size:.68rem;line-height:1.4;color:var(--ink);font-variant-numeric:tabular-nums}
+  .print-interval{white-space:nowrap}
+  .print-only{display:inline}
+  .screen-legend{display:none}
+  .print-legend-note{display:block;flex-basis:100%;font-size:.72rem;color:var(--muted)}
+  .legend i,.bar{background:transparent!important;background-image:none!important;box-shadow:none!important;
+    border:2px solid currentColor!important;border-radius:0!important}
+  .legend i{width:1rem;height:.75rem;vertical-align:middle}
+  .bar[data-role="transport"],.legend i:not(.place):not(.stay):not(.meal):not(.rest):not(.uncertain):not(.alert){color:var(--teal);border-style:solid!important}
+  .bar[data-role="place"],.legend i.place{color:var(--violet);border-style:dashed!important}
+  .bar[data-role="stay"],.legend i.stay{color:var(--gold);border-style:double!important;border-width:3px!important}
+  .bar[data-role="meal"],.legend i.meal{color:var(--ink);border-style:dotted!important}
+  .bar[data-role="rest"],.legend i.rest{color:var(--muted);border-style:solid!important;border-width:1px!important}
+  .bar[data-certainty="reference"],.legend i.uncertain{border-top-style:dashed!important;border-bottom-style:dashed!important}
+  .bar[data-certainty="needs-check"],.legend i.alert{outline:1px solid var(--coral)!important;outline-offset:1px}
   .day-detail,.issue-support,.record,.overview,.focus,#full-record .panel{break-inside:auto!important;page-break-inside:auto!important}
   .day-detail[hidden],.issue-support[hidden]{display:block!important}
-  .day-identity,.issue-support h2,.record-context h2,.panel h2{break-after:avoid-page;page-break-after:avoid}
-  .agenda li,.issue-details li,.day-list li{break-inside:avoid-page;page-break-inside:avoid}
+  .day-identity,.issue-support h2,.issue-details>summary,.issue-group h3,.record-context h2,.panel h2{
+    break-after:avoid-page;page-break-after:avoid}
+  .issue-group .issue-list{break-before:avoid-page;page-break-before:avoid}
+  .issue-group .issue-list>li:first-child{break-before:avoid-page;page-break-before:avoid;
+    break-inside:avoid-page;page-break-inside:avoid}
+  .agenda li,.day-list li{break-inside:avoid-page;page-break-inside:avoid}
   details,details::details-content{display:block!important;content-visibility:visible!important;height:auto!important}
   details:not([open])>*:not(summary){display:block!important}
   details summary::after{content:none!important}

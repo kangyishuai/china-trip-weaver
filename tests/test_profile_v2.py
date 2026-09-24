@@ -92,8 +92,8 @@ class ProfileV2Tests(unittest.TestCase):
 
     def test_v2_fixture_bytes_guard_template_and_legacy_record_changes(self):
         expected = (
-            (self.trip, render_trip, 'demo/trip.html', '42f8286762283ed29463e8a475440db37a4f20c35d8d6cf8e5f82726b7ad6d45'),
-            (self.journey, render_journey, 'demo/journey-16d/journey.html', '250df995867613aa63331ee4719e4eb32027ae31e5770715f85820b08b36d6e1'),
+            (self.trip, render_trip, 'demo/trip.html', '6eb6dcdddfd96e0a18e04778178d8d664e5c31991bbe96070ee1c0eed14f24af'),
+            (self.journey, render_journey, 'demo/journey-16d/journey.html', 'e6d6a895eb1f7ef56f0e0835bc4b2ac426b92ca2ce9a93e3eb89207c43318482'),
         )
         for source, render, path, digest in expected:
             with self.subTest(path=path):
@@ -259,6 +259,49 @@ class ProfileV2Tests(unittest.TestCase):
                 levels = re.findall(r'<h([1-6])(?:\s|>)', support)
                 self.assertEqual('2', levels[0])
                 self.assertTrue(all(level == '3' for level in levels[1:]), levels)
+
+    def test_print_chart_uses_the_original_model_intervals_and_shared_axis(self):
+        english = copy.deepcopy(self.trip)
+        english['request']['locale'] = 'en'
+        for source, render in ((self.trip, render_trip), (self.journey, render_journey), (english, render_trip)):
+            model = build_model(source)
+            page = render(source, renderer_version='2')
+            marks = re.search(r'<div class="axis-row">.*?<div class="axis-track">(.*?)</div>', page, re.S).group(1)
+            axis = model['axis']
+            scale = axis['end'] - axis['start']
+            ticks = [axis['start']] + list(range((axis['start'] // 360 + 1) * 360, axis['end'], 360)) + [axis['end']]
+            printed_ticks = re.findall(r'style="left:([0-9.]+)%">([^<]+)</span>', marks)
+            self.assertEqual(len(ticks), len(printed_ticks))
+            for tick, (position, label) in zip(ticks, printed_ticks):
+                self.assertAlmostEqual(100 * (tick - axis['start']) / scale, float(position), places=3)
+                self.assertEqual(clock(tick), label)
+            rows = re.findall(r'<li><a class="day-index".*?</a></li>', page, re.S)
+            self.assertEqual(len(model['days']), len(rows))
+            request = source['request'] if 'request' in source else source['trips'][0]['request']
+            labels = LABELS[request.get('locale', 'zh-CN')]
+            certainty_keys = {'needs-check': 'claim_unknown', 'reference': 'claim_reference',
+                              'verified': 'claim_verified', 'plan-only': 'plan_only'}
+            for day, row in zip(model['days'], rows):
+                self.assertIn('<span class="print-row-axis" aria-hidden="true">%s</span>' % marks, row)
+                bars = re.findall(r'<span class="bar" data-role="([^"]+)" data-certainty="([^"]+)"'
+                                  r'(?: data-scenario-source="true")? style="left:([0-9.]+)%;width:([0-9.]+)%"', row)
+                intervals = re.findall(r'<span class="print-interval" data-slot-id="([^"]+)"'
+                                       r' data-role="([^"]+)" data-certainty="([^"]+)">([^<]+)</span>', row)
+                expected = [slot for slot in day['slots'] if slot['effective'] and slot['kind'] != 'free']
+                self.assertEqual(len(expected), len(bars))
+                self.assertEqual(len(expected), len(intervals))
+                for slot, bar, interval in zip(expected, bars, intervals):
+                    role_label = labels['lodging' if slot['role'] == 'stay' else slot['role']]
+                    self.assertEqual((slot['role'], slot['certainty']), bar[:2])
+                    self.assertAlmostEqual(100 * (slot['start'] - model['axis']['start']) /
+                                           (model['axis']['end'] - model['axis']['start']), float(bar[2]), places=3)
+                    self.assertAlmostEqual(max(.2, 100 * (slot['end'] - slot['start']) / scale),
+                                           float(bar[3]), places=3)
+                    self.assertEqual((slot['id'], slot['role'], slot['certainty'],
+                                      '%s–%s · %s · %s' % (slot['start_label'], slot['end_label'],
+                                                           role_label, labels[certainty_keys[slot['certainty']]])), interval)
+            self.assertIn(labels['print_reference'], page)
+            self.assertIn(labels['print_unknown'], page)
 
     def test_budget_state_distinguishes_missing_quotes_from_a_real_zero(self):
         pending = {'budget': {'status': 'incomplete', 'known': 0, 'minimum': None, 'maximum': None, 'comparable_count': 0}}
