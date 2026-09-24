@@ -486,7 +486,7 @@
   发版提交 3.9 与 3.13 同时；D2 任务 3 提交 3.13 一次），`gh run rerun
   --failed` 即绿。0.11.0 起握手等 30 秒并重启一次，之后再出现请记在这里。
 - 本机 Codex 与源码的差距：以 `bash scripts/install_local_plugin.sh --check`
-  实时输出为准；`ctw doctor` 的 `runtime_root` 是缓存所在目录，可随时删除。
+  实时输出为准；`ctw doctor` 的 `runtime_root` 由 `cli.py::_repo_root()` 给出：源码运行时是整个仓库根，安装后是本地 marketplace 缓存根，**都不能当作临时目录整体删除**。其中已确认可重建的 `.npm-cache/` 与 `.tmp/*-runtime` 子目录，也只在明确授权并核对具体路径后清理，不泛删 `.tmp`。
 
 ## 定位失败天花板
 
@@ -527,7 +527,7 @@ fix-names` 会把它们列为人工项。
   `verify-on-click`，不给价格；FlyAI 本身是个人维护的第三方包装，可能停更。
 - **12306 无官方站点距离**：站点候选靠 AMap geocode/POI 事后算距离兜底，命中
   同城精确站名才生效，未内置或跨城场景仍是 unknown 距离。
-- **CI 的跳过口径**：没装 Codex 的 GitHub runner 会跳过三项 Codex 依赖测试（`OK (skipped=3)`），装了 Codex 的本机必须零跳过。2026-09-05 到 09-08 CI 曾因 Skill 解析 smoke 不跳过而连红 12 次，已于 2026-09-08 修复（提交 `b160501`，run 34217843374 全绿），经过见 `BLOCKED.md` 顶部条目。每次 push 后看一眼 `gh run list --limit 3`。
+- **CI 的跳过口径**：没装 Codex 的 GitHub runner 会跳过三项 Codex 依赖测试（`OK (skipped=3)`），装了 Codex 的本机必须零跳过。2026-09-05 到 09-08 CI 曾因 Skill 解析 smoke 不跳过而连红 12 次，已于 2026-09-08 修复（提交 `b160501`，run 34217843374 全绿），经过见[已关闭的历史归档](docs/history/blocked-closed.md)中「GitHub CI 自 2026-09-05 起连续全红」条目；根 `BLOCKED.md` 仅保留索引。每次 push 后看一眼 `gh run list --limit 3`。
 
 ## 历史索引
 
